@@ -30,6 +30,8 @@ internal sealed class MainForm : Form
     private Bitmap? _frameBitmap;
     private long _frameSequence;
     private bool _autoAttached, _updating, _gameMinimized;
+    /// <summary>Verified update that arrived while the bot was running.</summary>
+    private PreparedUpdate? _pendingUpdate;
 
     protected override CreateParams CreateParams
     {
@@ -115,7 +117,7 @@ internal sealed class MainForm : Form
         _startBot = Theme.Button(botCard, "▶  Başlat  (F10)", new Rectangle(14, 64, 268, 38), Theme.Primary, Theme.PrimaryHover);
         _startBot.Click += (_, _) => ToggleBot();
         _stopBot = Theme.Button(botCard, "■  Durdur  (F12)", new Rectangle(14, 108, 268, 34), Theme.Danger, Theme.DangerHover);
-        _stopBot.Click += (_, _) => StopBot("kullanıcı durdurdu");
+        _stopBot.Click += (_, _) => StopBot("kullanıcı durdurdu", byUser: true);
 
         Theme.Label(botCard, "HP iksiri (%)", new Rectangle(14, 156, 170, 26), 9f, Theme.Muted);
         _potionHp = Theme.Number(botCard, new Rectangle(192, 156, 90, 26), 5, 95, (decimal)(_profile.PotionHpBelow * 100));
@@ -202,7 +204,7 @@ internal sealed class MainForm : Form
 
         if (!_hotkeys.Register(Keys.F10, () => BeginInvoke(new Action(ToggleBot))))
             WriteLog("F10 kısayolu başka bir uygulamada kullanılıyor.");
-        if (!_hotkeys.Register(Keys.F12, () => BeginInvoke(new Action(() => StopBot("F12 acil durdurma")))))
+        if (!_hotkeys.Register(Keys.F12, () => BeginInvoke(new Action(() => StopBot("F12 acil durdurma", byUser: true)))))
             WriteLog("F12 kısayolu başka bir uygulamada kullanılıyor.");
 
         Shown += async (_, _) =>
@@ -360,7 +362,7 @@ internal sealed class MainForm : Form
         }
         if (_engine.BotRunning)
         {
-            StopBot("duraklatıldı");
+            StopBot("duraklatıldı", byUser: true);
             return;
         }
         if (!_engine.StartBot(_dryRun.Checked, out string error))
@@ -373,13 +375,17 @@ internal sealed class MainForm : Form
         UpdateControls();
     }
 
-    private void StopBot(string reason)
+    /// <param name="byUser">F10/F12/button: a pending update may install now. Automatic stops
+    /// (critical HP, minimized game) keep the window as is so the user can see why it stopped.</param>
+    private void StopBot(string reason, bool byUser = false)
     {
         if (_engine?.BotRunning != true)
             return;
         _engine.StopBot(reason);
         SetStatus("BAĞLI", Theme.Green);
         UpdateControls();
+        if (byUser && _pendingUpdate is PreparedUpdate pending)
+            _ = ApplyUpdateAsync(pending);
     }
 
     // ── Calibration ──────────────────────────────────────────────
@@ -551,6 +557,11 @@ internal sealed class MainForm : Form
     {
         if (_updating || (!startup && _engine?.BotRunning == true))
             return;
+        if (_pendingUpdate is PreparedUpdate ready && File.Exists(ready.FilePath))
+        {
+            await ApplyUpdateAsync(ready);
+            return;
+        }
         if (startup)
             WriteLog("Güncelleme kontrol ediliyor…");
         var result = await UpdateService.CheckAndDownloadAsync();
@@ -566,26 +577,47 @@ internal sealed class MainForm : Form
             if (startup) WriteLog($"SekoBot güncel (v{BuildInfo.Version}).");
             return;
         }
-        // Never interrupt a running farm session; try again on the next timer tick.
+        await ApplyUpdateAsync(update);
+    }
+
+    private async Task ApplyUpdateAsync(PreparedUpdate update)
+    {
+        if (_updating || IsDisposed)
+            return;
+        // Never interrupt a running farm session; install when the user stops the bot.
         if (_engine?.BotRunning == true)
         {
-            WriteLog("Yeni sürüm hazır; bot durunca yüklenecek.");
+            if (_pendingUpdate == null)
+                WriteLog($"Yeni sürüm {update.Version} hazır; botu durdurduğunda (F10/F12) yüklenecek.");
+            _pendingUpdate = update;
             return;
         }
         _updating = true;
         SetStatus("GÜNCELLENİYOR", Theme.Yellow);
         WriteLog($"Yeni sürüm {update.Version} doğrulandı. SekoBot yeniden başlatılıyor…");
         await Task.Delay(1200);
+        if (IsDisposed)
+            return;
+        if (_engine?.BotRunning == true)
+        {
+            // The user restarted the bot during the countdown.
+            _updating = false;
+            _pendingUpdate = update;
+            WriteLog("Bot yeniden başladı; güncelleme bot durunca yüklenecek.");
+            return;
+        }
         try
         {
             _engine?.Dispose();
             _engine = null;
             UpdateService.InstallAfterExit(update);
+            _pendingUpdate = null;
             Close();
         }
         catch (Exception ex)
         {
             _updating = false;
+            _pendingUpdate = null;
             SetStatus("HAZIR", Theme.Green);
             WriteLog("Güncelleme uygulanamadı: " + ex.Message);
         }

@@ -10,7 +10,8 @@ namespace SekoBot.Bot;
 ///            target bar is calibrated)
 /// Looting  → pickup key pressed LootPresses times
 /// Turning  → every N cycles (or when no target is left) rotate the camera / walk forward
-/// Any time → HP/MP potions with cooldown, stop on critical HP
+/// Any time → HP/MP potions with cooldown, stop on critical HP. A low reading must last
+///            BarConfirmMs, so one bad frame (loading screen, menu, overlap) is ignored.
 /// </summary>
 internal sealed class Brain
 {
@@ -20,6 +21,8 @@ internal sealed class Brain
 
     private TimeSpan _phaseSince, _lastLoot, _turnDuration;
     private TimeSpan _lastAttackDown = Never, _lastHpPotion = Never, _lastMpPotion = Never;
+    // When each low-bar condition was first seen; a single bad frame must not trigger anything.
+    private TimeSpan _hpCriticalSince = Never, _hpLowSince = Never, _mpLowSince = Never;
     private int _lootPresses;
 
     public Brain(Func<BotProfile> profile) => _profile = profile;
@@ -31,6 +34,7 @@ internal sealed class Brain
     public void Start(TimeSpan now)
     {
         _lastAttackDown = Never;
+        _hpCriticalSince = _hpLowSince = _mpLowSince = Never;
         Enter(BotPhase.Fighting, now);
     }
 
@@ -45,21 +49,22 @@ internal sealed class Brain
         var now = state.Time;
         var actions = new List<BotAction>();
 
-        if (state.Hp is double hp)
+        var confirm = Ms(Math.Max(0, p.BarConfirmMs));
+        double? hp = state.Hp;
+        if (Confirmed(hp < p.StopHpBelow, ref _hpCriticalSince, now, confirm))
         {
-            if (hp < p.StopHpBelow)
-            {
-                Phase = BotPhase.Stopped;
-                return [new KeyUpAction(p.Keys.Attack), new StopAction($"HP kritik (%{hp * 100:0})")];
-            }
-            if (hp < p.PotionHpBelow && now - _lastHpPotion >= Ms(p.PotionCooldownMs))
-            {
-                actions.Add(new KeyTapAction(p.Keys.HpPotion));
-                _lastHpPotion = now;
-                Potions++;
-            }
+            Phase = BotPhase.Stopped;
+            return [new KeyUpAction(p.Keys.Attack), new StopAction($"HP kritik (%{hp!.Value * 100:0})")];
         }
-        if (state.Mp is double mp && mp < p.PotionMpBelow && now - _lastMpPotion >= Ms(p.PotionCooldownMs))
+        if (Confirmed(hp < p.PotionHpBelow, ref _hpLowSince, now, confirm) &&
+            now - _lastHpPotion >= Ms(p.PotionCooldownMs))
+        {
+            actions.Add(new KeyTapAction(p.Keys.HpPotion));
+            _lastHpPotion = now;
+            Potions++;
+        }
+        if (Confirmed(state.Mp < p.PotionMpBelow, ref _mpLowSince, now, confirm) &&
+            now - _lastMpPotion >= Ms(p.PotionCooldownMs))
         {
             actions.Add(new KeyTapAction(p.Keys.MpPotion));
             _lastMpPotion = now;
@@ -141,6 +146,20 @@ internal sealed class Brain
             _turnDuration += Ms(p.MoveHoldMs + 150);
         }
         Enter(turn || move ? BotPhase.Turning : BotPhase.Fighting, now);
+    }
+
+    /// <summary>True once <paramref name="condition"/> has held without interruption for <paramref name="needed"/>.
+    /// A missing reading (null → false) resets it.</summary>
+    private static bool Confirmed(bool condition, ref TimeSpan since, TimeSpan now, TimeSpan needed)
+    {
+        if (!condition)
+        {
+            since = Never;
+            return false;
+        }
+        if (since == Never)
+            since = now;
+        return now - since >= needed;
     }
 
     private static TimeSpan Ms(double milliseconds) => TimeSpan.FromMilliseconds(milliseconds);

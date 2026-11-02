@@ -52,6 +52,8 @@ internal sealed class BotProfile
     public double PotionMpBelow { get; set; } = 0.25;
     public double StopHpBelow { get; set; } = 0.20;
     public int PotionCooldownMs { get; set; } = 1500;
+    /// <summary>A low HP/MP reading must last this long before a potion or stop (filters bad frames).</summary>
+    public int BarConfirmMs { get; set; } = 300;
 
     /// <summary>How long the attack key is held per cycle.</summary>
     public int FightMs { get; set; } = 4000;

@@ -113,7 +113,7 @@ internal static class UpdateService
 
     /// <summary>
     /// An EXE cannot reliably replace itself while running. Launch Windows cmd
-    /// to wait until this process exits, swap verified files, and restart.
+    /// to wait until this process (by PID) has exited, swap verified files, and restart.
     /// </summary>
     public static void InstallAfterExit(PreparedUpdate update)
     {
@@ -131,6 +131,14 @@ setlocal DisableDelayedExpansion
 set "target=%~1"
 set "replacement=%~2"
 set "old=%~1.old"
+set "pid=%~3"
+rem Wait (max ~30 s) until the old SekoBot has really exited: a running EXE can be renamed,
+rem so without this the new one could start while the old one still owns the F10/F12 hotkeys.
+for /L %%I in (1,1,30) do (
+  tasklist /FI "PID eq %pid%" /NH 2>NUL | find " %pid% " >NUL || goto swap
+  ping -n 2 127.0.0.1 >NUL
+)
+:swap
 for /L %%I in (1,1,60) do (
   ping -n 2 127.0.0.1 >NUL
   move /Y "%target%" "%old%" >NUL 2>&1
@@ -159,6 +167,7 @@ exit /B 1
         launch.ArgumentList.Add(updaterFile);
         launch.ArgumentList.Add(executable);
         launch.ArgumentList.Add(update.FilePath);
+        launch.ArgumentList.Add(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
         _ = Process.Start(launch)
             ?? throw new InvalidOperationException("Windows güncelleme işlemi başlatılamadı.");
