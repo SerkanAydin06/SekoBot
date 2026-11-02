@@ -18,9 +18,19 @@ public class PopupTests
     }
 
     [Fact]
-    public void Plain_game_screen_has_no_popup()
+    public void Esc_system_menu_over_the_blurred_game_is_seen()
     {
-        using var frame = RecordingFormat.LoadPng(Fixture("topdown-wolves.png"));
+        using var frame = RecordingFormat.LoadPng(Fixture("esc-menu.png"));
+        Assert.True(PopupDetector.IsOpen(frame));
+    }
+
+    [Theory]
+    [InlineData("topdown-wolves.png")]
+    [InlineData("red-armor.png")]
+    [InlineData("other-player.png")]
+    public void Plain_game_screen_has_no_popup(string file)
+    {
+        using var frame = RecordingFormat.LoadPng(Fixture(file));
         Assert.False(PopupDetector.IsOpen(frame));
     }
 
