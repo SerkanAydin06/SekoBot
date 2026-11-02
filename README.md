@@ -8,15 +8,15 @@ Windows için Metin2 oyun penceresi izleme ve ileride geliştirilecek farm otoma
 
 SekoBot, GitHub Actions üzerinde Windows için **tek dosyalı taşınabilir SekoBot.exe** olarak derlenir. Kendi bilgisayarında Python kurulu olması gerekmez.
 
-1. [Windows EXE Build](https://github.com/SerkanAydin06/SekoBot/actions/workflows/build-windows.yml) sayfasına git.
-2. En son **başarıyla tamamlanan** çalıştırmayı aç (yeşil onay işaretli).
-3. Sayfanın altındaki **Artifacts** bölümünden `SekoBot-Windows-x64` dosyasını indir. GitHub oturum açmanı isteyebilir.
-4. İndirilen ZIP arşivini aç, içindeki `SekoBot.exe` dosyasını klasöre çıkar.
-5. `SekoBot.exe` dosyasını çift tıklayarak çalıştır. Metin2 pencerede açık olduğunda program penceresini algılar.
+1. [SekoBot Releases](https://github.com/SerkanAydin06/SekoBot/releases/tag/preview) sayfasına git.
+2. **Assets → SekoBot.exe** bağlantısına tıkla. ZIP olmadan doğrudan `.exe` indirilir.
+3. İndirilen dosyayı çift tıkla. Metin2 pencerede açık olduğunda program onu otomatik algılamayı dener.
 
-**Önemli:** Bir iş akışı henüz tamamlanmamış veya başarısızsa kullanılabilir EXE dosyası oluşmuş değildir. `Code → Download ZIP` ile indirilen kaynak kodu doğrudan çalıştırılabilir program değildir. GitHub Actions dosyaları sınırlı süre saklanır; bu iş akışında süre 30 gündür.
+Başarılı bir derlemeden sonra doğrudan EXE adresi: [SekoBot.exe](https://github.com/SerkanAydin06/SekoBot/releases/download/preview/SekoBot.exe).
 
-Paketlenmiş EXE'nin ilk açılışı birkaç saniye sürebilir. Uygulama henüz dijital olarak imzalanmadığından Windows SmartScreen uyarısı gösterebilir. Güvenmediğin EXE dosyalarını çalıştırma.
+**Önemli:** Release ancak GitHub Actions derlemesi **başarıyla tamamlanırsa** yayınlanır. Önizleme bağlantısı henüz açılmıyorsa [Windows EXE Build](https://github.com/SerkanAydin06/SekoBot/actions/workflows/build-windows.yml) sayfasından iş akışını kontrol et. `Code → Download ZIP` yalnızca kaynak kodunu içerir. `Actions → Artifacts` yedeği ZIP olarak iner, `Releases` ise doğrudan EXE sunar.
+
+Her `main` güncellemesinde yeni sürüm mevcut `preview` sürümündeki EXE dosyasının yerini alır. Paketlenmiş EXE'nin ilk açılışı birkaç saniye sürebilir. Uygulama henüz dijital olarak imzalanmadığından Windows SmartScreen uyarısı gösterebilir. Güvenmediğin EXE dosyalarını çalıştırma.
 
 ## Geliştiriciler için Python ile çalıştırma (isteğe bağlı)
 
