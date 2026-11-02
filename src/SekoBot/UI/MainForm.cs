@@ -17,7 +17,7 @@ internal sealed class MainForm : Form
     private readonly BotProfile _profile = ProfileStore.Load();
     private readonly ListBox _windows;
     private readonly Button _connect, _startBot, _stopBot, _record, _replay;
-    private readonly CheckBox _dryRun;
+    private readonly CheckBox _dryRun, _background;
     private readonly NumericUpDown _potionHp, _stopHp, _fightSeconds, _searchSeconds;
     private readonly PreviewControl _preview;
     private readonly Button[] _calibrationButtons;
@@ -144,7 +144,17 @@ internal sealed class MainForm : Form
         _replay.Click += async (_, _) => await ReplayAsync();
         foreach (var small in new[] { openFolder, _record, _replay })
             small.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
-        Theme.Label(botCard, "Tuşlar: profile.json  ·  F10 başlat · F12 dur", new Rectangle(14, 328, 268, 22), 8f, Theme.Muted);
+        _background = new CheckBox
+        {
+            Text = "Arka planda çalış (deneysel)",
+            Checked = _profile.BackgroundInput,
+            Bounds = new Rectangle(14, 328, 268, 24),
+            ForeColor = Theme.Text,
+            BackColor = botCard.BackColor,
+            Font = new Font("Segoe UI", 9f)
+        };
+        _background.CheckedChanged += (_, _) => { _profile.BackgroundInput = _background.Checked; SaveProfile(); };
+        botCard.Controls.Add(_background);
 
         // ── Preview card ─────────────────────────────────────────
         var previewCard = new Card { Bounds = new Rectangle(318, 66, 850, 478) };
@@ -400,13 +410,14 @@ internal sealed class MainForm : Form
             StopBot("duraklatıldı", byUser: true);
             return;
         }
-        if (!_engine.StartBot(_dryRun.Checked, out string error))
+        if (!_engine.StartBot(_dryRun.Checked, _background.Checked, out string error))
         {
             WriteLog(error);
             SetStatus("BAŞLATILAMADI", Theme.Yellow);
             return;
         }
-        SetStatus(_dryRun.Checked ? "BOT · KURU ÇALIŞMA" : "BOT ÇALIŞIYOR", _dryRun.Checked ? Theme.Yellow : Theme.Green);
+        SetStatus(_dryRun.Checked ? "BOT · KURU ÇALIŞMA" : _background.Checked ? "BOT · ARKA PLAN" : "BOT ÇALIŞIYOR",
+            _dryRun.Checked ? Theme.Yellow : Theme.Green);
         UpdateControls();
     }
 
@@ -643,6 +654,7 @@ internal sealed class MainForm : Form
         _record.FlatAppearance.MouseOverBackColor = recording ? Theme.DangerHover : Theme.SecondaryHover;
         _replay.Enabled = !_replaying;
         _dryRun.Enabled = !running;
+        _background.Enabled = !running;
         bool hasSelection = connected && _preview.Selection != null;
         for (int i = 0; i < 3; i++)
             _calibrationButtons[i].Enabled = hasSelection;
