@@ -21,7 +21,7 @@ Tuşlar (Space saldırı, Z toplama, 1/2 iksir, E kamera, W yürüme) ve sürele
 
 ## Açılır pencereler
 
-Level atlayınca çıkan reklam penceresi gibi oyunun üstüne açılan pencereleri bot görür (ekranın ortasındaki uzun, düz başlık çubuğundan), yürümeyi ve saldırıyı bırakır ve **bir kez Esc**'ye basar. Pencere 3 sn sonra hâlâ açıksa tekrar basar; böylece boşuna Esc basıp oyun menüsünü açmaz. Kapatmak için `profile.json` içinde `"ClosePopups": false`. Not: bot çalışırken envanter gibi bir pencereyi kendin açarsan onu da kapatır.
+Level atlayınca çıkan reklam penceresi ve yanlışlıkla açılan Esc menüsü gibi oyunun üstüne açılan pencereleri bot görür (ekranın ortasındaki uzun, düz başlık çubuğundan ya da menünün arkasında bulanıklaşan oyundan), yürümeyi ve saldırıyı bırakır ve **bir kez Esc**'ye basar. Pencere 3 sn sonra hâlâ açıksa tekrar basar; böylece boşuna Esc basıp oyun menüsünü açmaz. Kapatmak için `profile.json` içinde `"ClosePopups": false`. Not: bot çalışırken envanter gibi bir pencereyi kendin açarsan onu da kapatır.
 
 ## Arka planda çalışma (deneysel)
 
