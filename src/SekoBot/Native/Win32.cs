@@ -80,6 +80,13 @@ internal static class Win32
     internal const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
     internal const uint MOUSEEVENTF_LEFTUP = 0x0004;
     internal const int WM_HOTKEY = 0x0312;
+    internal const uint WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101;
+    internal const uint WM_MOUSEMOVE = 0x0200, WM_LBUTTONDOWN = 0x0201, WM_LBUTTONUP = 0x0202;
+    internal const nint MK_LBUTTON = 0x0001;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool PostMessage(nint hwnd, uint msg, nint wParam, nint lParam);
     internal const uint MOD_NOREPEAT = 0x4000;
     internal const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
 

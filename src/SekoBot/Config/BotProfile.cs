@@ -59,6 +59,9 @@ internal sealed class BotProfile
     public BarSpec? TargetBar { get; set; }
 
     public int PerceptionFps { get; set; } = 10;
+    /// <summary>Experimental: send keys/clicks to the game window as messages so it can stay in
+    /// the background. Works only if the game reads window messages.</summary>
+    public bool BackgroundInput { get; set; }
     /// <summary>Find HP/MP/target bars on screen automatically (manual marks always win).</summary>
     public bool AutoDetectBars { get; set; } = true;
 

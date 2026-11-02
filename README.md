@@ -19,6 +19,10 @@ Metin2 için tek dosyalı Windows farm botu. Kurulum gerekmez, açılışta kend
 
 Tuşlar (Space saldırı, Z toplama, 1/2 iksir, E kamera, W yürüme) ve süreler `%LOCALAPPDATA%\SekoBot\profile.json` içinde; arayüzden **Klasör** ile açılır.
 
+## Arka planda çalışma (deneysel)
+
+**Arka planda çalış (deneysel)** işaretliyken bot tuşları ve tıklamaları Windows klavyesi yerine doğrudan oyun penceresine mesaj olarak gönderir; oyunun önde olması gerekmez (ama simge durumuna küçültülmemeli, yoksa görüntü alınamaz). Basılı tuşlar (Space, W/A/S/D) gerçek klavye gibi saniyede ~10 kez tekrarlanır. Bu yalnızca oyun tuşları pencere mesajlarından okuyorsa çalışır; çalışmazsa kutuyu kapatıp oyunu önde tut. Bot çalışırken değiştirilemez.
+
 ## Kayıt ve tekrar oynatma
 
 - **⏺ Kaydet:** Bot her turda okuduğu HP/MP/hedef değerlerini, aşamayı ve gönderdiği tuşları `%LOCALAPPDATA%\SekoBot\recordings\<tarih>\` klasörüne yazar. Saniyede bir kare PNG olarak saklanır; iksir ve durdurma anının karesi her zaman saklanır. Bot kapalıyken de kaydeder (örnek görüntü toplamak için). Kare aralığı ve boyut sınırı `profile.json` içinde: `RecordFrameIntervalMs` (varsayılan 1000), `RecordMaxMb` (varsayılan 1500).

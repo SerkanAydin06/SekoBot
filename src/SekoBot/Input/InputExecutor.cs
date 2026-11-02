@@ -8,8 +8,11 @@ namespace SekoBot.Input;
 
 /// <summary>
 /// Executes bot actions one after another on a background task.
-/// Input is only sent while the game window is in the foreground; in dry-run
-/// mode actions are only logged.
+/// Normally input goes through SendInput and only while the game window is in the
+/// foreground. In background mode (experimental) keys and clicks are posted to the game
+/// window as messages instead, so the game can stay behind other windows; held keys are
+/// re-posted with the repeat flag like a real keyboard does. In dry-run mode actions are
+/// only logged.
 /// </summary>
 internal sealed class InputExecutor : IDisposable
 {
@@ -26,14 +29,18 @@ internal sealed class InputExecutor : IDisposable
     private readonly Action<Point> _selected;
     private readonly Func<double?> _targetHp;
     private bool _warnedFocus, _learnedLogged;
+    private readonly bool _background;
+    private readonly Task? _repeater;
 
     /// <param name="hasTarget">Whether a target bar is showing; null when it can't be told
     /// (target bar not known yet).</param>
     /// <param name="missed">Called with a candidate that was clicked but selected nothing.</param>
     /// <param name="selected">Called with the spot whose click selected a mob.</param>
+    /// <param name="background">Post messages to the game window instead of SendInput (experimental).</param>
     public InputExecutor(WindowInfo window, bool dryRun, Action<string> log, Func<bool?> hasTarget,
-        Func<double?> targetHp, Action<Point> missed, Action<Point> selected)
+        Func<double?> targetHp, Action<Point> missed, Action<Point> selected, bool background = false)
     {
+        _background = background && !dryRun;
         _targetHp = targetHp;
         _selected = selected;
         _window = window;
@@ -42,6 +49,8 @@ internal sealed class InputExecutor : IDisposable
         _hasTarget = hasTarget;
         _missed = missed;
         _worker = Task.Run(RunAsync);
+        if (_background)
+            _repeater = Task.Run(RepeatHeldKeysAsync);
     }
 
     public bool DryRun { get; }
@@ -67,7 +76,7 @@ internal sealed class InputExecutor : IDisposable
                     if (held) SendKey(up.Key, down: false);
                     continue;
                 }
-                if (Win32.GetForegroundWindow() != _window.Handle)
+                if (!_background && Win32.GetForegroundWindow() != _window.Handle)
                 {
                     if (!_warnedFocus)
                     {
@@ -98,11 +107,7 @@ internal sealed class InputExecutor : IDisposable
         switch (action)
         {
             case ClickAction click:
-                MoveMouse(WindowService.ClientToScreen(_window, click.Client));
-                await Task.Delay(_random.Next(30, 60), token);
-                SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);
-                await Task.Delay(_random.Next(35, 75), token);
-                SendMouse(Win32.MOUSEEVENTF_LEFTUP);
+                await ClickAsync(click.Client, 30, 60, token);
                 break;
             case KeyTapAction tap:
                 SendKey(tap.Key, down: true);
@@ -134,16 +139,12 @@ internal sealed class InputExecutor : IDisposable
         int misses = 0;
         foreach (var spot in candidates)
         {
-            if (Win32.GetForegroundWindow() != _window.Handle || misses >= 2)
+            if ((!_background && Win32.GetForegroundWindow() != _window.Handle) || misses >= 2)
                 return;
             // A bar that was already showing before the click doesn't prove this click selected anything.
             bool hadTarget = _hasTarget() == true;
             double? before = _targetHp();
-            MoveMouse(WindowService.ClientToScreen(_window, spot));
-            await Task.Delay(_random.Next(40, 70), token);
-            SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);
-            await Task.Delay(_random.Next(35, 75), token);
-            SendMouse(Win32.MOUSEEVENTF_LEFTUP);
+            await ClickAsync(spot, 40, 70, token);
 
             // Until the target bar has been found once, give the bar finder time to spot it.
             int wait = _hasTarget() == null ? 1500 : 800;
@@ -168,6 +169,27 @@ internal sealed class InputExecutor : IDisposable
                 _missed(spot);
             misses++;
         }
+    }
+
+    /// <summary>Left click at a point of the game's client area.</summary>
+    private async Task ClickAsync(Point client, int settleMin, int settleMax, CancellationToken token)
+    {
+        if (_background)
+        {
+            // Client coordinates in lParam; the real cursor is left alone.
+            nint lParam = (nint)((client.Y << 16) | (client.X & 0xFFFF));
+            Win32.PostMessage(_window.Handle, Win32.WM_MOUSEMOVE, 0, lParam);
+            await Task.Delay(_random.Next(settleMin, settleMax), token);
+            Win32.PostMessage(_window.Handle, Win32.WM_LBUTTONDOWN, Win32.MK_LBUTTON, lParam);
+            await Task.Delay(_random.Next(35, 75), token);
+            Win32.PostMessage(_window.Handle, Win32.WM_LBUTTONUP, 0, lParam);
+            return;
+        }
+        MoveMouse(WindowService.ClientToScreen(_window, client));
+        await Task.Delay(_random.Next(settleMin, settleMax), token);
+        SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);
+        await Task.Delay(_random.Next(35, 75), token);
+        SendMouse(Win32.MOUSEEVENTF_LEFTUP);
     }
 
     /// <summary>
@@ -199,6 +221,17 @@ internal sealed class InputExecutor : IDisposable
         uint vk = (uint)(key & Keys.KeyCode);
         // Games read DirectInput scan codes, so send the scan code rather than the virtual key.
         ushort scan = (ushort)Win32.MapVirtualKey(vk, 0);
+        if (_background)
+        {
+            // Same lock as the repeater: a repeat can never slip in after this key's key-up.
+            lock (_held)
+            {
+                bool wasDown = _held.Contains(key);
+                PostKey(vk, scan, IsExtended(key), down, repeat: down && wasDown);
+                if (down) _held.Add(key); else _held.Remove(key);
+            }
+            return;
+        }
         uint flags = Win32.KEYEVENTF_SCANCODE | (down ? 0 : Win32.KEYEVENTF_KEYUP);
         if (IsExtended(key))
             flags |= Win32.KEYEVENTF_EXTENDEDKEY;
@@ -210,6 +243,47 @@ internal sealed class InputExecutor : IDisposable
         {
             if (down) _held.Add(key); else _held.Remove(key);
         }
+    }
+
+    private void PostKey(uint vk, ushort scan, bool extended, bool down, bool repeat) =>
+        Win32.PostMessage(_window.Handle, down ? Win32.WM_KEYDOWN : Win32.WM_KEYUP, (nint)vk,
+            KeyMessageLParam(scan, extended, down, repeat));
+
+    /// <summary>
+    /// lParam of WM_KEYDOWN/WM_KEYUP: repeat count 1, scan code (bits 16–23), extended
+    /// (bit 24), previous state (bit 30: key was already down) and transition (bit 31: up).
+    /// </summary>
+    internal static nint KeyMessageLParam(ushort scan, bool extended, bool down, bool repeat)
+    {
+        long value = 1 | ((long)(scan & 0xFF) << 16);
+        if (extended) value |= 1L << 24;
+        if (!down || repeat) value |= 1L << 30;
+        if (!down) value |= 1L << 31;
+        return (nint)value;
+    }
+
+    /// <summary>
+    /// A real keyboard repeats a held key ~30×/s. Messages carry no "is held" state, so a game
+    /// reading them sees the key held only while key-down messages keep coming.
+    /// </summary>
+    private async Task RepeatHeldKeysAsync()
+    {
+        try
+        {
+            while (!_cts.Token.IsCancellationRequested)
+            {
+                await Task.Delay(100, _cts.Token);
+                lock (_held)
+                {
+                    foreach (var key in _held)
+                    {
+                        uint vk = (uint)(key & Keys.KeyCode);
+                        PostKey(vk, (ushort)Win32.MapVirtualKey(vk, 0), IsExtended(key), down: true, repeat: true);
+                    }
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
     }
 
     private static bool IsExtended(Keys key) => key is Keys.Left or Keys.Right or Keys.Up or Keys.Down
@@ -229,6 +303,7 @@ internal sealed class InputExecutor : IDisposable
         _queue.Writer.TryComplete();
         _cts.Cancel();
         try { _worker.Wait(1500); } catch { }
+        try { _repeater?.Wait(500); } catch { }
         _cts.Dispose();
     }
 }

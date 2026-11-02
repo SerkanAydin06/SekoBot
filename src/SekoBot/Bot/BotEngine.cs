@@ -327,7 +327,9 @@ internal sealed class BotEngine : IDisposable
         _log($"Kayıt bitti: {recorder.Ticks:N0} tur, {recorder.FramesSaved:N0} kare, {recorder.Bytes / 1024.0 / 1024.0:0.0} MB.");
     }
 
-    public bool StartBot(bool dryRun, out string error)
+    public bool StartBot(bool dryRun, out string error) => StartBot(dryRun, false, out error);
+
+    public bool StartBot(bool dryRun, bool background, out string error)
     {
         error = "";
         if (GameMinimized)
@@ -345,11 +347,14 @@ internal sealed class BotEngine : IDisposable
                 () => Profile.TargetBar == null ? null : State?.HasTarget == true,
                 () => State?.TargetHp,
                 spot => _motion.MarkMiss(spot, _clock.Elapsed),
-                spot => { lock (_spotGate) { _targetSpot = spot; _targetSpotAt = _clock.Elapsed; } });
+                spot => { lock (_spotGate) { _targetSpot = spot; _targetSpotAt = _clock.Elapsed; } },
+                background);
             _botStarted = _clock.Elapsed;
             _brain.Start(_clock.Elapsed);
         }
-        _log(dryRun ? "Bot kuru çalışmada başladı (girdi gönderilmez)." : "Bot başladı. Acil durdurma: F12");
+        _log(dryRun ? "Bot kuru çalışmada başladı (girdi gönderilmez)."
+            : background ? "Bot arka plan modunda başladı (deneysel): tuşlar oyun penceresine mesajla gidiyor. Acil durdurma: F12"
+            : "Bot başladı. Acil durdurma: F12");
         return true;
     }
 
