@@ -242,4 +242,25 @@ public class NameFinderTests
         Assert.Contains(names, n => Math.Abs(n.X - 972) <= 8 && Math.Abs(n.Y - 260) <= 8);  // Yabani Köpek above
         Assert.Contains(names, n => Math.Abs(n.X - 756) <= 8 && Math.Abs(n.Y - 420) <= 8);  // nearest one, up-left
     }
+
+    [Fact]
+    public void Another_players_red_armour_is_not_a_mob()
+    {
+        // Real screenshot with another player ("Lv.3 azad06", red armour) next to the wolves.
+        string path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "other-player.png");
+        using var frame = SekoBot.Recording.RecordingFormat.LoadPng(path);
+        // Make it hard: paint a block of exactly the name red onto that player's armour.
+        for (int y = 448; y < 462; y++)
+        for (int x = 672; x < 712; x++)
+        {
+            int i = y * frame.Stride + x * 4;
+            frame.Data[i] = 30; frame.Data[i + 1] = 30; frame.Data[i + 2] = 150;
+        }
+        var names = NameFinder.Find(frame);
+        Assert.DoesNotContain(names, n => Math.Abs(n.X + n.Width / 2 - 692) < 40 && Math.Abs(n.Y + n.Height / 2 - 455) < 25);
+        Assert.DoesNotContain(names, n => Math.Abs(n.X + n.Width / 2 - 965) < 40 && Math.Abs(n.Y + n.Height / 2 - 548) < 25);
+        Assert.Equal(8, names.Count);
+        // The wolf whose name is half hidden behind an icon next to that player still counts.
+        Assert.Contains(names, n => Math.Abs(n.X - 788) <= 8 && Math.Abs(n.Y - 468) <= 8);
+    }
 }
