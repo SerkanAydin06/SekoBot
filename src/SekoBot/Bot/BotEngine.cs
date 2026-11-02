@@ -131,6 +131,8 @@ internal sealed class BotEngine : IDisposable
                     {
                         SearchBars(frame, profile, now);
                         var state = Perception.Analyze(frame, profile, now);
+                        if (profile.ClosePopups && BotRunning)
+                            state = state with { PopupOpen = PopupDetector.IsOpen(frame) };
                         if (profile.NavigateMode)
                         {
                             // Top-down camera: the name sits right on the mob.

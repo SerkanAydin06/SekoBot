@@ -45,6 +45,8 @@ internal sealed class KeyBindings
     public Keys CameraTop { get; set; } = Keys.G;
     /// <summary>Held at start: zooms the camera out.</summary>
     public Keys ZoomOut { get; set; } = Keys.F;
+    /// <summary>Closes a window opened over the game (shop advert after a level-up).</summary>
+    public Keys CloseWindow { get; set; } = Keys.Escape;
 }
 
 internal sealed class BotProfile
@@ -92,6 +94,8 @@ internal sealed class BotProfile
     /// <summary>Only red text with the green "Lv.N" in front counts as a mob name (filters out
     /// damage numbers and the HP bar over the character).</summary>
     public bool RequireLevelTag { get; set; } = true;
+    /// <summary>Close windows that pop up over the game (Esc once, again after 3 s if still open).</summary>
+    public bool ClosePopups { get; set; } = true;
     /// <summary>While attacking, press the pickup key this often.</summary>
     public int LootEveryMs { get; set; } = 1500;
     /// <summary>No mob on screen: walk forward this long, then turn the camera, and look again.</summary>

@@ -20,7 +20,7 @@ internal sealed partial class Brain
     private readonly Func<BotProfile> _profile;
 
     private TimeSpan _phaseSince, _lastLoot, _turnDuration;
-    private TimeSpan _lastAttackDown = Never, _lastHpPotion = Never, _lastMpPotion = Never;
+    private TimeSpan _lastAttackDown = Never, _lastHpPotion = Never, _lastMpPotion = Never, _lastEsc = Never;
     // When each low-bar condition was first seen; a single bad frame must not trigger anything.
     private TimeSpan _hpCriticalSince = Never, _hpLowSince = Never, _mpLowSince = Never;
     private TimeSpan _targetGoneSince = Never, _searchSentAt = Never, _lastProgress = Never;
@@ -41,7 +41,7 @@ internal sealed partial class Brain
     public void Start(TimeSpan now)
     {
         _lastAttackDown = Never;
-        _hpCriticalSince = _hpLowSince = _mpLowSince = Never;
+        _hpCriticalSince = _hpLowSince = _mpLowSince = _lastEsc = Never;
         _failedSearches = 0;
         _blindFight = false;
         if (_profile().NavigateMode)
@@ -84,6 +84,25 @@ internal sealed partial class Brain
             actions.Add(new KeyTapAction(p.Keys.MpPotion));
             _lastMpPotion = now;
             Potions++;
+        }
+
+        // A window over the game (advert after a level-up): let go of everything and close it
+        // with one Esc; only press again if it is still there 3 s later (a second Esc with
+        // nothing open would open the game menu instead).
+        if (p.ClosePopups && state.PopupOpen)
+        {
+            if (p.NavigateMode)
+            {
+                SetMoves([], p, actions, refresh: false);
+                SetAttack(false, p, actions, refresh: false);
+            }
+            if (now - _lastEsc >= Ms(3000))
+            {
+                actions.Add(new KeyTapAction(p.Keys.CloseWindow));
+                actions.Add(new NoteAction("Açılır pencere görüldü; Esc ile kapatılıyor."));
+                _lastEsc = now;
+            }
+            return actions;
         }
 
         if (p.NavigateMode)
