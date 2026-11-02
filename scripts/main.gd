@@ -1,5 +1,5 @@
 extends Control
-## SekoBot desktop shell. Window discovery/capture is isolated in WindowCaptureBridge.cs.
+## SekoBot desktop shell: pure GDScript UI plus external Win32 helper.
 
 const BACKGROUND := Color("#0B1020")
 const SURFACE := Color("#141D30")
@@ -20,6 +20,7 @@ var _active_pid: int = 0
 var _last_image: Image
 var _texture: ImageTexture
 var _auto_attach_pending := true
+var _last_backend_error := ""
 var _interval := 0.1
 var _elapsed := 0.0
 var _fps_elapsed := 0.0
@@ -57,7 +58,7 @@ func _ready() -> void:
 	_write_log("SekoBot başlatıldı. Windows pencereleri aranıyor.")
 	_refresh_windows()
 	_refresh_timer = Timer.new()
-	_refresh_timer.wait_time = 5.0
+	_refresh_timer.wait_time = 2.0
 	_refresh_timer.autostart = true
 	_refresh_timer.timeout.connect(_refresh_windows)
 	add_child(_refresh_timer)
@@ -289,10 +290,10 @@ func _make_workspace(parent: HBoxContainer) -> void:
 	log_column.add_child(_log_view)
 
 
-func _text(value: String, size: int, tint: Color) -> Label:
+func _text(value: String, font_size: int, tint: Color) -> Label:
 	var result := Label.new()
 	result.text = value
-	result.add_theme_font_size_override("font_size", size)
+	result.add_theme_font_size_override("font_size", font_size)
 	result.add_theme_color_override("font_color", tint)
 	return result
 
@@ -388,13 +389,21 @@ func _refresh_windows() -> void:
 	if _running:
 		return
 	if not _bridge.has_method("ListWindows"):
-		_set_status("C# DERLENMELİ", RED)
-		_write_log("Godot .NET üst menüsünden Build çalıştırılmalı.")
+		_set_status("YARDIMCI MODÜL EKSİK", RED)
+		_write_log("Windows yardımcı modülü yüklenemedi.")
 		return
 	var previous := _selected_window()
 	var old_handle: int = int(previous.get("hwnd", 0))
 	var old_pid: int = int(previous.get("pid", 0))
 	_windows = _bridge.call("ListWindows")
+	var backend_error: String = str(_bridge.call("GetLastError"))
+	if not backend_error.is_empty():
+		_set_status("WINDOWS YARDIMCISI HATASI", RED)
+		if backend_error != _last_backend_error:
+			_write_log(backend_error)
+			_last_backend_error = backend_error
+		return
+	_last_backend_error = ""
 	_window_selector.clear()
 	var selected_index := -1
 	var metin_indices: Array[int] = []
@@ -446,6 +455,7 @@ func _begin_capture() -> void:
 		return
 	_active_hwnd = int(chosen.get("hwnd", 0))
 	_active_pid = int(chosen.get("pid", 0))
+	_bridge.call("StartCapture", _active_hwnd, _active_pid, int(_fps_selector.get_item_id(_fps_selector.selected)))
 	_elapsed = _interval
 	_fps_elapsed = 0.0
 	_fps_frames = 0
@@ -460,6 +470,8 @@ func _capture_once() -> void:
 	var frame: Image = _bridge.call("CaptureFrame", _active_hwnd, _active_pid)
 	if frame == null or frame.is_empty():
 		var reason: String = str(_bridge.call("GetLastError"))
+		if reason.is_empty():
+			return  # Asynchronous helper has not yet produced a new frame.
 		_stop_capture()
 		_set_status("YAKALAMA HATASI", RED)
 		_write_log(reason if not reason.is_empty() else "Görüntü yakalama başarısız.")
@@ -491,6 +503,7 @@ func _stop_capture() -> void:
 	if not _running:
 		return
 	_running = false
+	_bridge.call("StopCapture")
 	_active_hwnd = 0
 	_active_pid = 0
 	_set_status("DURDURULDU", MUTED)

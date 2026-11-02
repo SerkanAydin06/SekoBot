@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
-[ext_resource type="Script" path="res://scripts/WindowCaptureBridge.cs" id="2_capture"]
+[ext_resource type="Script" path="res://scripts/WindowCaptureBridge.gd" id="2_capture"]
 
 [node name="SekoBot" type="Control"]
 layout_mode = 3

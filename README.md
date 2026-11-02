@@ -1,63 +1,46 @@
-# SekoBot · Godot Desktop
+# SekoBot — Standart Godot 4
 
-Metin2 penceresi için **Godot 4.5 .NET** tabanlı Windows masaüstü arayüzü. Python, PySide6 ve otomatik GitHub Releases süreçleri kaldırılmıştır. Geliştirme sırasında doğrudan Godot editöründen çalışır.
+Metin2 penceresi izlemek için Godot 4 + GDScript tabanlı masaüstü arayüzü.
 
-## Kurulum (bir defalık)
+## Gereksinimler
 
-> **Godot'un standart sürümü yeterli değildir.** Windows pencerelerini listelemek/yakalamak için C# Win32 köprüsü vardır.
+- Windows 10/11 ve **Godot 4.5+ standart editörü**.
+- Windows ile gelen Windows PowerShell 5.1.
+- **Python ve .NET SDK kurmana gerek yok.**
 
-- [Godot 4.5 .NET editor (Windows x64)](https://godotengine.org/download/windows/) — indirme sayfasından **.NET** sürümünü seç.
-- [.NET 8 SDK (Windows x64)](https://dotnet.microsoft.com/download/dotnet/8.0) — yalnızca Godot içinde C# kodunu derlemek için gerekir. Python gerekmez.
+Yerel PowerShell yardımcısı, `tools/WindowNative.cs` içindeki Win32 kodunu PowerShell'in `Add-Type` komutuyla çalışırken derler. Bu **Godot C# script'i değildir**; Godot sahnesi yalnızca GDScript yükler.
 
-1. Depoyu klonla veya **Code → Download ZIP** ile indirip çıkar.
-2. Godot **.NET editörü** üzerinden **Import** seç ve bu klasördeki **project.godot** dosyasını aç.
-3. Üst menüde **Build** düğmesini bir kez çalıştır (C# köprüsü derlenir).
-4. **F6** (ana sahne açıksa) veya **F5** ile SekoBot'u çalıştır.
-5. Metin2'yi pencere modunda aç. SekoBot penceresini listeler; tek Metin2 varsa otomatik bağlanır. Gerekirse listeden seçip **Pencereye bağlan** butonuna bas.
+## Çalıştırma
 
-Her kod değişikliğinde GitHub'a push/pull yapıp Godot'ta **Build** (C# değiştiyse) ve **F5** yeterlidir. **Releases, Python ve her güncelleme için EXE gerekmez.** Son sürüm hazır olduğunda Godot > Project > Export üzerinden Windows EXE üretilebilir.
+1. GitHub'dan **Code → Download ZIP** ile güncel depoyu indirip klasöre çıkar veya mevcut projeyi güncelle.
+2. Godot standart editörüyle `project.godot` dosyasını aç.
+3. **F5** ile çalıştır — Build yapman gerekmez.
+4. Metin2'yi pencere modunda aç. SekoBot pencere listesini tarar ve tek Metin2 bulursa bağlanmayı dener.
+5. Önizleme geldikten sonra **Ekran görüntüsü kaydet** seçeneğini kullanabilirsin.
 
-## Şu anda çalışan özellikler
+## Mimari
 
-- Koyu temalı Godot arayüzü ve bağlantı durum paneli.
-- Açık Windows pencerelerini listeleme; Metin2 başlıklarını öne alma.
-- Seçilen pencereye **HWND + PID** ile bağlanma ve eski/değişmiş pencereyi reddetme.
-- Pencerenin **başlık çubuğu hariç yalnızca oyun alanını** yakalama.
-- Pencere konumu ve boyutu değiştiğinde her karede güncel koordinatları kullanma.
-- 5 / 10 / 15 FPS canlı önizleme ve çözünürlük/FPS/kare sayacı.
-- **Ekran görüntüsü kaydet**: varsayılan olarak \`%USERPROFILE%\Pictures\SekoBot\`.
-- Bağlantıyı durdurma; simge durumuna küçültme/hata senaryolarında uyarı.
-- FPS ayarını \`user://settings.cfg\` içerisinde hatırlama.
+- `scripts/main.gd`: Koyu temalı Godot kontrol paneli, önizleme ve istatistikler.
+- `scripts/WindowCaptureBridge.gd`: JSON/PNG üzerinden Windows yardımcı işlemine bağlanır.
+- `tools/capture_helper.ps1`: Windows PowerShell yardımcı hizmeti.
+- `tools/WindowNative.cs`: Win32 API pencere keşfi ve görünür ekran yakalama.
+- `docs/ROADMAP.md`: Geliştirme planı.
 
-## Proje yapısı
+## Özellikler ve sınırlamalar
 
-\`\`\`text
-SekoBot/
-├── project.godot               # Godot proje giriş dosyası
-├── SekoBot.csproj              # Godot .NET 8 projesi
-├── scenes/
-│   └── main.tscn              # Ana Godot sahnesi
-├── scripts/
-│   ├── main.gd                # GDScript kontrol paneli
-│   └── WindowCaptureBridge.cs # C# / Win32 pencere keşfi ve görüntü yakalama
-└── docs/
-    └── ROADMAP.md             # Sonraki modüller ve test planı
-\`\`\`
+Açık Windows pencereleri, Metin2 otomatik seçimi, HWND/PID doğrulaması, 5/10/15 FPS hedefli canlı önizleme, olay günlüğü ve PNG kayıtları bulunur. PNG'ler varsayılan olarak `%USERPROFILE%\Pictures\SekoBot` klasörüne kaydedilir. Godot arayüzü yardımcı sürecin oluşturduğu PNG karelerini okur.
 
-## Bilinmesi gerekenler
+**İlk sürüm otomatik farm yapmaz**; oyuna klavye/fare komutu göndermez. Yalnızca oyun ekranını yakalar.
 
-- **Bu sürüm bir ekran izleyicisidir**; otomatik farm, hareket, saldırı veya klavye/fare komutu henüz yoktur.
-- Windows **BitBlt/GDI** ekran yakalama kullanılır. Metin2 **görünür ve pencere modunda** olmalıdır. Üstünü kapatan başka pencere görüntüye girer; küçültülmüş pencereden görüntü alınamaz.
-- DirectX özel tam ekran veya donanım korumalı pencerelerde siyah görüntü oluşabilir. Önce pencere modunda deneyin; sonraki aşamada Windows Graphics Capture alternatifi eklenebilir.
-- Kare yakalama şu anda **Godot ana iş parçacığında** gerçekleşir; 10 FPS başlangıç için makuldür. Oyun ve bilgisayara göre hız ayarlanabilir. Daha sonra worker thread'e alınabilir.
-- Uygulama dışarıya veri göndermez. PNG'ler yerel diske kaydedilir.
-- Bu ortamda Godot .NET/Windows GUI çalıştırma imkânı olmadığından **gerçek pencere yakalama testi Windows üzerinde yapılmalıdır**.
+Yakalama penceredeki görünür masaüstü piksellerini kullanır: Metin2 **pencere modunda, ekranda ve önü açık** olmalıdır. Simge durumunda görüntü alınamaz; pencerenin üstü örtülürse yanlış pikseller yakalanabilir. Bazı DirectX istemcileri siyah görüntü üretebilir. PNG üretimi CPU ve disk kullanır.
+
+PowerShell'in `-ExecutionPolicy Bypass` seçeneği yalnızca yerel yardımcı sürecin başlatılması için kullanılır; Windows'un kalıcı yürütme politikasını değiştirmez. Görüntüler internete gönderilmez.
 
 ## Sorun giderme
 
-- **C# script yüklenemedi:** Standart Godot yerine **.NET** sürümünü aç, .NET 8 SDK kur, editörde **Build** yap.
-- **Pencere listesi boş:** Metin2'yi pencere modunda aç; GDScript'in Build sonrası güncellendiğini kontrol et.
-- **Siyah/yanlış görüntü:** Tam ekranı kapat; oyun penceresinin başka pencere tarafından örtülmediğinden emin ol.
-- **Kare hızı düşük:** Önizlemeyi 5 FPS yap; daha düşük oyun çözünürlüğü dene.
+- **WindowCaptureBridge.cs yüklenemedi:** Eski proje klasörü açıktır. Yeni sahne `WindowCaptureBridge.gd` dosyasını kullanır. Godot'u kapatıp güncel klasörden yeniden aç.
+- **WINDOWS YARDIMCISI HATASI:** Sistem günlüğünü kontrol et. PowerShell'in çalıştırılmasına sistem politikası veya antivirüs engel oluyor olabilir.
+- **Pencere bulunamadı:** Metin2 pencere modunda olmalı; 2–5 saniye sonra **Pencereleri yenile** seç.
+- **Siyah görüntü:** Pencere moduna geç, üstündeki diğer pencereleri kaldır ve tekrar dene.
 
-**Not:** Godot projeleri GDScript + C# ile hibrit çalışabilir. Arayüz sahneleri GDScript, Windows API erişimi C# olarak ayrılmıştır.
+**Test:** GitHub dosyaları ve bağımlılıkları kontrol edildi. Gerçek Windows + Godot + Metin2 uçtan uca testi henüz yapılmadı.
