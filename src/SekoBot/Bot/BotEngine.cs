@@ -134,7 +134,8 @@ internal sealed class BotEngine : IDisposable
                         if (profile.AutoTarget)
                         {
                             var moving = _motion.Update(frame, now);
-                            var mobs = MobLocator.Combine(NameFinder.Find(frame), moving, frame.Width, frame.Height)
+                            var mobs = MobLocator.Combine(NameFinder.Find(frame), moving, frame.Width, frame.Height,
+                                    name => MobLocator.BodyBelow(frame, name))
                                 .Where(m => !_motion.RecentlyMissed(m, now)).ToList();
                             state = state with { MobCandidates = mobs, TargetSpot = TrackTarget(state, mobs, now) };
                         }

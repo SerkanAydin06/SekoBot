@@ -3,8 +3,8 @@ using SekoBot.Capture;
 namespace SekoBot.Vision;
 
 /// <summary>
-/// Finds red mob names floating above monsters. Text is a thin horizontal line of red
-/// pixels with gaps between letters; a solid red strip (HP/target bar) is not text.
+/// Finds red mob names floating above monsters ("Lv.3 Kurt": red text, often on a dark red
+/// label). A name is a short horizontal block of red, 8–28 px tall; a thin solid strip is a bar.
 /// The mob itself stands right below its name.
 /// </summary>
 internal static class NameFinder
@@ -80,8 +80,10 @@ internal static class NameFinder
             if (ch < 2 || ch > 7 || cw < 4 || cw < ch * 1.5 || cw > 65)
                 continue;
             var box = new Rectangle(left * Cell, top * Cell, cw * Cell, ch * Cell);
-            if (PixelDensity(frame, box) > 0.6)
-                continue; // solid strip: a bar, not text
+            // Names sit on a dark red label, so a filled box is fine; only a thin solid strip
+            // (≤ 8 px, a bar) is not a name.
+            if (ch <= 2 && PixelDensity(frame, box) > 0.6)
+                continue;
             names.Add(box);
         }
         return names;
@@ -110,10 +112,12 @@ internal static class NameFinder
 internal static class MobLocator
 {
     /// <summary>
-    /// Where to click: below each red name (on the moving thing there, if any, else a fixed
-    /// distance below), then the remaining moving things. Nearest to the character first.
+    /// Where to click: below each red name (on the moving thing there, else on the mob's body
+    /// found under the name, else a fixed distance below), then the remaining moving things.
+    /// Nearest to the character first.
     /// </summary>
-    public static List<Point> Combine(IReadOnlyList<Rectangle> names, IReadOnlyList<Point> motion, int width, int height)
+    public static List<Point> Combine(IReadOnlyList<Rectangle> names, IReadOnlyList<Point> motion, int width, int height,
+        Func<Rectangle, Point?>? bodyBelow = null)
     {
         var center = new Point(width / 2, height / 2);
         double Dist(Point p) => Math.Sqrt(Math.Pow(p.X - center.X, 2) + Math.Pow(p.Y - center.Y, 2));
@@ -135,10 +139,59 @@ internal static class MobLocator
             }
             else
             {
-                fromNames.Add(new Point(cx, Math.Min(height - 1, name.Bottom + below)));
+                fromNames.Add(bodyBelow?.Invoke(name) ?? new Point(cx, Math.Min(height - 1, name.Bottom + below)));
             }
         }
         var rest = motion.Where(m => !used.Contains(m));
         return fromNames.OrderBy(Dist).Concat(rest.OrderBy(Dist)).Take(6).ToList();
+    }
+
+    /// <summary>
+    /// The mob's body under its name: in a band below the name, the ground is the typical
+    /// (median) colour; pixels clearly different from it are the mob. Returns the centre of
+    /// the topmost such blob (the nearest one under the name), or null if nothing stands out.
+    /// Red pixels are skipped so another name lower down doesn't count as a body.
+    /// </summary>
+    public static Point? BodyBelow(Frame frame, Rectangle name)
+    {
+        int half = Math.Max(30, name.Width / 2);
+        int cx = name.X + name.Width / 2;
+        int x0 = Math.Max(0, cx - half), x1 = Math.Min(frame.Width, cx + half);
+        int y0 = Math.Min(frame.Height, name.Bottom + 3);
+        int y1 = Math.Min((int)(frame.Height * 0.82), name.Bottom + (int)(frame.Height * 0.15));
+        if (x1 - x0 < 10 || y1 - y0 < 10)
+            return null;
+
+        var data = frame.Data;
+        var samples = new List<(int X, int Y, int R, int G, int B)>();
+        for (int y = y0; y < y1; y += 2)
+        for (int x = x0; x < x1; x += 2)
+        {
+            int i = y * frame.Stride + x * 4;
+            byte b = data[i], g = data[i + 1], r = data[i + 2];
+            if (BarFinder.Classify(r, g, b) == 1)
+                continue;
+            samples.Add((x, y, r, g, b));
+        }
+        if (samples.Count < 30)
+            return null;
+        int Median(Func<(int X, int Y, int R, int G, int B), int> channel)
+        {
+            var values = samples.Select(channel).ToArray();
+            Array.Sort(values);
+            return values[values.Length / 2];
+        }
+        int mr = Median(s => s.R), mg = Median(s => s.G), mb = Median(s => s.B);
+        var body = samples.Where(s =>
+        {
+            int dr = s.R - mr, dg = s.G - mg, db = s.B - mb;
+            return dr * dr + dg * dg + db * db > 55 * 55;
+        }).ToList();
+        if (body.Count < 12)
+            return null;
+        int top = body.Min(s => s.Y);
+        int limit = top + Math.Max(20, (int)(frame.Height * 0.08));
+        var nearest = body.Where(s => s.Y < limit).ToList();
+        return new Point((int)nearest.Average(s => s.X), (int)nearest.Average(s => s.Y));
     }
 }
