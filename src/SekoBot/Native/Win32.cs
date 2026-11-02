@@ -74,6 +74,9 @@ internal static class Win32
     internal const uint KEYEVENTF_KEYUP = 0x0002;
     internal const uint KEYEVENTF_SCANCODE = 0x0008;
     internal const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
+    internal const uint MOUSEEVENTF_MOVE = 0x0001;
+    internal const uint MOUSEEVENTF_VIRTUALDESK = 0x4000;
+    internal const uint MOUSEEVENTF_ABSOLUTE = 0x8000;
     internal const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
     internal const uint MOUSEEVENTF_LEFTUP = 0x0004;
     internal const int WM_HOTKEY = 0x0312;
@@ -145,6 +148,11 @@ internal static class Win32
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool SetCursorPos(int x, int y);
+
+    [DllImport("user32.dll")]
+    internal static extern int GetSystemMetrics(int index);
+
+    internal const int SM_XVIRTUALSCREEN = 76, SM_YVIRTUALSCREEN = 77, SM_CXVIRTUALSCREEN = 78, SM_CYVIRTUALSCREEN = 79;
 
     [DllImport("user32.dll")]
     internal static extern uint MapVirtualKey(uint code, uint mapType);

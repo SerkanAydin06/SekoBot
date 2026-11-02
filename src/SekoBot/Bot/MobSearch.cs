@@ -49,9 +49,10 @@ internal static class MobSearch
         double cx = width / 2.0, cy = height / 2.0;
         double maxRadius = Math.Min(width, height) * 0.42;
         int ring = 0;
-        for (double r = 70; r <= maxRadius; r += 55, ring++)
+        // Spacing ~80 px: a mob is bigger than that, and fewer points keep a slow hover affordable.
+        for (double r = 70; r <= maxRadius; r += 70, ring++)
         {
-            int n = Math.Max(8, (int)Math.Round(2 * Math.PI * r / 60));
+            int n = Math.Max(8, (int)Math.Round(2 * Math.PI * r / 80));
             // Rotate every other ring so points don't line up on the same rays.
             double offset = ring % 2 == 0 ? 0 : Math.PI / n;
             for (int i = 0; i < n; i++)
