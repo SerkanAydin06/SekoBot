@@ -281,7 +281,7 @@ internal sealed partial class Brain
         }
         if (state.ReviveReady && now - _lastReviveClick >= Ms(3000))
         {
-            actions.Add(new ClickAction(DeathDetector.ReviveHereButton(state.Width, state.Height)));
+            actions.Add(new ClickAction(DeathDetector.ReviveHereButton(state.Width, state.Height), Slow: true));
             actions.Add(new NoteAction("\"Burada yeniden başla\" tıklandı."));
             _lastReviveClick = now;
         }

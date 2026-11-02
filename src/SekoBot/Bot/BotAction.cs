@@ -3,9 +3,11 @@ namespace SekoBot.Bot;
 internal abstract record BotAction;
 
 /// <summary>Left click at a point in game client pixels.</summary>
-internal sealed record ClickAction(Point Client) : BotAction
+/// <param name="Slow">For UI buttons (e.g. "Burada yeniden başla"): the real cursor is put on
+/// the button, hovers a moment, and the button is held down a bit, like a person clicks.</param>
+internal sealed record ClickAction(Point Client, bool Slow = false) : BotAction
 {
-    public override string ToString() => $"Tıkla ({Client.X}, {Client.Y})";
+    public override string ToString() => $"Tıkla ({Client.X}, {Client.Y}){(Slow ? " yavaş" : "")}";
 }
 
 internal sealed record KeyTapAction(Keys Key) : BotAction

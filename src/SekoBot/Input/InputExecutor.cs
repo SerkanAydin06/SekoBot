@@ -106,6 +106,9 @@ internal sealed class InputExecutor : IDisposable
     {
         switch (action)
         {
+            case ClickAction { Slow: true } button:
+                await ClickButtonAsync(button.Client, token);
+                break;
             case ClickAction click:
                 await ClickAsync(click.Client, 30, 60, token);
                 break;
@@ -172,6 +175,45 @@ internal sealed class InputExecutor : IDisposable
     }
 
     /// <summary>Left click at a point of the game's client area.</summary>
+    /// <summary>
+    /// Clicks a game UI button the way a person does. The game checks where the real cursor is,
+    /// so a posted click alone (cursor elsewhere) misses: put the cursor on the button, let it
+    /// hover, hold the button down a moment, then put the cursor back where it was.
+    /// </summary>
+    private async Task ClickButtonAsync(Point client, CancellationToken token)
+    {
+        Win32.GetCursorPos(out var previous);
+        var screen = WindowService.ClientToScreen(_window, client);
+        nint lParam = (nint)((client.Y << 16) | (client.X & 0xFFFF));
+        try
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                Win32.SetCursorPos(screen.X, screen.Y);
+                if (_background)
+                    Win32.PostMessage(_window.Handle, Win32.WM_MOUSEMOVE, 0, lParam);
+                else
+                    MoveMouse(screen);
+                await Task.Delay(80, token);
+            }
+            await Task.Delay(150, token);
+            if (_background)
+                Win32.PostMessage(_window.Handle, Win32.WM_LBUTTONDOWN, Win32.MK_LBUTTON, lParam);
+            else
+                SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);
+            await Task.Delay(150, token);
+            if (_background)
+                Win32.PostMessage(_window.Handle, Win32.WM_LBUTTONUP, 0, lParam);
+            else
+                SendMouse(Win32.MOUSEEVENTF_LEFTUP);
+            await Task.Delay(150, token);
+        }
+        finally
+        {
+            Win32.SetCursorPos(previous.X, previous.Y);
+        }
+    }
+
     private async Task ClickAsync(Point client, int settleMin, int settleMax, CancellationToken token)
     {
         if (_background)

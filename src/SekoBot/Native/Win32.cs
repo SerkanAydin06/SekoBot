@@ -157,6 +157,10 @@ internal static class Win32
     internal static extern bool SetCursorPos(int x, int y);
 
     [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetCursorPos(out POINT point);
+
+    [DllImport("user32.dll")]
     internal static extern int GetSystemMetrics(int index);
 
     internal const int SM_XVIRTUALSCREEN = 76, SM_YVIRTUALSCREEN = 77, SM_CXVIRTUALSCREEN = 78, SM_CYVIRTUALSCREEN = 79;
