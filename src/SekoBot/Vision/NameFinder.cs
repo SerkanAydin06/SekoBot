@@ -96,7 +96,10 @@ internal static class NameFinder
                 // its tag on the same line; without that, red under a white name is a player.
                 if (!HasLevelTag(frame, box))
                     continue;
-                if (!HasLevelTagOnSameLine(frame, box) && UnderPlayerName(frame, box))
+                // Our own character is always in the middle (the camera follows it), so there a
+                // red blob without the tag on its line is our armour even if our white name
+                // wasn't recognised in this frame (animation, effects, name partly hidden).
+                if (!HasLevelTagOnSameLine(frame, box) && (NearOwnCharacter(box, w, h) || UnderPlayerName(frame, box)))
                     continue;
             }
             names.Add(box);
@@ -141,6 +144,16 @@ internal static class NameFinder
         int x0 = Math.Max(0, name.Left - width), x1 = Math.Min(frame.Width, name.Left + 2);
         int y0 = Math.Max(0, centre - half), y1 = Math.Min(frame.Height, centre + half + 1);
         return CountGreen(frame, x0, x1, y0, y1, 8) >= 8;
+    }
+
+    /// <summary>
+    /// The player's own character: screen centre, from its name line down to its feet.
+    /// Measured: name "Lv.6 KAIZER06" at (903–992, 538), armour at (956–972, 544–552) on 1920×1080.
+    /// </summary>
+    internal static bool NearOwnCharacter(Rectangle box, int w, int h)
+    {
+        double cx = (box.X + box.Width / 2.0) / w, cy = (box.Y + box.Height / 2.0) / h;
+        return Math.Abs(cx - 0.5) < 0.06 && cy > 0.44 && cy < 0.60;
     }
 
     /// <summary>

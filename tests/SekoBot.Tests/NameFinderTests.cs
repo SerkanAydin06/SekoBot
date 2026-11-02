@@ -263,4 +263,26 @@ public class NameFinderTests
         // The wolf whose name is half hidden behind an icon next to that player still counts.
         Assert.Contains(names, n => Math.Abs(n.X - 788) <= 8 && Math.Abs(n.Y - 468) <= 8);
     }
+
+    [Fact]
+    public void Red_in_the_middle_without_a_tag_on_its_line_is_our_own_character_even_without_a_visible_name()
+    {
+        var c = new Canvas();
+        c.Name(250, 150, 8);                // a real mob
+        c.LevelTag(380, 290);               // our "Lv.6" (our white name not recognisable)
+        c.Fill(395, 296, 30, 12, 220, 40, 40); // red armour in the middle, a bit below the tag line
+        using var frame = c.ToFrame();
+        var names = NameFinder.Find(frame);
+        var only = Assert.Single(names);
+        Assert.InRange(only.X, 246, 254);
+    }
+
+    [Fact]
+    public void A_mob_right_next_to_us_is_still_found()
+    {
+        var c = new Canvas();
+        c.Name(410, 300, 6); // mob name with its tag on the line, right at the middle
+        using var frame = c.ToFrame();
+        Assert.Single(NameFinder.Find(frame));
+    }
 }
