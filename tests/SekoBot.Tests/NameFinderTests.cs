@@ -228,4 +228,18 @@ public class NameFinderTests
     [InlineData(70, 15, 15, false)]   // too dark
     public void Name_red_is_the_measured_pure_red(int r, int g, int b, bool expected) =>
         Assert.Equal(expected, NameFinder.IsNameRed(r, g, b));
+
+    [Fact]
+    public void Red_armour_on_the_players_character_is_not_a_mob()
+    {
+        // Real 1919×1079 screenshot: the character wears red armour right under "Lv.6 KAIZER06"
+        // in the middle; 15 mob names around it have a visible Lv tag.
+        string path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "red-armor.png");
+        using var frame = SekoBot.Recording.RecordingFormat.LoadPng(path);
+        var names = NameFinder.Find(frame);
+        Assert.DoesNotContain(names, n => Math.Abs(n.X + n.Width / 2 - 960) < 60 && Math.Abs(n.Y + n.Height / 2 - 545) < 40);
+        Assert.InRange(names.Count, 14, 16);
+        Assert.Contains(names, n => Math.Abs(n.X - 972) <= 8 && Math.Abs(n.Y - 260) <= 8);  // Yabani Köpek above
+        Assert.Contains(names, n => Math.Abs(n.X - 756) <= 8 && Math.Abs(n.Y - 420) <= 8);  // nearest one, up-left
+    }
 }

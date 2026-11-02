@@ -89,8 +89,16 @@ internal static class NameFinder
             // (≤ 8 px, a bar) is not a name.
             if (ch <= 2 && PixelDensity(frame, box) > 0.6)
                 continue;
-            if (requireLevelTag && !HasLevelTag(frame, box))
-                continue;
+            if (requireLevelTag)
+            {
+                // The player's own character stands in the middle, right under its own green
+                // "Lv.N": red armour or hair there would pass the loose check. There the tag must
+                // be on the same line, right before the red text, like on every mob name.
+                double cx = (box.X + box.Width / 2.0) / w, cy = (box.Y + box.Height / 2.0) / h;
+                bool nearPlayer = Math.Abs(cx - 0.5) < 0.05 && Math.Abs(cy - 0.5) < 0.07;
+                if (nearPlayer ? !HasLevelTagOnSameLine(frame, box) : !HasLevelTag(frame, box))
+                    continue;
+            }
             names.Add(box);
         }
         return names;
@@ -118,6 +126,37 @@ internal static class NameFinder
                     return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Strict version: the green tag on the name's middle rows, at most 24 px (2 × height) to its
+    /// left. Measured on real screenshots: 14–62 green pixels there for mob names, 0 for the red
+    /// armour under the player's own "Lv.6".
+    /// </summary>
+    private static bool HasLevelTagOnSameLine(Frame frame, Rectangle name)
+    {
+        int width = Math.Max(24, name.Height * 2);
+        int centre = name.Top + name.Height / 2, half = Math.Max(2, name.Height / 4);
+        int x0 = Math.Max(0, name.Left - width), x1 = Math.Min(frame.Width, name.Left + 2);
+        int y0 = Math.Max(0, centre - half), y1 = Math.Min(frame.Height, centre + half + 1);
+        return CountGreen(frame, x0, x1, y0, y1, 8) >= 8;
+    }
+
+    private static int CountGreen(Frame frame, int x0, int x1, int y0, int y1, int enough)
+    {
+        var data = frame.Data;
+        int green = 0;
+        for (int y = y0; y < y1; y++)
+        for (int x = x0; x < x1; x++)
+        {
+            int i = y * frame.Stride + x * 4;
+            int b = data[i], g = data[i + 1], r = data[i + 2];
+            int max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b));
+            if (g == max && g >= 110 && r * 100 < g * 60 && b * 100 < g * 60 && (max - min) * 255 >= 90 * max)
+                if (++green >= enough)
+                    return green;
+        }
+        return green;
     }
 
     /// <summary>
