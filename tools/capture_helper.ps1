@@ -65,7 +65,19 @@ while ($true) {
             continue
         }
 
-        $json = [System.IO.File]::ReadAllText($commandPath, $utf8)
+        # Godot replaces command.json between polling intervals.
+        # A transient missing/locked command is not a fatal capture failure.
+        try {
+            $json = [System.IO.File]::ReadAllText($commandPath, $utf8)
+        }
+        catch [System.IO.IOException] {
+            Start-Sleep -Milliseconds 40
+            continue
+        }
+        catch [System.UnauthorizedAccessException] {
+            Start-Sleep -Milliseconds 40
+            continue
+        }
         $command = ConvertFrom-Json -InputObject $json
         if ($null -eq $command) {
             Start-Sleep -Milliseconds 60
