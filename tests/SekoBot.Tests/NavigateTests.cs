@@ -15,7 +15,7 @@ public class NavigateTests
 
     private static (Brain Brain, BotProfile Profile) Ready()
     {
-        var profile = new BotProfile { SkillEverySec = new int[5] };
+        var profile = new BotProfile { LeashRadius = 0, SkillEverySec = new int[5] };
         Assert.True(profile.NavigateMode); // the default
         var brain = new Brain(() => profile);
         brain.Start(TimeSpan.Zero);
@@ -98,7 +98,9 @@ public class NavigateTests
         var (brain, p) = Ready();
         var actions = Run(brain, 4000, 9000, _ => []);
         Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.MoveForward);
-        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.RotateCamera);
+        // Zigzag instead of turning the camera (the area check needs the camera's direction).
+        Assert.Contains(actions, a => a is KeyDownAction d && (d.Key == p.Keys.MoveLeft || d.Key == p.Keys.MoveRight));
+        Assert.DoesNotContain(actions, a => a is KeyDownAction d && d.Key == p.Keys.RotateCamera);
         Assert.DoesNotContain(actions, a => a is KeyDownAction d && d.Key == p.Keys.Attack);
     }
 
@@ -198,12 +200,12 @@ public class NavigateTests
     [Fact]
     public void Old_profile_moves_to_the_closer_attack_distance_but_keeps_user_choices()
     {
-        var old = new BotProfile { SkillEverySec = new int[5], Version = 0, AttackRadius = 0.10 };
+        var old = new BotProfile { LeashRadius = 0, SkillEverySec = new int[5], Version = 0, AttackRadius = 0.10 };
         Assert.True(ProfileStore.Upgrade(old));
         Assert.Equal(0.05, old.AttackRadius);
         Assert.Equal(BotProfile.CurrentVersion, old.Version);
 
-        var picked = new BotProfile { SkillEverySec = new int[5], Version = 0, AttackRadius = 0.07 };
+        var picked = new BotProfile { LeashRadius = 0, SkillEverySec = new int[5], Version = 0, AttackRadius = 0.07 };
         ProfileStore.Upgrade(picked);
         Assert.Equal(0.07, picked.AttackRadius);
 

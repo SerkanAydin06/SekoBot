@@ -15,6 +15,15 @@ internal sealed record GameState(
     /// <summary>Probable mobs (client pixels, nearest to the character first), from motion.</summary>
     public IReadOnlyList<Point> MobCandidates { get; init; } = [];
 
+    /// <summary>Whether the picture is moving (we walk) — null when not measured.</summary>
+    public bool? ScreenMoving { get; init; }
+
+    /// <summary>The big map (M) is open on screen.</summary>
+    public bool MapOpen { get; init; }
+
+    /// <summary>Our position on the big map (0..1 of its width), when it is open and the arrow was found.</summary>
+    public PointF? MapPosition { get; init; }
+
     /// <summary>The death dialog is showing.</summary>
     public bool Dead { get; init; }
 

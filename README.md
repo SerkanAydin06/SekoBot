@@ -27,6 +27,12 @@ Karakter ölünce ekrana gelen pencereyi bot tanır: tuşları bırakır, **"Bur
 
 Level atlayınca çıkan reklam penceresi ve yanlışlıkla açılan Esc menüsü gibi oyunun üstüne açılan pencereleri bot görür (ekranın ortasındaki uzun, düz başlık çubuğundan ya da menünün arkasında bulanıklaşan oyundan), yürümeyi ve saldırıyı bırakır ve **bir kez Esc**'ye basar. Pencere 3 sn sonra hâlâ açıksa tekrar basar; böylece boşuna Esc basıp oyun menüsünü açmaz. Kapatmak için `profile.json` içinde `"ClosePopups": false`. Not: bot çalışırken envanter gibi bir pencereyi kendin açarsan onu da kapatır.
 
+## Alan sınırı ve takılma
+
+**Alan sınırı (harita %)** (varsayılan 6, 0 = kapalı): Bot başlarken **M** ile büyük haritayı açar, sarı oktan başlangıç yerini kaydeder ve kapatır; hemen ardından kısa bir yürüyüşle haritanın hangi yönünün ekranın üstü olduğunu ölçer. Sonra 20 sn'de bir (hiç saldırı ortasında değil) haritaya bakar; başlangıçtan haritanın genişliğinin %6'sından fazla uzaklaştıysa başlangıca geri yürür (yanındaki mobla yine savaşır). Bu yüzden bot kamerayı artık E ile çevirmez; mob ararken zikzak yürür.
+
+**Takılma:** W/A/S/D basılıyken ekran 0,7 sn kımıldamıyorsa karakter bir ağaca/kayaya takılmıştır; bot yana kayarak dolanır (her seferinde diğer yana), sonra yoluna devam eder.
+
 ## Kalabalığa git
 
 **Kalabalığa git** işaretliyken (varsayılan) bot, yanında mob yoksa ekrandaki en iyi mob grubuna yürür: birbirine yakın en az 3 mob (`CrowdMinMobs`) bir grup sayılır; yakın ve kalabalık grup kazanır, uzaktaki grubun çok daha büyük olması gerekir. Grubun ortasına varınca Space ile saldırır. Yanındaki mobu bitirmeden gruba koşmaz, neredeyse ulaştığı tek mobu önce alır ve seçtiği gruptan kolay kolay vazgeçmez (zikzak yapmaz). Kapalıyken her zaman en yakın moba gider.

@@ -41,6 +41,10 @@ internal sealed partial class Brain
         _exploreKeys = [];
         _exploreStep = 0;
         _crowdTarget = _lastCrowd = null;
+        _sidestepUntil = _notMovingSince = Never;
+        _sidestepKeys = [];
+        _sidesteps = 0;
+        ResetLeash();
     }
 
     /// <summary>Press <paramref name="key"/> from <paramref name="start"/> for <paramref name="ms"/> without blocking anything else.</summary>
@@ -109,7 +113,15 @@ internal sealed partial class Brain
             _lastLootTap = now;
         }
         if (now < _pauseUntil)
-            return; // just gave up on an unreachable mob: let the turn happen first
+            return; // casting a skill: stand still a moment
+
+        // Stepping aside around something we walked into.
+        if (now < _sidestepUntil)
+        {
+            SetAttack(false, p, actions, refresh);
+            SetMoves(_sidestepKeys, p, actions, refresh);
+            return;
+        }
 
         double cx = state.Width / 2.0, cy = state.Height / 2.0;
         Point? target = null;
@@ -119,6 +131,11 @@ internal sealed partial class Brain
             double d = Math.Sqrt(Math.Pow(m.X - cx, 2) + Math.Pow(m.Y - cy, 2));
             if (d < best) { best = d; target = m; }
         }
+        double radius = p.AttackRadius * state.Height;
+
+        // Stay in the area we started in (big map, M): checks, and walking back when too far.
+        if (LeashTick(state, p, actions, refresh, mobNextToUs: best <= radius))
+            return;
 
         if (target is not Point t)
         {
@@ -132,22 +149,17 @@ internal sealed partial class Brain
             }
             if (now >= _exploreUntil)
             {
-                // Walk forward a bit, then turn the camera, and so on — names that show up
-                // meanwhile are picked up on the very next tick.
+                // Zigzag forward (W, D, W, A, ...) to look around; names that show up meanwhile
+                // are picked up on the very next tick. The camera is never turned (E): the
+                // area check relies on its direction staying the same.
                 _exploreStep++;
-                if (_exploreStep % 2 == 1)
-                {
-                    _exploreKeys = [p.Keys.MoveForward];
-                    _exploreUntil = now + Ms(p.ExploreWalkMs);
-                }
-                else
-                {
-                    _exploreKeys = [];
-                    PressFor(p.Keys.RotateCamera, now, p.RotateHoldMs * 2);
-                    _exploreUntil = now + Ms(p.RotateHoldMs * 2 + 200);
-                }
+                var keys = new[] { p.Keys.MoveForward, p.Keys.MoveRight, p.Keys.MoveForward, p.Keys.MoveLeft };
+                _exploreKeys = [keys[(_exploreStep - 1) % keys.Length]];
+                _exploreUntil = now + Ms(p.ExploreWalkMs);
             }
             SetMoves(_exploreKeys, p, actions, refresh);
+            if (CheckBlocked(state, p, actions))
+                _exploreUntil = now; // pick another direction next time
             if (Phase != BotPhase.Searching)
                 Enter(BotPhase.Searching, now);
             return;
@@ -157,7 +169,6 @@ internal sealed partial class Brain
         _exploreStep = 0;
         _exploreUntil = Never;
         double dx = t.X - cx, dy = t.Y - cy;
-        double radius = p.AttackRadius * state.Height;
         // Once attacking, keep at it a bit further out so it doesn't flip between walk and attack.
         bool inRange = best <= radius || (Phase == BotPhase.Fighting && best <= radius * 1.4);
         if (inRange)
@@ -191,13 +202,15 @@ internal sealed partial class Brain
             Enter(BotPhase.Moving, now);
             _movingSince = now;
         }
+        if (CheckBlocked(state, p, actions))
+            return;
         if (_movingSince != Never && now - _movingSince >= Ms(p.MoveStuckMs))
         {
-            // Walking into a wall or the mob can't be reached: let go and look elsewhere.
-            SetMoves([], p, actions, refresh);
+            // The mob can't be reached: walk the other way for a moment and look elsewhere.
+            var away = Towards(-dx, -dy, radius * 0.5, p);
             actions.Add(new NoteAction("Moba ulaşılamıyor; başka yere bakılıyor."));
-            PressFor(p.Keys.RotateCamera, now, p.RotateHoldMs * 2);
-            _pauseUntil = now + Ms(p.RotateHoldMs * 2 + 200);
+            StepAside(away, now, 1000);
+            SetMoves(away, p, actions, refresh);
             _movingSince = Never;
             Enter(BotPhase.Searching, now);
         }
