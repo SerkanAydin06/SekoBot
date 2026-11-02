@@ -19,13 +19,12 @@ public class NavigateTests
         Assert.True(profile.NavigateMode); // the default
         var brain = new Brain(() => profile);
         brain.Start(TimeSpan.Zero);
-        // Camera setup: G then F held; done after both.
+        // Camera setup starts right away (G, then F) and doesn't hold anything up.
         var setup = brain.Tick(State(0));
-        Assert.Contains(setup, a => a is KeyHoldAction h && h.Key == profile.Keys.CameraTop);
-        Assert.Contains(setup, a => a is KeyHoldAction h && h.Key == profile.Keys.ZoomOut);
-        Assert.Equal(BotPhase.Setup, brain.Phase);
-        brain.Tick(State(2 * profile.CameraSetupHoldMs + 500));
+        Assert.Contains(setup, a => a is KeyDownAction d && d.Key == profile.Keys.CameraTop);
         Assert.Equal(BotPhase.Searching, brain.Phase);
+        var later = brain.Tick(State(2 * profile.CameraSetupHoldMs + 500));
+        Assert.Contains(later, a => a is KeyUpAction u && u.Key == profile.Keys.ZoomOut);
         return (brain, profile);
     }
 
@@ -56,7 +55,9 @@ public class NavigateTests
     {
         var (brain, p) = Ready();
         var actions = Run(brain, 4000, 4300, _ => [new Point(Center.X + 10, Center.Y - 500)]);
-        var downs = actions.OfType<KeyDownAction>().Select(d => d.Key).Distinct().ToList();
+        // Only movement keys matter here (camera/turn keys run alongside on their own).
+        var moves = new[] { p.Keys.MoveForward, p.Keys.MoveBack, p.Keys.MoveLeft, p.Keys.MoveRight };
+        var downs = actions.OfType<KeyDownAction>().Select(d => d.Key).Where(moves.Contains).Distinct().ToList();
         Assert.Equal(new[] { p.Keys.MoveForward }, downs);
     }
 
@@ -96,8 +97,8 @@ public class NavigateTests
     {
         var (brain, p) = Ready();
         var actions = Run(brain, 4000, 9000, _ => []);
-        Assert.Contains(actions, a => a is KeyHoldAction h && h.Key == p.Keys.MoveForward);
-        Assert.Contains(actions, a => a is KeyHoldAction h && h.Key == p.Keys.RotateCamera);
+        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.MoveForward);
+        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.RotateCamera);
         Assert.DoesNotContain(actions, a => a is KeyDownAction d && d.Key == p.Keys.Attack);
     }
 
@@ -145,28 +146,38 @@ public class NavigateTests
     }
 
     [Fact]
-    public void Presses_g_and_f_again_now_and_then()
+    public void Presses_g_and_f_again_while_walking_without_stopping()
     {
         var (brain, p) = Ready();
-        // Walking to a far mob the whole time; setup finished at 3.5 s.
-        var actions = Run(brain, 4000, 3500 + p.CameraRefreshMs + 1000, _ => [new Point(Center.X + 900, Center.Y)]);
-        Assert.Contains(actions, a => a is KeyHoldAction h && h.Key == p.Keys.CameraTop);
-        Assert.Contains(actions, a => a is KeyHoldAction h && h.Key == p.Keys.ZoomOut);
-        // Keys are released before the camera keys are held.
-        int up = actions.FindIndex(a => a is KeyUpAction u && u.Key == p.Keys.MoveRight);
-        int g = actions.FindIndex(a => a is KeyHoldAction h && h.Key == p.Keys.CameraTop);
-        Assert.InRange(up, 0, g);
+        p.MoveStuckMs = 1_000_000; // keep walking to the far mob the whole time
+        var actions = Run(brain, 4000, p.CameraRefreshMs + 2 * p.CameraSetupHoldMs + 500,
+            _ => [new Point(Center.X + 900, Center.Y)]);
+        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.CameraTop);
+        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.ZoomOut);
+        Assert.Contains(actions, a => a is KeyUpAction u && u.Key == p.Keys.ZoomOut);
+        Assert.DoesNotContain(actions, a => a is KeyUpAction u && u.Key == p.Keys.MoveRight);
+        Assert.DoesNotContain(actions, a => a is KeyHoldAction);
     }
 
     [Fact]
-    public void A_long_fight_delays_the_camera_refresh_but_not_forever()
+    public void Presses_g_and_f_during_a_fight_without_letting_go_of_space()
     {
         var (brain, p) = Ready();
-        var mob = new Point(Center.X, Center.Y + 20);
-        var first = Run(brain, 4000, 3500 + p.CameraRefreshMs + 2000, _ => [mob]);
-        Assert.DoesNotContain(first, a => a is KeyHoldAction h && h.Key == p.Keys.CameraTop);
-        var later = Run(brain, 3500 + p.CameraRefreshMs + 2000, 3500 + 2 * p.CameraRefreshMs + 500, _ => [mob]);
-        Assert.Contains(later, a => a is KeyHoldAction h && h.Key == p.Keys.CameraTop);
+        var mob = new Point(Center.X, Center.Y + 10);
+        var fight = Run(brain, 4000, p.CameraRefreshMs + 2 * p.CameraSetupHoldMs + 500, _ => [mob]);
+        Assert.Contains(fight, a => a is KeyDownAction d && d.Key == p.Keys.CameraTop);
+        Assert.DoesNotContain(fight, a => a is KeyUpAction u && u.Key == p.Keys.Attack);
+        Assert.Equal(BotPhase.Fighting, brain.Phase);
+    }
+
+    [Fact]
+    public void Picks_up_loot_all_the_time_also_while_walking()
+    {
+        var (brain, p) = Ready();
+        p.MoveStuckMs = 1_000_000;
+        var walk = Run(brain, 4000, 8000, _ => [new Point(Center.X - 900, Center.Y)]);
+        Assert.Equal(BotPhase.Moving, brain.Phase);
+        Assert.True(walk.OfType<KeyTapAction>().Count(a => a.Key == p.Keys.Pickup) >= 2);
     }
 
     [Fact]
