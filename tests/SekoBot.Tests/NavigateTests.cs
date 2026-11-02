@@ -55,7 +55,9 @@ public class NavigateTests
     {
         var (brain, p) = Ready();
         var actions = Run(brain, 4000, 4300, _ => [new Point(Center.X + 10, Center.Y - 500)]);
-        var downs = actions.OfType<KeyDownAction>().Select(d => d.Key).Distinct().ToList();
+        // Only movement keys matter here (camera/turn keys run alongside on their own).
+        var moves = new[] { p.Keys.MoveForward, p.Keys.MoveBack, p.Keys.MoveLeft, p.Keys.MoveRight };
+        var downs = actions.OfType<KeyDownAction>().Select(d => d.Key).Where(moves.Contains).Distinct().ToList();
         Assert.Equal(new[] { p.Keys.MoveForward }, downs);
     }
 

@@ -43,7 +43,7 @@ public class PopupTests
         var actions = new List<BotAction>();
         for (double t = 300; t < 3300; t += 100)
             actions.AddRange(brain.Tick(At(t, true)));
-        Assert.Single(actions.OfType<KeyTapAction>().Where(a => a.Key == Keys.Escape)); // once more, after 3 s
+        Assert.Single(actions.OfType<KeyTapAction>(), a => a.Key == Keys.Escape); // once more, after 3 s
         Assert.DoesNotContain(actions, a => a is KeyDownAction);
 
         // Closed: back to work.
