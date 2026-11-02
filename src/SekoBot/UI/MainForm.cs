@@ -46,6 +46,8 @@ internal sealed class MainForm : Form
 
     public MainForm()
     {
+        if (!string.IsNullOrWhiteSpace(_profile.GameWindowTitle))
+            WindowService.GameTitles = [_profile.GameWindowTitle.Trim(), "Mobile2 Global", "Metin2"];
         SuspendLayout();
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
@@ -200,7 +202,7 @@ internal sealed class MainForm : Form
         logCard.Controls.Add(_log);
 
         // ── Timers & hotkeys ─────────────────────────────────────
-        _scanTimer = new System.Windows.Forms.Timer { Interval = 4000 };
+        _scanTimer = new System.Windows.Forms.Timer { Interval = 2000 };
         _scanTimer.Tick += (_, _) => { if (_engine == null) RefreshWindows(); };
         _previewTimer = new System.Windows.Forms.Timer { Interval = 33 };
         _previewTimer.Tick += (_, _) => RenderPreview();
@@ -279,22 +281,31 @@ internal sealed class MainForm : Form
         try
         {
             var previous = _windows.SelectedItem as WindowInfo;
-            var list = WindowService.GetOpenWindows();
+            var all = WindowService.GetOpenWindows();
+            var games = all.Where(w => w.IsMetin2).ToList();
+            // Only the game is of interest; show everything just as a fallback when it isn't open.
+            IReadOnlyList<WindowInfo> list = games.Count > 0 ? games : all;
             _windows.BeginUpdate();
             _windows.Items.Clear();
             foreach (var w in list)
                 _windows.Items.Add(w);
             int index = previous == null ? -1 : list.ToList().FindIndex(w => w.Handle == previous.Handle && w.ProcessId == previous.ProcessId);
-            if (index < 0) index = list.ToList().FindIndex(w => w.IsMetin2);
             if (index < 0 && list.Count > 0) index = 0;
             _windows.SelectedIndex = index;
             _windows.EndUpdate();
-            _scanStatus.Text = list.Count == 0 ? "Pencere yok. Oyunu açıp yenile." : $"{list.Count} pencere bulundu.";
+            _scanStatus.Text = games.Count switch
+            {
+                0 => $"{_profile.GameWindowTitle} bekleniyor… Açılınca kendiliğinden bağlanır.",
+                1 => $"{_profile.GameWindowTitle} bulundu.",
+                _ => $"{games.Count} oyun penceresi var; birini seçip Bağlan'a bas."
+            };
             UpdateControls();
 
-            if (!_autoAttached && list.Count(w => w.IsMetin2 && !w.IsMinimized) == 1)
+            var ready = games.Where(w => !w.IsMinimized).ToList();
+            if (!_autoAttached && ready.Count == 1)
             {
                 _autoAttached = true;
+                _windows.SelectedItem = ready[0];
                 BeginInvoke(new Action(Connect));
             }
         }
@@ -318,7 +329,16 @@ internal sealed class MainForm : Form
         try
         {
             var engine = new BotEngine(window, _profile, message => PostLog(message));
-            engine.CaptureFailed += message => PostUi(() => { if (_engine == engine) Disconnect(message); });
+            engine.CaptureFailed += message => PostUi(() =>
+            {
+                if (_engine != engine)
+                    return;
+                // The game closed: connect again by itself when it is back. (Not when capture
+                // failed on a live window, or it would reconnect and fail in a loop.)
+                if (!WindowService.IsAlive(engine.Window, out _))
+                    _autoAttached = false;
+                Disconnect(message);
+            });
             engine.BarsChanged += message => PostUi(() =>
             {
                 SaveProfile();

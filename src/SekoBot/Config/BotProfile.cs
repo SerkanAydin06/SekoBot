@@ -42,6 +42,9 @@ internal sealed class KeyBindings
 
 internal sealed class BotProfile
 {
+    /// <summary>Title of the game window; the bot connects to it on its own.</summary>
+    public string GameWindowTitle { get; set; } = "Mobile2 Global";
+
     public BarSpec? HpBar { get; set; }
     public BarSpec? MpBar { get; set; }
     /// <summary>Optional: the selected target's HP bar. Lets the bot keep hitting a living mob
