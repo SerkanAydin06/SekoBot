@@ -79,7 +79,7 @@ public class BarFinderTests
     [Fact]
     public void Auto_bars_read_correct_values()
     {
-        var profile = new BotProfile();
+        var profile = new BotProfile { SkillEverySec = new int[5] };
         var auto = new AutoBars();
         using (var full = GameFrame())
             Assert.NotEmpty(auto.Apply(profile, BarFinder.Find(full), full));
@@ -92,7 +92,7 @@ public class BarFinderTests
     [Fact]
     public void Bar_found_while_not_full_grows_later_and_never_shrinks()
     {
-        var profile = new BotProfile();
+        var profile = new BotProfile { SkillEverySec = new int[5] };
         var auto = new AutoBars();
         using (var half = GameFrame(hp: 0.5))
             auto.Apply(profile, BarFinder.Find(half), half);
@@ -111,7 +111,7 @@ public class BarFinderTests
     public void Manually_marked_bar_is_never_replaced()
     {
         var manual = new BarSpec { Area = NormRect.FromPixels(new Rectangle(500, 100, 50, 5), W, H) };
-        var profile = new BotProfile { HpBar = manual };
+        var profile = new BotProfile { SkillEverySec = new int[5], HpBar = manual };
         var auto = new AutoBars();
         for (int i = 0; i < 20; i++)
             using (var frame = GameFrame())

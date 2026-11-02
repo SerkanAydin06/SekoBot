@@ -21,15 +21,19 @@ Tuşlar (Space saldırı, Z toplama, 1/2 iksir, E kamera, W yürüme) ve sürele
 
 ## Ölünce
 
-Karakter ölünce ekrana gelen pencereyi bot tanır: tuşları bırakır, **"Burada yeniden başla"** düğmesinin yazısı griden beyaza dönüp tıklanabilir olunca ona tıklar. Dirilince HP %90'a gelene kadar (en fazla 30 sn) 1 tuşuyla iksir içer, kamerayı yeniden ayarlar ve avlanmaya devam eder. Bu açıkken (`"ReviveOnDeath": true`, varsayılan) düşük HP'de bot durmaz. Ayarlar: `ReviveHealTo` (0.90), `ReviveHealMaxMs` (30000).
+Karakter ölünce ekrana gelen pencereyi bot tanır: tuşları bırakır, **"Burada yeniden başla"** düğmesinin yazısı griden beyaza dönüp tıklanabilir olunca ona tıklar. Dirilince HP %90'a gelene kadar (en fazla 30 sn) 1 tuşuyla iksir içer, kamerayı yeniden ayarlar ve avlanmaya devam eder. Bot düşük HP'de hiç durmaz (durmak, saldıran mobların karakteri öldürmesine yol açardı); iksir içmeye devam eder. Ayarlar: `ReviveHealTo` (0.90), `ReviveHealMaxMs` (30000).
 
 ## Açılır pencereler
 
 Level atlayınca çıkan reklam penceresi ve yanlışlıkla açılan Esc menüsü gibi oyunun üstüne açılan pencereleri bot görür (ekranın ortasındaki uzun, düz başlık çubuğundan ya da menünün arkasında bulanıklaşan oyundan), yürümeyi ve saldırıyı bırakır ve **bir kez Esc**'ye basar. Pencere 3 sn sonra hâlâ açıksa tekrar basar; böylece boşuna Esc basıp oyun menüsünü açmaz. Kapatmak için `profile.json` içinde `"ClosePopups": false`. Not: bot çalışırken envanter gibi bir pencereyi kendin açarsan onu da kapatır.
 
-## Arka planda çalışma (deneysel)
+## Buff becerileri (F1–F5)
 
-**Arka planda çalış (deneysel)** işaretliyken bot tuşları ve tıklamaları Windows klavyesi yerine doğrudan oyun penceresine mesaj olarak gönderir; oyunun önde olması gerekmez (ama simge durumuna küçültülmemeli, yoksa görüntü alınamaz). Basılı tuşlar (Space, W/A/S/D) gerçek klavye gibi saniyede ~10 kez tekrarlanır. Bu yalnızca oyun tuşları pencere mesajlarından okuyorsa çalışır; çalışmazsa kutuyu kapatıp oyunu önde tut. Bot çalışırken değiştirilemez.
+Bot kartında F1–F5 için "kaç saniyede bir" yazılır (0 = kapalı; varsayılan F1 ve F2 her 60 sn). Bot bunlara döngü halinde, aralarında en az 1,5 sn olacak şekilde basar; basarken W/A/S/D ve Space'i bırakıp 1 sn durur ki beceri kesilmesin, sonra devam eder.
+
+## Arka planda çalışma
+
+Tuşlar ve tıklamalar her zaman doğrudan oyun penceresine gönderilir; oyun başka pencerelerin arkasında kalabilir (simge durumuna küçültülmemeli, yoksa görüntü alınamaz).
 
 ## Kayıt ve tekrar oynatma
 

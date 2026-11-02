@@ -15,7 +15,7 @@ public class NavigateTests
 
     private static (Brain Brain, BotProfile Profile) Ready()
     {
-        var profile = new BotProfile();
+        var profile = new BotProfile { SkillEverySec = new int[5] };
         Assert.True(profile.NavigateMode); // the default
         var brain = new Brain(() => profile);
         brain.Start(TimeSpan.Zero);
@@ -112,17 +112,17 @@ public class NavigateTests
     }
 
     [Fact]
-    public void Still_drinks_potions_and_stops_on_critical_hp()
+    public void Still_drinks_potions_and_never_stops_on_low_hp()
     {
         var (brain, p) = Ready();
-        p.ReviveOnDeath = false; // with revive on, low HP doesn't stop the bot
         var low = new GameState(TimeSpan.FromMilliseconds(4000), W, H, 0.4, 1, null, 1);
         brain.Tick(low);
         var potion = brain.Tick(low with { Time = TimeSpan.FromMilliseconds(4400) });
         Assert.Contains(potion, a => a is KeyTapAction t && t.Key == p.Keys.HpPotion);
-        var crit = new GameState(TimeSpan.FromMilliseconds(5000), W, H, 0.1, 1, null, 1);
+        var crit = new GameState(TimeSpan.FromMilliseconds(5000), W, H, 0.05, 1, null, 1);
         brain.Tick(crit);
-        Assert.Contains(brain.Tick(crit with { Time = TimeSpan.FromMilliseconds(5400) }), a => a is StopAction);
+        Assert.DoesNotContain(brain.Tick(crit with { Time = TimeSpan.FromMilliseconds(5400) }), a => a is StopAction);
+        Assert.NotEqual(BotPhase.Stopped, brain.Phase);
     }
 
     [Fact]
@@ -198,12 +198,12 @@ public class NavigateTests
     [Fact]
     public void Old_profile_moves_to_the_closer_attack_distance_but_keeps_user_choices()
     {
-        var old = new BotProfile { Version = 0, AttackRadius = 0.10 };
+        var old = new BotProfile { SkillEverySec = new int[5], Version = 0, AttackRadius = 0.10 };
         Assert.True(ProfileStore.Upgrade(old));
         Assert.Equal(0.05, old.AttackRadius);
         Assert.Equal(BotProfile.CurrentVersion, old.Version);
 
-        var picked = new BotProfile { Version = 0, AttackRadius = 0.07 };
+        var picked = new BotProfile { SkillEverySec = new int[5], Version = 0, AttackRadius = 0.07 };
         ProfileStore.Upgrade(picked);
         Assert.Equal(0.07, picked.AttackRadius);
 
