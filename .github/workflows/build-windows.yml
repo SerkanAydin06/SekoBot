@@ -1,0 +1,64 @@
+name: Windows Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sekobot-preview-release
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Standalone Windows x64 EXE
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK (only on GitHub runner)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore project
+        run: dotnet restore SekoBot.Windows.csproj -r win-x64
+
+      - name: Publish independent single-file EXE
+        shell: pwsh
+        run: |
+          dotnet publish SekoBot.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:DebugSymbols=false -p:DebugType=None -o publish
+          if (-not (Test-Path "publish/SekoBot.exe")) {
+            throw "Standalone SekoBot.exe was not generated."
+          }
+          Get-Item publish/SekoBot.exe | Select-Object Name, Length
+          Get-FileHash publish/SekoBot.exe -Algorithm SHA256 | Format-List
+
+      - name: Upload backup build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SekoBot-Windows-x64
+          path: publish/SekoBot.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish direct EXE download (rolling preview)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: preview
+          target_commitish: ${{ github.sha }}
+          name: SekoBot - Güncel Windows Sürümü
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: publish/SekoBot.exe
+          body: |
+            Python / Godot kurulumu gerektirmeyen, tek dosyalı Windows x64 SekoBot.
+            Assets > SekoBot.exe ile doğrudan indirilebilir.
+            Şu anda açık pencereleri bulur, canlı görüntü alır ve PNG kaydeder.
+            Kod commit'i: ${{ github.sha }}

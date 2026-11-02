@@ -1,10 +1,9 @@
-.godot/
-.mono/
-.vs/
-.vscode/
-.idea/
 bin/
 obj/
-.export/
-*.tmp
+.vs/
+.idea/
+.vscode/
+artifacts/
+publish/
+*.user
 *.log
