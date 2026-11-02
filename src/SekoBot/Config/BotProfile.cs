@@ -62,12 +62,10 @@ internal sealed class BotProfile
     /// <summary>A low HP/MP reading must last this long before a potion or stop (filters bad frames).</summary>
     public int BarConfirmMs { get; set; } = 300;
 
-    /// <summary>Find mobs by hovering (attack cursor) and click them; needs the target bar to learn.</summary>
+    /// <summary>Find mobs by their movement on screen and click them; a target bar confirms the hit.</summary>
     public bool AutoTarget { get; set; } = true;
-    /// <summary>How long to wait for a target bar after asking for a mob search.</summary>
+    /// <summary>How long to look for a mob before turning the camera.</summary>
     public int SearchTimeoutMs { get; set; } = 6000;
-    /// <summary>How long the mouse rests on each point while looking for the attack cursor.</summary>
-    public int HoverDelayMs { get; set; } = 80;
 
     /// <summary>How long the attack key is held per cycle (blind attack, without mob search).</summary>
     public int FightMs { get; set; } = 4000;

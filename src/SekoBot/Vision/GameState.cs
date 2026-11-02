@@ -11,4 +11,7 @@ internal sealed record GameState(
     double AnalysisMs)
 {
     public bool HasTarget => TargetHp is > 0.01;
+
+    /// <summary>Probable mobs (client pixels, nearest to the character first), from motion.</summary>
+    public IReadOnlyList<Point> MobCandidates { get; init; } = [];
 }

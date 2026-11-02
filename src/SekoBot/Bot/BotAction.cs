@@ -28,10 +28,10 @@ internal sealed record KeyHoldAction(Keys Key, int Milliseconds) : BotAction
     public override string ToString() => $"Basılı tut {Key} {Milliseconds} ms";
 }
 
-/// <summary>Hover around the character until the cursor shows a monster, then click it.</summary>
-internal sealed record FindTargetAction : BotAction
+/// <summary>Click the probable mobs (nearest first) until one gets selected (target bar shows).</summary>
+internal sealed record FindTargetAction(IReadOnlyList<Point> Candidates) : BotAction
 {
-    public override string ToString() => "Mob ara";
+    public override string ToString() => $"Mob ara ({Candidates.Count} aday)";
 }
 
 internal sealed record StopAction(string Reason) : BotAction

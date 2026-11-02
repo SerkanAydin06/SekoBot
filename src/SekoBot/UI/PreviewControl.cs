@@ -119,6 +119,17 @@ internal sealed class PreviewControl : Control
             DrawBar(g, p.MpBar, w, h, Theme.Accent, "MP", small);
             DrawBar(g, p.TargetBar, w, h, Theme.Red, "HEDEF", small);
         }
+        if (State is { MobCandidates.Count: > 0 } st)
+        {
+            // What the bot thinks are mobs: yellow rings, the nearest one thicker.
+            using var near = new Pen(Theme.Yellow, 2.5f);
+            using var far = new Pen(Color.FromArgb(170, Theme.Yellow), 1.5f);
+            for (int i = 0; i < st.MobCandidates.Count; i++)
+            {
+                var c = ToControl(new Rectangle(st.MobCandidates[i].X - 10, st.MobCandidates[i].Y - 10, 20, 20));
+                g.DrawEllipse(i == 0 ? near : far, c);
+            }
+        }
         if (_selection is Rectangle sel)
         {
             using var pen = new Pen(Color.White, 1.5f) { DashStyle = DashStyle.Dot };
