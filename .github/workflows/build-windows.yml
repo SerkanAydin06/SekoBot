@@ -3,22 +3,27 @@ name: Windows EXE Build
 on:
   push:
     branches: [main]
-    tags: ['v*']
   workflow_dispatch:
 
+# Each successful build replaces the EXE asset of the same "preview" release.
+# The link stays stable and downloads a raw .exe, not a GitHub Actions ZIP.
+concurrency:
+  group: sekobot-windows-preview
+  cancel-in-progress: true
+
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   windows-exe:
     name: SekoBot.exe (Windows x64)
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python for build runner only
+      - name: Setup build-only Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -30,12 +35,12 @@ jobs:
           python -m pip install -e ".[dev]"
           python -m pip install "pyinstaller>=6.11,<7"
 
-      - name: Run automated tests
+      - name: Test source
         run: |
           python -m compileall -q src
           python -m pytest -q
 
-      - name: Build standalone executable
+      - name: Build portable EXE
         shell: pwsh
         run: |
           python -m PyInstaller --noconfirm --clean --onefile --windowed --name SekoBot --paths src --collect-submodules mss src/sekobot/__main__.py
@@ -43,8 +48,28 @@ jobs:
             throw "SekoBot.exe was not generated."
           }
           Get-Item "dist/SekoBot.exe" | Select-Object Name, Length
+          Get-FileHash "dist/SekoBot.exe" -Algorithm SHA256 | Format-List
 
-      - name: Upload Windows executable
+      - name: Publish direct-download EXE to GitHub Releases
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: preview
+          target_commitish: ${{ github.sha }}
+          name: SekoBot - Güncel Windows Sürümü
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: dist/SekoBot.exe
+          body: |
+            SekoBot Windows x64 geliştirme sürümü.
+            - SekoBot.exe dosyasına tıklayarak doğrudan indirebilirsiniz.
+            - Python kurulumu veya ZIP açma gerekmez.
+            - Bu önizleme sürümü oyun penceresini izler ve ekran görüntüsü kaydeder.
+            - Dijital imza henüz yoktur.
+            - Kaynak commit: ${{ github.sha }}
+
+      - name: Keep ZIP artifact for diagnostics (optional)
         uses: actions/upload-artifact@v4
         with:
           name: SekoBot-Windows-x64
