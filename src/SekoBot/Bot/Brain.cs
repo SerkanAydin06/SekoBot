@@ -4,45 +4,34 @@ using SekoBot.Vision;
 namespace SekoBot.Bot;
 
 /// <summary>
-/// Farm state machine. Pure logic: takes a <see cref="GameState"/>, returns actions.
-/// Every waiting state has a timeout, so the bot never stays stuck on one target.
+/// Simple, robust farm loop. Pure logic: takes a <see cref="GameState"/>, returns actions.
 ///
-/// Searching   → click nearest stone                 → Approaching
-/// Approaching → target HP bar appears               → Attacking   (timeout: blacklist, Searching)
-/// Attacking   → target HP bar gone                  → Looting     (timeout: blacklist, Searching)
-/// Looting     → pickup key pressed N times          → Searching
-/// Any state   → low HP potion, critical HP          → Stop
+/// Fighting → attack key held for FightMs (longer while a target is still alive, if the
+///            target bar is calibrated)
+/// Looting  → pickup key pressed LootPresses times
+/// Turning  → every N cycles (or when no target is left) rotate the camera / walk forward
+/// Any time → HP/MP potions with cooldown, stop on critical HP
 /// </summary>
 internal sealed class Brain
 {
-    private const double BlacklistRadius = 90;
-    private const double FollowRadius = 160;
+    private static readonly TimeSpan Never = TimeSpan.FromDays(-1);
 
     private readonly Func<BotProfile> _profile;
-    private readonly Random _random;
-    private readonly List<(Point At, TimeSpan Until)> _blacklist = [];
 
-    private TimeSpan _phaseSince, _lastClick, _lastRotate, _lastAttackKey, _lastLoot, _lastTargetSeen;
-    private TimeSpan _lastHpPotion = TimeSpan.FromDays(-1), _lastMpPotion = TimeSpan.FromDays(-1);
-    private Point _targetPoint;
-    private int _rotations, _lootPresses;
+    private TimeSpan _phaseSince, _lastLoot, _turnDuration;
+    private TimeSpan _lastAttackDown = Never, _lastHpPotion = Never, _lastMpPotion = Never;
+    private int _lootPresses;
 
-    public Brain(Func<BotProfile> profile, Random? random = null)
-    {
-        _profile = profile;
-        _random = random ?? new Random();
-    }
+    public Brain(Func<BotProfile> profile) => _profile = profile;
 
     public BotPhase Phase { get; private set; } = BotPhase.Stopped;
-    public int StonesDestroyed { get; private set; }
-    public int TargetsSkipped { get; private set; }
+    public int Cycles { get; private set; }
+    public int Potions { get; private set; }
 
     public void Start(TimeSpan now)
     {
-        _blacklist.Clear();
-        _rotations = 0;
-        Enter(BotPhase.Searching, now);
-        _lastRotate = now;
+        _lastAttackDown = Never;
+        Enter(BotPhase.Fighting, now);
     }
 
     public void Stop() => Phase = BotPhase.Stopped;
@@ -55,189 +44,106 @@ internal sealed class Brain
         var p = _profile();
         var now = state.Time;
         var actions = new List<BotAction>();
-        _blacklist.RemoveAll(b => b.Until <= now);
 
         if (state.Hp is double hp)
         {
             if (hp < p.StopHpBelow)
             {
                 Phase = BotPhase.Stopped;
-                return [new StopAction($"HP kritik (%{hp * 100:0})")];
+                return [new KeyUpAction(p.Keys.Attack), new StopAction($"HP kritik (%{hp * 100:0})")];
             }
-            if (hp < p.PotionHpBelow && now - _lastHpPotion >= TimeSpan.FromMilliseconds(p.PotionCooldownMs))
+            if (hp < p.PotionHpBelow && now - _lastHpPotion >= Ms(p.PotionCooldownMs))
             {
                 actions.Add(new KeyTapAction(p.Keys.HpPotion));
                 _lastHpPotion = now;
+                Potions++;
             }
         }
-        if (state.Mp is double mp && mp < p.PotionMpBelow &&
-            now - _lastMpPotion >= TimeSpan.FromMilliseconds(p.PotionCooldownMs))
+        if (state.Mp is double mp && mp < p.PotionMpBelow && now - _lastMpPotion >= Ms(p.PotionCooldownMs))
         {
             actions.Add(new KeyTapAction(p.Keys.MpPotion));
             _lastMpPotion = now;
+            Potions++;
         }
 
         switch (Phase)
         {
-            case BotPhase.Searching:
-                Search(state, p, actions);
-                break;
-            case BotPhase.Approaching:
-                Approach(state, p, actions);
-                break;
-            case BotPhase.Attacking:
-                Attack(state, p, actions);
+            case BotPhase.Fighting:
+                Fight(state, p, actions);
                 break;
             case BotPhase.Looting:
                 Loot(state, p, actions);
+                break;
+            case BotPhase.Turning:
+                if (now - _phaseSince >= _turnDuration)
+                    Enter(BotPhase.Fighting, now);
                 break;
         }
         return actions;
     }
 
-    private void Search(GameState state, BotProfile p, List<BotAction> actions)
+    private void Fight(GameState state, BotProfile p, List<BotAction> actions)
     {
         var now = state.Time;
-        if (state.HasTarget)
+        // Re-send key-down every second: harmless for the game and restores the
+        // attack if the key was released while the game lost focus.
+        if (now - _lastAttackDown >= Ms(1000))
         {
-            // Something is already selected (e.g. the stone we just walked into).
-            _lastTargetSeen = now;
-            Enter(BotPhase.Attacking, now);
-            return;
+            actions.Add(new KeyDownAction(p.Keys.Attack));
+            _lastAttackDown = now;
         }
 
-        var stone = Nearest(state, state.ScreenCenter, double.MaxValue, skipBlacklisted: true);
-        if (stone is Detection target)
-        {
-            _targetPoint = target.Center;
-            actions.Add(new ClickAction(Jitter(target)));
-            _lastClick = now;
-            _rotations = 0;
-            Enter(BotPhase.Approaching, now);
+        var elapsed = now - _phaseSince;
+        if (elapsed < Ms(p.FightMs))
             return;
-        }
+        bool targetAlive = state.TargetHp != null && state.HasTarget;
+        if (targetAlive && elapsed < Ms(p.FightMaxMs))
+            return;
 
-        if (now - _lastRotate < TimeSpan.FromMilliseconds(p.RotateHoldMs + 450))
-            return;
-        _lastRotate = now;
-        if (_rotations < p.RotationsBeforeMove)
-        {
-            actions.Add(new KeyHoldAction(p.Keys.RotateCamera, p.RotateHoldMs));
-            _rotations++;
-        }
-        else
-        {
-            actions.Add(new KeyHoldAction(p.Keys.MoveForward, p.MoveHoldMs));
-            _rotations = 0;
-        }
-    }
-
-    private void Approach(GameState state, BotProfile p, List<BotAction> actions)
-    {
-        var now = state.Time;
-        if (state.HasTarget)
-        {
-            _lastTargetSeen = now;
-            Enter(BotPhase.Attacking, now);
-            return;
-        }
-        if (now - _phaseSince > TimeSpan.FromMilliseconds(p.ApproachTimeoutMs))
-        {
-            GiveUp(now, p);
-            return;
-        }
-        // The stone moves on screen while we walk; re-click it every few seconds.
-        if (now - _lastClick > TimeSpan.FromMilliseconds(2500) &&
-            Nearest(state, _targetPoint, FollowRadius, skipBlacklisted: false) is Detection same)
-        {
-            _targetPoint = same.Center;
-            actions.Add(new ClickAction(Jitter(same)));
-            _lastClick = now;
-        }
-    }
-
-    private void Attack(GameState state, BotProfile p, List<BotAction> actions)
-    {
-        var now = state.Time;
-        if (state.HasTarget)
-        {
-            _lastTargetSeen = now;
-            if (now - _phaseSince > TimeSpan.FromMilliseconds(p.AttackTimeoutMs))
-            {
-                GiveUp(now, p);
-                return;
-            }
-            if (p.UseAttackKey && now - _lastAttackKey > TimeSpan.FromMilliseconds(900))
-            {
-                actions.Add(new KeyHoldAction(p.Keys.Attack, 700));
-                _lastAttackKey = now;
-            }
-            return;
-        }
-        if (now - _lastTargetSeen > TimeSpan.FromMilliseconds(p.TargetLostGraceMs))
-        {
-            StonesDestroyed++;
-            _lootPresses = 0;
-            Enter(BotPhase.Looting, now);
-        }
+        actions.Add(new KeyUpAction(p.Keys.Attack));
+        _lastAttackDown = Never;
+        _lootPresses = 0;
+        _lastLoot = Never;
+        Enter(BotPhase.Looting, now);
     }
 
     private void Loot(GameState state, BotProfile p, List<BotAction> actions)
     {
         var now = state.Time;
-        if (_lootPresses >= p.LootPresses)
+        if (_lootPresses < p.LootPresses)
         {
-            Enter(BotPhase.Searching, now);
-            _lastRotate = now;
+            if (now - _lastLoot >= Ms(350))
+            {
+                actions.Add(new KeyTapAction(p.Keys.Pickup));
+                _lastLoot = now;
+                _lootPresses++;
+            }
             return;
         }
-        if (now - _lastLoot > TimeSpan.FromMilliseconds(350))
+        if (now - _lastLoot < Ms(250))
+            return;
+
+        Cycles++;
+        // With a calibrated target bar we know when the area around us is empty.
+        bool nothingAround = state.TargetHp != null && !state.HasTarget;
+        bool turn = nothingAround || (p.RotateEveryCycles > 0 && Cycles % p.RotateEveryCycles == 0);
+        bool move = p.MoveEveryCycles > 0 && Cycles % p.MoveEveryCycles == 0;
+
+        _turnDuration = TimeSpan.Zero;
+        if (turn)
         {
-            actions.Add(new KeyTapAction(p.Keys.Pickup));
-            _lastLoot = now;
-            _lootPresses++;
+            actions.Add(new KeyHoldAction(p.Keys.RotateCamera, p.RotateHoldMs));
+            _turnDuration += Ms(p.RotateHoldMs + 150);
         }
-    }
-
-    private void GiveUp(TimeSpan now, BotProfile p)
-    {
-        _blacklist.Add((_targetPoint, now + TimeSpan.FromMilliseconds(p.BlacklistMs)));
-        TargetsSkipped++;
-        Enter(BotPhase.Searching, now);
-        _lastRotate = now;
-    }
-
-    private Detection? Nearest(GameState state, Point from, double maxDistance, bool skipBlacklisted)
-    {
-        Detection? best = null;
-        double bestDistance = maxDistance;
-        foreach (var stone in state.Stones)
+        if (move)
         {
-            var c = stone.Center;
-            if (skipBlacklisted && _blacklist.Any(b => Distance(b.At, c) < BlacklistRadius))
-                continue;
-            double d = Distance(from, c);
-            if (d < bestDistance)
-            {
-                bestDistance = d;
-                best = stone;
-            }
+            actions.Add(new KeyHoldAction(p.Keys.MoveForward, p.MoveHoldMs));
+            _turnDuration += Ms(p.MoveHoldMs + 150);
         }
-        return best;
+        Enter(turn || move ? BotPhase.Turning : BotPhase.Fighting, now);
     }
 
-    /// <summary>Click inside the middle of the box rather than the exact same pixel.</summary>
-    private Point Jitter(Detection d)
-    {
-        int dx = Math.Max(1, d.Box.Width / 6), dy = Math.Max(1, d.Box.Height / 6);
-        return new Point(d.Center.X + _random.Next(-dx, dx + 1), d.Center.Y + _random.Next(-dy, dy + 1));
-    }
-
-    private static double Distance(Point a, Point b)
-    {
-        double dx = a.X - b.X, dy = a.Y - b.Y;
-        return Math.Sqrt(dx * dx + dy * dy);
-    }
+    private static TimeSpan Ms(double milliseconds) => TimeSpan.FromMilliseconds(milliseconds);
 
     private void Enter(BotPhase phase, TimeSpan now)
     {

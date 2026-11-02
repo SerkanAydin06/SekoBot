@@ -26,12 +26,15 @@ internal static class UpdateService
     {
         var client = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
         client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SekoBot", "0.4"));
+        // Never get a cached manifest that still names the previous build.
+        client.DefaultRequestHeaders.CacheControl = new CacheControlHeaderValue { NoCache = true, NoStore = true };
         return client;
     }
 
     private sealed class UpdateManifest
     {
         public string? Commit { get; set; }
+        public string? Version { get; set; }
         public string? Sha256 { get; set; }
         public long Length { get; set; }
     }
@@ -44,10 +47,9 @@ internal static class UpdateService
             return new UpdateCheckResult(null, null);
 
         string? executable = Environment.ProcessPath;
-        if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable) ||
-            !string.Equals(Path.GetFileName(executable), "SekoBot.exe",
-                StringComparison.OrdinalIgnoreCase))
-            return new UpdateCheckResult(null, "Otomatik güncelleme yalnızca SekoBot.exe için geçerli.");
+        // Any file name works ("SekoBot (1).exe" from a browser download included).
+        if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable))
+            return new UpdateCheckResult(null, "Otomatik güncelleme: çalışan dosya bulunamadı.");
 
         // Clean up the backup retained by a successful previous replacement.
         try { File.Delete(executable + ".old"); } catch { }
@@ -96,7 +98,7 @@ internal static class UpdateService
                 hash, Convert.FromHexString(manifest.Sha256)))
                 throw new InvalidDataException("Güncellemenin SHA-256 değeri doğrulanamadı.");
 
-            return new UpdateCheckResult(new PreparedUpdate(manifest.Commit, tempFile), null);
+            return new UpdateCheckResult(new PreparedUpdate(manifest.Version ?? manifest.Commit[..7], tempFile), null);
         }
         catch (OperationCanceledException)
         {

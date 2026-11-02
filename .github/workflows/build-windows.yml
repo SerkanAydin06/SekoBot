@@ -44,7 +44,7 @@ jobs:
           if (-not (Test-Path publish/SekoBot.exe)) { throw "SekoBot.exe was not generated." }
           $hash = (Get-FileHash publish/SekoBot.exe -Algorithm SHA256).Hash.ToLowerInvariant()
           $size = (Get-Item publish/SekoBot.exe).Length
-          @{ commit = $env:GITHUB_SHA; sha256 = $hash; length = $size } |
+          @{ commit = $env:GITHUB_SHA; version = "0.4.${{ github.run_number }}"; sha256 = $hash; length = $size } |
             ConvertTo-Json -Compress | Set-Content -Path publish/SekoBot.manifest.json -Encoding utf8
           "SekoBot.exe: $size bytes, sha256 $hash"
 

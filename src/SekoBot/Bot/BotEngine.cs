@@ -11,7 +11,7 @@ namespace SekoBot.Bot;
 
 internal sealed record EngineStats(
     string CaptureName, double CaptureFps, double AnalysisMs, BotPhase Phase,
-    bool BotRunning, bool DryRun, int Stones, int Skipped, TimeSpan BotUptime);
+    bool BotRunning, bool DryRun, int Cycles, int Potions, TimeSpan BotUptime);
 
 /// <summary>
 /// Pipeline: capture → (latest frame only) → perception → brain → input.
@@ -22,7 +22,6 @@ internal sealed class BotEngine : IDisposable
 {
     private readonly WindowInfo _window;
     private readonly Action<string> _log;
-    private readonly Perception _perception = new();
     private readonly Brain _brain;
     private readonly CancellationTokenSource _cts = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -47,14 +46,12 @@ internal sealed class BotEngine : IDisposable
         Profile = profile;
         _log = log;
         _brain = new Brain(() => Profile);
-        ReloadTemplates();
     }
 
     public WindowInfo Window => _window;
     public bool GameMinimized => WindowService.IsMinimized(_window);
     public BotProfile Profile { get; set; }
     public GameState? State => Volatile.Read(ref _state);
-    public int TemplateCount => _perception.Detector.TemplateCount;
 
     /// <summary>Raised from a worker thread when capture stops or the bot stops itself.</summary>
     public event Action<string>? CaptureFailed;
@@ -94,9 +91,6 @@ internal sealed class BotEngine : IDisposable
         CaptureFailed?.Invoke(message);
     }
 
-    public void ReloadTemplates() =>
-        _perception.Detector.LoadFrom(ProfileStore.TemplateDirectory, Profile.Scales);
-
     private async Task RunAsync(ChannelReader<Frame> frames, CancellationToken token)
     {
         var lastAnalysis = TimeSpan.FromDays(-1);
@@ -122,7 +116,7 @@ internal sealed class BotEngine : IDisposable
                     lastAnalysis = now;
                     try
                     {
-                        var state = _perception.Analyze(frame, profile, now);
+                        var state = Perception.Analyze(frame, profile, now);
                         Volatile.Write(ref _state, state);
                         TickBot(state);
                     }
@@ -173,16 +167,13 @@ internal sealed class BotEngine : IDisposable
     public bool StartBot(bool dryRun, out string error)
     {
         error = "";
-        if (!Profile.IsReadyForBot)
+        if (GameMinimized)
         {
-            error = "Önce 'Hedef HP barı' kalibrasyonunu yapın.";
+            error = "Oyun simge durumunda; önce oyunu geri aç.";
             return false;
         }
-        if (TemplateCount == 0)
-        {
-            error = "Önce en az bir Metin şablonu ekleyin.";
-            return false;
-        }
+        if (Profile.HpBar == null)
+            _log("Uyarı: HP barı işaretli değil; iksir ve HP güvenlik durdurması çalışmaz.");
         lock (_botGate)
         {
             if (_input != null)
@@ -223,7 +214,7 @@ internal sealed class BotEngine : IDisposable
             {
                 return new EngineStats(_capture?.Name ?? "—", _captureFps, State?.AnalysisMs ?? 0,
                     _brain.Phase, _input != null, _input?.DryRun ?? true,
-                    _brain.StonesDestroyed, _brain.TargetsSkipped,
+                    _brain.Cycles, _brain.Potions,
                     _input != null ? _clock.Elapsed - _botStarted : TimeSpan.Zero);
             }
         }
@@ -278,7 +269,6 @@ internal sealed class BotEngine : IDisposable
             _latest?.Dispose();
             _latest = null;
         }
-        _perception.Dispose();
         _cts.Dispose();
     }
 }

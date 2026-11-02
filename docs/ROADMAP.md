@@ -4,8 +4,7 @@
 - [x] Windows Graphics Capture (GPU) + GDI yedek
 - [x] Kare kuyruğu yok: her katman en son kareyi işler
 - [x] HP/MP/hedef barı okuma (renk kalibrasyonu)
-- [x] Çok ölçekli Metin şablon eşleme (OpenCV)
-- [x] Zaman aşımlı durum makinesi, kara liste, kamera döndürme / yürüme
+- [x] Basit farm döngüsü: saldır → topla → dön (Metin taşı arama kaldırıldı)
 - [x] Tarama kodlu girdi, odak kontrolü, F10/F12 kısayolları, kuru çalışma modu
 - [x] Önizlemede debug katmanı ve fareyle kalibrasyon
 - [x] Sessiz otomatik güncelleme
@@ -17,4 +16,4 @@
 - [ ] Ölüm algılama ve yeniden doğma
 - [ ] Envanter dolu algılama
 - [ ] Mini harita ile rota / alan sınırı
-- [ ] Şablon eşleme yerine küçük bir YOLO modeli (ONNX + DirectML)
+- [ ] İsteğe bağlı Metin taşı / mob algılama

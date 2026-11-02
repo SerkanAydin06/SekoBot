@@ -115,22 +115,9 @@ internal sealed class PreviewControl : Control
         using var small = new Font("Segoe UI", 8f, FontStyle.Bold);
         if (Profile is { } p)
         {
-            using (var dashed = new Pen(Color.FromArgb(150, Theme.Muted), 1) { DashStyle = DashStyle.Dash })
-                g.DrawRectangle(dashed, Rect(ToControl(p.SearchArea.ToPixels(w, h))));
             DrawBar(g, p.HpBar, w, h, Theme.Green, "HP", small);
             DrawBar(g, p.MpBar, w, h, Theme.Accent, "MP", small);
             DrawBar(g, p.TargetBar, w, h, Theme.Red, "HEDEF", small);
-        }
-        if (State is { } state && state.Width == w && state.Height == h)
-        {
-            using var pen = new Pen(Theme.Yellow, 2);
-            using var brush = new SolidBrush(Theme.Yellow);
-            foreach (var stone in state.Stones)
-            {
-                var r = ToControl(stone.Box);
-                g.DrawRectangle(pen, Rect(r));
-                g.DrawString($"{stone.Score:0.00}", small, brush, r.X, r.Y - 14);
-            }
         }
         if (_selection is Rectangle sel)
         {

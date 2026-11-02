@@ -49,18 +49,4 @@ public class VisionTests
         Assert.Equal(r, n.ToPixels(1024, 768));
         Assert.Equal(new Rectangle(128, 96, 640, 48), n.ToPixels(2048, 1536));
     }
-
-    [Fact]
-    public void Non_max_suppression_keeps_best_of_overlapping_hits()
-    {
-        var hits = new List<Detection>
-        {
-            new(new Rectangle(100, 100, 40, 60), 0.80),
-            new(new Rectangle(104, 102, 40, 60), 0.92),
-            new(new Rectangle(400, 100, 40, 60), 0.75)
-        };
-        var kept = StoneDetector.NonMaxSuppression(hits, 0.3);
-        Assert.Equal(2, kept.Count);
-        Assert.Equal(0.92, kept[0].Score);
-    }
 }

@@ -13,6 +13,16 @@ internal sealed record KeyTapAction(Keys Key) : BotAction
     public override string ToString() => $"Tuş {Key}";
 }
 
+internal sealed record KeyDownAction(Keys Key) : BotAction
+{
+    public override string ToString() => $"Bas {Key}";
+}
+
+internal sealed record KeyUpAction(Keys Key) : BotAction
+{
+    public override string ToString() => $"Bırak {Key}";
+}
+
 internal sealed record KeyHoldAction(Keys Key, int Milliseconds) : BotAction
 {
     public override string ToString() => $"Basılı tut {Key} {Milliseconds} ms";
@@ -26,20 +36,18 @@ internal sealed record StopAction(string Reason) : BotAction
 internal enum BotPhase
 {
     Stopped,
-    Searching,
-    Approaching,
-    Attacking,
-    Looting
+    Fighting,
+    Looting,
+    Turning
 }
 
 internal static class BotPhaseText
 {
     public static string ToTurkish(this BotPhase phase) => phase switch
     {
-        BotPhase.Searching => "Metin aranıyor",
-        BotPhase.Approaching => "Metne gidiliyor",
-        BotPhase.Attacking => "Saldırıyor",
+        BotPhase.Fighting => "Saldırıyor",
         BotPhase.Looting => "Eşya toplanıyor",
+        BotPhase.Turning => "Yön değiştiriyor",
         _ => "Durduruldu"
     };
 }

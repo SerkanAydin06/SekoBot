@@ -16,7 +16,7 @@ internal sealed class InputExecutor : IDisposable
     private readonly WindowInfo _window;
     private readonly Action<string> _log;
     private readonly Channel<BotAction> _queue = Channel.CreateBounded<BotAction>(
-        new BoundedChannelOptions(8) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
+        new BoundedChannelOptions(32) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
     private readonly CancellationTokenSource _cts = new();
     private readonly HashSet<Keys> _held = [];
     private readonly Random _random = new();
@@ -46,10 +46,22 @@ internal sealed class InputExecutor : IDisposable
                     _log("[Kuru] " + action);
                     continue;
                 }
+                if (action is KeyUpAction up)
+                {
+                    // Releasing is always safe and must never be skipped.
+                    bool held;
+                    lock (_held) held = _held.Contains(up.Key);
+                    if (held) SendKey(up.Key, down: false);
+                    continue;
+                }
                 if (Win32.GetForegroundWindow() != _window.Handle)
                 {
                     if (!_warnedFocus)
+                    {
+                        // Don't leave the attack key pressed in whatever app is in front now.
+                        ReleaseAll();
                         _log("Oyun penceresi odakta değil; girdiler bekletiliyor.");
+                    }
                     _warnedFocus = true;
                     continue;
                 }
@@ -84,6 +96,9 @@ internal sealed class InputExecutor : IDisposable
                 SendKey(tap.Key, down: true);
                 await Task.Delay(_random.Next(40, 90), token);
                 SendKey(tap.Key, down: false);
+                break;
+            case KeyDownAction keyDown:
+                SendKey(keyDown.Key, down: true);
                 break;
             case KeyHoldAction hold:
                 SendKey(hold.Key, down: true);

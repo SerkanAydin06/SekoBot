@@ -42,13 +42,10 @@ internal sealed class BotProfile
 {
     public BarSpec? HpBar { get; set; }
     public BarSpec? MpBar { get; set; }
-    /// <summary>The selected target's HP bar (top of screen). Its presence means "we are fighting".</summary>
+    /// <summary>Optional: the selected target's HP bar. Lets the bot keep hitting a living mob
+    /// and turn around when nothing is left.</summary>
     public BarSpec? TargetBar { get; set; }
-    /// <summary>Where Metin stones are searched for. Excludes the HUD.</summary>
-    public NormRect SearchArea { get; set; } = new(0.03, 0.10, 0.94, 0.70);
 
-    public double MatchThreshold { get; set; } = 0.72;
-    public double[] Scales { get; set; } = [0.75, 1.0, 1.3];
     public int PerceptionFps { get; set; } = 10;
 
     public double PotionHpBelow { get; set; } = 0.55;
@@ -56,20 +53,19 @@ internal sealed class BotProfile
     public double StopHpBelow { get; set; } = 0.20;
     public int PotionCooldownMs { get; set; } = 1500;
 
-    public bool UseAttackKey { get; set; } = true;
-    public int ApproachTimeoutMs { get; set; } = 9000;
-    public int AttackTimeoutMs { get; set; } = 120000;
-    public int TargetLostGraceMs { get; set; } = 800;
-    public int LootPresses { get; set; } = 4;
-    public int RotateHoldMs { get; set; } = 320;
-    public int RotationsBeforeMove { get; set; } = 8;
-    public int MoveHoldMs { get; set; } = 1200;
-    public int BlacklistMs { get; set; } = 25000;
+    /// <summary>How long the attack key is held per cycle.</summary>
+    public int FightMs { get; set; } = 4000;
+    /// <summary>Upper limit while the target bar still shows a living target.</summary>
+    public int FightMaxMs { get; set; } = 20000;
+    public int LootPresses { get; set; } = 3;
+    /// <summary>Rotate the camera every N cycles (0 = only when nothing is around).</summary>
+    public int RotateEveryCycles { get; set; } = 3;
+    public int RotateHoldMs { get; set; } = 350;
+    /// <summary>Walk forward every N cycles (0 = never).</summary>
+    public int MoveEveryCycles { get; set; } = 0;
+    public int MoveHoldMs { get; set; } = 1000;
 
     public KeyBindings Keys { get; set; } = new();
-
-    [JsonIgnore]
-    public bool IsReadyForBot => TargetBar != null;
 }
 
 internal static class ProfileStore
@@ -83,11 +79,12 @@ internal static class ProfileStore
     public static string Directory { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SekoBot");
 
-    public static string TemplateDirectory => Path.Combine(Directory, "templates");
     private static string ProfilePath => Path.Combine(Directory, "profile.json");
 
     public static BotProfile Load()
     {
+        // Leftover from v0.4.0 (Metin stone templates); no longer used.
+        try { System.IO.Directory.Delete(Path.Combine(Directory, "templates"), true); } catch { }
         try
         {
             if (File.Exists(ProfilePath))

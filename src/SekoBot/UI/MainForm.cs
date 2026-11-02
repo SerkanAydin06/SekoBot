@@ -17,11 +17,11 @@ internal sealed class MainForm : Form
     private readonly ListBox _windows;
     private readonly Button _connect, _startBot, _stopBot;
     private readonly CheckBox _dryRun;
-    private readonly NumericUpDown _potionHp, _stopHp, _threshold;
+    private readonly NumericUpDown _potionHp, _stopHp, _fightSeconds, _rotateEvery;
     private readonly PreviewControl _preview;
     private readonly Button[] _calibrationButtons;
-    private readonly Label _status, _scanStatus, _captureName, _calibrationHint, _templateCount;
-    private readonly Label _statPhase, _statFps, _statAnalysis, _statStones, _statRate, _statSkipped, _statTime, _statBars;
+    private readonly Label _status, _scanStatus, _captureName, _calibrationHint, _calibrationState;
+    private readonly Label _statPhase, _statFps, _statAnalysis, _statCycles, _statPotions, _statTime, _statBars;
     private readonly RichTextBox _log;
     private readonly System.Windows.Forms.Timer _scanTimer, _previewTimer, _statsTimer, _updateTimer;
     private readonly GlobalHotkeys _hotkeys = new();
@@ -121,22 +121,24 @@ internal sealed class MainForm : Form
         _potionHp = Theme.Number(botCard, new Rectangle(192, 156, 90, 26), 5, 95, (decimal)(_profile.PotionHpBelow * 100));
         Theme.Label(botCard, "Botu durdur HP (%)", new Rectangle(14, 188, 170, 26), 9f, Theme.Muted);
         _stopHp = Theme.Number(botCard, new Rectangle(192, 188, 90, 26), 0, 90, (decimal)(_profile.StopHpBelow * 100));
-        Theme.Label(botCard, "Eşleşme eşiği", new Rectangle(14, 220, 170, 26), 9f, Theme.Muted);
-        _threshold = Theme.Number(botCard, new Rectangle(192, 220, 90, 26), 0.40m, 0.98m, (decimal)_profile.MatchThreshold, 2, 0.02m);
+        Theme.Label(botCard, "Saldırı süresi (sn)", new Rectangle(14, 220, 170, 26), 9f, Theme.Muted);
+        _fightSeconds = Theme.Number(botCard, new Rectangle(192, 220, 90, 26), 1, 30, (decimal)(_profile.FightMs / 1000.0), 1, 0.5m);
+        Theme.Label(botCard, "Kamera dönüşü (her N tur)", new Rectangle(14, 252, 170, 26), 9f, Theme.Muted);
+        _rotateEvery = Theme.Number(botCard, new Rectangle(192, 252, 90, 26), 0, 20, _profile.RotateEveryCycles);
         _potionHp.ValueChanged += (_, _) => { _profile.PotionHpBelow = (double)_potionHp.Value / 100; SaveProfile(); };
         _stopHp.ValueChanged += (_, _) => { _profile.StopHpBelow = (double)_stopHp.Value / 100; SaveProfile(); };
-        _threshold.ValueChanged += (_, _) => { _profile.MatchThreshold = (double)_threshold.Value; SaveProfile(); };
+        _fightSeconds.ValueChanged += (_, _) => { _profile.FightMs = (int)(_fightSeconds.Value * 1000); SaveProfile(); };
+        _rotateEvery.ValueChanged += (_, _) => { _profile.RotateEveryCycles = (int)_rotateEvery.Value; SaveProfile(); };
 
-        var openFolder = Theme.Button(botCard, "📁  Profil klasörü", new Rectangle(14, 262, 268, 32), Theme.Secondary, Theme.SecondaryHover);
+        var openFolder = Theme.Button(botCard, "📁  Profil klasörü", new Rectangle(14, 290, 268, 32), Theme.Secondary, Theme.SecondaryHover);
         openFolder.Click += (_, _) => OpenProfileFolder();
-        Theme.Label(botCard, "Tuşlar ve süreler: profile.json", new Rectangle(14, 300, 268, 20), 8f, Theme.Muted);
-        Theme.Label(botCard, "F10 başlat/duraklat · F12 acil durdur", new Rectangle(14, 322, 268, 20), 8f, Theme.Muted);
+        Theme.Label(botCard, "Tuşlar: profile.json  ·  F10 başlat · F12 dur", new Rectangle(14, 328, 268, 22), 8f, Theme.Muted);
 
         // ── Preview card ─────────────────────────────────────────
         var previewCard = new Card { Bounds = new Rectangle(318, 66, 850, 478) };
         Controls.Add(previewCard);
         Theme.Label(previewCard, "CANLI GÖRÜNTÜ  ·  KALİBRASYON", new Rectangle(16, 10, 400, 20), 8f, Theme.Accent, FontStyle.Bold);
-        _templateCount = Theme.Label(previewCard, "", new Rectangle(560, 10, 274, 20), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.MiddleRight);
+        _calibrationState = Theme.Label(previewCard, "", new Rectangle(560, 10, 274, 20), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.MiddleRight);
         _preview = new PreviewControl { Bounds = new Rectangle(16, 34, 818, 360), Profile = _profile };
         _preview.SelectionChanged += UpdateControls;
         _preview.MouseClick += (_, _) => { if (_engine != null && _gameMinimized) WindowService.Restore(_engine.Window); };
@@ -144,15 +146,15 @@ internal sealed class MainForm : Form
 
         _calibrationHint = Theme.Label(previewCard, "Önizlemede fareyle bir alan seç, sonra ne olduğunu işaretle:",
             new Rectangle(16, 398, 818, 20), 8.5f, Theme.Muted);
-        string[] names = ["HP barı", "MP barı", "Hedef HP barı", "Arama alanı", "+ Metin şablonu", "Tümünü sıfırla"];
+        string[] names = ["HP barı", "MP barı", "Hedef HP barı (isteğe bağlı)", "Tümünü sıfırla"];
         _calibrationButtons = new Button[names.Length];
         int bx = 16;
         for (int i = 0; i < names.Length; i++)
         {
-            int width = i is 2 or 4 ? 150 : 124;
+            int width = i == 2 ? 230 : 140;
             int index = i;
             var button = Theme.Button(previewCard, names[i], new Rectangle(bx, 424, width, 38),
-                i == 5 ? Theme.Danger : Theme.Secondary, i == 5 ? Theme.DangerHover : Theme.SecondaryHover);
+                i == 3 ? Theme.Danger : Theme.Secondary, i == 3 ? Theme.DangerHover : Theme.SecondaryHover);
             button.Click += (_, _) => Calibrate(index);
             _calibrationButtons[i] = button;
             bx += width + 8;
@@ -164,10 +166,9 @@ internal sealed class MainForm : Form
         Theme.Label(statsCard, "İSTATİSTİK", new Rectangle(16, 10, 200, 20), 8f, Theme.Accent, FontStyle.Bold);
         _statPhase = Stat(statsCard, "DURUM", 16, 34, 196);
         _statBars = Stat(statsCard, "HP / MP / HEDEF", 216, 34, 190);
-        _statStones = Stat(statsCard, "KIRILAN METİN", 16, 78, 120);
-        _statRate = Stat(statsCard, "SAATTE", 140, 78, 90);
-        _statSkipped = Stat(statsCard, "ATLANAN", 234, 78, 80);
-        _statTime = Stat(statsCard, "SÜRE", 318, 78, 90);
+        _statCycles = Stat(statsCard, "TUR", 16, 78, 120);
+        _statPotions = Stat(statsCard, "İKSİR", 140, 78, 90);
+        _statTime = Stat(statsCard, "SÜRE", 234, 78, 170);
         _statFps = Stat(statsCard, "YAKALAMA FPS", 16, 116, 196, small: true);
         _statAnalysis = Stat(statsCard, "ANALİZ", 216, 116, 190, small: true);
 
@@ -317,7 +318,7 @@ internal sealed class MainForm : Form
             _previewTimer.Start();
             _captureName.Text = $"{window.Title}\n{engine.Stats.CaptureName}";
             SetStatus("BAĞLI", Theme.Green);
-            WriteLog($"Bağlandı: {window.Title} (PID {window.ProcessId}). Şablon: {engine.TemplateCount}");
+            WriteLog($"Bağlandı: {window.Title} (PID {window.ProcessId}).");
         }
         catch (Exception ex)
         {
@@ -365,7 +366,7 @@ internal sealed class MainForm : Form
         if (!_engine.StartBot(_dryRun.Checked, out string error))
         {
             WriteLog(error);
-            SetStatus("KALİBRASYON GEREKLİ", Theme.Yellow);
+            SetStatus("BAŞLATILAMADI", Theme.Yellow);
             return;
         }
         SetStatus(_dryRun.Checked ? "BOT · KURU ÇALIŞMA" : "BOT ÇALIŞIYOR", _dryRun.Checked ? Theme.Yellow : Theme.Green);
@@ -385,7 +386,7 @@ internal sealed class MainForm : Form
 
     private void Calibrate(int kind)
     {
-        if (kind == 5)
+        if (kind == 3)
         {
             ResetCalibration();
             return;
@@ -404,20 +405,12 @@ internal sealed class MainForm : Form
                     case 1:
                         _profile.MpBar = BarReader.Calibrate(frame, selection);
                         return "MP barı kaydedildi" + ColorText(_profile.MpBar);
-                    case 2:
+                    default:
                         _profile.TargetBar = BarReader.Calibrate(frame, selection);
                         return "Hedef HP barı kaydedildi" + ColorText(_profile.TargetBar);
-                    case 3:
-                        _profile.SearchArea = NormRect.FromPixels(selection, frame.Width, frame.Height);
-                        return "Arama alanı kaydedildi.";
-                    default:
-                        string path = StoneDetector.SaveTemplate(frame, selection, ProfileStore.TemplateDirectory);
-                        return "Metin şablonu eklendi: " + Path.GetFileName(path);
                 }
             }) ?? "Henüz görüntü yok.";
             SaveProfile();
-            if (kind == 4)
-                _engine.ReloadTemplates();
             WriteLog(message);
             _preview.ClearSelection();
         }
@@ -430,36 +423,21 @@ internal sealed class MainForm : Form
 
     private static string ColorText(BarSpec? bar) => bar == null ? "." : $" (renk {bar.R},{bar.G},{bar.B}).";
 
-    /// <summary>Deletes every template and every marked area (HP/MP/target bars, search area).</summary>
+    /// <summary>Deletes every marked bar (HP/MP/target).</summary>
     private void ResetCalibration()
     {
-        var answer = MessageBox.Show(this,
-            "Tüm Metin şablonları ve işaretlenen alanlar (HP, MP, hedef barı, arama alanı) silinsin mi?",
+        var answer = MessageBox.Show(this, "İşaretlenen tüm barlar (HP, MP, hedef) silinsin mi?",
             "SekoBot", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         if (answer != DialogResult.Yes)
             return;
         StopBot("kalibrasyon sıfırlandı");
-        int deleted = 0, failed = 0;
-        if (Directory.Exists(ProfileStore.TemplateDirectory))
-        {
-            foreach (var file in Directory.GetFiles(ProfileStore.TemplateDirectory, "*.png"))
-            {
-                try { File.Delete(file); deleted++; }
-                catch { failed++; }
-            }
-        }
-        var defaults = new BotProfile();
         _profile.HpBar = null;
         _profile.MpBar = null;
         _profile.TargetBar = null;
-        _profile.SearchArea = defaults.SearchArea;
         SaveProfile();
-        _engine?.ReloadTemplates();
         _preview.State = null;
         _preview.ClearSelection();
-        WriteLog(failed == 0
-            ? $"Kalibrasyon sıfırlandı: {deleted} şablon ve tüm işaretli alanlar silindi."
-            : $"{deleted} şablon silindi, {failed} dosya silinemedi (başka bir program kullanıyor olabilir).");
+        WriteLog("Kalibrasyon sıfırlandı: tüm işaretli barlar silindi.");
         UpdateControls();
     }
 
@@ -474,7 +452,6 @@ internal sealed class MainForm : Form
         try
         {
             SaveProfile();
-            Directory.CreateDirectory(ProfileStore.TemplateDirectory);
             Process.Start(new ProcessStartInfo("explorer.exe", ProfileStore.Directory) { UseShellExecute = true });
         }
         catch (Exception ex)
@@ -521,13 +498,11 @@ internal sealed class MainForm : Form
 
     private void UpdateStats()
     {
-        int templates = _engine?.TemplateCount
-            ?? (Directory.Exists(ProfileStore.TemplateDirectory) ? Directory.GetFiles(ProfileStore.TemplateDirectory, "*.png").Length : 0);
-        _templateCount.Text = $"{templates} Metin şablonu" + (_profile.TargetBar == null ? "  ·  hedef barı eksik" : "");
+        _calibrationState.Text = $"HP {Mark(_profile.HpBar)}   MP {Mark(_profile.MpBar)}   Hedef {Mark(_profile.TargetBar)}";
 
         if (_engine == null)
         {
-            foreach (var l in new[] { _statPhase, _statFps, _statAnalysis, _statBars, _statRate, _statTime })
+            foreach (var l in new[] { _statPhase, _statFps, _statAnalysis, _statBars, _statCycles, _statPotions, _statTime })
                 l.Text = "—";
             return;
         }
@@ -536,13 +511,14 @@ internal sealed class MainForm : Form
         _statPhase.Text = s.BotRunning ? s.Phase.ToTurkish() : "Bot kapalı";
         _statPhase.ForeColor = s.BotRunning ? Theme.Green : Theme.Muted;
         _statFps.Text = $"{s.CaptureFps:0.0}  ·  {(s.CaptureName.StartsWith("Windows") ? "GPU" : "GDI")}";
-        _statAnalysis.Text = $"{s.AnalysisMs:0.0} ms  ·  {state?.Stones.Count ?? 0} metin";
+        _statAnalysis.Text = $"{s.AnalysisMs:0.00} ms";
         _statBars.Text = $"{Pct(state?.Hp)} / {Pct(state?.Mp)} / {Pct(state?.TargetHp)}";
-        _statStones.Text = s.Stones.ToString("N0");
-        _statSkipped.Text = s.Skipped.ToString("N0");
+        _statCycles.Text = s.Cycles.ToString("N0");
+        _statPotions.Text = s.Potions.ToString("N0");
         _statTime.Text = s.BotUptime.ToString(@"hh\:mm\:ss");
-        _statRate.Text = s.BotUptime.TotalMinutes >= 1 ? (s.Stones / s.BotUptime.TotalHours).ToString("0") : "—";
     }
+
+    private static string Mark(BarSpec? bar) => bar == null ? "✗" : "✓";
 
     private static string Pct(double? value) => value is double v ? $"%{v * 100:0}" : "—";
 
@@ -560,13 +536,13 @@ internal sealed class MainForm : Form
         _stopBot.Enabled = running;
         _dryRun.Enabled = !running;
         bool hasSelection = connected && _preview.Selection != null;
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < 3; i++)
             _calibrationButtons[i].Enabled = hasSelection;
         _calibrationHint.Text = !connected
             ? "Kalibrasyon için önce oyuna bağlan."
             : hasSelection
                 ? "Seçili alanı ne olarak kaydedelim? (Bar seçerken bar dolu olmalı)"
-                : "Önizlemede fareyle bir alan seç: HP barı, hedef barı veya bir Metin taşı.";
+                : "Önizlemede fareyle bir bar seç (HP, MP veya hedef HP), sonra aşağıdan işaretle.";
     }
 
     // ── Update ───────────────────────────────────────────────────
@@ -587,7 +563,7 @@ internal sealed class MainForm : Form
         }
         if (result.Update is not PreparedUpdate update)
         {
-            if (startup) WriteLog("SekoBot güncel.");
+            if (startup) WriteLog($"SekoBot güncel (v{BuildInfo.Version}).");
             return;
         }
         // Never interrupt a running farm session; try again on the next timer tick.
@@ -598,7 +574,7 @@ internal sealed class MainForm : Form
         }
         _updating = true;
         SetStatus("GÜNCELLENİYOR", Theme.Yellow);
-        WriteLog("Yeni sürüm doğrulandı. SekoBot yeniden başlatılıyor…");
+        WriteLog($"Yeni sürüm {update.Version} doğrulandı. SekoBot yeniden başlatılıyor…");
         await Task.Delay(1200);
         try
         {
