@@ -45,6 +45,8 @@ internal sealed class BotEngine : IDisposable
     private readonly object _spotGate = new();
     private Point? _targetSpot;
     private TimeSpan _targetSpotAt;
+    private TimeSpan _targetConstSince = TimeSpan.FromDays(-1);
+    private double _targetConstValue = -1;
     private TimeSpan _lastBarSearch = TimeSpan.FromDays(-1), _barSearchStarted = TimeSpan.FromDays(-1);
     private bool _barSearchFailedLogged;
     private bool _disposed;
@@ -135,6 +137,7 @@ internal sealed class BotEngine : IDisposable
                             state = state with { MobCandidates = mobs, TargetSpot = TrackTarget(state, mobs, now) };
                         }
                         Volatile.Write(ref _state, state);
+                        CheckTargetBar(state, profile, frame, now);
                         var (phase, actions) = TickBot(state);
                         Volatile.Read(ref _recorder)?.Record(frame, state, phase, actions, IsImportant(actions, profile));
                     }
@@ -177,6 +180,11 @@ internal sealed class BotEngine : IDisposable
                     stopReason = stop.Reason;
                     break;
                 }
+                if (action is NoteAction note)
+                {
+                    _log(note.Text);
+                    continue;
+                }
                 _input.Enqueue(action);
             }
         }
@@ -191,6 +199,34 @@ internal sealed class BotEngine : IDisposable
     private static bool IsImportant(IReadOnlyList<BotAction> actions, BotProfile profile) =>
         actions.Any(a => a is StopAction ||
                          a is KeyTapAction tap && (tap.Key == profile.Keys.HpPotion || tap.Key == profile.Keys.MpPotion));
+
+    /// <summary>
+    /// A real target bar changes (mob gets hit) or disappears (mob dies, nothing selected).
+    /// One that shows the same value for 45 s while the bot runs is some other red thing at
+    /// the top of the screen: forget it, never pick that spot again, and look for the real one.
+    /// </summary>
+    private void CheckTargetBar(GameState state, BotProfile profile, Frame frame, TimeSpan now)
+    {
+        if (profile.TargetBar is not { Auto: true } bar || !BotRunning || !state.HasTarget)
+        {
+            _targetConstSince = TimeSpan.FromDays(-1);
+            return;
+        }
+        double value = state.TargetHp!.Value;
+        if (_targetConstSince < TimeSpan.Zero || Math.Abs(value - _targetConstValue) > 0.01)
+        {
+            _targetConstSince = now;
+            _targetConstValue = value;
+            return;
+        }
+        if (now - _targetConstSince < TimeSpan.FromSeconds(45))
+            return;
+        _targetConstSince = TimeSpan.FromDays(-1);
+        _autoBars.Reject(bar.Area.ToPixels(frame.Width, frame.Height), frame.Width, frame.Height);
+        profile.TargetBar = null;
+        _log("Hedef barı sanılan yer hiç değişmiyor; gerçek hedef barı değil. Yeniden aranıyor.");
+        BarsChanged?.Invoke("");
+    }
 
     /// <summary>Follows the selected mob on screen: the moving thing nearest to where it was.</summary>
     private Point? TrackTarget(GameState state, IReadOnlyList<Point> mobs, TimeSpan now)
@@ -295,6 +331,7 @@ internal sealed class BotEngine : IDisposable
                 return true;
             _input = new InputExecutor(_window, dryRun, _log,
                 () => Profile.TargetBar == null ? null : State?.HasTarget == true,
+                () => State?.TargetHp,
                 spot => _motion.MarkMiss(spot, _clock.Elapsed),
                 spot => { lock (_spotGate) { _targetSpot = spot; _targetSpotAt = _clock.Elapsed; } });
             _botStarted = _clock.Elapsed;

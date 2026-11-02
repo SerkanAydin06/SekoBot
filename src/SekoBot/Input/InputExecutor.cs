@@ -24,6 +24,7 @@ internal sealed class InputExecutor : IDisposable
     private readonly Func<bool?> _hasTarget;
     private readonly Action<Point> _missed;
     private readonly Action<Point> _selected;
+    private readonly Func<double?> _targetHp;
     private bool _warnedFocus, _learnedLogged;
 
     /// <param name="hasTarget">Whether a target bar is showing; null when it can't be told
@@ -31,8 +32,9 @@ internal sealed class InputExecutor : IDisposable
     /// <param name="missed">Called with a candidate that was clicked but selected nothing.</param>
     /// <param name="selected">Called with the spot whose click selected a mob.</param>
     public InputExecutor(WindowInfo window, bool dryRun, Action<string> log, Func<bool?> hasTarget,
-        Action<Point> missed, Action<Point> selected)
+        Func<double?> targetHp, Action<Point> missed, Action<Point> selected)
     {
+        _targetHp = targetHp;
         _selected = selected;
         _window = window;
         DryRun = dryRun;
@@ -134,6 +136,9 @@ internal sealed class InputExecutor : IDisposable
         {
             if (Win32.GetForegroundWindow() != _window.Handle || misses >= 2)
                 return;
+            // A bar that was already showing before the click doesn't prove this click selected anything.
+            bool hadTarget = _hasTarget() == true;
+            double? before = _targetHp();
             MoveMouse(WindowService.ClientToScreen(_window, spot));
             await Task.Delay(_random.Next(40, 70), token);
             SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);
@@ -144,7 +149,9 @@ internal sealed class InputExecutor : IDisposable
             int wait = _hasTarget() == null ? 1500 : 800;
             for (int waited = 0; waited < wait; waited += 50)
             {
-                if (_hasTarget() == true)
+                bool fresh = !hadTarget ||
+                    (before is double b && _targetHp() is double n && Math.Abs(n - b) > 0.02);
+                if (_hasTarget() == true && fresh)
                 {
                     _selected(spot);
                     if (!_learnedLogged)
@@ -156,7 +163,8 @@ internal sealed class InputExecutor : IDisposable
                 }
                 await Task.Delay(50, token);
             }
-            if (_hasTarget() != null)
+            // Only a click that left no target bar at all hit empty ground.
+            if (_hasTarget() == false)
                 _missed(spot);
             misses++;
         }

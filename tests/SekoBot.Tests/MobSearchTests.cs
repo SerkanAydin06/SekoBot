@@ -179,6 +179,27 @@ public class MobSearchBrainTests
     }
 
     [Fact]
+    public void A_target_bar_that_never_changes_is_ignored_and_the_bot_keeps_clicking_mobs()
+    {
+        var (brain, p) = Started();
+        Run(brain, 0, 1000, t => State(t, 0, Mob));
+        // Stuck: the "target" stays at 70 % whatever happens, and its position is unknown.
+        var stuck = Run(brain, 1000, 1000 + 4 * p.StallMs + 500, t => State(t, 0.7, Mob));
+        Assert.Contains(stuck, a => a is NoteAction);
+        Assert.Equal(3, stuck.OfType<ClickAction>().Count()); // clicked the nearest moving thing
+
+        // The same bar is still showing: don't fight it again, look for mobs instead.
+        double t1 = 1000 + 4 * p.StallMs + 500;
+        var later = Run(brain, t1, t1 + 3500, t => State(t, 0.7, Mob));
+        Assert.Contains(later, a => a is FindTargetAction);
+        Assert.Equal(BotPhase.Searching, brain.Phase);
+
+        // Its value changes (a mob really gets hit): fight again.
+        Run(brain, t1 + 3500, t1 + 3800, t => State(t, 0.6, Mob));
+        Assert.Equal(BotPhase.Fighting, brain.Phase);
+    }
+
+    [Fact]
     public void Can_still_hold_the_attack_key_on_a_target_if_wanted()
     {
         var (brain, p) = Started();

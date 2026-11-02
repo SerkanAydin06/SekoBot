@@ -34,6 +34,12 @@ internal sealed record FindTargetAction(IReadOnlyList<Point> Candidates) : BotAc
     public override string ToString() => $"Mob ara ({Candidates.Count} aday)";
 }
 
+/// <summary>A message for the log (why the bot did something); not sent to the game.</summary>
+internal sealed record NoteAction(string Text) : BotAction
+{
+    public override string ToString() => "Not: " + Text;
+}
+
 internal sealed record StopAction(string Reason) : BotAction
 {
     public override string ToString() => "Dur: " + Reason;
