@@ -67,6 +67,11 @@ internal sealed class BotProfile
     public int MoveEveryCycles { get; set; } = 0;
     public int MoveHoldMs { get; set; } = 1000;
 
+    /// <summary>Recording: store one PNG frame this often (potion/stop frames are always stored).</summary>
+    public int RecordFrameIntervalMs { get; set; } = 1000;
+    /// <summary>Recording: stop storing frames above this size; bar values keep being recorded.</summary>
+    public int RecordMaxMb { get; set; } = 1500;
+
     public KeyBindings Keys { get; set; } = new();
 }
 

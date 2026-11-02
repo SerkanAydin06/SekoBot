@@ -9,6 +9,8 @@
 - [x] Önizlemede debug katmanı ve fareyle kalibrasyon
 - [x] Sessiz otomatik güncelleme
 - [x] DPI ölçeklendirme
+- [x] Kısa süreli bozuk karelere karşı HP/MP okuma filtresi
+- [x] Oturum kaydı (değerler + kareler) ve çevrimdışı tekrar oynatma raporu
 - [ ] Gerçek Metin2 istemcisinde kalibrasyon + kuru çalışma testi
 - [ ] Gerçek modda uzun süreli test
 

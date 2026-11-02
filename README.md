@@ -17,6 +17,13 @@ Metin2 için tek dosyalı Windows farm botu. Kurulum gerekmez, açılışta kend
 
 Döngü: saldırı tuşu basılı (varsayılan 4 sn) → eşya topla → her N turda kamera döndür → tekrar. Tuşlar (Space saldırı, Z toplama, 1/2 iksir, E kamera, W yürüme) ve süreler `%LOCALAPPDATA%\SekoBot\profile.json` içinde; arayüzden **Profil klasörü** ile açılır.
 
+## Kayıt ve tekrar oynatma
+
+- **⏺ Kaydet:** Bot her turda okuduğu HP/MP/hedef değerlerini, aşamayı ve gönderdiği tuşları `%LOCALAPPDATA%\SekoBot\recordings\<tarih>\` klasörüne yazar. Saniyede bir kare PNG olarak saklanır; iksir ve durdurma anının karesi her zaman saklanır. Bot kapalıyken de kaydeder (örnek görüntü toplamak için). Kare aralığı ve boyut sınırı `profile.json` içinde: `RecordFrameIntervalMs` (varsayılan 1000), `RecordMaxMb` (varsayılan 1500).
+- **▶ Kaydı oynat:** Bir kayıt klasörü seç. Kayıttaki kareler **şimdiki** kalibrasyon ve ayarlarla yeniden okunur ve bot mantığından geçirilir; oyuna hiçbir tuş gönderilmez. Klasöre `replay-report.txt` yazılır: kayıtta ne yapıldı → şimdiki kod ne yapardı, durma anı, kalibrasyonu tutmayan kareler.
+
+Böylece yeni bir ayarı ya da kalibrasyonu oyunda denemeden önce eski bir oturumun üzerinde test edebilirsin.
+
 ## Nasıl çalışır
 
 - **Yakalama:** Windows Graphics Capture (GPU); oyunun üstü örtülse de çalışır. Desteklenmezse GDI'ya düşer. Küçültülmüş pencere Windows tarafından çizilmez, görüntü alınamaz.
@@ -31,8 +38,8 @@ Uygulama oyun belleğini okumaz, koda enjekte etmez, görüntü yüklemez. Günc
 ## Geliştirme
 
 ```
-src/SekoBot/            uygulama (Capture, Vision, Bot, Input, Config, Update, UI)
-tests/SekoBot.Tests/    farm döngüsü ve bar okuma testleri
+src/SekoBot/            uygulama (Capture, Vision, Bot, Input, Config, Recording, Update, UI)
+tests/SekoBot.Tests/    farm döngüsü, bar okuma, kayıt/oynatma testleri
 ```
 
 .NET 10 SDK ile `dotnet test` ve `dotnet run --project src/SekoBot`. Her push GitHub Actions'ta test edilip derlenir; `main` dalı `preview` sürümünü günceller.

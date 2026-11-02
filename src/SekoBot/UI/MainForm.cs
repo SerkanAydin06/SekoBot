@@ -4,6 +4,7 @@ using SekoBot.Capture;
 using SekoBot.Config;
 using SekoBot.Input;
 using SekoBot.Native;
+using SekoBot.Recording;
 using SekoBot.Update;
 using SekoBot.Vision;
 
@@ -15,7 +16,7 @@ internal sealed class MainForm : Form
 
     private readonly BotProfile _profile = ProfileStore.Load();
     private readonly ListBox _windows;
-    private readonly Button _connect, _startBot, _stopBot;
+    private readonly Button _connect, _startBot, _stopBot, _record, _replay;
     private readonly CheckBox _dryRun;
     private readonly NumericUpDown _potionHp, _stopHp, _fightSeconds, _rotateEvery;
     private readonly PreviewControl _preview;
@@ -29,7 +30,7 @@ internal sealed class MainForm : Form
     private BotEngine? _engine;
     private Bitmap? _frameBitmap;
     private long _frameSequence;
-    private bool _autoAttached, _updating, _gameMinimized;
+    private bool _autoAttached, _updating, _gameMinimized, _replaying;
     /// <summary>Verified update that arrived while the bot was running.</summary>
     private PreparedUpdate? _pendingUpdate;
 
@@ -132,8 +133,14 @@ internal sealed class MainForm : Form
         _fightSeconds.ValueChanged += (_, _) => { _profile.FightMs = (int)(_fightSeconds.Value * 1000); SaveProfile(); };
         _rotateEvery.ValueChanged += (_, _) => { _profile.RotateEveryCycles = (int)_rotateEvery.Value; SaveProfile(); };
 
-        var openFolder = Theme.Button(botCard, "📁  Profil klasörü", new Rectangle(14, 290, 268, 32), Theme.Secondary, Theme.SecondaryHover);
+        var openFolder = Theme.Button(botCard, "📁 Klasör", new Rectangle(14, 290, 80, 32), Theme.Secondary, Theme.SecondaryHover);
         openFolder.Click += (_, _) => OpenProfileFolder();
+        _record = Theme.Button(botCard, "⏺ Kaydet", new Rectangle(98, 290, 88, 32), Theme.Secondary, Theme.SecondaryHover);
+        _record.Click += (_, _) => ToggleRecording();
+        _replay = Theme.Button(botCard, "▶ Kaydı oynat", new Rectangle(190, 290, 92, 32), Theme.Secondary, Theme.SecondaryHover);
+        _replay.Click += async (_, _) => await ReplayAsync();
+        foreach (var small in new[] { openFolder, _record, _replay })
+            small.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
         Theme.Label(botCard, "Tuşlar: profile.json  ·  F10 başlat · F12 dur", new Rectangle(14, 328, 268, 22), 8f, Theme.Muted);
 
         // ── Preview card ─────────────────────────────────────────
@@ -388,6 +395,67 @@ internal sealed class MainForm : Form
             _ = ApplyUpdateAsync(pending);
     }
 
+    // ── Recording / replay ───────────────────────────────────────
+
+    private void ToggleRecording()
+    {
+        if (_engine == null)
+            return;
+        try
+        {
+            if (_engine.IsRecording)
+                _engine.StopRecording();
+            else
+                _engine.StartRecording();
+        }
+        catch (Exception ex)
+        {
+            WriteLog("Kayıt başlatılamadı: " + ex.Message);
+        }
+        UpdateControls();
+    }
+
+    /// <summary>Runs a recording through the current calibration and bot logic, then shows the report.</summary>
+    private async Task ReplayAsync()
+    {
+        if (_replaying)
+            return;
+        using var dialog = new FolderBrowserDialog
+        {
+            Description = "Oynatılacak kayıt klasörünü seç (içinde ticks.jsonl olan)",
+            UseDescriptionForTitle = true,
+            InitialDirectory = Directory.Exists(RecordingFormat.Root) ? RecordingFormat.Root : ProfileStore.Directory
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+            return;
+        string folder = dialog.SelectedPath;
+        // The replay runs on a worker; give it a snapshot so UI edits can't race with it.
+        var profile = System.Text.Json.JsonSerializer.Deserialize<BotProfile>(
+            System.Text.Json.JsonSerializer.Serialize(_profile, RecordingFormat.Json), RecordingFormat.Json)!;
+        _replaying = true;
+        UpdateControls();
+        WriteLog("Kayıt oynatılıyor: " + folder);
+        try
+        {
+            string report = await Task.Run(() => Replayer.Report(SessionRecording.Load(folder), profile));
+            string reportPath = Path.Combine(folder, "replay-report.txt");
+            await File.WriteAllTextAsync(reportPath, report);
+            foreach (var line in report.Split(Environment.NewLine).Skip(3).Take(5))
+                if (line.Length > 0) WriteLog(line);
+            WriteLog("Rapor: " + reportPath);
+            Process.Start(new ProcessStartInfo(reportPath) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            WriteLog("Kayıt oynatılamadı: " + ex.Message);
+        }
+        finally
+        {
+            _replaying = false;
+            if (!IsDisposed) UpdateControls();
+        }
+    }
+
     // ── Calibration ──────────────────────────────────────────────
 
     private void Calibrate(int kind)
@@ -495,9 +563,9 @@ internal sealed class MainForm : Form
             _preview.Image = _frameBitmap;
             _preview.State = _engine.State;
             var stats = _engine.Stats;
-            _preview.Overlay = stats.BotRunning
+            _preview.Overlay = (_engine.IsRecording ? "⏺ KAYIT  " : "") + (stats.BotRunning
                 ? (stats.DryRun ? "KURU · " : "") + stats.Phase.ToTurkish()
-                : "";
+                : "");
             _preview.Invalidate();
         }
     }
@@ -540,6 +608,12 @@ internal sealed class MainForm : Form
         _startBot.Enabled = connected;
         _startBot.Text = running ? "❚❚  Duraklat  (F10)" : "▶  Başlat  (F10)";
         _stopBot.Enabled = running;
+        bool recording = _engine?.IsRecording == true;
+        _record.Enabled = connected;
+        _record.Text = recording ? "■ Bitir" : "⏺ Kaydet";
+        _record.BackColor = recording ? Theme.Danger : Theme.Secondary;
+        _record.FlatAppearance.MouseOverBackColor = recording ? Theme.DangerHover : Theme.SecondaryHover;
+        _replay.Enabled = !_replaying;
         _dryRun.Enabled = !running;
         bool hasSelection = connected && _preview.Selection != null;
         for (int i = 0; i < 3; i++)
