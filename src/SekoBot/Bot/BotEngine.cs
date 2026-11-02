@@ -261,7 +261,8 @@ internal sealed class BotEngine : IDisposable
             if (_input != null)
                 return true;
             _input = new InputExecutor(_window, dryRun, _log, _mobCursors,
-                () => Profile.TargetBar == null ? null : State?.HasTarget == true);
+                () => Profile.TargetBar == null ? null : State?.HasTarget == true,
+                () => Profile.HoverDelayMs);
             _botStarted = _clock.Elapsed;
             _brain.Start(_clock.Elapsed);
         }

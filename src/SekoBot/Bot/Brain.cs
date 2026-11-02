@@ -186,7 +186,8 @@ internal sealed class Brain
             _searchSent = true;
             return;
         }
-        if (now - _phaseSince < Ms(p.SearchTimeoutMs))
+        // The scan takes ~40 points × hover delay, plus up to 1.5 s to see the target bar.
+        if (now - _phaseSince < Ms(Math.Max(p.SearchTimeoutMs, p.HoverDelayMs * 40 + 2000)))
             return;
 
         _failedSearches++;

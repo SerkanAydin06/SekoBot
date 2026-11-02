@@ -27,8 +27,12 @@ internal sealed class InputExecutor : IDisposable
 
     /// <param name="hasTarget">Whether a target bar is showing; null when it can't be told
     /// (target bar not known yet).</param>
-    public InputExecutor(WindowInfo window, bool dryRun, Action<string> log, MobCursors cursors, Func<bool?> hasTarget)
+    private readonly Func<int> _hoverDelayMs;
+
+    public InputExecutor(WindowInfo window, bool dryRun, Action<string> log, MobCursors cursors, Func<bool?> hasTarget,
+        Func<int>? hoverDelayMs = null)
     {
+        _hoverDelayMs = hoverDelayMs ?? (() => 80);
         _window = window;
         DryRun = dryRun;
         _log = log;
@@ -134,10 +138,9 @@ internal sealed class InputExecutor : IDisposable
         {
             if (Win32.GetForegroundWindow() != _window.Handle)
                 return;
-            var screen = WindowService.ClientToScreen(_window, point);
-            Win32.SetCursorPos(screen.X, screen.Y);
-            // The game updates its cursor on its next frame.
-            await Task.Delay(22, token);
+            MoveMouse(WindowService.ClientToScreen(_window, point));
+            // The game only changes its cursor after it has noticed the mouse over the mob.
+            await Task.Delay(Math.Clamp(_hoverDelayMs(), 20, 1000), token);
             seen.Add(Win32.CurrentCursor());
             pick = MobSearch.Choose(seen, _cursors);
             if (pick >= 0)
@@ -161,8 +164,7 @@ internal sealed class InputExecutor : IDisposable
             return;
 
         nint cursor = seen[pick];
-        var target = WindowService.ClientToScreen(_window, points[pick]);
-        Win32.SetCursorPos(target.X, target.Y);
+        MoveMouse(WindowService.ClientToScreen(_window, points[pick]));
         await Task.Delay(_random.Next(25, 45), token);
         SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);
         await Task.Delay(_random.Next(35, 75), token);
@@ -181,6 +183,23 @@ internal sealed class InputExecutor : IDisposable
             await Task.Delay(50, token);
         }
         _cursors.MarkFailed(cursor);
+    }
+
+    /// <summary>
+    /// Moves the cursor and also sends a real mouse-move input event: some games ignore a
+    /// bare cursor jump and only react (hover, attack cursor) to actual mouse input.
+    /// </summary>
+    private static void MoveMouse(Point screen)
+    {
+        Win32.SetCursorPos(screen.X, screen.Y);
+        int vx = Win32.GetSystemMetrics(Win32.SM_XVIRTUALSCREEN), vy = Win32.GetSystemMetrics(Win32.SM_YVIRTUALSCREEN);
+        int vw = Math.Max(2, Win32.GetSystemMetrics(Win32.SM_CXVIRTUALSCREEN));
+        int vh = Math.Max(2, Win32.GetSystemMetrics(Win32.SM_CYVIRTUALSCREEN));
+        var input = new Win32.INPUT { type = Win32.INPUT_MOUSE };
+        input.u.mi.dx = (int)((screen.X - vx) * 65535L / (vw - 1));
+        input.u.mi.dy = (int)((screen.Y - vy) * 65535L / (vh - 1));
+        input.u.mi.dwFlags = Win32.MOUSEEVENTF_MOVE | Win32.MOUSEEVENTF_ABSOLUTE | Win32.MOUSEEVENTF_VIRTUALDESK;
+        Win32.SendInput(1, [input], Marshal.SizeOf<Win32.INPUT>());
     }
 
     private static void SendMouse(uint flags)

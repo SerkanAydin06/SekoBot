@@ -18,7 +18,7 @@ internal sealed class MainForm : Form
     private readonly ListBox _windows;
     private readonly Button _connect, _startBot, _stopBot, _record, _replay;
     private readonly CheckBox _dryRun;
-    private readonly NumericUpDown _potionHp, _stopHp, _fightSeconds, _rotateEvery;
+    private readonly NumericUpDown _potionHp, _stopHp, _fightSeconds, _hoverDelay;
     private readonly PreviewControl _preview;
     private readonly Button[] _calibrationButtons;
     private readonly Label _status, _scanStatus, _captureName, _calibrationHint, _calibrationState;
@@ -128,12 +128,13 @@ internal sealed class MainForm : Form
         _stopHp = Theme.Number(botCard, new Rectangle(192, 188, 90, 26), 0, 90, (decimal)(_profile.StopHpBelow * 100));
         Theme.Label(botCard, "Saldırı süresi (sn)", new Rectangle(14, 220, 170, 26), 9f, Theme.Muted);
         _fightSeconds = Theme.Number(botCard, new Rectangle(192, 220, 90, 26), 1, 30, (decimal)(_profile.FightMs / 1000.0), 1, 0.5m);
-        Theme.Label(botCard, "Kamera dönüşü (her N tur)", new Rectangle(14, 252, 170, 26), 9f, Theme.Muted);
-        _rotateEvery = Theme.Number(botCard, new Rectangle(192, 252, 90, 26), 0, 20, _profile.RotateEveryCycles);
+        Theme.Label(botCard, "Mob ararken fare bekleme (ms)", new Rectangle(14, 252, 176, 26), 9f, Theme.Muted);
+        _hoverDelay = Theme.Number(botCard, new Rectangle(192, 252, 90, 26), 20, 400,
+            Math.Clamp(_profile.HoverDelayMs, 20, 400), 0, 10);
         _potionHp.ValueChanged += (_, _) => { _profile.PotionHpBelow = (double)_potionHp.Value / 100; SaveProfile(); };
         _stopHp.ValueChanged += (_, _) => { _profile.StopHpBelow = (double)_stopHp.Value / 100; SaveProfile(); };
         _fightSeconds.ValueChanged += (_, _) => { _profile.FightMs = (int)(_fightSeconds.Value * 1000); SaveProfile(); };
-        _rotateEvery.ValueChanged += (_, _) => { _profile.RotateEveryCycles = (int)_rotateEvery.Value; SaveProfile(); };
+        _hoverDelay.ValueChanged += (_, _) => { _profile.HoverDelayMs = (int)_hoverDelay.Value; SaveProfile(); };
 
         var openFolder = Theme.Button(botCard, "📁 Klasör", new Rectangle(14, 290, 80, 32), Theme.Secondary, Theme.SecondaryHover);
         openFolder.Click += (_, _) => OpenProfileFolder();

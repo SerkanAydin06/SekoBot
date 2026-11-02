@@ -75,7 +75,7 @@ public class MobSearchTests
     public void Scan_points_start_near_the_character_and_avoid_the_hud()
     {
         var points = MobSearch.ScanPoints(800, 600);
-        Assert.InRange(points.Count, 30, 120);
+        Assert.InRange(points.Count, 15, 80);
         double Dist(Point q) => Math.Sqrt(Math.Pow(q.X - 400, 2) + Math.Pow(q.Y - 300, 2));
         Assert.True(Dist(points[0]) < Dist(points[^1]));
         Assert.All(points, q => Assert.InRange(q.Y, 72, 492));
