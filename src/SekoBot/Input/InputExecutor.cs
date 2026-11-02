@@ -23,13 +23,17 @@ internal sealed class InputExecutor : IDisposable
     private readonly Task _worker;
     private readonly Func<bool?> _hasTarget;
     private readonly Action<Point> _missed;
+    private readonly Action<Point> _selected;
     private bool _warnedFocus, _learnedLogged;
 
     /// <param name="hasTarget">Whether a target bar is showing; null when it can't be told
     /// (target bar not known yet).</param>
     /// <param name="missed">Called with a candidate that was clicked but selected nothing.</param>
-    public InputExecutor(WindowInfo window, bool dryRun, Action<string> log, Func<bool?> hasTarget, Action<Point> missed)
+    /// <param name="selected">Called with the spot whose click selected a mob.</param>
+    public InputExecutor(WindowInfo window, bool dryRun, Action<string> log, Func<bool?> hasTarget,
+        Action<Point> missed, Action<Point> selected)
     {
+        _selected = selected;
         _window = window;
         DryRun = dryRun;
         _log = log;
@@ -92,9 +96,8 @@ internal sealed class InputExecutor : IDisposable
         switch (action)
         {
             case ClickAction click:
-                var screen = WindowService.ClientToScreen(_window, click.Client);
-                Win32.SetCursorPos(screen.X, screen.Y);
-                await Task.Delay(_random.Next(25, 55), token);
+                MoveMouse(WindowService.ClientToScreen(_window, click.Client));
+                await Task.Delay(_random.Next(30, 60), token);
                 SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);
                 await Task.Delay(_random.Next(35, 75), token);
                 SendMouse(Win32.MOUSEEVENTF_LEFTUP);
@@ -143,6 +146,7 @@ internal sealed class InputExecutor : IDisposable
             {
                 if (_hasTarget() == true)
                 {
+                    _selected(spot);
                     if (!_learnedLogged)
                     {
                         _learnedLogged = true;

@@ -116,8 +116,12 @@ public class MobSearchBrainTests
 {
     private static readonly Point[] Mob = [new(300, 250)];
 
-    private static GameState State(double ms, double? target, IReadOnlyList<Point>? mobs = null) =>
-        new(TimeSpan.FromMilliseconds(ms), 800, 600, 1, 1, target, 1) { MobCandidates = mobs ?? Array.Empty<Point>() };
+    private static GameState State(double ms, double? target, IReadOnlyList<Point>? mobs = null, Point? spot = null) =>
+        new(TimeSpan.FromMilliseconds(ms), 800, 600, 1, 1, target, 1)
+        {
+            MobCandidates = mobs ?? Array.Empty<Point>(),
+            TargetSpot = spot
+        };
 
     private static (Brain Brain, BotProfile Profile) Started(bool targetBarKnown = true)
     {
@@ -138,26 +142,50 @@ public class MobSearchBrainTests
     }
 
     [Fact]
-    public void Clicks_a_moving_mob_fights_until_it_dies_then_searches_again()
+    public void Clicks_a_moving_mob_lets_the_character_fight_without_space_then_searches_again()
     {
         var (brain, p) = Started();
         Assert.Equal(BotPhase.Searching, brain.Phase);
         var search = Run(brain, 0, 1000, t => State(t, 0, Mob));
         var find = Assert.Single(search.OfType<FindTargetAction>());
         Assert.Equal(Mob, find.Candidates);
-        Assert.DoesNotContain(search, a => a is KeyDownAction);
 
-        var fight = Run(brain, 1000, 1000 + p.FightMs + 3000, t => State(t, 0.7));
+        // Mob selected and its HP keeps going down: no attack key, no extra clicks.
+        var fight = Run(brain, 1000, 1000 + p.FightMs + 3000, t => State(t, 0.9 - (t - 1000) / 20000, spot: Mob[0]));
         Assert.Equal(BotPhase.Fighting, brain.Phase);
-        Assert.Contains(fight, a => a is KeyDownAction d && d.Key == p.Keys.Attack);
+        Assert.DoesNotContain(fight, a => a is KeyDownAction);
+        Assert.DoesNotContain(fight, a => a is ClickAction);
 
         double t0 = 1000 + p.FightMs + 3000;
         var after = Run(brain, t0, t0 + 3000, t => State(t, 0, Mob));
-        Assert.Contains(after, a => a is KeyUpAction u && u.Key == p.Keys.Attack);
         Assert.Equal(p.LootPresses, after.OfType<KeyTapAction>().Count(a => a.Key == p.Keys.Pickup));
         Assert.Single(after.OfType<FindTargetAction>());
         Assert.Equal(BotPhase.Searching, brain.Phase);
         Assert.Equal(1, brain.Cycles);
+    }
+
+    [Fact]
+    public void Clicks_the_mob_again_when_its_hp_stops_dropping_and_gives_up_after_three_tries()
+    {
+        var (brain, p) = Started();
+        Run(brain, 0, 1000, t => State(t, 0, Mob));
+        var spot = new Point(330, 260);
+        var stuck = Run(brain, 1000, 1000 + 4 * p.StallMs + 500, t => State(t, 0.7, spot: spot));
+        var clicks = stuck.OfType<ClickAction>().ToList();
+        Assert.Equal(3, clicks.Count);
+        Assert.All(clicks, c => Assert.Equal(spot, c.Client));
+        Assert.NotEqual(BotPhase.Fighting, brain.Phase);
+        Assert.DoesNotContain(stuck, a => a is KeyDownAction);
+    }
+
+    [Fact]
+    public void Can_still_hold_the_attack_key_on_a_target_if_wanted()
+    {
+        var (brain, p) = Started();
+        p.UseAttackKeyOnTarget = true;
+        Run(brain, 0, 1000, t => State(t, 0, Mob));
+        var fight = Run(brain, 1000, 2000, t => State(t, 0.9 - (t - 1000) / 20000, spot: Mob[0]));
+        Assert.Contains(fight, a => a is KeyDownAction d && d.Key == p.Keys.Attack);
     }
 
     [Fact]
@@ -178,13 +206,14 @@ public class MobSearchBrainTests
     }
 
     [Fact]
-    public void Turns_camera_when_nothing_is_found_and_attacks_blindly_after_three_misses()
+    public void Turns_camera_twice_then_walks_when_nothing_is_found_without_attacking_the_air()
     {
         var (brain, p) = Started();
-        var actions = Run(brain, 0, 3 * (p.SearchTimeoutMs + p.RotateHoldMs + 400), t => State(t, 0));
+        var actions = Run(brain, 0, 3 * (p.SearchTimeoutMs + 200) + p.RotateHoldMs * 2 + p.MoveHoldMs + 1500, t => State(t, 0));
         Assert.Equal(2, actions.OfType<KeyHoldAction>().Count(a => a.Key == p.Keys.RotateCamera));
-        Assert.Equal(BotPhase.Fighting, brain.Phase);
-        Assert.Contains(actions, a => a is KeyDownAction);
+        Assert.Equal(1, actions.OfType<KeyHoldAction>().Count(a => a.Key == p.Keys.MoveForward));
+        Assert.DoesNotContain(actions, a => a is KeyDownAction);
+        Assert.NotEqual(BotPhase.Fighting, brain.Phase);
     }
 
     [Fact]

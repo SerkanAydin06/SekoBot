@@ -42,6 +42,9 @@ internal sealed class BotEngine : IDisposable
     private SessionRecorder? _recorder;
     private readonly AutoBars _autoBars = new();
     private readonly MotionDetector _motion = new();
+    private readonly object _spotGate = new();
+    private Point? _targetSpot;
+    private TimeSpan _targetSpotAt;
     private TimeSpan _lastBarSearch = TimeSpan.FromDays(-1), _barSearchStarted = TimeSpan.FromDays(-1);
     private bool _barSearchFailedLogged;
     private bool _disposed;
@@ -127,7 +130,10 @@ internal sealed class BotEngine : IDisposable
                         SearchBars(frame, profile, now);
                         var state = Perception.Analyze(frame, profile, now);
                         if (profile.AutoTarget)
-                            state = state with { MobCandidates = _motion.Update(frame, now) };
+                        {
+                            var mobs = _motion.Update(frame, now);
+                            state = state with { MobCandidates = mobs, TargetSpot = TrackTarget(state, mobs, now) };
+                        }
                         Volatile.Write(ref _state, state);
                         var (phase, actions) = TickBot(state);
                         Volatile.Read(ref _recorder)?.Record(frame, state, phase, actions, IsImportant(actions, profile));
@@ -185,6 +191,31 @@ internal sealed class BotEngine : IDisposable
     private static bool IsImportant(IReadOnlyList<BotAction> actions, BotProfile profile) =>
         actions.Any(a => a is StopAction ||
                          a is KeyTapAction tap && (tap.Key == profile.Keys.HpPotion || tap.Key == profile.Keys.MpPotion));
+
+    /// <summary>Follows the selected mob on screen: the moving thing nearest to where it was.</summary>
+    private Point? TrackTarget(GameState state, IReadOnlyList<Point> mobs, TimeSpan now)
+    {
+        lock (_spotGate)
+        {
+            if (_targetSpot is not Point spot)
+                return null;
+            if (!state.HasTarget)
+            {
+                // Give the target bar a moment to show after the click, then forget the spot.
+                if (now - _targetSpotAt > TimeSpan.FromSeconds(2))
+                    _targetSpot = null;
+                return _targetSpot;
+            }
+            static double Dist(Point a, Point b) => Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(a.Y - b.Y, 2));
+            var nearest = mobs.Where(m => Dist(m, spot) < 120).OrderBy(m => Dist(m, spot)).ToList();
+            if (nearest.Count > 0)
+            {
+                _targetSpot = nearest[0];
+                _targetSpotAt = now;
+            }
+            return _targetSpot;
+        }
+    }
 
     // ── Automatic bar detection ──────────────────────────────────
 
@@ -264,7 +295,8 @@ internal sealed class BotEngine : IDisposable
                 return true;
             _input = new InputExecutor(_window, dryRun, _log,
                 () => Profile.TargetBar == null ? null : State?.HasTarget == true,
-                spot => _motion.MarkMiss(spot, _clock.Elapsed));
+                spot => _motion.MarkMiss(spot, _clock.Elapsed),
+                spot => { lock (_spotGate) { _targetSpot = spot; _targetSpotAt = _clock.Elapsed; } });
             _botStarted = _clock.Elapsed;
             _brain.Start(_clock.Elapsed);
         }
