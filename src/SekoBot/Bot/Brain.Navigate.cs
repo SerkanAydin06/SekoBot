@@ -7,21 +7,22 @@ namespace SekoBot.Bot;
 /// Walk mode: the camera looks straight down (G) and is zoomed out (F), so the character is
 /// always in the middle of the screen and every mob shows its red name right on top of it.
 /// The bot walks with W/A/S/D towards the nearest name and holds Space once it is next to
-/// the character; when nothing is left nearby it picks up loot and walks to the next one.
+/// the character, still steering with W/A/S/D while attacking; when nothing is left nearby
+/// it picks up loot and walks to the next one. G and F are pressed again now and then.
 /// </summary>
 internal sealed partial class Brain
 {
     private readonly HashSet<Keys> _heldMoves = [];
     private bool _attackHeld, _setupSent, _wasFighting;
     private TimeSpan _busyUntil = Never, _lastSeen = Never, _lastLootTap = Never, _lastKeyRefresh = Never;
-    private TimeSpan _movingSince = Never;
+    private TimeSpan _movingSince = Never, _lastCameraSetup = Never;
     private int _exploreStep;
 
     private void ResetNavigation()
     {
         _heldMoves.Clear();
         _attackHeld = _setupSent = _wasFighting = false;
-        _busyUntil = _lastSeen = _lastLootTap = _lastKeyRefresh = _movingSince = Never;
+        _busyUntil = _lastSeen = _lastLootTap = _lastKeyRefresh = _movingSince = _lastCameraSetup = Never;
         _exploreStep = 0;
     }
 
@@ -39,11 +40,28 @@ internal sealed partial class Brain
                 _busyUntil = now + Ms(2 * p.CameraSetupHoldMs + 400);
             }
             if (now >= _busyUntil)
+            {
+                _lastCameraSetup = now;
                 Enter(BotPhase.Searching, now);
+            }
             return;
         }
         if (now < _busyUntil)
             return; // an exploring step (key hold) is still running
+
+        // The camera can drift (a stray key, a cutscene): set it up again now and then,
+        // preferably between fights, but never let a long fight postpone it forever.
+        if (p.CameraRefreshMs > 0 && now - _lastCameraSetup >= Ms(p.CameraRefreshMs) &&
+            (Phase != BotPhase.Fighting || now - _lastCameraSetup >= Ms(2 * p.CameraRefreshMs)))
+        {
+            SetMoves([], p, actions, refresh: false);
+            SetAttack(false, p, actions, refresh: false);
+            _wasFighting = false;
+            _setupSent = false;
+            Enter(BotPhase.Setup, now);
+            Navigate(state, p, actions);
+            return;
+        }
 
         // Re-send held keys every second: restores them if the game lost focus meanwhile.
         bool refresh = now - _lastKeyRefresh >= Ms(1000);
@@ -87,10 +105,13 @@ internal sealed partial class Brain
         _exploreStep = 0;
         double dx = t.X - cx, dy = t.Y - cy;
         double radius = p.AttackRadius * state.Height;
-        if (best <= radius)
+        // Once attacking, keep at it a bit further out so it doesn't flip between walk and attack.
+        bool inRange = best <= radius || (Phase == BotPhase.Fighting && best <= radius * 1.4);
+        if (inRange)
         {
-            // Next to the character: stand and attack, pick up loot now and then.
-            SetMoves([], p, actions, refresh);
+            // Next to the character: attack, and keep steering onto the mob, because every
+            // swing moves the character a little and the mob moves too.
+            SetMoves(Towards(dx, dy, radius * 0.35, p), p, actions, refresh);
             SetAttack(true, p, actions, refresh);
             if (Phase != BotPhase.Fighting)
                 Enter(BotPhase.Fighting, now);
@@ -107,13 +128,7 @@ internal sealed partial class Brain
         // Walk towards it: W up, S down, A left, D right (both for diagonals).
         SetAttack(false, p, actions, refresh);
         FinishFight(p, actions, now);
-        double dead = radius * 0.5;
-        var keys = new HashSet<Keys>();
-        if (dx > dead) keys.Add(p.Keys.MoveRight);
-        if (dx < -dead) keys.Add(p.Keys.MoveLeft);
-        if (dy > dead) keys.Add(p.Keys.MoveBack);
-        if (dy < -dead) keys.Add(p.Keys.MoveForward);
-        SetMoves(keys, p, actions, refresh);
+        SetMoves(Towards(dx, dy, radius * 0.5, p), p, actions, refresh);
         if (Phase != BotPhase.Moving)
         {
             Enter(BotPhase.Moving, now);
@@ -129,6 +144,17 @@ internal sealed partial class Brain
             _movingSince = Never;
             Enter(BotPhase.Searching, now);
         }
+    }
+
+    /// <summary>W up, S down, A left, D right (two keys for diagonals); nothing inside the dead zone.</summary>
+    private static HashSet<Keys> Towards(double dx, double dy, double dead, BotProfile p)
+    {
+        var keys = new HashSet<Keys>();
+        if (dx > dead) keys.Add(p.Keys.MoveRight);
+        if (dx < -dead) keys.Add(p.Keys.MoveLeft);
+        if (dy > dead) keys.Add(p.Keys.MoveBack);
+        if (dy < -dead) keys.Add(p.Keys.MoveForward);
+        return keys;
     }
 
     /// <summary>The fight just ended (no mob next to us any more): grab the loot, count it.</summary>

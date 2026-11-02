@@ -76,6 +76,8 @@ internal sealed class BotProfile
     public bool NavigateMode { get; set; } = true;
     /// <summary>How long G and F are held at start to set up the camera.</summary>
     public int CameraSetupHoldMs { get; set; } = 1500;
+    /// <summary>Press G and F again this often, in case the camera moved (0 = only at start).</summary>
+    public int CameraRefreshMs { get; set; } = 30000;
     /// <summary>A mob counts as "next to the character" within this part of the screen height.</summary>
     public double AttackRadius { get; set; } = 0.10;
     /// <summary>While attacking, press the pickup key this often.</summary>

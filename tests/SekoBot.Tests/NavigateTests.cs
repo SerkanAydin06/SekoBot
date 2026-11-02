@@ -67,7 +67,7 @@ public class NavigateTests
         var mob = new Point(Center.X + 300, Center.Y);
         Run(brain, 4000, 4500, _ => [mob]); // walking right
         // Arrived: the name is now right next to the middle.
-        var fight = Run(brain, 4500, 7000, _ => [new Point(Center.X + 40, Center.Y + 20)]);
+        var fight = Run(brain, 4500, 7000, _ => [new Point(Center.X + 20, Center.Y + 10)]);
         Assert.Equal(BotPhase.Fighting, brain.Phase);
         Assert.Contains(fight, a => a is KeyUpAction u && u.Key == p.Keys.MoveRight);
         Assert.Contains(fight, a => a is KeyDownAction d && d.Key == p.Keys.Attack);
@@ -121,5 +121,51 @@ public class NavigateTests
         var crit = new GameState(TimeSpan.FromMilliseconds(5000), W, H, 0.1, 1, null, 1);
         brain.Tick(crit);
         Assert.Contains(brain.Tick(crit with { Time = TimeSpan.FromMilliseconds(5400) }), a => a is StopAction);
+    }
+
+    [Fact]
+    public void Keeps_steering_with_wasd_while_attacking()
+    {
+        var (brain, p) = Ready();
+        Run(brain, 4000, 4500, _ => [new Point(Center.X, Center.Y + 20)]); // attacking, centred
+        // The mob drifts up-left but is still in range: attack AND steer.
+        var drift = Run(brain, 4500, 5000, _ => [new Point(Center.X - 70, Center.Y - 70)]);
+        Assert.Equal(BotPhase.Fighting, brain.Phase);
+        Assert.Contains(drift, a => a is KeyDownAction d && d.Key == p.Keys.MoveLeft);
+        Assert.Contains(drift, a => a is KeyDownAction d && d.Key == p.Keys.MoveForward);
+        Assert.DoesNotContain(drift, a => a is KeyUpAction u && u.Key == p.Keys.Attack);
+        // A bit beyond the attack radius: keep attacking (no flip-flop) ...
+        var edge = Run(brain, 5000, 5300, _ => [new Point(Center.X + 130, Center.Y)]);
+        Assert.Equal(BotPhase.Fighting, brain.Phase);
+        Assert.DoesNotContain(edge, a => a is KeyUpAction u && u.Key == p.Keys.Attack);
+        // ... but clearly away: stop attacking and walk.
+        var away = Run(brain, 5300, 5600, _ => [new Point(Center.X + 400, Center.Y)]);
+        Assert.Contains(away, a => a is KeyUpAction u && u.Key == p.Keys.Attack);
+        Assert.Equal(BotPhase.Moving, brain.Phase);
+    }
+
+    [Fact]
+    public void Presses_g_and_f_again_now_and_then()
+    {
+        var (brain, p) = Ready();
+        // Walking to a far mob the whole time; setup finished at 3.5 s.
+        var actions = Run(brain, 4000, 3500 + p.CameraRefreshMs + 1000, _ => [new Point(Center.X + 900, Center.Y)]);
+        Assert.Contains(actions, a => a is KeyHoldAction h && h.Key == p.Keys.CameraTop);
+        Assert.Contains(actions, a => a is KeyHoldAction h && h.Key == p.Keys.ZoomOut);
+        // Keys are released before the camera keys are held.
+        int up = actions.FindIndex(a => a is KeyUpAction u && u.Key == p.Keys.MoveRight);
+        int g = actions.FindIndex(a => a is KeyHoldAction h && h.Key == p.Keys.CameraTop);
+        Assert.InRange(up, 0, g);
+    }
+
+    [Fact]
+    public void A_long_fight_delays_the_camera_refresh_but_not_forever()
+    {
+        var (brain, p) = Ready();
+        var mob = new Point(Center.X, Center.Y + 20);
+        var first = Run(brain, 4000, 3500 + p.CameraRefreshMs + 2000, _ => [mob]);
+        Assert.DoesNotContain(first, a => a is KeyHoldAction h && h.Key == p.Keys.CameraTop);
+        var later = Run(brain, 3500 + p.CameraRefreshMs + 2000, 3500 + 2 * p.CameraRefreshMs + 500, _ => [mob]);
+        Assert.Contains(later, a => a is KeyHoldAction h && h.Key == p.Keys.CameraTop);
     }
 }
