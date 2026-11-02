@@ -13,7 +13,22 @@ public class NavigateTests
     private static GameState State(double ms, params Point[] mobs) =>
         new(TimeSpan.FromMilliseconds(ms), W, H, 1, 1, null, 1) { MobCandidates = mobs };
 
-    private static (Brain Brain, BotProfile Profile) Ready()
+    private static (Brain Brain, BotProfile Profile) Ready() => Ready([]);
+
+    /// <summary>Keys held after these actions (key-downs minus key-ups).</summary>
+    private static HashSet<Keys> Held(IEnumerable<BotAction> actions)
+    {
+        var held = new HashSet<Keys>();
+        foreach (var a in actions)
+        {
+            if (a is KeyDownAction d) held.Add(d.Key);
+            else if (a is KeyUpAction u) held.Remove(u.Key);
+        }
+        return held;
+    }
+
+    /// <param name="log">Collects the setup actions, to know which keys are held afterwards.</param>
+    private static (Brain Brain, BotProfile Profile) Ready(List<BotAction> log)
     {
         var profile = new BotProfile { LeashRadius = 0, SkillEverySec = new int[5] };
         Assert.True(profile.NavigateMode); // the default
@@ -21,9 +36,11 @@ public class NavigateTests
         brain.Start(TimeSpan.Zero);
         // Camera setup starts right away (G, then F) and doesn't hold anything up.
         var setup = brain.Tick(State(0));
+        log.AddRange(setup);
         Assert.Contains(setup, a => a is KeyDownAction d && d.Key == profile.Keys.CameraTop);
         Assert.Equal(BotPhase.Searching, brain.Phase);
         var later = brain.Tick(State(2 * profile.CameraSetupHoldMs + 500));
+        log.AddRange(later);
         Assert.Contains(later, a => a is KeyUpAction u && u.Key == profile.Keys.ZoomOut);
         return (brain, profile);
     }
@@ -39,15 +56,19 @@ public class NavigateTests
     [Fact]
     public void Walks_diagonally_towards_the_nearest_red_name_without_attacking()
     {
-        var (brain, p) = Ready();
+        var log = new List<BotAction>();
+        var (brain, p) = Ready(log);
         var far = new Point(Center.X - 700, Center.Y - 400);
         var near = new Point(Center.X + 400, Center.Y + 300); // down-right, nearer
         var actions = Run(brain, 4000, 4500, _ => [far, near]);
         Assert.Equal(BotPhase.Moving, brain.Phase);
-        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
-        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.MoveBack);
-        Assert.DoesNotContain(actions, a => a is KeyDownAction d &&
-            (d.Key == p.Keys.MoveLeft || d.Key == p.Keys.MoveForward || d.Key == p.Keys.Attack));
+        // Exploring may already have been holding one of the keys, so look at what is held now.
+        var held = Held(log.Concat(actions));
+        Assert.Contains(p.Keys.MoveRight, held);
+        Assert.Contains(p.Keys.MoveBack, held);
+        Assert.DoesNotContain(p.Keys.MoveLeft, held);
+        Assert.DoesNotContain(p.Keys.MoveForward, held);
+        Assert.DoesNotContain(actions, a => a is KeyDownAction d && d.Key == p.Keys.Attack);
     }
 
     [Fact]
@@ -232,18 +253,23 @@ public class NavigateTests
     [Fact]
     public void Only_goes_for_the_nearest_when_crowds_are_off_or_too_small()
     {
-        var (brain, p) = Ready();
+        var log = new List<BotAction>();
+        var (brain, p) = Ready(log);
         p.PreferCrowds = false;
         var lone = new Point(Center.X + 200, Center.Y);
         var walk = Run(brain, 4000, 4500, _ => Crowd(-350, 0).Append(lone).ToArray());
-        Assert.Contains(walk, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
+        Assert.Equal(new HashSet<Keys> { p.Keys.MoveRight }, Held(log.Concat(walk)).Where(IsMove(p)).ToHashSet());
 
-        var (brain2, p2) = Ready();
+        var log2 = new List<BotAction>();
+        var (brain2, p2) = Ready(log2);
         // Only two to the left: not a crowd (needs 3), so the nearest one wins.
         var two = new[] { new Point(Center.X - 350, Center.Y), new Point(Center.X - 320, Center.Y + 20), lone };
         var walk2 = Run(brain2, 4000, 4500, _ => two);
-        Assert.Contains(walk2, a => a is KeyDownAction d && d.Key == p2.Keys.MoveRight);
+        Assert.Equal(new HashSet<Keys> { p2.Keys.MoveRight }, Held(log2.Concat(walk2)).Where(IsMove(p2)).ToHashSet());
     }
+
+    private static Func<Keys, bool> IsMove(BotProfile p) =>
+        k => k == p.Keys.MoveForward || k == p.Keys.MoveBack || k == p.Keys.MoveLeft || k == p.Keys.MoveRight;
 
     [Fact]
     public void Finishes_the_mob_next_to_it_before_heading_for_a_crowd()
@@ -258,10 +284,11 @@ public class NavigateTests
     [Fact]
     public void A_lone_mob_almost_reached_is_taken_first()
     {
-        var (brain, p) = Ready();
+        var log = new List<BotAction>();
+        var (brain, p) = Ready(log);
         var close = new Point(Center.X + 80, Center.Y); // just outside attack range
         var walk = Run(brain, 4000, 4500, _ => Crowd(-400, 0).Append(close).ToArray());
-        Assert.Contains(walk, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
+        Assert.Equal(new HashSet<Keys> { p.Keys.MoveRight }, Held(log.Concat(walk)).Where(IsMove(p)).ToHashSet());
     }
 
     [Fact]
