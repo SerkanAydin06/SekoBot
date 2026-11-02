@@ -31,7 +31,7 @@ public class BarFinderTests
             for (int x = r.Left; x < r.Right; x++)
             {
                 int i = (y * W + x) * 4;
-                var c = x < fillTo ? color : ((byte)20, (byte)15, (byte)15);
+                (byte R, byte G, byte B) c = x < fillTo ? color : ((byte)20, (byte)15, (byte)15);
                 // Slight vertical gradient like the real bars.
                 int shade = (y - r.Top) * 6;
                 data[i] = (byte)Math.Max(0, c.B - shade);
