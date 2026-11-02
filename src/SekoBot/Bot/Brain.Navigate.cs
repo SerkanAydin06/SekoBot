@@ -20,6 +20,8 @@ internal sealed partial class Brain
     private TimeSpan _pauseUntil = Never, _lastSeen = Never, _lastLootTap = Never, _lastKeyRefresh = Never;
     private TimeSpan _movingSince = Never, _lastCameraSetup = Never, _exploreUntil = Never;
     private HashSet<Keys> _exploreKeys = [];
+    /// <summary>Centre of the crowd being walked to (kept between ticks so the bot doesn't dither).</summary>
+    private Point? _crowdTarget, _lastCrowd;
     private int _exploreStep;
 
     private sealed class TimedKey(Keys key, TimeSpan start, TimeSpan end)
@@ -38,6 +40,7 @@ internal sealed partial class Brain
         _pauseUntil = _lastSeen = _lastLootTap = _lastKeyRefresh = _movingSince = _lastCameraSetup = _exploreUntil = Never;
         _exploreKeys = [];
         _exploreStep = 0;
+        _crowdTarget = _lastCrowd = null;
     }
 
     /// <summary>Press <paramref name="key"/> from <paramref name="start"/> for <paramref name="ms"/> without blocking anything else.</summary>
@@ -170,6 +173,15 @@ internal sealed partial class Brain
             return;
         }
 
+        // Not next to anything: head for the crowd if there is one worth it, else the nearest.
+        _crowdTarget = null;
+        if (p.PreferCrowds && best > radius * 2 && PickCrowd(state, p, cx, cy) is Point crowd)
+        {
+            _crowdTarget = crowd;
+            dx = crowd.X - cx;
+            dy = crowd.Y - cy;
+        }
+
         // Walk towards it: W up, S down, A left, D right (both for diagonals).
         SetAttack(false, p, actions, refresh);
         FinishFight(p, actions, now);
@@ -189,6 +201,39 @@ internal sealed partial class Brain
             _movingSince = Never;
             Enter(BotPhase.Searching, now);
         }
+    }
+
+    /// <summary>
+    /// The best group of mobs to walk into: for every mob, the mobs within CrowdRadius of it
+    /// form a group; groups with at least CrowdMinMobs score count ÷ (1 + distance / ¼ screen),
+    /// so a big group close by wins and a far one has to be much bigger. The group chosen last
+    /// time is kept unless another scores clearly better (×1.3), so the bot doesn't zigzag.
+    /// </summary>
+    /// <returns>The group's centre, or null when no group is big enough.</returns>
+    private Point? PickCrowd(GameState state, BotProfile p, double cx, double cy)
+    {
+        var mobs = state.MobCandidates;
+        double reach = p.CrowdRadius * state.Height, scale = state.Height * 0.25;
+        Point? bestCentre = null, keptCentre = null;
+        double bestScore = 0, keptScore = 0;
+        foreach (var m in mobs)
+        {
+            var group = mobs.Where(o => Math.Sqrt(Math.Pow(o.X - m.X, 2) + Math.Pow(o.Y - m.Y, 2)) <= reach).ToList();
+            if (group.Count < p.CrowdMinMobs)
+                continue;
+            var centre = new Point((int)group.Average(o => o.X), (int)group.Average(o => o.Y));
+            double distance = Math.Sqrt(Math.Pow(centre.X - cx, 2) + Math.Pow(centre.Y - cy, 2));
+            double score = group.Count / (1 + distance / scale);
+            if (score > bestScore) { bestScore = score; bestCentre = centre; }
+            if (_lastCrowd is Point last && Math.Abs(centre.X - last.X) + Math.Abs(centre.Y - last.Y) < reach && score > keptScore)
+            {
+                keptScore = score;
+                keptCentre = centre;
+            }
+        }
+        var chosen = keptCentre is not null && keptScore * 1.3 >= bestScore ? keptCentre : bestCentre;
+        _lastCrowd = chosen;
+        return chosen;
     }
 
     /// <summary>W up, S down, A left, D right (two keys for diagonals); nothing inside the dead zone.</summary>

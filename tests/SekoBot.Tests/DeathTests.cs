@@ -83,6 +83,7 @@ public class DeathTests
         // Unlocked: click "Burada yeniden başla" (top middle), once per 3 s.
         var click = brain.Tick(At(5000, 0, dead: true, ready: true));
         var c = Assert.Single(click.OfType<ClickAction>());
+        Assert.True(c.Slow); // a UI button: real cursor on it, hover, hold the click
         Assert.Equal(960, c.Client.X);
         Assert.InRange(c.Client.Y, 140, 170);
         Assert.Empty(brain.Tick(At(5100, 0, dead: true, ready: true)).OfType<ClickAction>());

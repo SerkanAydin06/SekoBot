@@ -209,4 +209,71 @@ public class NavigateTests
 
         Assert.False(ProfileStore.Upgrade(old)); // only once
     }
+
+    private static Point[] Crowd(int dx, int dy) =>
+    [
+        new(Center.X + dx, Center.Y + dy), new(Center.X + dx + 40, Center.Y + dy + 10),
+        new(Center.X + dx - 30, Center.Y + dy + 30), new(Center.X + dx + 10, Center.Y + dy - 35),
+    ];
+
+    [Fact]
+    public void Walks_into_the_crowd_rather_than_to_a_lone_mob_nearby()
+    {
+        var (brain, p) = Ready();
+        var lone = new Point(Center.X + 200, Center.Y); // nearest, but alone
+        var mobs = Crowd(-350, 0).Append(lone).ToArray(); // four wolves to the left
+        var walk = Run(brain, 4000, 4500, _ => mobs);
+        Assert.Contains(walk, a => a is KeyDownAction d && d.Key == p.Keys.MoveLeft);
+        Assert.DoesNotContain(walk, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
+    }
+
+    [Fact]
+    public void Only_goes_for_the_nearest_when_crowds_are_off_or_too_small()
+    {
+        var (brain, p) = Ready();
+        p.PreferCrowds = false;
+        var lone = new Point(Center.X + 200, Center.Y);
+        var walk = Run(brain, 4000, 4500, _ => Crowd(-350, 0).Append(lone).ToArray());
+        Assert.Contains(walk, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
+
+        var (brain2, p2) = Ready();
+        // Only two to the left: not a crowd (needs 3), so the nearest one wins.
+        var two = new[] { new Point(Center.X - 350, Center.Y), new Point(Center.X - 320, Center.Y + 20), lone };
+        var walk2 = Run(brain2, 4000, 4500, _ => two);
+        Assert.Contains(walk2, a => a is KeyDownAction d && d.Key == p2.Keys.MoveRight);
+    }
+
+    [Fact]
+    public void Finishes_the_mob_next_to_it_before_heading_for_a_crowd()
+    {
+        var (brain, p) = Ready();
+        var adjacent = new Point(Center.X + 20, Center.Y + 10);
+        var fight = Run(brain, 4000, 5000, _ => Crowd(-500, 0).Append(adjacent).ToArray());
+        Assert.Equal(BotPhase.Fighting, brain.Phase);
+        Assert.DoesNotContain(fight, a => a is KeyDownAction d && d.Key == p.Keys.MoveLeft);
+    }
+
+    [Fact]
+    public void A_lone_mob_almost_reached_is_taken_first()
+    {
+        var (brain, p) = Ready();
+        var close = new Point(Center.X + 80, Center.Y); // just outside attack range
+        var walk = Run(brain, 4000, 4500, _ => Crowd(-400, 0).Append(close).ToArray());
+        Assert.Contains(walk, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
+    }
+
+    [Fact]
+    public void Sticks_to_the_chosen_crowd_instead_of_zigzagging()
+    {
+        var (brain, p) = Ready();
+        // Two similar crowds left and right; the left one slightly better at first.
+        var left = Crowd(-300, 0);
+        var right = Crowd(330, 0);
+        Run(brain, 4000, 4300, _ => left.Concat(right).ToArray());
+        // Now the right one is a touch closer, but not clearly better: keep going left.
+        var leftLater = Crowd(-320, 0);
+        var rightLater = Crowd(300, 0);
+        var walk = Run(brain, 4300, 5000, _ => leftLater.Concat(rightLater).ToArray());
+        Assert.DoesNotContain(walk, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
+    }
 }
