@@ -49,6 +49,9 @@ internal static class UpdateService
                 StringComparison.OrdinalIgnoreCase))
             return new UpdateCheckResult(null, "Otomatik güncelleme yalnızca SekoBot.exe için geçerli.");
 
+        // Clean up the backup retained by a successful previous replacement.
+        try { File.Delete(executable + ".old"); } catch { }
+
         string tempFile = Path.Combine(Path.GetDirectoryName(executable)!, ".SekoBot.update.exe");
         try
         {
@@ -127,7 +130,7 @@ set "target=%~1"
 set "replacement=%~2"
 set "old=%~1.old"
 for /L %%I in (1,1,60) do (
-  timeout /T 1 /NOBREAK >NUL
+  ping -n 2 127.0.0.1 >NUL
   move /Y "%target%" "%old%" >NUL 2>&1
   if not exist "%target%" (
     move /Y "%replacement%" "%target%" >NUL 2>&1
