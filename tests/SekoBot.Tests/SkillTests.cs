@@ -26,7 +26,7 @@ public class SkillTests
     [Fact]
     public void Buffs_are_pressed_in_a_loop_one_at_a_time()
     {
-        var p = new BotProfile { SkillEverySec = [10, 20, 0, 0, 0] };
+        var p = new BotProfile { LeashRadius = 0, SkillEverySec = [10, 20, 0, 0, 0] };
         var brain = new Brain(() => p);
         brain.Start(TimeSpan.Zero);
         var actions = Run(brain, 0, 41_000);
@@ -47,7 +47,7 @@ public class SkillTests
     [Fact]
     public void Stands_still_while_casting_then_walks_on()
     {
-        var p = new BotProfile { SkillEverySec = [0, 0, 30, 0, 0] };
+        var p = new BotProfile { LeashRadius = 0, SkillEverySec = [0, 0, 30, 0, 0] };
         var brain = new Brain(() => p);
         brain.Start(TimeSpan.Zero);
         var mob = new Point(W / 2 + 600, H / 2);
@@ -69,7 +69,7 @@ public class SkillTests
     [Fact]
     public void All_zero_means_no_skills()
     {
-        var p = new BotProfile { SkillEverySec = new int[5] };
+        var p = new BotProfile { LeashRadius = 0, SkillEverySec = new int[5] };
         var brain = new Brain(() => p);
         brain.Start(TimeSpan.Zero);
         var actions = Run(brain, 0, 20_000);
@@ -79,7 +79,7 @@ public class SkillTests
     [Fact]
     public void Old_profile_without_skills_gets_the_defaults()
     {
-        var old = new BotProfile { SkillEverySec = [15] };
+        var old = new BotProfile { LeashRadius = 0, SkillEverySec = [15] };
         ProfileStore.Normalize(old);
         Assert.Equal(new[] { 15, 60, 0, 0, 0 }, old.SkillEverySec);
         Assert.Equal(new[] { Keys.F1, Keys.F2, Keys.F3, Keys.F4, Keys.F5 }, old.Keys.Skills);

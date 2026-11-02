@@ -18,7 +18,7 @@ internal sealed class MainForm : Form
     private readonly ListBox _windows;
     private readonly Button _connect, _startBot, _stopBot, _record, _replay;
     private readonly CheckBox _dryRun;
-    private readonly NumericUpDown _potionHp, _attackRange, _searchSeconds;
+    private readonly NumericUpDown _potionHp, _attackRange, _leash;
     private readonly NumericUpDown[] _skillEvery;
     private readonly PreviewControl _preview;
     private readonly Button[] _calibrationButtons;
@@ -141,12 +141,13 @@ internal sealed class MainForm : Form
         Theme.Label(botCard, "Saldırı mesafesi (%)", new Rectangle(14, 180, 170, 26), 9f, Theme.Muted);
         _attackRange = Theme.Number(botCard, new Rectangle(192, 180, 90, 26), 1, 20,
             Math.Clamp((decimal)Math.Round(_profile.AttackRadius * 100, 1), 1, 20), 1, 0.5m);
-        Theme.Label(botCard, "Mob arama süresi (sn)", new Rectangle(14, 210, 176, 26), 9f, Theme.Muted);
-        _searchSeconds = Theme.Number(botCard, new Rectangle(192, 210, 90, 26), 2, 30,
-            Math.Clamp(_profile.SearchTimeoutMs / 1000m, 2, 30), 0, 1);
+        // How far from the starting point the bot may wander (share of the big map, 0 = no limit).
+        Theme.Label(botCard, "Alan sınırı (harita %)", new Rectangle(14, 210, 176, 26), 9f, Theme.Muted);
+        _leash = Theme.Number(botCard, new Rectangle(192, 210, 90, 26), 0, 30,
+            Math.Clamp((decimal)Math.Round(_profile.LeashRadius * 100, 1), 0, 30), 1, 0.5m);
         _potionHp.ValueChanged += (_, _) => { _profile.PotionHpBelow = (double)_potionHp.Value / 100; SaveProfile(); };
         _attackRange.ValueChanged += (_, _) => { _profile.AttackRadius = (double)_attackRange.Value / 100; SaveProfile(); };
-        _searchSeconds.ValueChanged += (_, _) => { _profile.SearchTimeoutMs = (int)(_searchSeconds.Value * 1000); SaveProfile(); };
+        _leash.ValueChanged += (_, _) => { _profile.LeashRadius = (double)_leash.Value / 100; SaveProfile(); };
 
         // Buff skills: F1–F5, each pressed again every N seconds (0 = off).
         Theme.Label(botCard, "Buff becerileri: kaç saniyede bir (0 = kapalı)", new Rectangle(14, 240, 268, 18), 8f, Theme.Muted);

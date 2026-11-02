@@ -103,7 +103,7 @@ internal sealed partial class Brain
         // A window over the game (advert after a level-up): let go of everything and close it
         // with one Esc; only press again if it is still there 3 s later (a second Esc with
         // nothing open would open the game menu instead).
-        if (p.ClosePopups && state.PopupOpen)
+        if (p.ClosePopups && state.PopupOpen && !WantsMap) // our own map isn't a popup to close
         {
             if (p.NavigateMode)
             {

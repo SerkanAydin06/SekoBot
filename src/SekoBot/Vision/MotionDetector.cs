@@ -24,6 +24,10 @@ internal sealed class MotionDetector
     private readonly List<(Point Spot, TimeSpan Time)> _misses = [];
     private readonly object _missGate = new();
 
+    /// <summary>Share of the screen that changed since the previous frame (0..1). High while
+    /// the camera moves (we walk), low when we stand — or are stuck against something.</summary>
+    public double LastChange { get; private set; }
+
     /// <summary>Remember a spot that was clicked without selecting anything; it is skipped for a while.</summary>
     public void MarkMiss(Point spot, TimeSpan now)
     {
@@ -75,6 +79,7 @@ internal sealed class MotionDetector
             }
         }
         _previous = current;
+        LastChange = considered == 0 ? 0 : (double)changed / considered;
         if (considered == 0 || changed > considered * CameraMovedFraction)
         {
             Array.Clear(_heat);

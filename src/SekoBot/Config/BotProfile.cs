@@ -47,6 +47,8 @@ internal sealed class KeyBindings
     public Keys ZoomOut { get; set; } = Keys.F;
     /// <summary>Buff skills, pressed in a loop (see <see cref="BotProfile.SkillEverySec"/>).</summary>
     public Keys[] Skills { get; set; } = [Keys.F1, Keys.F2, Keys.F3, Keys.F4, Keys.F5];
+    /// <summary>Opens/closes the big map (used to stay in the starting area).</summary>
+    public Keys Map { get; set; } = Keys.M;
     /// <summary>Closes a window opened over the game (shop advert after a level-up).</summary>
     public Keys CloseWindow { get; set; } = Keys.Escape;
 }
@@ -99,6 +101,20 @@ internal sealed class BotProfile
     public int CrowdMinMobs { get; set; } = 3;
     /// <summary>Mobs within this share of the screen height of each other form a group.</summary>
     public double CrowdRadius { get; set; } = 0.12;
+
+    /// <summary>Stay within this distance of the starting point, as a share of the big map's
+    /// width (0 = no limit). Checked with the big map (M).</summary>
+    public double LeashRadius { get; set; } = 0.06;
+    /// <summary>How often the big map is checked (never mid-fight).</summary>
+    public int LeashCheckMs { get; set; } = 20000;
+    /// <summary>How often while walking back home.</summary>
+    public int LeashReturnCheckMs { get; set; } = 4000;
+    /// <summary>Walk this long after the first reading to learn the map direction.</summary>
+    public int CalibrationWalkMs { get; set; } = 1500;
+    /// <summary>Walking keys held but the picture still for this long = stuck against something.</summary>
+    public int BlockedMs { get; set; } = 700;
+    /// <summary>How long to step sideways around an obstacle.</summary>
+    public int SidestepMs { get; set; } = 700;
 
     /// <summary>How long G and F are held at start to set up the camera.</summary>
     public int CameraSetupHoldMs { get; set; } = 1500;

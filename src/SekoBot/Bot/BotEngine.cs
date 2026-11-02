@@ -145,7 +145,14 @@ internal sealed class BotEngine : IDisposable
                             var mobs = NameFinder.Find(frame, profile.RequireLevelTag)
                                 .Select(n => new Point(n.X + n.Width / 2, n.Y + n.Height / 2 + down))
                                 .ToList();
-                            state = state with { MobCandidates = mobs };
+                            _motion.Update(frame, now); // only to tell whether the picture moves (walking vs stuck)
+                            state = state with
+                            {
+                                MobCandidates = mobs,
+                                ScreenMoving = _motion.LastChange > 0.08
+                            };
+                            if (_brain.WantsMap && MapReader.Read(frame) is { } map)
+                                state = state with { MapOpen = true, MapPosition = map.Arrow };
                         }
                         else if (profile.AutoTarget)
                         {
