@@ -37,14 +37,24 @@ public class NameFinderTests
         /// <summary>Like in the game: a dark red label box with light pink text inside.</summary>
         public void Label(int x0, int y0, int w)
         {
+            LevelTag(x0, y0 + 3);
             Fill(x0, y0, w, 16, 120, 30, 30);
             for (int k = 0; k + 7 < w - 4; k += 9)
                 Fill(x0 + 3 + k, y0 + 3, 5, 10, 250, 150, 150);
         }
 
-        /// <summary>A red name: "F"-like letters, 10 px tall, 9 px apart.</summary>
-        public void Name(int x0, int y0, int letters)
+        /// <summary>The green "Lv.6" in front of every mob name.</summary>
+        public void LevelTag(int nameLeft, int y0)
         {
+            for (int k = 0; k < 3; k++)
+                Fill(nameLeft - 30 + k * 8, y0 + 1, 2, 9, 30, 125, 20);
+        }
+
+        /// <summary>A red mob name ("F"-like letters, 10 px tall, 9 px apart) with its level tag.</summary>
+        public void Name(int x0, int y0, int letters, bool levelTag = true)
+        {
+            if (levelTag)
+                LevelTag(x0, y0);
             for (int k = 0; k < letters; k++)
             {
                 int lx = x0 + k * 9;
@@ -177,5 +187,20 @@ public class NameFinderTests
         Assert.Contains(names, n => Math.Abs(n.X - 536) <= 8 && Math.Abs(n.Y - 868) <= 8);
         Assert.Contains(names, n => Math.Abs(n.X - 860) <= 8 && Math.Abs(n.Y - 888) <= 8);
         Assert.DoesNotContain(names, n => n.X < 250);
+    }
+
+    [Fact]
+    public void Red_text_without_a_level_tag_is_not_a_mob()
+    {
+        var c = new Canvas();
+        c.Name(250, 150, 8);                    // real mob name
+        c.Name(420, 290, 3, levelTag: false);   // floating damage number near the character
+        c.Name(380, 330, 6, levelTag: false);   // something red over the character
+        using var frame = c.ToFrame();
+        var names = NameFinder.Find(frame);
+        var name = Assert.Single(names);
+        Assert.InRange(name.X, 246, 254);
+        // The check can be switched off.
+        Assert.Equal(3, NameFinder.Find(frame, requireLevelTag: false).Count);
     }
 }
