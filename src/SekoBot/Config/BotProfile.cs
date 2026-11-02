@@ -93,6 +93,13 @@ internal sealed class BotProfile
     /// nearest red mob name, hold Space when it is next to the character. Off: click mode.
     /// </summary>
     public bool NavigateMode { get; set; } = true;
+    /// <summary>Walk into the biggest nearby group of mobs instead of to the single nearest one.</summary>
+    public bool PreferCrowds { get; set; } = true;
+    /// <summary>A group needs at least this many mobs.</summary>
+    public int CrowdMinMobs { get; set; } = 3;
+    /// <summary>Mobs within this share of the screen height of each other form a group.</summary>
+    public double CrowdRadius { get; set; } = 0.12;
+
     /// <summary>How long G and F are held at start to set up the camera.</summary>
     public int CameraSetupHoldMs { get; set; } = 1500;
     /// <summary>Press G and F again this often, in case the camera moved (0 = only at start).</summary>

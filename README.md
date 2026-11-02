@@ -27,6 +27,10 @@ Karakter ölünce ekrana gelen pencereyi bot tanır: tuşları bırakır, **"Bur
 
 Level atlayınca çıkan reklam penceresi ve yanlışlıkla açılan Esc menüsü gibi oyunun üstüne açılan pencereleri bot görür (ekranın ortasındaki uzun, düz başlık çubuğundan ya da menünün arkasında bulanıklaşan oyundan), yürümeyi ve saldırıyı bırakır ve **bir kez Esc**'ye basar. Pencere 3 sn sonra hâlâ açıksa tekrar basar; böylece boşuna Esc basıp oyun menüsünü açmaz. Kapatmak için `profile.json` içinde `"ClosePopups": false`. Not: bot çalışırken envanter gibi bir pencereyi kendin açarsan onu da kapatır.
 
+## Kalabalığa git
+
+**Kalabalığa git** işaretliyken (varsayılan) bot, yanında mob yoksa ekrandaki en iyi mob grubuna yürür: birbirine yakın en az 3 mob (`CrowdMinMobs`) bir grup sayılır; yakın ve kalabalık grup kazanır, uzaktaki grubun çok daha büyük olması gerekir. Grubun ortasına varınca Space ile saldırır. Yanındaki mobu bitirmeden gruba koşmaz, neredeyse ulaştığı tek mobu önce alır ve seçtiği gruptan kolay kolay vazgeçmez (zikzak yapmaz). Kapalıyken her zaman en yakın moba gider.
+
 ## Buff becerileri (F1–F5)
 
 Bot kartında F1–F5 için "kaç saniyede bir" yazılır (0 = kapalı; varsayılan F1 ve F2 her 60 sn). Bot bunlara döngü halinde, aralarında en az 1,5 sn olacak şekilde basar; basarken W/A/S/D ve Space'i bırakıp 1 sn durur ki beceri kesilmesin, sonra devam eder.

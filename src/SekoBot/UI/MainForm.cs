@@ -110,14 +110,26 @@ internal sealed class MainForm : Form
         Theme.Label(botCard, "02  /  FARM BOTU", new Rectangle(14, 10, 268, 20), 8f, Theme.Accent, FontStyle.Bold);
         _dryRun = new CheckBox
         {
-            Text = "Kuru çalışma (girdi gönderme)",
+            Text = "Kuru çalışma",
             Checked = true,
-            Bounds = new Rectangle(14, 34, 268, 24),
+            Bounds = new Rectangle(14, 34, 120, 24),
             ForeColor = Theme.Text,
             BackColor = botCard.BackColor,
             Font = new Font("Segoe UI", 9f)
         };
         botCard.Controls.Add(_dryRun);
+        // Walk into groups of mobs rather than to the single nearest one.
+        var crowds = new CheckBox
+        {
+            Text = "Kalabalığa git",
+            Checked = _profile.PreferCrowds,
+            Bounds = new Rectangle(146, 34, 136, 24),
+            ForeColor = Theme.Text,
+            BackColor = botCard.BackColor,
+            Font = new Font("Segoe UI", 9f)
+        };
+        crowds.CheckedChanged += (_, _) => { _profile.PreferCrowds = crowds.Checked; SaveProfile(); };
+        botCard.Controls.Add(crowds);
         _startBot = Theme.Button(botCard, "▶  Başlat  (F10)", new Rectangle(14, 64, 268, 38), Theme.Primary, Theme.PrimaryHover);
         _startBot.Click += (_, _) => ToggleBot();
         _stopBot = Theme.Button(botCard, "■  Durdur  (F12)", new Rectangle(14, 108, 268, 34), Theme.Danger, Theme.DangerHover);
