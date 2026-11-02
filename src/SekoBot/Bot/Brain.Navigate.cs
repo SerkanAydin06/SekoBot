@@ -64,6 +64,14 @@ internal sealed partial class Brain
         }
     }
 
+    /// <summary>Let go of camera/turn keys that are being held and forget the pending ones.</summary>
+    private void ReleaseTimedKeys(List<BotAction> actions)
+    {
+        foreach (var t in _timed.Where(t => t.Down))
+            actions.Add(new KeyUpAction(t.Key));
+        _timed.Clear();
+    }
+
     /// <summary>Look straight down (G), then zoom out (F) — while the bot keeps walking and fighting.</summary>
     private void ScheduleCamera(BotProfile p, TimeSpan now)
     {

@@ -131,7 +131,12 @@ internal sealed class BotEngine : IDisposable
                     {
                         SearchBars(frame, profile, now);
                         var state = Perception.Analyze(frame, profile, now);
-                        if (profile.ClosePopups && BotRunning)
+                        if (profile.ReviveOnDeath && BotRunning)
+                        {
+                            var (dead, ready) = DeathDetector.Check(frame);
+                            state = state with { Dead = dead, ReviveReady = ready };
+                        }
+                        if (profile.ClosePopups && BotRunning && !state.Dead)
                             state = state with { PopupOpen = PopupDetector.IsOpen(frame) };
                         if (profile.NavigateMode)
                         {

@@ -94,6 +94,13 @@ internal sealed class BotProfile
     /// <summary>Only red text with the green "Lv.N" in front counts as a mob name (filters out
     /// damage numbers and the HP bar over the character).</summary>
     public bool RequireLevelTag { get; set; } = true;
+    /// <summary>After dying: wait until "Burada yeniden başla" can be clicked, click it, drink HP
+    /// potions up to <see cref="ReviveHealTo"/>, then carry on. While on, low HP doesn't stop the bot.</summary>
+    public bool ReviveOnDeath { get; set; } = true;
+    public double ReviveHealTo { get; set; } = 0.90;
+    /// <summary>Stop healing after this long even if HP isn't there yet.</summary>
+    public int ReviveHealMaxMs { get; set; } = 30000;
+
     /// <summary>Close windows that pop up over the game (Esc once, again after 3 s if still open).</summary>
     public bool ClosePopups { get; set; } = true;
     /// <summary>While attacking, press the pickup key this often.</summary>

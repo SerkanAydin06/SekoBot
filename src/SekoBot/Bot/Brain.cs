@@ -21,6 +21,7 @@ internal sealed partial class Brain
 
     private TimeSpan _phaseSince, _lastLoot, _turnDuration;
     private TimeSpan _lastAttackDown = Never, _lastHpPotion = Never, _lastMpPotion = Never, _lastEsc = Never;
+    private TimeSpan _lastReviveClick = Never, _recoverSince = Never;
     // When each low-bar condition was first seen; a single bad frame must not trigger anything.
     private TimeSpan _hpCriticalSince = Never, _hpLowSince = Never, _mpLowSince = Never;
     private TimeSpan _targetGoneSince = Never, _searchSentAt = Never, _lastProgress = Never;
@@ -64,9 +65,25 @@ internal sealed partial class Brain
         var now = state.Time;
         var actions = new List<BotAction>();
 
+        // Dead: wait for "Burada yeniden başla", click it; then heal before fighting again.
+        if (p.ReviveOnDeath && state.Dead)
+        {
+            HandleDeath(state, p, actions);
+            return actions;
+        }
+        if (Phase == BotPhase.Dead)
+        {
+            actions.Add(new NoteAction("Yeniden doğuldu; can dolduruluyor."));
+            Enter(BotPhase.Recovering, now);
+            _recoverSince = now;
+        }
+        if (Phase == BotPhase.Recovering && Recover(state, p, actions))
+            return actions;
+
         var confirm = Ms(Math.Max(0, p.BarConfirmMs));
         double? hp = state.Hp;
-        if (Confirmed(hp < p.StopHpBelow, ref _hpCriticalSince, now, confirm))
+        // With revive on, dying is handled above; stopping at low HP would end the farm instead.
+        if (!p.ReviveOnDeath && Confirmed(hp < p.StopHpBelow, ref _hpCriticalSince, now, confirm))
         {
             Phase = BotPhase.Stopped;
             return [new KeyUpAction(p.Keys.Attack), new StopAction($"HP kritik (%{hp!.Value * 100:0})")];
@@ -241,6 +258,61 @@ internal sealed partial class Brain
             _turnDuration += Ms(p.MoveHoldMs + 150);
         }
         Enter(turn || move ? BotPhase.Turning : NextAfterLoot(p), now);
+    }
+
+    private void HandleDeath(GameState state, BotProfile p, List<BotAction> actions)
+    {
+        var now = state.Time;
+        if (Phase != BotPhase.Dead)
+        {
+            if (p.NavigateMode)
+            {
+                SetMoves([], p, actions, refresh: false);
+                SetAttack(false, p, actions, refresh: false);
+                ReleaseTimedKeys(actions);
+                _lastCameraSetup = Never; // set the camera up again once alive
+            }
+            else
+            {
+                actions.Add(new KeyUpAction(p.Keys.Attack));
+            }
+            actions.Add(new NoteAction("Karakter öldü; \"Burada yeniden başla\" bekleniyor."));
+            Enter(BotPhase.Dead, now);
+            _lastReviveClick = Never;
+        }
+        if (state.ReviveReady && now - _lastReviveClick >= Ms(3000))
+        {
+            actions.Add(new ClickAction(DeathDetector.ReviveHereButton(state.Width, state.Height)));
+            actions.Add(new NoteAction("\"Burada yeniden başla\" tıklandı."));
+            _lastReviveClick = now;
+        }
+    }
+
+    /// <summary>Right after reviving: drink HP potions up to ReviveHealTo before fighting again.</summary>
+    /// <returns>True while still healing (nothing else should happen this tick).</returns>
+    private bool Recover(GameState state, BotProfile p, List<BotAction> actions)
+    {
+        var now = state.Time;
+        var waited = now - _recoverSince;
+        bool done = state.Hp is double hp
+            ? hp >= p.ReviveHealTo || waited >= Ms(p.ReviveHealMaxMs)
+            : waited >= Ms(5000); // HP bar unknown: just give it a moment
+        if (done)
+        {
+            actions.Add(new NoteAction("Can doldu; avlanmaya devam."));
+            if (p.NavigateMode)
+                Enter(BotPhase.Searching, now);
+            else
+                Enter(p.AutoTarget ? BotPhase.Searching : BotPhase.Fighting, now);
+            return false;
+        }
+        if (state.Hp is not null && now - _lastHpPotion >= Ms(p.PotionCooldownMs))
+        {
+            actions.Add(new KeyTapAction(p.Keys.HpPotion));
+            _lastHpPotion = now;
+            Potions++;
+        }
+        return true;
     }
 
     /// <summary>A target bar that is showing and not one we already gave up on.</summary>
