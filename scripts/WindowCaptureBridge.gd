@@ -42,7 +42,12 @@ func _ready() -> void:
 		_last_error = "Windows görüntü yakalama yardımcısı bulunamadı."
 		return
 
+	_launch_helper()
+
+
+func _launch_helper() -> void:
 	_start_msec = Time.get_ticks_msec()
+	var helper_script := ProjectSettings.globalize_path("res://tools/capture_helper.ps1")
 	_helper_pid = OS.create_process(
 		"powershell.exe",
 		PackedStringArray([
@@ -53,7 +58,50 @@ func _ready() -> void:
 		false
 	)
 	if _helper_pid <= 0:
-		_last_error = "Windows PowerShell yardımcı işlemi başlatılamadı."
+		_last_error = "Windows PowerShell yardımcısı başlatılamadı. powershell.exe erişimini kontrol edin."
+
+
+func RestartHelper() -> void:
+	if OS.get_name() != "Windows" or _session.is_empty():
+		return
+	if _helper_pid > 0 and OS.is_process_running(_helper_pid):
+		OS.kill(_helper_pid)
+	_helper_pid = -1
+	_last_error = ""
+	_status.clear()
+	_windows.clear()
+	_latest_frame = -1
+	_capture_enabled = false
+	if FileAccess.file_exists(_status_path):
+		DirAccess.remove_absolute(_status_path)
+	_write_command()
+	_launch_helper()
+
+
+func GetStatus() -> Dictionary:
+	_read_status()
+	var alive := _helper_pid > 0 and OS.is_process_running(_helper_pid)
+	var ready := bool(_status.get("ready", false))
+	var message := ""
+	if not _last_error.is_empty():
+		message = _last_error
+	elif not alive:
+		message = "Windows yardımcısı kapalı. Yenile / Yeniden dene düğmesine bas."
+	elif not ready:
+		message = "Windows yardımcısı başlatılıyor; ilk tarama hazırlanıyor..."
+	elif int(_status.get("scan_done", -1)) < 0:
+		message = "Windows pencereleri taranıyor..."
+	elif _windows.is_empty():
+		message = "Tarama tamamlandı; uygun pencere bulunamadı. Oyunu pencere modunda aç."
+	else:
+		message = "%d açık pencere bulundu. Listeden seçim yapabilirsin." % _windows.size()
+	return {
+		"alive": alive,
+		"ready": ready,
+		"scan_done": int(_status.get("scan_done", -1)),
+		"count": _windows.size(),
+		"message": message
+	}
 
 
 func ListWindows() -> Array:
@@ -117,25 +165,24 @@ func GetLastError() -> String:
 func _read_status() -> void:
 	if _status_path.is_empty():
 		return
-	if not FileAccess.file_exists(_status_path):
-		if _helper_pid > 0 and Time.get_ticks_msec() - _start_msec > 10000:
-			if not OS.is_process_running(_helper_pid):
-				_last_error = "Windows görüntü yakalama yardımcısı beklenmedik şekilde kapandı."
-		return
-
-	var file := FileAccess.open(_status_path, FileAccess.READ)
-	if file == null:
-		return
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
-	file.close()
-	if not (parsed is Dictionary):
-		return
-
-	_status = parsed
-	_last_error = str(_status.get("error", ""))
-	var reported_windows: Variant = _status.get("windows", [])
-	if reported_windows is Array:
-		_windows = reported_windows
+	if FileAccess.file_exists(_status_path):
+		var file := FileAccess.open(_status_path, FileAccess.READ)
+		if file != null:
+			var parsed: Variant = JSON.parse_string(file.get_as_text())
+			file.close()
+			if parsed is Dictionary:
+				_status = parsed
+				_last_error = str(_status.get("error", ""))
+				var reported_windows: Variant = _status.get("windows", [])
+				if reported_windows is Array:
+					_windows = reported_windows
+	if _helper_pid > 0 and Time.get_ticks_msec() - _start_msec > 7000:
+		if not OS.is_process_running(_helper_pid):
+			if _last_error.is_empty():
+				_last_error = "Windows yardımcısı kapandı. Windows güvenlik ayarlarını ve PowerShell erişimini kontrol edin."
+	if _helper_pid > 0 and Time.get_ticks_msec() - _start_msec > 16000:
+		if _status.is_empty() and _last_error.is_empty():
+			_last_error = "Windows yardımcısından 16 saniyedir yanıt alınamadı."
 
 
 func _write_command() -> void:

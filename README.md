@@ -28,7 +28,7 @@ Yerel PowerShell yardımcısı, `tools/WindowNative.cs` içindeki Win32 kodunu P
 
 ## Özellikler ve sınırlamalar
 
-Açık Windows pencereleri, Metin2 otomatik seçimi, HWND/PID doğrulaması, 5/10/15 FPS hedefli canlı önizleme, olay günlüğü ve PNG kayıtları bulunur. PNG'ler varsayılan olarak `%USERPROFILE%\Pictures\SekoBot` klasörüne kaydedilir. Godot arayüzü yardımcı sürecin oluşturduğu PNG karelerini okur.
+Her zaman görünür kaydırılabilir pencere listesi, Metin2 otomatik seçimi, HWND/PID doğrulaması, 5/10/15 FPS önizleme, olay günlüğü ve PNG kayıtları bulunur. Pencere bulunamadığında tarama/Windows yardımcısı durumu arayüzde açıkça gösterilir. Yenile / Yeniden dene ile tekrar taranır. PNG'ler varsayılan olarak `%USERPROFILE%\Pictures\SekoBot` klasörüne kaydedilir. Godot arayüzü yardımcı sürecin oluşturduğu PNG karelerini okur.
 
 **İlk sürüm otomatik farm yapmaz**; oyuna klavye/fare komutu göndermez. Yalnızca oyun ekranını yakalar.
 
@@ -44,3 +44,7 @@ PowerShell'in `-ExecutionPolicy Bypass` seçeneği yalnızca yerel yardımcı s�
 - **Siyah görüntü:** Pencere moduna geç, üstündeki diğer pencereleri kaldır ve tekrar dene.
 
 **Test:** GitHub dosyaları ve bağımlılıkları kontrol edildi. Gerçek Windows + Godot + Metin2 uçtan uca testi henüz yapılmadı.
+
+## Kod kontrolü — EXE ve Releases yok
+
+GitHub Actions, Godot sahnesinin açılmasını ve yerel Windows PowerShell/Win32 yardımcısının derlenmesini kontrol eder. EXE veya Release üretmez. Bu testler gerçek oyun istemcisindeki görüntü yakalamanın yerine geçmez.

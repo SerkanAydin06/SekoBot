@@ -30,7 +30,9 @@ var _refresh_timer: Timer
 var _log_lines: Array[String] = []
 var _settings := ConfigFile.new()
 
-var _window_selector: OptionButton
+var _window_selector: ItemList
+var _scan_details: Label
+var _window_signature := ""
 var _fps_selector: OptionButton
 var _connect_button: Button
 var _disconnect_button: Button
@@ -136,9 +138,13 @@ func _make_header(parent: VBoxContainer) -> void:
 
 
 func _make_sidebar(parent: HBoxContainer) -> void:
+	var sidebar_scroll := ScrollContainer.new()
+	sidebar_scroll.custom_minimum_size.x = 355
+	sidebar_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(sidebar_scroll)
 	var panel := _card(SURFACE, BORDER, 17, 22)
-	panel.custom_minimum_size = Vector2(335, 0)
-	parent.add_child(panel)
+	panel.custom_minimum_size.x = 338
+	sidebar_scroll.add_child(panel)
 
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 13)
@@ -150,16 +156,24 @@ func _make_sidebar(parent: HBoxContainer) -> void:
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(intro)
 
-	_window_selector = OptionButton.new()
-	_window_selector.clip_text = true
+	_window_selector = ItemList.new()
+	_window_selector.custom_minimum_size.y = 146
 	_window_selector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_window_selector.custom_minimum_size.y = 42
-	_style_button(_window_selector, "neutral")
+	_window_selector.add_theme_stylebox_override("panel", _panel_style(SURFACE_DEEP, BORDER, 9, 6))
+	_window_selector.add_theme_stylebox_override("selected", _panel_style(Color("#254778"), Color("#5789C7"), 6, 5))
+	_window_selector.add_theme_stylebox_override("selected_focus", _panel_style(Color("#254778"), Color("#5789C7"), 6, 5))
+	_window_selector.add_theme_color_override("font_color", WHITE)
+	_window_selector.add_theme_color_override("font_selected_color", WHITE)
 	_window_selector.item_selected.connect(_on_window_selected)
+	_window_selector.add_item("Pencereler taranıyor...")
+	_window_selector.set_item_disabled(0, true)
 	column.add_child(_window_selector)
+	_scan_details = _text("Windows servisi başlatılıyor...", 11, MUTED)
+	_scan_details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(_scan_details)
 
-	var refresh := _button("↻   Pencereleri yenile", "neutral")
-	refresh.pressed.connect(_refresh_windows)
+	var refresh := _button("↻   Yenile / Yeniden dene", "neutral")
+	refresh.pressed.connect(_force_refresh_windows)
 	column.add_child(refresh)
 
 	_spacer(column, 10)
@@ -380,9 +394,26 @@ func _on_fps_selected(index: int) -> void:
 
 
 func _selected_window() -> Dictionary:
-	if _window_selector.selected < 0 or _window_selector.selected >= _windows.size():
+	if _window_selector == null:
 		return {}
-	return _windows[_window_selector.selected]
+	var chosen: PackedInt32Array = _window_selector.get_selected_items()
+	if chosen.is_empty():
+		return {}
+	var index: int = chosen[0]
+	if index < 0 or index >= _windows.size():
+		return {}
+	return _windows[index]
+
+
+func _force_refresh_windows() -> void:
+	if _running:
+		return
+	if _bridge.has_method("RestartHelper"):
+		var current: Dictionary = _bridge.call("GetStatus")
+		if not bool(current.get("alive", false)):
+			_bridge.call("RestartHelper")
+			_window_signature = ""
+	_refresh_windows()
 
 
 func _refresh_windows() -> void:
@@ -390,53 +421,85 @@ func _refresh_windows() -> void:
 		return
 	if not _bridge.has_method("ListWindows"):
 		_set_status("YARDIMCI MODÜL EKSİK", RED)
+		_scan_details.text = "GDScript Windows köprüsü yüklenemedi."
 		_write_log("Windows yardımcı modülü yüklenemedi.")
 		return
+
 	var previous := _selected_window()
 	var old_handle: int = int(previous.get("hwnd", 0))
 	var old_pid: int = int(previous.get("pid", 0))
-	_windows = _bridge.call("ListWindows")
+	var new_windows: Array = _bridge.call("ListWindows")
+	var info: Dictionary = _bridge.call("GetStatus")
 	var backend_error: String = str(_bridge.call("GetLastError"))
+	_scan_details.text = str(info.get("message", "Windows pencereleri taranıyor..."))
+
 	if not backend_error.is_empty():
 		_set_status("WINDOWS YARDIMCISI HATASI", RED)
 		if backend_error != _last_backend_error:
 			_write_log(backend_error)
 			_last_backend_error = backend_error
+		_preview_caption.text = "Pencere listesi okunamadı"
+		if _window_signature != "error":
+			_windows.clear()
+			_window_selector.clear()
+			_window_selector.add_item("Tarama hatası — Yeniden dene")
+			_window_selector.set_item_disabled(0, true)
+			_window_signature = "error"
+		_update_controls()
 		return
-	_last_backend_error = ""
-	_window_selector.clear()
-	var selected_index := -1
-	var metin_indices: Array[int] = []
-	for i in range(_windows.size()):
-		var item: Dictionary = _windows[i]
-		var title: String = str(item.get("title", "Pencere"))
-		var pid: int = int(item.get("pid", 0))
-		var width: int = int(item.get("width", 0))
-		var height: int = int(item.get("height", 0))
-		var minimized_suffix := " [küçültülmüş]" if item.get("minimized", false) else ""
-		_window_selector.add_item("%s  ·  PID %d  ·  %dx%d%s" % [title, pid, width, height, minimized_suffix])
-		if item.get("metin2", false):
-			metin_indices.append(i)
-		if old_handle == int(item.get("hwnd", 0)) and old_pid == pid:
-			selected_index = i
-	if selected_index >= 0:
-		_window_selector.select(selected_index)
-	elif not metin_indices.is_empty():
-		_window_selector.select(metin_indices[0])
-	elif not _windows.is_empty():
-		_window_selector.select(0)
 
-	_update_controls()
+	_last_backend_error = ""
+	var signature := JSON.stringify(new_windows)
+	if signature != _window_signature:
+		_window_signature = signature
+		_windows = new_windows
+		_window_selector.clear()
+		var selected_index := -1
+		var metin_indices: Array[int] = []
+		for i in range(_windows.size()):
+			var item: Dictionary = _windows[i]
+			var title: String = str(item.get("title", "Pencere"))
+			var pid: int = int(item.get("pid", 0))
+			var width: int = int(item.get("width", 0))
+			var height: int = int(item.get("height", 0))
+			var minimized_suffix := " [küçültülmüş]" if item.get("minimized", false) else ""
+			_window_selector.add_item("%s · %dx%d%s" % [title, width, height, minimized_suffix])
+			_window_selector.set_item_tooltip(i, "PID %d  |  %s" % [pid, title])
+			if item.get("metin2", false):
+				metin_indices.append(i)
+			if old_handle == int(item.get("hwnd", 0)) and old_pid == pid:
+				selected_index = i
+		if _windows.is_empty():
+			var placeholder := "Tarama sürüyor..." if not bool(info.get("ready", false)) else "Uygun pencere bulunamadı"
+			_window_selector.add_item(placeholder)
+			_window_selector.set_item_disabled(0, true)
+		elif selected_index >= 0:
+			_window_selector.select(selected_index)
+		elif not metin_indices.is_empty():
+			_window_selector.select(metin_indices[0])
+		else:
+			_window_selector.select(0)
+		if not _windows.is_empty():
+			_write_log("%d açık pencere listelendi." % _windows.size())
+
 	if _windows.is_empty():
-		_set_status("PENCERE BEKLENİYOR", MUTED)
+		if bool(info.get("ready", false)):
+			_set_status("PENCERE BEKLENİYOR", MUTED)
+		else:
+			_set_status("TARANIYOR", MUTED)
 		_preview_caption.text = "Pencere bulunamadı"
 	else:
 		_set_status("HAZIR", GREEN)
-		_preview_caption.text = "%d pencere algılandı" % _windows.size()
+		_preview_caption.text = "%d açık pencere bulundu" % _windows.size()
 
-	if _auto_attach_pending and metin_indices.size() == 1:
+	_update_controls()
+	var selected_metin: Array[int] = []
+	for i in range(_windows.size()):
+		if bool(_windows[i].get("metin2", false)):
+			selected_metin.append(i)
+	if _auto_attach_pending and selected_metin.size() == 1:
 		_auto_attach_pending = false
-		_window_selector.select(metin_indices[0])
+		_window_selector.select(selected_metin[0])
 		_update_controls()
 		_write_log("Tek Metin2 penceresi bulundu. Otomatik bağlanılıyor.")
 		call_deferred("_begin_capture")
@@ -538,7 +601,8 @@ func _save_screenshot() -> void:
 func _update_controls() -> void:
 	if _window_selector == null:
 		return
-	_window_selector.disabled = _running
+	_window_selector.mouse_filter = Control.MOUSE_FILTER_IGNORE if _running else Control.MOUSE_FILTER_STOP
+	_window_selector.modulate.a = 0.7 if _running else 1.0
 	_fps_selector.disabled = _running
 	_connect_button.disabled = _running or _selected_window().is_empty()
 	_disconnect_button.disabled = not _running

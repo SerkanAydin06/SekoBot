@@ -16,6 +16,7 @@ $state = @{
     frame_file = ""
     error = ""
     capture = $false
+    ready = $false
 }
 
 function Publish-Status {
@@ -38,9 +39,14 @@ function Publish-Status {
 try {
     Add-Type -Path (Join-Path $PSScriptRoot "WindowNative.cs") -ReferencedAssemblies "System.Drawing"
     [SekoBot.WindowNative]::InitializeDpi()
+    $state.ready = $true
 }
 catch {
     $state.error = "Windows yardımcı modülü yüklenemedi: " + $_.Exception.Message
+    try {
+        [System.IO.File]::WriteAllText((Join-Path $Session "helper-error.txt"),
+            ($_ | Out-String), $utf8)
+    } catch {}
     Publish-Status
     exit 1
 }
@@ -125,6 +131,10 @@ while ($true) {
     }
     catch {
         $state.error = "Windows yardımcı işlem hatası: " + $_.Exception.Message
+        try {
+            [System.IO.File]::WriteAllText((Join-Path $Session "helper-error.txt"),
+                ($_ | Out-String), $utf8)
+        } catch {}
         Publish-Status
         Start-Sleep -Milliseconds 150
     }
