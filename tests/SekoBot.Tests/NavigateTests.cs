@@ -67,7 +67,7 @@ public class NavigateTests
         var mob = new Point(Center.X + 300, Center.Y);
         Run(brain, 4000, 4500, _ => [mob]); // walking right
         // Arrived: the name is now right next to the middle.
-        var fight = Run(brain, 4500, 7000, _ => [new Point(Center.X + 20, Center.Y + 10)]);
+        var fight = Run(brain, 4500, 7000, _ => [new Point(Center.X + 10, Center.Y + 5)]);
         Assert.Equal(BotPhase.Fighting, brain.Phase);
         Assert.Contains(fight, a => a is KeyUpAction u && u.Key == p.Keys.MoveRight);
         Assert.Contains(fight, a => a is KeyDownAction d && d.Key == p.Keys.Attack);
@@ -129,13 +129,13 @@ public class NavigateTests
         var (brain, p) = Ready();
         Run(brain, 4000, 4500, _ => [new Point(Center.X, Center.Y + 20)]); // attacking, centred
         // The mob drifts up-left but is still in range: attack AND steer.
-        var drift = Run(brain, 4500, 5000, _ => [new Point(Center.X - 70, Center.Y - 70)]);
+        var drift = Run(brain, 4500, 5000, _ => [new Point(Center.X - 35, Center.Y - 35)]);
         Assert.Equal(BotPhase.Fighting, brain.Phase);
         Assert.Contains(drift, a => a is KeyDownAction d && d.Key == p.Keys.MoveLeft);
         Assert.Contains(drift, a => a is KeyDownAction d && d.Key == p.Keys.MoveForward);
         Assert.DoesNotContain(drift, a => a is KeyUpAction u && u.Key == p.Keys.Attack);
         // A bit beyond the attack radius: keep attacking (no flip-flop) ...
-        var edge = Run(brain, 5000, 5300, _ => [new Point(Center.X + 130, Center.Y)]);
+        var edge = Run(brain, 5000, 5300, _ => [new Point(Center.X + 65, Center.Y)]);
         Assert.Equal(BotPhase.Fighting, brain.Phase);
         Assert.DoesNotContain(edge, a => a is KeyUpAction u && u.Key == p.Keys.Attack);
         // ... but clearly away: stop attacking and walk.
@@ -167,5 +167,34 @@ public class NavigateTests
         Assert.DoesNotContain(first, a => a is KeyHoldAction h && h.Key == p.Keys.CameraTop);
         var later = Run(brain, 3500 + p.CameraRefreshMs + 2000, 3500 + 2 * p.CameraRefreshMs + 500, _ => [mob]);
         Assert.Contains(later, a => a is KeyHoldAction h && h.Key == p.Keys.CameraTop);
+    }
+
+    [Fact]
+    public void Attack_starts_only_when_the_mob_is_close()
+    {
+        var (brain, p) = Ready();
+        Assert.Equal(0.05, p.AttackRadius);
+        // ~8 % of the screen height away: still walking, no Space.
+        var near = Run(brain, 4000, 4500, _ => [new Point(Center.X + 85, Center.Y)]);
+        Assert.Equal(BotPhase.Moving, brain.Phase);
+        Assert.DoesNotContain(near, a => a is KeyDownAction d && d.Key == p.Keys.Attack);
+        // Right next to it: attack.
+        Run(brain, 4500, 4800, _ => [new Point(Center.X + 30, Center.Y)]);
+        Assert.Equal(BotPhase.Fighting, brain.Phase);
+    }
+
+    [Fact]
+    public void Old_profile_moves_to_the_closer_attack_distance_but_keeps_user_choices()
+    {
+        var old = new BotProfile { Version = 0, AttackRadius = 0.10 };
+        Assert.True(ProfileStore.Upgrade(old));
+        Assert.Equal(0.05, old.AttackRadius);
+        Assert.Equal(BotProfile.CurrentVersion, old.Version);
+
+        var picked = new BotProfile { Version = 0, AttackRadius = 0.07 };
+        ProfileStore.Upgrade(picked);
+        Assert.Equal(0.07, picked.AttackRadius);
+
+        Assert.False(ProfileStore.Upgrade(old)); // only once
     }
 }
