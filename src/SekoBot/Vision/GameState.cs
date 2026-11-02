@@ -14,4 +14,7 @@ internal sealed record GameState(
 
     /// <summary>Probable mobs (client pixels, nearest to the character first), from motion.</summary>
     public IReadOnlyList<Point> MobCandidates { get; init; } = [];
+
+    /// <summary>Where the selected mob is believed to be on screen (client pixels), if known.</summary>
+    public Point? TargetSpot { get; init; }
 }

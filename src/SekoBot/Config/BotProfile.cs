@@ -66,6 +66,10 @@ internal sealed class BotProfile
     public bool AutoTarget { get; set; } = true;
     /// <summary>How long to look for a mob before turning the camera.</summary>
     public int SearchTimeoutMs { get; set; } = 6000;
+    /// <summary>With a selected mob, also hold the attack key (off: the click alone makes the character attack).</summary>
+    public bool UseAttackKeyOnTarget { get; set; }
+    /// <summary>Click the mob again when its HP has not gone down for this long.</summary>
+    public int StallMs { get; set; } = 3000;
 
     /// <summary>How long the attack key is held per cycle (blind attack, without mob search).</summary>
     public int FightMs { get; set; } = 4000;

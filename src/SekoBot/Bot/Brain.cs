@@ -23,7 +23,9 @@ internal sealed class Brain
     private TimeSpan _lastAttackDown = Never, _lastHpPotion = Never, _lastMpPotion = Never;
     // When each low-bar condition was first seen; a single bad frame must not trigger anything.
     private TimeSpan _hpCriticalSince = Never, _hpLowSince = Never, _mpLowSince = Never;
-    private TimeSpan _targetGoneSince = Never, _searchSentAt = Never;
+    private TimeSpan _targetGoneSince = Never, _searchSentAt = Never, _lastProgress = Never;
+    private double _targetHpBest = 1;
+    private int _reclicks;
     private int _lootPresses, _failedSearches;
     private bool _searchSent, _blindFight;
 
@@ -97,31 +99,63 @@ internal sealed class Brain
     private void Fight(GameState state, BotProfile p, List<BotAction> actions)
     {
         var now = state.Time;
-        // Re-send key-down every second: harmless for the game and restores the
-        // attack if the key was released while the game lost focus.
-        if (now - _lastAttackDown >= Ms(1000))
-        {
-            actions.Add(new KeyDownAction(p.Keys.Attack));
-            _lastAttackDown = now;
-        }
-
         var elapsed = now - _phaseSince;
-        if (p.AutoTarget && state.TargetHp != null && !_blindFight)
+        bool targeted = p.AutoTarget && state.TargetHp != null && !_blindFight;
+
+        if (!targeted || p.UseAttackKeyOnTarget)
         {
-            // A clicked mob: keep hitting until its bar is gone (briefly, to skip flicker).
-            bool gone = Confirmed(!state.HasTarget, ref _targetGoneSince, now, Ms(500));
-            if (!(gone && elapsed >= Ms(800)) && elapsed < Ms(p.FightMaxMs))
-                return;
-        }
-        else
-        {
-            if (elapsed < Ms(p.FightMs))
-                return;
-            bool targetAlive = state.TargetHp != null && state.HasTarget;
-            if (targetAlive && elapsed < Ms(p.FightMaxMs))
-                return;
+            // Re-send key-down every second: harmless for the game and restores the
+            // attack if the key was released while the game lost focus.
+            if (now - _lastAttackDown >= Ms(1000))
+            {
+                actions.Add(new KeyDownAction(p.Keys.Attack));
+                _lastAttackDown = now;
+            }
         }
 
+        if (targeted)
+        {
+            // A clicked mob: the character runs to it and attacks on its own (no Space, which
+            // would swing at the air or walk). Keep going until its bar is gone.
+            bool gone = Confirmed(!state.HasTarget, ref _targetGoneSince, now, Ms(500));
+            if (gone && elapsed >= Ms(800))
+            {
+                EndFight(p, actions, now);
+                return;
+            }
+            if (state.TargetHp is double targetHp && targetHp < _targetHpBest - 0.005)
+            {
+                _targetHpBest = targetHp;
+                _lastProgress = now;
+            }
+            // The mob's HP stopped going down: the character isn't hitting it. Click it again.
+            if (state.HasTarget && now - _lastProgress >= Ms(p.StallMs))
+            {
+                if (_reclicks >= 3)
+                {
+                    EndFight(p, actions, now); // unreachable/stuck: try another one
+                    return;
+                }
+                if (state.TargetSpot is Point spot)
+                    actions.Add(new ClickAction(spot));
+                _reclicks++;
+                _lastProgress = now;
+            }
+            if (elapsed >= Ms(p.FightMaxMs))
+                EndFight(p, actions, now);
+            return;
+        }
+
+        if (elapsed < Ms(p.FightMs))
+            return;
+        bool targetAlive = state.TargetHp != null && state.HasTarget;
+        if (targetAlive && elapsed < Ms(p.FightMaxMs))
+            return;
+        EndFight(p, actions, now);
+    }
+
+    private void EndFight(BotProfile p, List<BotAction> actions, TimeSpan now)
+    {
         actions.Add(new KeyUpAction(p.Keys.Attack));
         _lastAttackDown = Never;
         _lootPresses = 0;
@@ -197,18 +231,27 @@ internal sealed class Brain
         if (now - _phaseSince < Ms(p.SearchTimeoutMs))
             return;
 
-        _failedSearches++;
-        // Target bar not known yet (nothing to verify a click with), or several searches in a row
-        // found nothing: attack blindly so the bot never idles.
-        if (state.TargetHp == null || _failedSearches >= 3)
+        // Target bar not known yet: nothing to verify a click with, so attack blindly once
+        // (that usually selects something and lets the bar finder see the target bar).
+        if (state.TargetHp == null)
         {
-            _failedSearches = 0;
             _blindFight = true;
             Enter(BotPhase.Fighting, now);
             return;
         }
-        actions.Add(new KeyHoldAction(p.Keys.RotateCamera, p.RotateHoldMs));
-        _turnDuration = Ms(p.RotateHoldMs + 150);
+        // Nothing here: look around twice, then walk somewhere else. No attacking the air.
+        _failedSearches++;
+        if (_failedSearches >= 3)
+        {
+            _failedSearches = 0;
+            actions.Add(new KeyHoldAction(p.Keys.MoveForward, p.MoveHoldMs));
+            _turnDuration = Ms(p.MoveHoldMs + 300);
+        }
+        else
+        {
+            actions.Add(new KeyHoldAction(p.Keys.RotateCamera, p.RotateHoldMs));
+            _turnDuration = Ms(p.RotateHoldMs + 150);
+        }
         Enter(BotPhase.Turning, now);
     }
 
@@ -233,7 +276,12 @@ internal sealed class Brain
         if (phase == BotPhase.Searching)
             _searchSent = false;
         if (phase == BotPhase.Fighting)
+        {
             _targetGoneSince = Never;
+            _lastProgress = now;
+            _targetHpBest = 1.01;
+            _reclicks = 0;
+        }
         if (phase == BotPhase.Looting)
             _blindFight = false;
         Phase = phase;
