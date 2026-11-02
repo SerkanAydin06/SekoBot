@@ -8,65 +8,97 @@ namespace SekoBot.Bot;
 /// always in the middle of the screen and every mob shows its red name right on top of it.
 /// The bot walks with W/A/S/D towards the nearest name and holds Space once it is next to
 /// the character, still steering with W/A/S/D while attacking; when nothing is left nearby
-/// it picks up loot and walks to the next one. G and F are pressed again now and then.
+/// it picks up loot and walks to the next one. Z is tapped all the time, and G/F are held
+/// again every half minute — all next to walking and attacking, nothing ever waits.
 /// </summary>
 internal sealed partial class Brain
 {
     private readonly HashSet<Keys> _heldMoves = [];
-    private bool _attackHeld, _setupSent, _wasFighting;
-    private TimeSpan _busyUntil = Never, _lastSeen = Never, _lastLootTap = Never, _lastKeyRefresh = Never;
-    private TimeSpan _movingSince = Never, _lastCameraSetup = Never;
+    /// <summary>Keys pressed for a while next to everything else (camera G/F, turning E).</summary>
+    private readonly List<TimedKey> _timed = [];
+    private bool _attackHeld, _wasFighting;
+    private TimeSpan _pauseUntil = Never, _lastSeen = Never, _lastLootTap = Never, _lastKeyRefresh = Never;
+    private TimeSpan _movingSince = Never, _lastCameraSetup = Never, _exploreUntil = Never;
+    private HashSet<Keys> _exploreKeys = [];
     private int _exploreStep;
+
+    private sealed class TimedKey(Keys key, TimeSpan start, TimeSpan end)
+    {
+        public Keys Key { get; } = key;
+        public TimeSpan Start { get; } = start;
+        public TimeSpan End { get; } = end;
+        public bool Down { get; set; }
+    }
 
     private void ResetNavigation()
     {
         _heldMoves.Clear();
-        _attackHeld = _setupSent = _wasFighting = false;
-        _busyUntil = _lastSeen = _lastLootTap = _lastKeyRefresh = _movingSince = _lastCameraSetup = Never;
+        _timed.Clear();
+        _attackHeld = _wasFighting = false;
+        _pauseUntil = _lastSeen = _lastLootTap = _lastKeyRefresh = _movingSince = _lastCameraSetup = _exploreUntil = Never;
+        _exploreKeys = [];
         _exploreStep = 0;
+    }
+
+    /// <summary>Press <paramref name="key"/> from <paramref name="start"/> for <paramref name="ms"/> without blocking anything else.</summary>
+    private void PressFor(Keys key, TimeSpan start, int ms) => _timed.Add(new TimedKey(key, start, start + Ms(ms)));
+
+    private void RunTimedKeys(TimeSpan now, List<BotAction> actions, bool refresh)
+    {
+        foreach (var t in _timed.ToList())
+        {
+            if (!t.Down && now >= t.Start)
+            {
+                actions.Add(new KeyDownAction(t.Key));
+                t.Down = true;
+            }
+            else if (t.Down && now < t.End && refresh)
+            {
+                actions.Add(new KeyDownAction(t.Key));
+            }
+            if (t.Down && now >= t.End)
+            {
+                actions.Add(new KeyUpAction(t.Key));
+                _timed.Remove(t);
+            }
+        }
+    }
+
+    /// <summary>Look straight down (G), then zoom out (F) — while the bot keeps walking and fighting.</summary>
+    private void ScheduleCamera(BotProfile p, TimeSpan now)
+    {
+        _timed.RemoveAll(t => !t.Down && (t.Key == p.Keys.CameraTop || t.Key == p.Keys.ZoomOut));
+        PressFor(p.Keys.CameraTop, now, p.CameraSetupHoldMs);
+        PressFor(p.Keys.ZoomOut, now + Ms(p.CameraSetupHoldMs), p.CameraSetupHoldMs);
+        _lastCameraSetup = now;
     }
 
     private void Navigate(GameState state, BotProfile p, List<BotAction> actions)
     {
         var now = state.Time;
-        if (Phase == BotPhase.Setup)
-        {
-            if (!_setupSent)
-            {
-                // Run one after the other by the input worker: look down, then zoom out.
-                actions.Add(new KeyHoldAction(p.Keys.CameraTop, p.CameraSetupHoldMs));
-                actions.Add(new KeyHoldAction(p.Keys.ZoomOut, p.CameraSetupHoldMs));
-                _setupSent = true;
-                _busyUntil = now + Ms(2 * p.CameraSetupHoldMs + 400);
-            }
-            if (now >= _busyUntil)
-            {
-                _lastCameraSetup = now;
-                Enter(BotPhase.Searching, now);
-            }
-            return;
-        }
-        if (now < _busyUntil)
-            return; // an exploring step (key hold) is still running
-
-        // The camera can drift (a stray key, a cutscene): set it up again now and then,
-        // preferably between fights, but never let a long fight postpone it forever.
-        if (p.CameraRefreshMs > 0 && now - _lastCameraSetup >= Ms(p.CameraRefreshMs) &&
-            (Phase != BotPhase.Fighting || now - _lastCameraSetup >= Ms(2 * p.CameraRefreshMs)))
-        {
-            SetMoves([], p, actions, refresh: false);
-            SetAttack(false, p, actions, refresh: false);
-            _wasFighting = false;
-            _setupSent = false;
-            Enter(BotPhase.Setup, now);
-            Navigate(state, p, actions);
-            return;
-        }
-
         // Re-send held keys every second: restores them if the game lost focus meanwhile.
         bool refresh = now - _lastKeyRefresh >= Ms(1000);
         if (refresh)
             _lastKeyRefresh = now;
+
+        // Nothing here ever stops the bot: camera keys, turning and loot run alongside.
+        if (Phase == BotPhase.Setup)
+        {
+            ScheduleCamera(p, now);
+            Enter(BotPhase.Searching, now);
+        }
+        else if (p.CameraRefreshMs > 0 && now - _lastCameraSetup >= Ms(p.CameraRefreshMs))
+        {
+            ScheduleCamera(p, now); // the camera can drift (a stray key, a cutscene)
+        }
+        RunTimedKeys(now, actions, refresh);
+        if (now - _lastLootTap >= Ms(p.LootEveryMs))
+        {
+            actions.Add(new KeyTapAction(p.Keys.Pickup));
+            _lastLootTap = now;
+        }
+        if (now < _pauseUntil)
+            return; // just gave up on an unreachable mob: let the turn happen first
 
         double cx = state.Width / 2.0, cy = state.Height / 2.0;
         Point? target = null;
@@ -79,23 +111,32 @@ internal sealed partial class Brain
 
         if (target is not Point t)
         {
-            SetMoves([], p, actions, refresh);
             SetAttack(false, p, actions, refresh);
             FinishFight(p, actions, now);
             // Names flicker for a moment while walking; only explore when they are really gone.
             if (now - _lastSeen < Ms(800))
+            {
+                SetMoves([], p, actions, refresh);
                 return;
-            _exploreStep++;
-            if (_exploreStep % 2 == 1)
-            {
-                actions.Add(new KeyHoldAction(p.Keys.MoveForward, p.ExploreWalkMs));
-                _busyUntil = now + Ms(p.ExploreWalkMs + 200);
             }
-            else
+            if (now >= _exploreUntil)
             {
-                actions.Add(new KeyHoldAction(p.Keys.RotateCamera, p.RotateHoldMs * 2));
-                _busyUntil = now + Ms(p.RotateHoldMs * 2 + 200);
+                // Walk forward a bit, then turn the camera, and so on — names that show up
+                // meanwhile are picked up on the very next tick.
+                _exploreStep++;
+                if (_exploreStep % 2 == 1)
+                {
+                    _exploreKeys = [p.Keys.MoveForward];
+                    _exploreUntil = now + Ms(p.ExploreWalkMs);
+                }
+                else
+                {
+                    _exploreKeys = [];
+                    PressFor(p.Keys.RotateCamera, now, p.RotateHoldMs * 2);
+                    _exploreUntil = now + Ms(p.RotateHoldMs * 2 + 200);
+                }
             }
+            SetMoves(_exploreKeys, p, actions, refresh);
             if (Phase != BotPhase.Searching)
                 Enter(BotPhase.Searching, now);
             return;
@@ -103,6 +144,7 @@ internal sealed partial class Brain
 
         _lastSeen = now;
         _exploreStep = 0;
+        _exploreUntil = Never;
         double dx = t.X - cx, dy = t.Y - cy;
         double radius = p.AttackRadius * state.Height;
         // Once attacking, keep at it a bit further out so it doesn't flip between walk and attack.
@@ -117,11 +159,6 @@ internal sealed partial class Brain
                 Enter(BotPhase.Fighting, now);
             _wasFighting = true;
             _movingSince = Never;
-            if (now - _lastLootTap >= Ms(p.LootEveryMs))
-            {
-                actions.Add(new KeyTapAction(p.Keys.Pickup));
-                _lastLootTap = now;
-            }
             return;
         }
 
@@ -139,8 +176,8 @@ internal sealed partial class Brain
             // Walking into a wall or the mob can't be reached: let go and look elsewhere.
             SetMoves([], p, actions, refresh);
             actions.Add(new NoteAction("Moba ulaşılamıyor; başka yere bakılıyor."));
-            actions.Add(new KeyHoldAction(p.Keys.RotateCamera, p.RotateHoldMs * 2));
-            _busyUntil = now + Ms(p.RotateHoldMs * 2 + 200);
+            PressFor(p.Keys.RotateCamera, now, p.RotateHoldMs * 2);
+            _pauseUntil = now + Ms(p.RotateHoldMs * 2 + 200);
             _movingSince = Never;
             Enter(BotPhase.Searching, now);
         }
