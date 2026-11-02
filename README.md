@@ -18,6 +18,12 @@ Dosya, GitHub'daki **Windows Build** iş akışı başarılı olduğunda oluşur
 
 Uygulama **Windows 10/11 x64** içindir. İlk çalıştırmada Windows SmartScreen, dijital imza olmadığından uyarı gösterebilir; çalıştırmadan önce dosyanın bu depodan geldiğini doğrula.
 
+## Çerçevesiz pencere
+
+SekoBot standart Windows başlık çubuğu ve pencere kenarlığı olmadan açılır. Formun yerel pencere stillerinde de başlık/kenarlık devre dışıdır. **Yalnızca SekoBot'un kendi üst kontrol alanı** görünür: sürükleme alanı, küçültme ve kapatma tuşları.
+
+Eski bir SekoBot.exe kullanıyorsan hâlâ eski görünümü görebilirsin; yeni Windows derlemesi başarılı olduktan sonra otomatik güncellemeyi onayla veya en güncel SekoBot.exe dosyasını al. Godot F5 ile açılan sürüm ayrı eski uygulamadır.
+
 ## Özellikler
 
 - Küçük, koyu temalı, çerçevesiz WinForms arayüzü (940×595)
