@@ -137,6 +137,14 @@ internal sealed class AutoBars
 {
     private const int RelocateAfterMisses = 10;
     private readonly Dictionary<string, int> _misses = [];
+    private readonly List<NormRect> _rejectedTargets = [];
+
+    /// <summary>Never take this area as the target bar again (it turned out not to be one).</summary>
+    public void Reject(Rectangle area, int width, int height) =>
+        _rejectedTargets.Add(NormRect.FromPixels(area, width, height));
+
+    private bool IsRejected(Rectangle area, Frame frame) =>
+        _rejectedTargets.Any(r => r.ToPixels(frame.Width, frame.Height).IntersectsWith(area));
 
     /// <returns>Messages for the log; empty when nothing changed.</returns>
     public List<string> Apply(BotProfile profile, BarDetection found, Frame frame)
@@ -144,7 +152,8 @@ internal sealed class AutoBars
         var messages = new List<string>();
         profile.HpBar = Update(profile.HpBar, found.Hp, frame, "HP", messages);
         profile.MpBar = Update(profile.MpBar, found.Mp, frame, "MP", messages);
-        profile.TargetBar = Update(profile.TargetBar, found.Target, frame, "Hedef HP", messages);
+        var target = found.Target is Rectangle t && IsRejected(t, frame) ? null : found.Target;
+        profile.TargetBar = Update(profile.TargetBar, target, frame, "Hedef HP", messages);
         return messages;
     }
 

@@ -25,6 +25,9 @@ internal sealed class Brain
     private TimeSpan _hpCriticalSince = Never, _hpLowSince = Never, _mpLowSince = Never;
     private TimeSpan _targetGoneSince = Never, _searchSentAt = Never, _lastProgress = Never;
     private double _targetHpBest = 1;
+    /// <summary>A target bar value given up on (stuck mob or something that only looks like a
+    /// target bar); ignored until the bar disappears or its value changes.</summary>
+    private double? _ignoredTargetHp;
     private int _reclicks;
     private int _lootPresses, _failedSearches;
     private bool _searchSent, _blindFight;
@@ -76,6 +79,9 @@ internal sealed class Brain
             _lastMpPotion = now;
             Potions++;
         }
+
+        if (!state.HasTarget)
+            _ignoredTargetHp = null;
 
         switch (Phase)
         {
@@ -133,16 +139,22 @@ internal sealed class Brain
             {
                 if (_reclicks >= 3)
                 {
-                    EndFight(p, actions, now); // unreachable/stuck: try another one
+                    // Unreachable/stuck, or not a real target bar: ignore it and look for mobs.
+                    _ignoredTargetHp = state.TargetHp;
+                    actions.Add(new NoteAction("Hedefin HP'si düşmüyor; bu hedef bırakıldı, başka mob aranıyor."));
+                    EndFight(p, actions, now);
                     return;
                 }
-                if (state.TargetSpot is Point spot)
+                if ((state.TargetSpot ?? state.MobCandidates.Cast<Point?>().FirstOrDefault()) is Point spot)
                     actions.Add(new ClickAction(spot));
                 _reclicks++;
                 _lastProgress = now;
             }
             if (elapsed >= Ms(p.FightMaxMs))
+            {
+                _ignoredTargetHp = state.HasTarget ? state.TargetHp : null;
                 EndFight(p, actions, now);
+            }
             return;
         }
 
@@ -200,6 +212,10 @@ internal sealed class Brain
         Enter(turn || move ? BotPhase.Turning : NextAfterLoot(p), now);
     }
 
+    /// <summary>A target bar that is showing and not one we already gave up on.</summary>
+    private bool RealTarget(GameState state) =>
+        state.HasTarget && !(_ignoredTargetHp is double ignored && Math.Abs(state.TargetHp!.Value - ignored) < 0.02);
+
     private static BotPhase NextAfterLoot(BotProfile p) => p.AutoTarget ? BotPhase.Searching : BotPhase.Fighting;
 
     /// <summary>
@@ -209,7 +225,7 @@ internal sealed class Brain
     private void Search(GameState state, BotProfile p, List<BotAction> actions)
     {
         var now = state.Time;
-        if (state.HasTarget)
+        if (RealTarget(state))
         {
             _failedSearches = 0;
             _blindFight = false;
