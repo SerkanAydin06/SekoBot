@@ -51,6 +51,7 @@ internal sealed class BotEngine : IDisposable
     }
 
     public WindowInfo Window => _window;
+    public bool GameMinimized => WindowService.IsMinimized(_window);
     public BotProfile Profile { get; set; }
     public GameState? State => Volatile.Read(ref _state);
     public int TemplateCount => _perception.Detector.TemplateCount;

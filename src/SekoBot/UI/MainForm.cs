@@ -29,7 +29,7 @@ internal sealed class MainForm : Form
     private BotEngine? _engine;
     private Bitmap? _frameBitmap;
     private long _frameSequence;
-    private bool _autoAttached, _updating;
+    private bool _autoAttached, _updating, _gameMinimized;
 
     protected override CreateParams CreateParams
     {
@@ -139,11 +139,12 @@ internal sealed class MainForm : Form
         _templateCount = Theme.Label(previewCard, "", new Rectangle(560, 10, 274, 20), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.MiddleRight);
         _preview = new PreviewControl { Bounds = new Rectangle(16, 34, 818, 360), Profile = _profile };
         _preview.SelectionChanged += UpdateControls;
+        _preview.MouseClick += (_, _) => { if (_engine != null && _gameMinimized) WindowService.Restore(_engine.Window); };
         previewCard.Controls.Add(_preview);
 
         _calibrationHint = Theme.Label(previewCard, "Önizlemede fareyle bir alan seç, sonra ne olduğunu işaretle:",
             new Rectangle(16, 398, 818, 20), 8.5f, Theme.Muted);
-        string[] names = ["HP barı", "MP barı", "Hedef HP barı", "Arama alanı", "+ Metin şablonu", "Şablonları sil"];
+        string[] names = ["HP barı", "MP barı", "Hedef HP barı", "Arama alanı", "+ Metin şablonu", "Tümünü sıfırla"];
         _calibrationButtons = new Button[names.Length];
         int bx = 16;
         for (int i = 0; i < names.Length; i++)
@@ -312,6 +313,7 @@ internal sealed class MainForm : Form
             _engine = engine;
             engine.Start(previewFps: 30);
             _frameSequence = 0;
+            _gameMinimized = false;
             _previewTimer.Start();
             _captureName.Text = $"{window.Title}\n{engine.Stats.CaptureName}";
             SetStatus("BAĞLI", Theme.Green);
@@ -337,6 +339,7 @@ internal sealed class MainForm : Form
         _preview.Image = null;
         _preview.State = null;
         _preview.Overlay = "";
+        _preview.Placeholder = "Oyun penceresi bekleniyor";
         _preview.Invalidate();
         _captureName.Text = "Bağlı değil";
         SetStatus("BAĞLI DEĞİL", Theme.Muted);
@@ -384,7 +387,7 @@ internal sealed class MainForm : Form
     {
         if (kind == 5)
         {
-            ClearTemplates();
+            ResetCalibration();
             return;
         }
         if (_engine == null || _preview.Selection is not Rectangle selection)
@@ -427,24 +430,36 @@ internal sealed class MainForm : Form
 
     private static string ColorText(BarSpec? bar) => bar == null ? "." : $" (renk {bar.R},{bar.G},{bar.B}).";
 
-    private void ClearTemplates()
+    /// <summary>Deletes every template and every marked area (HP/MP/target bars, search area).</summary>
+    private void ResetCalibration()
     {
-        var answer = MessageBox.Show(this, "Tüm Metin şablonları silinsin mi?", "SekoBot",
-            MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+        var answer = MessageBox.Show(this,
+            "Tüm Metin şablonları ve işaretlenen alanlar (HP, MP, hedef barı, arama alanı) silinsin mi?",
+            "SekoBot", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         if (answer != DialogResult.Yes)
             return;
-        try
+        StopBot("kalibrasyon sıfırlandı");
+        int deleted = 0, failed = 0;
+        if (Directory.Exists(ProfileStore.TemplateDirectory))
         {
-            if (Directory.Exists(ProfileStore.TemplateDirectory))
-                foreach (var file in Directory.GetFiles(ProfileStore.TemplateDirectory, "*.png"))
-                    File.Delete(file);
-            _engine?.ReloadTemplates();
-            WriteLog("Şablonlar silindi.");
+            foreach (var file in Directory.GetFiles(ProfileStore.TemplateDirectory, "*.png"))
+            {
+                try { File.Delete(file); deleted++; }
+                catch { failed++; }
+            }
         }
-        catch (Exception ex)
-        {
-            WriteLog("Şablonlar silinemedi: " + ex.Message);
-        }
+        var defaults = new BotProfile();
+        _profile.HpBar = null;
+        _profile.MpBar = null;
+        _profile.TargetBar = null;
+        _profile.SearchArea = defaults.SearchArea;
+        SaveProfile();
+        _engine?.ReloadTemplates();
+        _preview.State = null;
+        _preview.ClearSelection();
+        WriteLog(failed == 0
+            ? $"Kalibrasyon sıfırlandı: {deleted} şablon ve tüm işaretli alanlar silindi."
+            : $"{deleted} şablon silindi, {failed} dosya silinemedi (başka bir program kullanıyor olabilir).");
         UpdateControls();
     }
 
@@ -473,6 +488,24 @@ internal sealed class MainForm : Form
     private void RenderPreview()
     {
         if (_engine == null)
+            return;
+        bool minimized = _engine.GameMinimized;
+        if (minimized != _gameMinimized)
+        {
+            _gameMinimized = minimized;
+            if (minimized)
+            {
+                StopBot("oyun simge durumuna alındı");
+                WriteLog("Oyun simge durumunda: Windows küçültülmüş pencereyi çizmez, görüntü alınamaz.");
+            }
+            _preview.Placeholder = minimized
+                ? "Oyun simge durumunda\n\nWindows küçültülmüş pencereyi çizmediği için görüntü yok.\nOyunu geri açmak için buraya tıkla."
+                : "Oyun penceresi bekleniyor";
+            _preview.Image = minimized ? null : _frameBitmap;
+            _preview.State = null;
+            _preview.Invalidate();
+        }
+        if (minimized)
             return;
         if (_engine.TryCopyLatest(ref _frameBitmap, ref _frameSequence))
         {

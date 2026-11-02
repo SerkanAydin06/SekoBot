@@ -37,6 +37,12 @@ internal sealed class GdiCapture : ICaptureSource
             while (!token.IsCancellationRequested)
             {
                 var step = Stopwatch.StartNew();
+                if (WindowService.IsAlive(_window, out _) && WindowService.IsMinimized(_window))
+                {
+                    // Windows does not draw minimized windows; wait until it is restored.
+                    await Task.Delay(250, token);
+                    continue;
+                }
                 if (!WindowService.TryGetClientScreenRect(_window, out var area, out var error))
                 {
                     Failed?.Invoke(error);

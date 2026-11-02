@@ -119,6 +119,16 @@ internal static class WindowService
         return true;
     }
 
+    public static bool IsMinimized(WindowInfo target) => Win32.IsIconic(target.Handle);
+
+    /// <summary>Restores a minimized game window and brings it to the front.</summary>
+    public static void Restore(WindowInfo target)
+    {
+        if (Win32.IsIconic(target.Handle))
+            Win32.ShowWindow(target.Handle, Win32.SW_RESTORE);
+        Win32.SetForegroundWindow(target.Handle);
+    }
+
     public static Point ClientToScreen(WindowInfo target, Point client)
     {
         var p = new Win32.POINT { X = client.X, Y = client.Y };

@@ -11,6 +11,7 @@ namespace SekoBot.UI;
 /// </summary>
 internal sealed class PreviewControl : Control
 {
+    private static readonly Font PlaceholderFont = new("Segoe UI", 12f);
     private Point? _dragStart;
     private Rectangle? _selection;
 
@@ -99,7 +100,7 @@ internal sealed class PreviewControl : Control
         g.Clear(BackColor);
         if (Image == null)
         {
-            TextRenderer.DrawText(g, "▣\n\n" + Placeholder, new Font("Segoe UI", 12f), ClientRectangle,
+            TextRenderer.DrawText(g, "▣\n\n" + Placeholder, PlaceholderFont, ClientRectangle,
                 Theme.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
             return;
         }
