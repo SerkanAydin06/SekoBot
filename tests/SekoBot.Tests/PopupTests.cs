@@ -28,6 +28,8 @@ public class PopupTests
     [InlineData("topdown-wolves.png")]
     [InlineData("red-armor.png")]
     [InlineData("other-player.png")]
+    [InlineData("trees-preview.png")] // big blurry leaves in front of the camera (preview, scaled up)
+    [InlineData("death-screen.png")]  // handled by the death logic, not by Esc
     public void Plain_game_screen_has_no_popup(string file)
     {
         using var frame = RecordingFormat.LoadPng(Fixture(file));

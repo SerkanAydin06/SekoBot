@@ -3,13 +3,16 @@ using SekoBot.Capture;
 namespace SekoBot.Vision;
 
 /// <summary>
-/// Notices a window opened over the game. Two signs, measured on real 1920×1080 screenshots:
+/// Notices a window opened over the game. Measured on real 1920×1080 screenshots:
 /// <list type="bullet">
-/// <item>a long, perfectly flat title bar (the shop advert after a level-up: a 586 px flat run
-/// over 10+ rows; the plain game's longest flat run is 156 px, at the screen edge);</item>
-/// <item>a blurred game behind a menu (the Esc system menu: 97 % of rows have a flat run longer
-/// than a third of the screen; the plain game 0 %, the advert 6 %).</item>
+/// <item>the shop advert after a level-up has a title bar: a flat run over 20 % of the width,
+/// not touching the edges, for 6+ rows, and all one colour (each channel varies ≤ 25);</item>
+/// <item>the Esc system menu blurs the game (96 % of the rows have a flat run over a third of
+/// the width) and has a near-black button panel in the middle (83 % black).</item>
 /// </list>
+/// Big blurry leaves right in front of the top-down camera are smooth too, but their long
+/// runs drift in colour (no one-colour bar) and the middle isn't black (19 %), so they don't
+/// count — they used to, and the bot kept pressing Esc under trees.
 /// </summary>
 internal static class PopupDetector
 {
@@ -38,8 +41,8 @@ internal static class PopupDetector
                     run = 0;
                 }
             }
-            // A long flat stretch that doesn't touch the screen edges (dark vignette): a title bar.
-            bool bar = best >= barRun && bestStart > w * 0.05 && bestStart + best < w * 0.95;
+            bool bar = best >= barRun && bestStart > w * 0.05 && bestStart + best < w * 0.95 &&
+                       OneColour(data, row, bestStart, best + 1);
             barRows = bar ? barRows + 1 : 0;
             if (barRows >= 6)
                 return true;
@@ -47,7 +50,38 @@ internal static class PopupDetector
             if (best >= blurRun)
                 blurRows++;
         }
-        // Most of the screen smooth: the game is blurred behind a menu.
-        return rows > 0 && blurRows * 100 >= rows * 40;
+        // Blurred game behind a menu: most rows smooth and a black panel in the middle.
+        return rows > 0 && blurRows * 100 >= rows * 40 && DarkShare(frame, 0.40, 0.60, 0.05, 0.92) >= 0.5;
+    }
+
+    /// <summary>Each channel stays within 25 over the run: a flat bar, not a smooth gradient.</summary>
+    private static bool OneColour(byte[] data, int row, int start, int length)
+    {
+        int minB = 255, maxB = 0, minG = 255, maxG = 0, minR = 255, maxR = 0;
+        for (int x = start; x < start + length; x++)
+        {
+            int i = row + x * 4;
+            minB = Math.Min(minB, data[i]); maxB = Math.Max(maxB, data[i]);
+            minG = Math.Min(minG, data[i + 1]); maxG = Math.Max(maxG, data[i + 1]);
+            minR = Math.Min(minR, data[i + 2]); maxR = Math.Max(maxR, data[i + 2]);
+        }
+        return maxB - minB <= 25 && maxG - minG <= 25 && maxR - minR <= 25;
+    }
+
+    private static double DarkShare(Frame frame, double x0, double x1, double y0, double y1)
+    {
+        int left = (int)(frame.Width * x0), right = (int)(frame.Width * x1);
+        int top = (int)(frame.Height * y0), bottom = (int)(frame.Height * y1);
+        var data = frame.Data;
+        int dark = 0, total = 0;
+        for (int y = top; y < bottom; y += 2)
+        for (int x = left; x < right; x += 2)
+        {
+            int i = y * frame.Stride + x * 4;
+            total++;
+            if (data[i] < 30 && data[i + 1] < 30 && data[i + 2] < 30)
+                dark++;
+        }
+        return total == 0 ? 0 : (double)dark / total;
     }
 }
