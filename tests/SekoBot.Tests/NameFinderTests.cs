@@ -203,4 +203,18 @@ public class NameFinderTests
         // The check can be switched off.
         Assert.Equal(3, NameFinder.Find(frame, requireLevelTag: false).Count);
     }
+
+    [Fact]
+    public void Reddish_hair_under_the_players_own_lv_tag_is_not_a_mob()
+    {
+        var c = new Canvas();
+        c.Name(250, 150, 8); // real mob name, to be sure the frame works
+        // The player's own name line: green "Lv.8" (the name itself is white, not drawn), and
+        // right under it the character's reddish-orange head, wide enough to look like text.
+        c.LevelTag(430, 280);
+        c.Fill(440, 290, 28, 12, 200, 90, 60);
+        using var frame = c.ToFrame();
+        var name = Assert.Single(NameFinder.Find(frame));
+        Assert.InRange(name.X, 246, 254);
+    }
 }
