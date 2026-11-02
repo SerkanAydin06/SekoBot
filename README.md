@@ -1,69 +1,47 @@
-# SekoBot · Windows Masaüstü Uygulaması
+# SekoBot
 
-**Metin2 pencere bağlantısı için bağımsız SekoBot.exe**. Godot editörü, Python, PowerShell yardımcı işlemi veya bilgisayarda .NET kurulumu gerektirmez.
+Metin2 için tek dosyalı Windows farm botu. Kurulum gerekmez, açılışta kendini otomatik günceller.
 
-## İndir ve çalıştır
+**[SekoBot.exe — indir](https://github.com/SerkanAydin06/SekoBot/releases/download/preview/SekoBot.exe)** · Windows 10 (2004+) / 11, x64
 
-**[SekoBot.exe — doğrudan indir](https://github.com/SerkanAydin06/SekoBot/releases/download/preview/SekoBot.exe)**
+> Eski bir SekoBot.exe kullanıyorsan bu sürümü **bir kez** elle indir. Bundan sonra her açılışta yeni sürüm sessizce indirilir, SHA-256 ile doğrulanır ve uygulama kendini yeniden başlatır. Bot çalışırken güncelleme yapılmaz.
 
-Alternatif: [SekoBot Releases](https://github.com/SerkanAydin06/SekoBot/releases/tag/preview) sayfasındaki **Assets → SekoBot.exe**.
+## Kullanım
 
-Dosya, GitHub'daki **Windows Build** iş akışı başarılı olduğunda oluşur. Derleme devam ediyorsa veya başarısızsa indirme bağlantısı henüz çalışmayabilir: [Derlemeyi kontrol et](https://github.com/SerkanAydin06/SekoBot/actions/workflows/build-windows.yml).
+1. Metin2'yi pencere modunda aç, SekoBot.exe'yi çalıştır. Tek Metin2 penceresi varsa otomatik bağlanır.
+2. **Kalibrasyon** (bir kez): önizlemede fareyle alan seç ve işaretle
+   - **HP barı** / **MP barı** — barlar doluyken seç
+   - **Hedef HP barı** — oyunda bir Metin taşına tıkla, ekranın üstündeki dolu hedef barını seç
+   - **+ Metin şablonu** — bir Metin taşının etrafını seç (farklı taşlar/açılar için birkaç şablon ekle)
+   - **Arama alanı** — isteğe bağlı; taşların aranacağı bölge (arayüzü hariç tut)
+3. **Kuru çalışma** açıkken **Başlat (F10)**: bot ne yapacağını yalnızca günlüğe yazar. Önizlemedeki sarı kutular ve durum doğruysa kuru çalışmayı kapatıp gerçek moda geç.
+4. **F12** her zaman acil durdurur. HP belirlenen eşiğin altına düşerse bot kendini durdurur.
 
-1. İnen `SekoBot.exe` dosyasını normal bir klasöre kaydet.
-2. Metin2'yi pencere modunda aç.
-3. SekoBot.exe'yi çift tıkla.
-4. Açık pencere listesinden oyun penceresini seç ve **Pencereye bağlan** düğmesine bas.
-5. Önizlemeyi kontrol et; **Ekran görüntüsü kaydet** ile PNG oluştur.
+Tuşlar (saldırı, toplama, iksir, kamera) ve süreler `%LOCALAPPDATA%\SekoBot\profile.json` içinde; arayüzden **Profil klasörü** ile açılır.
 
-Uygulama **Windows 10/11 x64** içindir. İlk çalıştırmada Windows SmartScreen, dijital imza olmadığından uyarı gösterebilir; çalıştırmadan önce dosyanın bu depodan geldiğini doğrula.
+## Nasıl çalışır
 
-## Çerçevesiz pencere
+```
+Yakalama (WGC, GPU) ─► en son kare ─► Algılama ─► GameState ─► Durum makinesi ─► Girdi
+   30 FPS önizleme        kuyruk yok     10 FPS                   Ara → Git →        yalnızca oyun
+   GDI yedek                             HP/MP/hedef barı         Saldır → Topla     odaktayken
+                                         Metin şablon eşleme
+```
 
-SekoBot standart Windows başlık çubuğu ve pencere kenarlığı olmadan açılır. Formun yerel pencere stillerinde de başlık/kenarlık devre dışıdır. **Yalnızca SekoBot'un kendi üst kontrol alanı** görünür: sürükleme alanı, küçültme ve kapatma tuşları.
+- **Yakalama:** Windows Graphics Capture; oyunun üstü örtülse de çalışır, yalnızca istemci alanını okur. Desteklenmezse GDI'ya düşer.
+- **Algılama:** Barlar kalibre edilen renge göre okunur; Metin taşları yarım çözünürlükte, çok ölçekli şablon eşleme (OpenCV) ile bulunur.
+- **Karar:** Her durumun zaman aşımı var. Ulaşılamayan taş geçici kara listeye alınır, takılma olmaz. Taş görünmüyorsa kamera döner, sonra ileri yürür.
+- **Girdi:** Tarama kodlu `SendInput`; oyun penceresi odakta değilse hiçbir şey gönderilmez, durunca basılı tuş bırakılmaz.
 
-Eski bir SekoBot.exe kullanıyorsan hâlâ eski görünümü görebilirsin; yeni Windows derlemesi başarılı olduktan sonra otomatik güncellemeyi onayla veya en güncel SekoBot.exe dosyasını al. Godot F5 ile açılan sürüm ayrı eski uygulamadır.
+Uygulama oyun belleğini okumaz, koda enjekte etmez, görüntü yüklemez. Güncelleme yalnızca bu deponun Releases sayfasından yapılır.
 
-## Özellikler
+> ⚠️ Bot kullanımı çoğu Metin2 sunucusunun kurallarına aykırıdır ve hesap kapatılmasına yol açabilir. Sorumluluk kullanıcıdadır.
 
-- Küçük, koyu temalı, çerçevesiz WinForms arayüzü (940×595)
-- Başlıktan sürükleyerek taşıma, küçültme, kapatma
-- Windows API üzerinden **doğrudan** açık pencere arama, gerçek oyun alanı boyutu
-- HWND + PID kimliğiyle hedef pencere takibi; kapanma/yeniden açılma denetimi
-- Canlı görüntü (5/10/15 FPS), FPS/çözünürlük/kare sayaçları
-- Windows ekranındaki **görünür** pencere alanını yakalama; ayrı PowerShell hizmeti ve geçici JSON/PNG alışverişi yok
-- PNG kayıtları: Kullanıcı profilindeki `Pictures\SekoBot`
-- Pencere bağlantısı, tarama ve yakalama hatalarını açıklayan sistem günlüğü
+## Geliştirme
 
-Bu aşamada **otomatik farm / oyun girdisi gönderme yoktur**. Önce canlı görüntünün sorunsuz yakalanması hedefleniyor.
+```
+src/SekoBot/            uygulama (Capture, Vision, Bot, Input, Config, Update, UI)
+tests/SekoBot.Tests/    durum makinesi ve görüntü testleri
+```
 
-## Yakalama sınırlamaları
-
-İlk sürüm ekrandaki görünür pikselleri `CopyFromScreen` ile yakalar. Oyun penceresi **simgede olmamalı**, SekoBot dahil başka pencereler oyun alanını örtmemelidir. DirectX/özel tam ekran veya ekran korumalı pencerelerde siyah görüntü oluşabilir. Metin2'yi **pencere modunda** kullan ve SekoBot penceresini oyunun yanına taşı. Gerekirse sonraki sürümde Windows Graphics Capture eklenecektir.
-
-Uygulama oyun belleğini okumaz, oyuna kod enjekte etmez ve görüntüleri herhangi bir sunucuya yüklemez.
-
-## Kaynak kod ve geliştirme
-
-- `SekoBot.Windows.csproj`: Windows Forms / .NET 10 projesi
-- `src/WindowService.cs`: Win32 pencere listesi, HWND/PID ve istemci alanı koordinatları
-- `src/ScreenCapture.cs`: GDI+ canlı görüntü yakalama
-- `src/DashboardForm.cs`: Kontrol paneli, canlı önizleme ve kayıt
-- `.github/workflows/build-windows.yml`: GitHub üzerinde tek dosyalı bağımsız EXE derleme
-
-Kod geliştirmek için .NET 10 SDK kullanılabilir. Ancak **hazır EXE kullanıcısının hiçbir SDK veya dil kurmasına gerek yoktur**.
-
-Yeni kod `main` dalına gönderildiğinde GitHub aynı **preview** sürümündeki SekoBot.exe dosyasını günceller; her seferinde yeni bir sürüm adresi açılmaz.
-
-## Test durumu
-
-Derleme GitHub Actions üzerindeki Windows derleyicisi tarafından doğrulanır. Metin2 istemcisi üzerindeki gerçek görüntü yakalama testi ayrıca Windows bilgisayarda yapılmalıdır.
-
-
-## Otomatik güncelleme
-
-**SekoBot.exe dosyasını yalnızca ilk kurulumda indirmen yeterli.** Program açılırken mevcut GitHub `preview` sürümünü kontrol eder. Yeni sürüm varsa kullanıcı başka bir sayfaya gitmeden dosyayı indirir ve `SHA-256` doğrulaması yapar. Ardından yeniden başlatıp yüklemek için onay ister; onay verilirse eski dosya Windows yardımcı komutuyla değiştirilir ve SekoBot yeniden açılır.
-
-Güncellemenin uygulanabilmesi için SekoBot.exe dosyasının **yazılabilir bir klasörde** bulunması gerekir (örneğin kullanıcı hesabındaki uygulama klasörü veya İndirilenler). Korunan `Program Files` klasöründen yönetici izni olmadan kendini güncelleyemez. İnternet bağlantısı yoksa mevcut sürüm çalışmaya devam eder. Güncelleme kontrolü sadece GitHub Releases üzerinden yapılır; başka sunucu veya telemetri kullanılmaz.
-
-Yeni derleme kimliği `src/BuildInfo.cs` içine GitHub Actions sırasında yazılır; `SekoBot.manifest.json` SHA-256 doğrulaması için aynı Release'e yüklenir. Eski kurulumlarda bu güncelleme sistemi yoktur; otomatik güncellemeden faydalanmak için **yeni SekoBot.exe dosyasını bir kez indirmen gerekir**.
+.NET 10 SDK ile `dotnet test` ve `dotnet run --project src/SekoBot`. Her push GitHub Actions'ta test edilip derlenir; `main` dalı `preview` sürümünü günceller.

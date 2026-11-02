@@ -5,7 +5,6 @@ using SekoBot.Native;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
-using Windows.Foundation.Metadata;
 using Windows.Graphics;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
@@ -111,13 +110,13 @@ internal sealed class WgcCapture : ICaptureSource
         const string sessionType = "Windows.Graphics.Capture.GraphicsCaptureSession";
         try
         {
-            if (ApiInformation.IsPropertyPresent(sessionType, "IsCursorCaptureEnabled"))
+            if (Windows.Foundation.Metadata.ApiInformation.IsPropertyPresent(sessionType, "IsCursorCaptureEnabled"))
                 _session.IsCursorCaptureEnabled = false;
         }
         catch { }
         try
         {
-            if (ApiInformation.IsPropertyPresent(sessionType, "IsBorderRequired"))
+            if (Windows.Foundation.Metadata.ApiInformation.IsPropertyPresent(sessionType, "IsBorderRequired"))
                 _session.IsBorderRequired = false;
         }
         catch { }
