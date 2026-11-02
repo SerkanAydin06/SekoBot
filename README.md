@@ -9,9 +9,9 @@ Metin2 için tek dosyalı Windows farm botu. Kurulum gerekmez, açılışta kend
 ## Kullanım
 
 1. Metin2'yi pencere modunda aç, SekoBot.exe'yi çalıştır. Tek Metin2 penceresi varsa otomatik bağlanır.
-2. **Kalibrasyon** (bir kez): önizlemede fareyle barı seç ve işaretle
-   - **HP barı** / **MP barı** — barlar doluyken seç (iksir ve güvenlik durdurması için)
-   - **Hedef HP barı** (isteğe bağlı) — bir moba tıkla, ekranın üstündeki dolu hedef barını seç. Bot yaşayan hedefe vurmaya devam eder, etrafta mob kalmayınca döner.
+2. **HP ve MP barları otomatik bulunur.** Önizlemede yeşil (HP) ve mavi (MP) çerçeve görünür, günlükte "HP barı otomatik bulundu ✓" yazar. Bir moba tıkladığında üstteki hedef barı da kendiliğinden bulunur. HP o an dolu değilse sorun değil; HP doldukça bot ölçüyü kendisi büyütür.
+   - Bulamazsa 10 sn sonra `hp-bulunamadi.png` kaydedilir (yolu günlükte yazar). Bu resmi geliştiriciye gönder. Beklerken barı önizlemede fareyle seçip **HP barı** / **MP barı** düğmesine basarak elle işaretleyebilirsin.
+   - Yanlış yer bulunduysa **Sıfırla / yeniden bul**.
 3. **Kuru çalışma** açıkken **Başlat (F10)**: bot ne yapacağını yalnızca günlüğe yazar. Doğruysa kuru çalışmayı kapat.
 4. **F12** her zaman acil durdurur. HP belirlenen eşiğin altına düşerse bot kendini durdurur.
 
@@ -27,7 +27,7 @@ Böylece yeni bir ayarı ya da kalibrasyonu oyunda denemeden önce eski bir otur
 ## Nasıl çalışır
 
 - **Yakalama:** Windows Graphics Capture (GPU); oyunun üstü örtülse de çalışır. Desteklenmezse GDI'ya düşer. Küçültülmüş pencere Windows tarafından çizilmez, görüntü alınamaz.
-- **Algılama:** HP/MP/hedef barları kalibre edilen renge göre okunur (kare başına <1 ms).
+- **Algılama:** HP (kırmızı) ve MP (mavi) barları ekranın altındaki ince yatay renk şeritleri olarak, hedef barı üst ortadaki kırmızı şerit olarak otomatik bulunur; sonra bulunan renge göre okunur (kare başına <1 ms).
 - **Karar:** Saldır → topla → dön döngüsü, iksir bekleme süreleri, kritik HP'de durma.
 - **Girdi:** Tarama kodlu `SendInput`; oyun odakta değilse hiçbir şey gönderilmez ve basılı tuşlar bırakılır.
 

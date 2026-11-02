@@ -26,6 +26,8 @@ internal sealed class BarSpec
     public byte G { get; set; }
     public byte B { get; set; }
     public int Tolerance { get; set; } = 70;
+    /// <summary>Found automatically (may be widened/moved by the bot); false = marked by hand.</summary>
+    public bool Auto { get; set; }
 }
 
 internal sealed class KeyBindings
@@ -47,6 +49,8 @@ internal sealed class BotProfile
     public BarSpec? TargetBar { get; set; }
 
     public int PerceptionFps { get; set; } = 10;
+    /// <summary>Find HP/MP/target bars on screen automatically (manual marks always win).</summary>
+    public bool AutoDetectBars { get; set; } = true;
 
     public double PotionHpBelow { get; set; } = 0.55;
     public double PotionMpBelow { get; set; } = 0.25;

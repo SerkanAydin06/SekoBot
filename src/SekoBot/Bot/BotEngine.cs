@@ -40,6 +40,9 @@ internal sealed class BotEngine : IDisposable
     private int _previewFps;
     private ChannelWriter<Frame>? _writer;
     private SessionRecorder? _recorder;
+    private readonly AutoBars _autoBars = new();
+    private TimeSpan _lastBarSearch = TimeSpan.FromDays(-1), _barSearchStarted = TimeSpan.FromDays(-1);
+    private bool _barSearchFailedLogged;
     private bool _disposed;
 
     public BotEngine(WindowInfo window, BotProfile profile, Action<string> log)
@@ -58,6 +61,8 @@ internal sealed class BotEngine : IDisposable
     /// <summary>Raised from a worker thread when capture stops or the bot stops itself.</summary>
     public event Action<string>? CaptureFailed;
     public event Action<string>? BotStopped;
+    /// <summary>Raised from the pipeline thread when automatic bar detection changed the profile.</summary>
+    public event Action<string>? BarsChanged;
 
     public void Start(int previewFps)
     {
@@ -118,6 +123,7 @@ internal sealed class BotEngine : IDisposable
                     lastAnalysis = now;
                     try
                     {
+                        SearchBars(frame, profile, now);
                         var state = Perception.Analyze(frame, profile, now);
                         Volatile.Write(ref _state, state);
                         var (phase, actions) = TickBot(state);
@@ -176,6 +182,41 @@ internal sealed class BotEngine : IDisposable
     private static bool IsImportant(IReadOnlyList<BotAction> actions, BotProfile profile) =>
         actions.Any(a => a is StopAction ||
                          a is KeyTapAction tap && (tap.Key == profile.Keys.HpPotion || tap.Key == profile.Keys.MpPotion));
+
+    // ── Automatic bar detection ──────────────────────────────────
+
+    private void SearchBars(Frame frame, BotProfile profile, TimeSpan now)
+    {
+        if (!profile.AutoDetectBars)
+            return;
+        bool hpMissing = profile.HpBar == null;
+        // Look often until the HP bar is known, then now and then (to widen a bar that was not full).
+        if (now - _lastBarSearch < TimeSpan.FromSeconds(hpMissing ? 1 : 3))
+            return;
+        _lastBarSearch = now;
+        if (_barSearchStarted < TimeSpan.Zero)
+            _barSearchStarted = now;
+        try
+        {
+            var before = (profile.HpBar, profile.MpBar, profile.TargetBar);
+            var messages = _autoBars.Apply(profile, BarFinder.Find(frame), frame);
+            // Also fires when a bar was only widened (no message), so the profile gets saved.
+            if (before != (profile.HpBar, profile.MpBar, profile.TargetBar))
+                BarsChanged?.Invoke(string.Join("  ", messages));
+            if (profile.HpBar == null && !_barSearchFailedLogged && now - _barSearchStarted > TimeSpan.FromSeconds(10))
+            {
+                _barSearchFailedLogged = true;
+                string shot = Path.Combine(ProfileStore.Directory, "hp-bulunamadi.png");
+                try { Directory.CreateDirectory(ProfileStore.Directory); RecordingFormat.SavePng(frame, shot); } catch { }
+                _log("HP barı otomatik bulunamadı. Oyunda karakterin HP/MP barları ekranda görünür olmalı. " +
+                     $"Olmazsa şu resmi gönder: {shot}  (ya da önizlemede barı fareyle seçip 'HP barı'na bas)");
+            }
+        }
+        catch (Exception ex)
+        {
+            _log("Otomatik bar arama hatası: " + ex.Message);
+        }
+    }
 
     // ── Recording ────────────────────────────────────────────────
 

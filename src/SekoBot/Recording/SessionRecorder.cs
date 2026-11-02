@@ -20,7 +20,7 @@ internal sealed class SessionRecorder : IDisposable
 
     private sealed record Item(RecordedTick Tick, Frame? Image);
 
-    private readonly Channel<Item> _queue = Channel.CreateUnbounded<Item>(new UnboundedChannelOptions { SingleReader = true });
+    private readonly Channel<Item> _queue = Channel.CreateUnbounded<Item>(); // multi-reader variant: it supports Count
     private readonly Action<string> _log;
     private readonly TimeSpan _frameInterval;
     private readonly long _maxBytes;

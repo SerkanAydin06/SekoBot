@@ -47,7 +47,8 @@ public sealed class RecordingTests : IDisposable
     /// <summary>Records <paramref name="seconds"/> of 10 Hz ticks with HP following <paramref name="hpAt"/>.</summary>
     private void RecordSession(BotProfile profile, double seconds, Func<double, double> hpAt)
     {
-        using var recorder = new SessionRecorder(_dir, profile, "Test", _ => { });
+        var errors = new List<string>();
+        var recorder = new SessionRecorder(_dir, profile, "Test", m => { lock (errors) errors.Add(m); });
         var brain = new Brain(() => profile);
         brain.Start(TimeSpan.Zero);
         long seq = 0;
@@ -60,6 +61,8 @@ public sealed class RecordingTests : IDisposable
             // The real engine runs at 10 Hz; give the writer time like it would have.
             if (seq % 10 == 0) Thread.Sleep(20);
         }
+        recorder.Dispose();
+        Assert.Empty(errors);
     }
 
     [Fact]

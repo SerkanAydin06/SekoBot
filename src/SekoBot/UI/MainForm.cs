@@ -155,12 +155,12 @@ internal sealed class MainForm : Form
 
         _calibrationHint = Theme.Label(previewCard, "Önizlemede fareyle bir alan seç, sonra ne olduğunu işaretle:",
             new Rectangle(16, 398, 818, 20), 8.5f, Theme.Muted);
-        string[] names = ["HP barı", "MP barı", "Hedef HP barı (isteğe bağlı)", "Tümünü sıfırla"];
+        string[] names = ["HP barı", "MP barı", "Hedef HP barı (isteğe bağlı)", "Sıfırla / yeniden bul"];
         _calibrationButtons = new Button[names.Length];
         int bx = 16;
         for (int i = 0; i < names.Length; i++)
         {
-            int width = i == 2 ? 230 : 140;
+            int width = i == 2 ? 230 : i == 3 ? 190 : 140;
             int index = i;
             var button = Theme.Button(previewCard, names[i], new Rectangle(bx, 424, width, 38),
                 i == 3 ? Theme.Danger : Theme.Secondary, i == 3 ? Theme.DangerHover : Theme.SecondaryHover);
@@ -319,6 +319,13 @@ internal sealed class MainForm : Form
         {
             var engine = new BotEngine(window, _profile, message => PostLog(message));
             engine.CaptureFailed += message => PostUi(() => { if (_engine == engine) Disconnect(message); });
+            engine.BarsChanged += message => PostUi(() =>
+            {
+                SaveProfile();
+                if (message.Length > 0) WriteLog(message);
+                _preview.Invalidate();
+                UpdateControls();
+            });
             engine.BotStopped += reason => PostUi(() => { SetStatus("DURDU: " + reason, Theme.Yellow); UpdateControls(); });
             _engine = engine;
             engine.Start(previewFps: 30);
@@ -500,7 +507,7 @@ internal sealed class MainForm : Form
     /// <summary>Deletes every marked bar (HP/MP/target).</summary>
     private void ResetCalibration()
     {
-        var answer = MessageBox.Show(this, "İşaretlenen tüm barlar (HP, MP, hedef) silinsin mi?",
+        var answer = MessageBox.Show(this, "Tüm barlar (HP, MP, hedef) silinsin ve otomatik olarak yeniden bulunsun mu?",
             "SekoBot", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         if (answer != DialogResult.Yes)
             return;
@@ -511,7 +518,7 @@ internal sealed class MainForm : Form
         SaveProfile();
         _preview.State = null;
         _preview.ClearSelection();
-        WriteLog("Kalibrasyon sıfırlandı: tüm işaretli barlar silindi.");
+        WriteLog("Barlar sıfırlandı; otomatik olarak yeniden aranıyor…");
         UpdateControls();
     }
 
@@ -622,7 +629,9 @@ internal sealed class MainForm : Form
             ? "Kalibrasyon için önce oyuna bağlan."
             : hasSelection
                 ? "Seçili alanı ne olarak kaydedelim? (Bar seçerken bar dolu olmalı)"
-                : "Önizlemede fareyle bir bar seç (HP, MP veya hedef HP), sonra aşağıdan işaretle.";
+                : _profile.HpBar == null
+                    ? "HP/MP barları otomatik aranıyor… Bulunamazsa barı fareyle seçip aşağıdan işaretle."
+                    : "Barlar hazır. Yanlışsa barı fareyle seçip elle işaretle ya da 'Sıfırla / yeniden bul'.";
     }
 
     // ── Update ───────────────────────────────────────────────────
