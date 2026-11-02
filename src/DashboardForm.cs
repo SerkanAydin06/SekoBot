@@ -12,6 +12,27 @@ namespace SekoBot;
 /// </summary>
 internal sealed class DashboardForm : Form
 {
+    // Force a truly frameless top-level window even if Windows Forms
+    // or a theme later modifies the default native window styles.
+    private const int WsCaption = 0x00C00000;
+    private const int WsThickFrame = 0x00040000;
+    private const int WsBorder = 0x00800000;
+    private const int WsDlgFrame = 0x00400000;
+    private const int WsExDlgModalFrame = 0x00000001;
+    private const int WsExClientEdge = 0x00000200;
+    private const int WsExWindowEdge = 0x00000100;
+
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            CreateParams parameters = base.CreateParams;
+            parameters.Style &= ~(WsCaption | WsThickFrame | WsBorder | WsDlgFrame);
+            parameters.ExStyle &= ~(WsExDlgModalFrame | WsExClientEdge | WsExWindowEdge);
+            return parameters;
+        }
+    }
+
     private static readonly Color Background = Color.FromArgb(11, 16, 32);
     private static readonly Color Surface = Color.FromArgb(20, 29, 48);
     private static readonly Color PreviewBackground = Color.FromArgb(8, 14, 27);
@@ -48,6 +69,10 @@ internal sealed class DashboardForm : Form
         MinimumSize = Size;
         MaximumSize = Size;
         FormBorderStyle = FormBorderStyle.None;
+        ControlBox = false;
+        ShowIcon = false;
+        MaximizeBox = false;
+        MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         ShowInTaskbar = true;
         BackColor = Background;
