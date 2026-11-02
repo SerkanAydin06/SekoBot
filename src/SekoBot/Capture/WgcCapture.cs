@@ -5,6 +5,7 @@ using SekoBot.Native;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
+using D3DBox = Vortice.Mathematics.Box;
 using Windows.Graphics;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
@@ -181,7 +182,7 @@ internal sealed class WgcCapture : ICaptureSource
 
                 EnsureStaging(crop.Width, crop.Height);
                 _context!.CopySubresourceRegion(_staging!, 0, 0, 0, 0, texture, 0,
-                    new Box(crop.Left, crop.Top, 0, crop.Right, crop.Bottom, 1));
+                    new D3DBox(crop.Left, crop.Top, 0, crop.Right, crop.Bottom, 1));
 
                 var mapped = _context.Map(_staging!, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
                 Frame frame;

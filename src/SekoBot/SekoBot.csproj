@@ -13,7 +13,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <Version>0.4.0</Version>
     <!-- Version checks for newer WGC properties are done at runtime. -->
-    <NoWarn>$(NoWarn);CA1416</NoWarn>
+    <NoWarn>$(NoWarn);CA1416;WFO1000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
