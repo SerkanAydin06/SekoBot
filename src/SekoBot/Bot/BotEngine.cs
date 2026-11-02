@@ -133,7 +133,9 @@ internal sealed class BotEngine : IDisposable
                         var state = Perception.Analyze(frame, profile, now);
                         if (profile.AutoTarget)
                         {
-                            var mobs = _motion.Update(frame, now);
+                            var moving = _motion.Update(frame, now);
+                            var mobs = MobLocator.Combine(NameFinder.Find(frame), moving, frame.Width, frame.Height)
+                                .Where(m => !_motion.RecentlyMissed(m, now)).ToList();
                             state = state with { MobCandidates = mobs, TargetSpot = TrackTarget(state, mobs, now) };
                         }
                         Volatile.Write(ref _state, state);

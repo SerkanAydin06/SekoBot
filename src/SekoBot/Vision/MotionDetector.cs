@@ -31,6 +31,14 @@ internal sealed class MotionDetector
             _misses.Add((spot, now));
     }
 
+    /// <summary>True when a click near this spot recently selected nothing.</summary>
+    public bool RecentlyMissed(Point spot, TimeSpan now)
+    {
+        lock (_missGate)
+            return _misses.Any(m => now - m.Time <= MissMemory &&
+                                    Math.Abs(m.Spot.X - spot.X) < 40 && Math.Abs(m.Spot.Y - spot.Y) < 40);
+    }
+
     /// <summary>Forget the motion history (camera turned, character walked).</summary>
     public void Reset() => _previous = null;
 
