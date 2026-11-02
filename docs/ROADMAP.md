@@ -19,4 +19,5 @@
 - [ ] Ölüm algılama ve yeniden doğma
 - [ ] Envanter dolu algılama
 - [ ] Mini harita ile rota / alan sınırı
-- [ ] İsteğe bağlı Metin taşı / mob algılama
+- [x] Mob bulma: saldırı imleci ile tarama, hedef barı ile öğrenme
+- [ ] İsteğe bağlı Metin taşı algılama

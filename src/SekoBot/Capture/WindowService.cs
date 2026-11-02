@@ -7,15 +7,22 @@ namespace SekoBot.Capture;
 internal sealed record WindowInfo(nint Handle, uint ProcessId, string Title,
     int Width, int Height, bool IsMinimized)
 {
-    public bool IsMetin2 =>
-        Title.Replace(" ", "", StringComparison.Ordinal)
-             .Contains("metin2", StringComparison.OrdinalIgnoreCase);
+    /// <summary>The game window ("Mobile2 Global", or any Metin2 client).</summary>
+    public bool IsMetin2 => WindowService.IsGameTitle(Title);
 
     public override string ToString() => $"{Title} · {Width}×{Height} · PID {ProcessId}";
 }
 
 internal static class WindowService
 {
+    /// <summary>Window titles that count as the game; the first one comes from the profile.</summary>
+    public static string[] GameTitles { get; set; } = ["Mobile2 Global", "Metin2"];
+
+    private static string Squash(string text) => text.Replace(" ", "", StringComparison.Ordinal);
+
+    public static bool IsGameTitle(string title) =>
+        GameTitles.Any(t => t.Length > 0 && Squash(title).Contains(Squash(t), StringComparison.OrdinalIgnoreCase));
+
     public static IReadOnlyList<WindowInfo> GetOpenWindows()
     {
         var found = new List<WindowInfo>();

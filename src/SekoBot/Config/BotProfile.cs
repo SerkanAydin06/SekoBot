@@ -42,6 +42,9 @@ internal sealed class KeyBindings
 
 internal sealed class BotProfile
 {
+    /// <summary>Title of the game window; the bot connects to it on its own.</summary>
+    public string GameWindowTitle { get; set; } = "Mobile2 Global";
+
     public BarSpec? HpBar { get; set; }
     public BarSpec? MpBar { get; set; }
     /// <summary>Optional: the selected target's HP bar. Lets the bot keep hitting a living mob
@@ -59,7 +62,12 @@ internal sealed class BotProfile
     /// <summary>A low HP/MP reading must last this long before a potion or stop (filters bad frames).</summary>
     public int BarConfirmMs { get; set; } = 300;
 
-    /// <summary>How long the attack key is held per cycle.</summary>
+    /// <summary>Find mobs by hovering (attack cursor) and click them; needs the target bar to learn.</summary>
+    public bool AutoTarget { get; set; } = true;
+    /// <summary>How long to wait for a target bar after asking for a mob search.</summary>
+    public int SearchTimeoutMs { get; set; } = 4500;
+
+    /// <summary>How long the attack key is held per cycle (blind attack, without mob search).</summary>
     public int FightMs { get; set; } = 4000;
     /// <summary>Upper limit while the target bar still shows a living target.</summary>
     public int FightMaxMs { get; set; } = 20000;

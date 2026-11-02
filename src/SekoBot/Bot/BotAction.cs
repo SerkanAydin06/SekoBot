@@ -28,6 +28,12 @@ internal sealed record KeyHoldAction(Keys Key, int Milliseconds) : BotAction
     public override string ToString() => $"Basılı tut {Key} {Milliseconds} ms";
 }
 
+/// <summary>Hover around the character until the cursor shows a monster, then click it.</summary>
+internal sealed record FindTargetAction : BotAction
+{
+    public override string ToString() => "Mob ara";
+}
+
 internal sealed record StopAction(string Reason) : BotAction
 {
     public override string ToString() => "Dur: " + Reason;
@@ -36,6 +42,7 @@ internal sealed record StopAction(string Reason) : BotAction
 internal enum BotPhase
 {
     Stopped,
+    Searching,
     Fighting,
     Looting,
     Turning
@@ -45,6 +52,7 @@ internal static class BotPhaseText
 {
     public static string ToTurkish(this BotPhase phase) => phase switch
     {
+        BotPhase.Searching => "Mob arıyor",
         BotPhase.Fighting => "Saldırıyor",
         BotPhase.Looting => "Eşya toplanıyor",
         BotPhase.Turning => "Yön değiştiriyor",

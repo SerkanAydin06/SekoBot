@@ -23,7 +23,9 @@ internal sealed class Brain
     private TimeSpan _lastAttackDown = Never, _lastHpPotion = Never, _lastMpPotion = Never;
     // When each low-bar condition was first seen; a single bad frame must not trigger anything.
     private TimeSpan _hpCriticalSince = Never, _hpLowSince = Never, _mpLowSince = Never;
-    private int _lootPresses;
+    private TimeSpan _targetGoneSince = Never;
+    private int _lootPresses, _failedSearches;
+    private bool _searchSent, _blindFight;
 
     public Brain(Func<BotProfile> profile) => _profile = profile;
 
@@ -35,7 +37,9 @@ internal sealed class Brain
     {
         _lastAttackDown = Never;
         _hpCriticalSince = _hpLowSince = _mpLowSince = Never;
-        Enter(BotPhase.Fighting, now);
+        _failedSearches = 0;
+        _blindFight = false;
+        Enter(_profile().AutoTarget ? BotPhase.Searching : BotPhase.Fighting, now);
     }
 
     public void Stop() => Phase = BotPhase.Stopped;
@@ -73,6 +77,9 @@ internal sealed class Brain
 
         switch (Phase)
         {
+            case BotPhase.Searching:
+                Search(state, p, actions);
+                break;
             case BotPhase.Fighting:
                 Fight(state, p, actions);
                 break;
@@ -81,7 +88,7 @@ internal sealed class Brain
                 break;
             case BotPhase.Turning:
                 if (now - _phaseSince >= _turnDuration)
-                    Enter(BotPhase.Fighting, now);
+                    Enter(NextAfterLoot(p), now);
                 break;
         }
         return actions;
@@ -99,11 +106,21 @@ internal sealed class Brain
         }
 
         var elapsed = now - _phaseSince;
-        if (elapsed < Ms(p.FightMs))
-            return;
-        bool targetAlive = state.TargetHp != null && state.HasTarget;
-        if (targetAlive && elapsed < Ms(p.FightMaxMs))
-            return;
+        if (p.AutoTarget && state.TargetHp != null && !_blindFight)
+        {
+            // A clicked mob: keep hitting until its bar is gone (briefly, to skip flicker).
+            bool gone = Confirmed(!state.HasTarget, ref _targetGoneSince, now, Ms(500));
+            if (!(gone && elapsed >= Ms(800)) && elapsed < Ms(p.FightMaxMs))
+                return;
+        }
+        else
+        {
+            if (elapsed < Ms(p.FightMs))
+                return;
+            bool targetAlive = state.TargetHp != null && state.HasTarget;
+            if (targetAlive && elapsed < Ms(p.FightMaxMs))
+                return;
+        }
 
         actions.Add(new KeyUpAction(p.Keys.Attack));
         _lastAttackDown = Never;
@@ -131,7 +148,8 @@ internal sealed class Brain
         Cycles++;
         // With a calibrated target bar we know when the area around us is empty.
         bool nothingAround = state.TargetHp != null && !state.HasTarget;
-        bool turn = nothingAround || (p.RotateEveryCycles > 0 && Cycles % p.RotateEveryCycles == 0);
+        // With mob search, turning happens when a search finds nothing.
+        bool turn = !p.AutoTarget && (nothingAround || (p.RotateEveryCycles > 0 && Cycles % p.RotateEveryCycles == 0));
         bool move = p.MoveEveryCycles > 0 && Cycles % p.MoveEveryCycles == 0;
 
         _turnDuration = TimeSpan.Zero;
@@ -145,7 +163,45 @@ internal sealed class Brain
             actions.Add(new KeyHoldAction(p.Keys.MoveForward, p.MoveHoldMs));
             _turnDuration += Ms(p.MoveHoldMs + 150);
         }
-        Enter(turn || move ? BotPhase.Turning : BotPhase.Fighting, now);
+        Enter(turn || move ? BotPhase.Turning : NextAfterLoot(p), now);
+    }
+
+    private static BotPhase NextAfterLoot(BotProfile p) => p.AutoTarget ? BotPhase.Searching : BotPhase.Fighting;
+
+    /// <summary>Ask the input worker to find and click a mob, then wait for its target bar.</summary>
+    private void Search(GameState state, BotProfile p, List<BotAction> actions)
+    {
+        var now = state.Time;
+        if (state.HasTarget)
+        {
+            _failedSearches = 0;
+            _blindFight = false;
+            Enter(BotPhase.Fighting, now);
+            Fight(state, p, actions);
+            return;
+        }
+        if (!_searchSent)
+        {
+            actions.Add(new FindTargetAction());
+            _searchSent = true;
+            return;
+        }
+        if (now - _phaseSince < Ms(p.SearchTimeoutMs))
+            return;
+
+        _failedSearches++;
+        // Target bar not known yet (nothing to verify a click with), or several searches in a row
+        // found nothing (cursor can't be read, empty area): attack blindly so the bot never idles.
+        if (state.TargetHp == null || _failedSearches >= 3)
+        {
+            _failedSearches = 0;
+            _blindFight = true;
+            Enter(BotPhase.Fighting, now);
+            return;
+        }
+        actions.Add(new KeyHoldAction(p.Keys.RotateCamera, p.RotateHoldMs));
+        _turnDuration = Ms(p.RotateHoldMs + 150);
+        Enter(BotPhase.Turning, now);
     }
 
     /// <summary>True once <paramref name="condition"/> has held without interruption for <paramref name="needed"/>.
@@ -166,6 +222,12 @@ internal sealed class Brain
 
     private void Enter(BotPhase phase, TimeSpan now)
     {
+        if (phase == BotPhase.Searching)
+            _searchSent = false;
+        if (phase == BotPhase.Fighting)
+            _targetGoneSince = Never;
+        if (phase == BotPhase.Looting)
+            _blindFight = false;
         Phase = phase;
         _phaseSince = now;
     }
