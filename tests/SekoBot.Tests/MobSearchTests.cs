@@ -125,7 +125,7 @@ public class MobSearchBrainTests
 
     private static (Brain Brain, BotProfile Profile) Started(bool targetBarKnown = true)
     {
-        var profile = new BotProfile { AutoTarget = true, NavigateMode = false };
+        var profile = new BotProfile { SkillEverySec = new int[5], AutoTarget = true, NavigateMode = false };
         if (targetBarKnown)
             profile.TargetBar = new BarSpec();
         var brain = new Brain(() => profile);

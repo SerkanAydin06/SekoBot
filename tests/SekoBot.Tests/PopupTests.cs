@@ -37,7 +37,7 @@ public class PopupTests
     [Fact]
     public void Bot_presses_esc_once_and_only_again_if_the_window_is_still_there()
     {
-        var p = new BotProfile();
+        var p = new BotProfile { SkillEverySec = new int[5] };
         var brain = new Brain(() => p);
         brain.Start(TimeSpan.Zero);
         GameState At(double ms, bool popup, params Point[] mobs) =>

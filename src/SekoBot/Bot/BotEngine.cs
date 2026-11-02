@@ -360,7 +360,7 @@ internal sealed class BotEngine : IDisposable
             _brain.Start(_clock.Elapsed);
         }
         _log(dryRun ? "Bot kuru çalışmada başladı (girdi gönderilmez)."
-            : background ? "Bot arka plan modunda başladı (deneysel): tuşlar oyun penceresine mesajla gidiyor. Acil durdurma: F12"
+            : background ? "Bot başladı (oyun arka planda kalabilir). Acil durdurma: F12"
             : "Bot başladı. Acil durdurma: F12");
         return true;
     }

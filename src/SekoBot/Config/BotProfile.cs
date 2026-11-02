@@ -45,6 +45,8 @@ internal sealed class KeyBindings
     public Keys CameraTop { get; set; } = Keys.G;
     /// <summary>Held at start: zooms the camera out.</summary>
     public Keys ZoomOut { get; set; } = Keys.F;
+    /// <summary>Buff skills, pressed in a loop (see <see cref="BotProfile.SkillEverySec"/>).</summary>
+    public Keys[] Skills { get; set; } = [Keys.F1, Keys.F2, Keys.F3, Keys.F4, Keys.F5];
     /// <summary>Closes a window opened over the game (shop advert after a level-up).</summary>
     public Keys CloseWindow { get; set; } = Keys.Escape;
 }
@@ -53,6 +55,16 @@ internal sealed class BotProfile
 {
     /// <summary>Current profile format; older files are upgraded once by <see cref="ProfileStore"/>.</summary>
     public const int CurrentVersion = 2;
+
+    /// <summary>Number of skill keys (F1–F5).</summary>
+    public const int SkillSlots = 5;
+
+    /// <summary>How often each skill key (F1–F5) is pressed again, in seconds; 0 = never.</summary>
+    public int[] SkillEverySec { get; set; } = [60, 60, 0, 0, 0];
+    /// <summary>At least this long between two skill presses.</summary>
+    public int SkillGapMs { get; set; } = 1500;
+    /// <summary>Stand still this long while a skill is cast.</summary>
+    public int SkillCastMs { get; set; } = 1000;
 
     /// <summary>0 in files written before versioning.</summary>
     public int Version { get; set; }
@@ -67,15 +79,11 @@ internal sealed class BotProfile
     public BarSpec? TargetBar { get; set; }
 
     public int PerceptionFps { get; set; } = 10;
-    /// <summary>Experimental: send keys/clicks to the game window as messages so it can stay in
-    /// the background. Works only if the game reads window messages.</summary>
-    public bool BackgroundInput { get; set; }
     /// <summary>Find HP/MP/target bars on screen automatically (manual marks always win).</summary>
     public bool AutoDetectBars { get; set; } = true;
 
     public double PotionHpBelow { get; set; } = 0.55;
     public double PotionMpBelow { get; set; } = 0.25;
-    public double StopHpBelow { get; set; } = 0.20;
     public int PotionCooldownMs { get; set; } = 1500;
     /// <summary>A low HP/MP reading must last this long before a potion or stop (filters bad frames).</summary>
     public int BarConfirmMs { get; set; } = 300;
@@ -163,6 +171,7 @@ internal static class ProfileStore
                 var loaded = JsonSerializer.Deserialize<BotProfile>(File.ReadAllText(ProfilePath), Options);
                 if (loaded != null)
                 {
+                    Normalize(loaded);
                     if (Upgrade(loaded))
                         try { Save(loaded); } catch { }
                     return loaded;
@@ -175,6 +184,21 @@ internal static class ProfileStore
             try { File.Copy(ProfilePath, ProfilePath + ".bozuk", true); } catch { }
         }
         return new BotProfile { Version = BotProfile.CurrentVersion };
+    }
+
+    /// <summary>Profiles written by older versions lack the skill lists or have them shorter.</summary>
+    internal static void Normalize(BotProfile profile)
+    {
+        var defaults = new BotProfile();
+        if (profile.SkillEverySec is not { Length: BotProfile.SkillSlots })
+        {
+            var every = new int[BotProfile.SkillSlots];
+            for (int i = 0; i < every.Length; i++)
+                every[i] = profile.SkillEverySec is { } old && i < old.Length ? Math.Max(0, old[i]) : defaults.SkillEverySec[i];
+            profile.SkillEverySec = every;
+        }
+        if (profile.Keys.Skills is not { Length: BotProfile.SkillSlots })
+            profile.Keys.Skills = defaults.Keys.Skills;
     }
 
     /// <summary>

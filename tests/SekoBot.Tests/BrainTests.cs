@@ -13,7 +13,7 @@ public class BrainTests
     private static (Brain Brain, BotProfile Profile) Started(Action<BotProfile>? configure = null)
     {
         // These tests cover the blind attack loop; mob search has its own tests.
-        var profile = new BotProfile { AutoTarget = false, NavigateMode = false, ReviveOnDeath = false };
+        var profile = new BotProfile { SkillEverySec = new int[5], AutoTarget = false, NavigateMode = false, ReviveOnDeath = false };
         configure?.Invoke(profile);
         var brain = new Brain(() => profile);
         brain.Start(TimeSpan.Zero);
@@ -75,18 +75,19 @@ public class BrainTests
     }
 
     [Fact]
-    public void Drinks_potion_with_cooldown_and_stops_on_critical_hp()
+    public void Drinks_potion_with_cooldown_and_never_stops_on_low_hp()
     {
         var (brain, p) = Started();
         Assert.DoesNotContain(brain.Tick(State(100, hp: 0.4)).OfType<KeyTapAction>(), a => a.Key == p.Keys.HpPotion);
         Assert.Contains(brain.Tick(State(450, hp: 0.4)).OfType<KeyTapAction>(), a => a.Key == p.Keys.HpPotion);
         Assert.DoesNotContain(brain.Tick(State(600, hp: 0.4)).OfType<KeyTapAction>(), a => a.Key == p.Keys.HpPotion);
-        Assert.Empty(brain.Tick(State(700, hp: 0.1)).OfType<StopAction>());
-        var stop = brain.Tick(State(1050, hp: 0.1));
-        Assert.Single(stop.OfType<StopAction>());
-        Assert.Contains(stop, a => a is KeyUpAction);
-        Assert.Equal(BotPhase.Stopped, brain.Phase);
-        Assert.Equal(1, brain.Potions);
+        // Very low HP: keep going (stopping would let the mobs finish us off), keep drinking.
+        var actions = new List<BotAction>();
+        for (double t = 700; t < 3000; t += 100)
+            actions.AddRange(brain.Tick(State(t, hp: 0.1)));
+        Assert.DoesNotContain(actions, a => a is StopAction);
+        Assert.NotEqual(BotPhase.Stopped, brain.Phase);
+        Assert.Contains(actions.OfType<KeyTapAction>(), a => a.Key == p.Keys.HpPotion);
     }
 
     [Fact]

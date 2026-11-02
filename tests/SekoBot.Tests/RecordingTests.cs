@@ -39,6 +39,7 @@ public sealed class RecordingTests : IDisposable
         using var full = HpFrame(1, 0);
         return new BotProfile
         {
+            SkillEverySec = new int[5],
             HpBar = BarReader.Calibrate(full, new Rectangle(20, 40, 160, 10)),
             RecordFrameIntervalMs = 100
         };

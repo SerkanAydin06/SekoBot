@@ -23,7 +23,7 @@ internal sealed partial class Brain
     private TimeSpan _lastAttackDown = Never, _lastHpPotion = Never, _lastMpPotion = Never, _lastEsc = Never;
     private TimeSpan _lastReviveClick = Never, _recoverSince = Never;
     // When each low-bar condition was first seen; a single bad frame must not trigger anything.
-    private TimeSpan _hpCriticalSince = Never, _hpLowSince = Never, _mpLowSince = Never;
+    private TimeSpan _hpLowSince = Never, _mpLowSince = Never;
     private TimeSpan _targetGoneSince = Never, _searchSentAt = Never, _lastProgress = Never;
     private double _targetHpBest = 1;
     /// <summary>A target bar value given up on (stuck mob or something that only looks like a
@@ -42,7 +42,8 @@ internal sealed partial class Brain
     public void Start(TimeSpan now)
     {
         _lastAttackDown = Never;
-        _hpCriticalSince = _hpLowSince = _mpLowSince = _lastEsc = Never;
+        _hpLowSince = _mpLowSince = _lastEsc = Never;
+        ResetSkills();
         _failedSearches = 0;
         _blindFight = false;
         if (_profile().NavigateMode)
@@ -80,14 +81,10 @@ internal sealed partial class Brain
         if (Phase == BotPhase.Recovering && Recover(state, p, actions))
             return actions;
 
+        // Low HP never stops the bot: stopping would let the mobs finish us off anyway. Potions
+        // below, and if we die anyway the death handling above revives us.
         var confirm = Ms(Math.Max(0, p.BarConfirmMs));
         double? hp = state.Hp;
-        // With revive on, dying is handled above; stopping at low HP would end the farm instead.
-        if (!p.ReviveOnDeath && Confirmed(hp < p.StopHpBelow, ref _hpCriticalSince, now, confirm))
-        {
-            Phase = BotPhase.Stopped;
-            return [new KeyUpAction(p.Keys.Attack), new StopAction($"HP kritik (%{hp!.Value * 100:0})")];
-        }
         if (Confirmed(hp < p.PotionHpBelow, ref _hpLowSince, now, confirm) &&
             now - _lastHpPotion >= Ms(p.PotionCooldownMs))
         {
@@ -121,6 +118,8 @@ internal sealed partial class Brain
             }
             return actions;
         }
+
+        CastSkills(state, p, actions);
 
         if (p.NavigateMode)
         {

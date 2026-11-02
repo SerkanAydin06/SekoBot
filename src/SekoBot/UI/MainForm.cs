@@ -17,8 +17,9 @@ internal sealed class MainForm : Form
     private readonly BotProfile _profile = ProfileStore.Load();
     private readonly ListBox _windows;
     private readonly Button _connect, _startBot, _stopBot, _record, _replay;
-    private readonly CheckBox _dryRun, _background;
-    private readonly NumericUpDown _potionHp, _stopHp, _attackRange, _searchSeconds;
+    private readonly CheckBox _dryRun;
+    private readonly NumericUpDown _potionHp, _attackRange, _searchSeconds;
+    private readonly NumericUpDown[] _skillEvery;
     private readonly PreviewControl _preview;
     private readonly Button[] _calibrationButtons;
     private readonly Label _status, _scanStatus, _captureName, _calibrationHint, _calibrationState;
@@ -122,41 +123,40 @@ internal sealed class MainForm : Form
         _stopBot = Theme.Button(botCard, "■  Durdur  (F12)", new Rectangle(14, 108, 268, 34), Theme.Danger, Theme.DangerHover);
         _stopBot.Click += (_, _) => StopBot("kullanıcı durdurdu", byUser: true);
 
-        Theme.Label(botCard, "HP iksiri (%)", new Rectangle(14, 156, 170, 26), 9f, Theme.Muted);
-        _potionHp = Theme.Number(botCard, new Rectangle(192, 156, 90, 26), 5, 95, (decimal)(_profile.PotionHpBelow * 100));
-        Theme.Label(botCard, "Botu durdur HP (%)", new Rectangle(14, 188, 170, 26), 9f, Theme.Muted);
-        _stopHp = Theme.Number(botCard, new Rectangle(192, 188, 90, 26), 0, 90, (decimal)(_profile.StopHpBelow * 100));
+        Theme.Label(botCard, "HP iksiri (%)", new Rectangle(14, 150, 170, 26), 9f, Theme.Muted);
+        _potionHp = Theme.Number(botCard, new Rectangle(192, 150, 90, 26), 5, 95, (decimal)(_profile.PotionHpBelow * 100));
         // Walk mode: how close (share of the screen height) a mob must be before Space is held.
-        Theme.Label(botCard, "Saldırı mesafesi (%)", new Rectangle(14, 220, 170, 26), 9f, Theme.Muted);
-        _attackRange = Theme.Number(botCard, new Rectangle(192, 220, 90, 26), 1, 20,
+        Theme.Label(botCard, "Saldırı mesafesi (%)", new Rectangle(14, 180, 170, 26), 9f, Theme.Muted);
+        _attackRange = Theme.Number(botCard, new Rectangle(192, 180, 90, 26), 1, 20,
             Math.Clamp((decimal)Math.Round(_profile.AttackRadius * 100, 1), 1, 20), 1, 0.5m);
-        Theme.Label(botCard, "Mob arama süresi (sn)", new Rectangle(14, 252, 176, 26), 9f, Theme.Muted);
-        _searchSeconds = Theme.Number(botCard, new Rectangle(192, 252, 90, 26), 2, 30,
+        Theme.Label(botCard, "Mob arama süresi (sn)", new Rectangle(14, 210, 176, 26), 9f, Theme.Muted);
+        _searchSeconds = Theme.Number(botCard, new Rectangle(192, 210, 90, 26), 2, 30,
             Math.Clamp(_profile.SearchTimeoutMs / 1000m, 2, 30), 0, 1);
         _potionHp.ValueChanged += (_, _) => { _profile.PotionHpBelow = (double)_potionHp.Value / 100; SaveProfile(); };
-        _stopHp.ValueChanged += (_, _) => { _profile.StopHpBelow = (double)_stopHp.Value / 100; SaveProfile(); };
         _attackRange.ValueChanged += (_, _) => { _profile.AttackRadius = (double)_attackRange.Value / 100; SaveProfile(); };
         _searchSeconds.ValueChanged += (_, _) => { _profile.SearchTimeoutMs = (int)(_searchSeconds.Value * 1000); SaveProfile(); };
 
-        var openFolder = Theme.Button(botCard, "📁 Klasör", new Rectangle(14, 290, 80, 32), Theme.Secondary, Theme.SecondaryHover);
+        // Buff skills: F1–F5, each pressed again every N seconds (0 = off).
+        Theme.Label(botCard, "Buff becerileri: kaç saniyede bir (0 = kapalı)", new Rectangle(14, 240, 268, 18), 8f, Theme.Muted);
+        _skillEvery = new NumericUpDown[BotProfile.SkillSlots];
+        for (int i = 0; i < BotProfile.SkillSlots; i++)
+        {
+            int slot = i;
+            int x = 14 + (i % 3) * 90, y = 262 + (i / 3) * 30;
+            Theme.Label(botCard, "F" + (i + 1), new Rectangle(x, y, 24, 26), 9f, Theme.Text, FontStyle.Bold);
+            _skillEvery[i] = Theme.Number(botCard, new Rectangle(x + 24, y, 60, 26), 0, 3600,
+                Math.Clamp(_profile.SkillEverySec[i], 0, 3600));
+            _skillEvery[i].ValueChanged += (_, _) => { _profile.SkillEverySec[slot] = (int)_skillEvery[slot].Value; SaveProfile(); };
+        }
+
+        var openFolder = Theme.Button(botCard, "📁 Klasör", new Rectangle(14, 326, 80, 32), Theme.Secondary, Theme.SecondaryHover);
         openFolder.Click += (_, _) => OpenProfileFolder();
-        _record = Theme.Button(botCard, "⏺ Kaydet", new Rectangle(98, 290, 88, 32), Theme.Secondary, Theme.SecondaryHover);
+        _record = Theme.Button(botCard, "⏺ Kaydet", new Rectangle(98, 326, 88, 32), Theme.Secondary, Theme.SecondaryHover);
         _record.Click += (_, _) => ToggleRecording();
-        _replay = Theme.Button(botCard, "▶ Kaydı oynat", new Rectangle(190, 290, 92, 32), Theme.Secondary, Theme.SecondaryHover);
+        _replay = Theme.Button(botCard, "▶ Kaydı oynat", new Rectangle(190, 326, 92, 32), Theme.Secondary, Theme.SecondaryHover);
         _replay.Click += async (_, _) => await ReplayAsync();
         foreach (var small in new[] { openFolder, _record, _replay })
             small.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
-        _background = new CheckBox
-        {
-            Text = "Arka planda çalış (deneysel)",
-            Checked = _profile.BackgroundInput,
-            Bounds = new Rectangle(14, 328, 268, 24),
-            ForeColor = Theme.Text,
-            BackColor = botCard.BackColor,
-            Font = new Font("Segoe UI", 9f)
-        };
-        _background.CheckedChanged += (_, _) => { _profile.BackgroundInput = _background.Checked; SaveProfile(); };
-        botCard.Controls.Add(_background);
 
         // ── Preview card ─────────────────────────────────────────
         var previewCard = new Card { Bounds = new Rectangle(318, 66, 850, 478) };
@@ -412,13 +412,14 @@ internal sealed class MainForm : Form
             StopBot("duraklatıldı", byUser: true);
             return;
         }
-        if (!_engine.StartBot(_dryRun.Checked, _background.Checked, out string error))
+        // Input always goes straight to the game window, so the game may stay in the background.
+        if (!_engine.StartBot(_dryRun.Checked, background: true, out string error))
         {
             WriteLog(error);
             SetStatus("BAŞLATILAMADI", Theme.Yellow);
             return;
         }
-        SetStatus(_dryRun.Checked ? "BOT · KURU ÇALIŞMA" : _background.Checked ? "BOT · ARKA PLAN" : "BOT ÇALIŞIYOR",
+        SetStatus(_dryRun.Checked ? "BOT · KURU ÇALIŞMA" : "BOT ÇALIŞIYOR",
             _dryRun.Checked ? Theme.Yellow : Theme.Green);
         UpdateControls();
     }
@@ -656,7 +657,6 @@ internal sealed class MainForm : Form
         _record.FlatAppearance.MouseOverBackColor = recording ? Theme.DangerHover : Theme.SecondaryHover;
         _replay.Enabled = !_replaying;
         _dryRun.Enabled = !running;
-        _background.Enabled = !running;
         bool hasSelection = connected && _preview.Selection != null;
         for (int i = 0; i < 3; i++)
             _calibrationButtons[i].Enabled = hasSelection;
