@@ -36,6 +36,9 @@ internal sealed class BotEngine : IDisposable
     private InputExecutor? _input;
     private TimeSpan _botStarted;
     private double _captureFps;
+    private long _framesReceived;
+    private int _previewFps;
+    private ChannelWriter<Frame>? _writer;
     private bool _disposed;
 
     public BotEngine(WindowInfo window, BotProfile profile, Action<string> log)
@@ -61,11 +64,33 @@ internal sealed class BotEngine : IDisposable
         var channel = Channel.CreateBounded<Frame>(
             new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true },
             dropped => dropped.Dispose());
-        _capture = CaptureFactory.Create(_window, previewFps, _log);
-        _capture.Failed += message => CaptureFailed?.Invoke(message);
-        _log("Yakalama yöntemi: " + _capture.Name);
-        _capture.Start(channel.Writer);
+        _previewFps = previewFps;
+        _writer = channel.Writer;
+        StartCapture(CaptureFactory.Create(_window, previewFps, _log));
         _loop = Task.Run(() => RunAsync(channel.Reader, _cts.Token));
+    }
+
+    private void StartCapture(ICaptureSource capture)
+    {
+        _capture = capture;
+        capture.Failed += message => OnCaptureFailed(capture, message);
+        _log("Yakalama yöntemi: " + capture.Name);
+        capture.Start(_writer!);
+    }
+
+    /// <summary>If GPU capture breaks before delivering anything, silently fall back to GDI.</summary>
+    private void OnCaptureFailed(ICaptureSource capture, string message)
+    {
+        if (_disposed || !ReferenceEquals(capture, _capture))
+            return;
+        if (capture is WgcCapture && Interlocked.Read(ref _framesReceived) == 0)
+        {
+            _log(message + " GDI yakalamaya geçiliyor.");
+            capture.Dispose();
+            StartCapture(new GdiCapture(_window, _previewFps));
+            return;
+        }
+        CaptureFailed?.Invoke(message);
     }
 
     public void ReloadTemplates() =>
@@ -81,6 +106,7 @@ internal sealed class BotEngine : IDisposable
             await foreach (var frame in frames.ReadAllAsync(token))
             {
                 fpsFrames++;
+                Interlocked.Increment(ref _framesReceived);
                 if (fpsWindow.Elapsed.TotalSeconds >= 1)
                 {
                     _captureFps = fpsFrames / fpsWindow.Elapsed.TotalSeconds;

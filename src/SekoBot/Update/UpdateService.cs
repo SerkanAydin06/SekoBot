@@ -40,7 +40,7 @@ internal static class UpdateService
         CancellationToken token = default)
     {
         // Only published release builds auto-update. Developers never overwrite build output.
-        if (BuildInfo.Commit == "development")
+        if (BuildInfo.Commit.Length != 40)
             return new UpdateCheckResult(null, null);
 
         string? executable = Environment.ProcessPath;
