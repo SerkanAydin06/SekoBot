@@ -15,6 +15,12 @@ internal sealed record GameState(
     /// <summary>Probable mobs (client pixels, nearest to the character first), from motion.</summary>
     public IReadOnlyList<Point> MobCandidates { get; init; } = [];
 
+    /// <summary>The death dialog is showing.</summary>
+    public bool Dead { get; init; }
+
+    /// <summary>"Burada yeniden başla" can be clicked (its text turned white).</summary>
+    public bool ReviveReady { get; init; }
+
     /// <summary>A window covers the game (e.g. the advert after a level-up).</summary>
     public bool PopupOpen { get; init; }
 

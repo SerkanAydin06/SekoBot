@@ -19,6 +19,10 @@ Metin2 için tek dosyalı Windows farm botu. Kurulum gerekmez, açılışta kend
 
 Tuşlar (Space saldırı, Z toplama, 1/2 iksir, E kamera, W yürüme) ve süreler `%LOCALAPPDATA%\SekoBot\profile.json` içinde; arayüzden **Klasör** ile açılır.
 
+## Ölünce
+
+Karakter ölünce ekrana gelen pencereyi bot tanır: tuşları bırakır, **"Burada yeniden başla"** düğmesinin yazısı griden beyaza dönüp tıklanabilir olunca ona tıklar. Dirilince HP %90'a gelene kadar (en fazla 30 sn) 1 tuşuyla iksir içer, kamerayı yeniden ayarlar ve avlanmaya devam eder. Bu açıkken (`"ReviveOnDeath": true`, varsayılan) düşük HP'de bot durmaz. Ayarlar: `ReviveHealTo` (0.90), `ReviveHealMaxMs` (30000).
+
 ## Açılır pencereler
 
 Level atlayınca çıkan reklam penceresi ve yanlışlıkla açılan Esc menüsü gibi oyunun üstüne açılan pencereleri bot görür (ekranın ortasındaki uzun, düz başlık çubuğundan ya da menünün arkasında bulanıklaşan oyundan), yürümeyi ve saldırıyı bırakır ve **bir kez Esc**'ye basar. Pencere 3 sn sonra hâlâ açıksa tekrar basar; böylece boşuna Esc basıp oyun menüsünü açmaz. Kapatmak için `profile.json` içinde `"ClosePopups": false`. Not: bot çalışırken envanter gibi bir pencereyi kendin açarsan onu da kapatır.

@@ -115,6 +115,7 @@ public class NavigateTests
     public void Still_drinks_potions_and_stops_on_critical_hp()
     {
         var (brain, p) = Ready();
+        p.ReviveOnDeath = false; // with revive on, low HP doesn't stop the bot
         var low = new GameState(TimeSpan.FromMilliseconds(4000), W, H, 0.4, 1, null, 1);
         brain.Tick(low);
         var potion = brain.Tick(low with { Time = TimeSpan.FromMilliseconds(4400) });

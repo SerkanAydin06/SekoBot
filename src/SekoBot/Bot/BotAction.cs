@@ -53,7 +53,9 @@ internal enum BotPhase
     Moving,
     Fighting,
     Looting,
-    Turning
+    Turning,
+    Dead,
+    Recovering
 }
 
 internal static class BotPhaseText
@@ -66,6 +68,8 @@ internal static class BotPhaseText
         BotPhase.Fighting => "Saldırıyor",
         BotPhase.Looting => "Eşya toplanıyor",
         BotPhase.Turning => "Yön değiştiriyor",
+        BotPhase.Dead => "Öldü, yeniden doğma bekleniyor",
+        BotPhase.Recovering => "Can dolduruluyor",
         _ => "Durduruldu"
     };
 }
