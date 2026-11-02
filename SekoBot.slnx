@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/SekoBot/SekoBot.csproj" />
+  <Project Path="tests/SekoBot.Tests/SekoBot.Tests.csproj" />
+</Solution>

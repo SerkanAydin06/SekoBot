@@ -2,61 +2,54 @@ name: Windows Build
 
 on:
   push:
-    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: sekobot-preview-release
-  cancel-in-progress: true
+  group: build-${{ github.ref }}
+  # Never cancel a main build mid-release: that leaves a new EXE next to an old manifest.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:
-    name: Standalone Windows x64 EXE
+    name: Test + standalone Windows x64 EXE
     runs-on: windows-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup .NET 10 SDK (only on GitHub runner)
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
-      - name: Embed Git commit into the executable
+      - name: Embed build identity
         shell: pwsh
         run: |
-          $code = 'namespace SekoBot; internal static class BuildInfo { internal const string Commit = "' + $env:GITHUB_SHA + '"; }'
-          Set-Content -Path src/BuildInfo.cs -Value $code -Encoding utf8
+          $version = "0.4.${{ github.run_number }}"
+          $code = "namespace SekoBot; internal static class BuildInfo { internal const string Commit = `"$env:GITHUB_SHA`"; internal const string Version = `"$version`"; }"
+          Set-Content -Path src/SekoBot/BuildInfo.cs -Value $code -Encoding utf8
 
-      - name: Restore project
-        run: dotnet restore SekoBot.Windows.csproj -r win-x64
+      - name: Test
+        run: dotnet test tests/SekoBot.Tests/SekoBot.Tests.csproj -c Release
 
-      - name: Publish independent single-file EXE
+      - name: Publish single-file EXE
         shell: pwsh
         run: |
-          dotnet publish SekoBot.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:DebugSymbols=false -p:DebugType=None -o publish
-          if (-not (Test-Path "publish/SekoBot.exe")) {
-            throw "Standalone SekoBot.exe was not generated."
-          }
-          Get-Item publish/SekoBot.exe | Select-Object Name, Length
+          dotnet publish src/SekoBot/SekoBot.csproj -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true -p:DebugType=None -o publish
+          if (-not (Test-Path publish/SekoBot.exe)) { throw "SekoBot.exe was not generated." }
           $hash = (Get-FileHash publish/SekoBot.exe -Algorithm SHA256).Hash.ToLowerInvariant()
           $size = (Get-Item publish/SekoBot.exe).Length
-          $manifest = @{ commit = $env:GITHUB_SHA; sha256 = $hash; length = $size }
-          $manifest | ConvertTo-Json -Compress | Set-Content -Path publish/SekoBot.manifest.json -Encoding utf8
-          Get-FileHash publish/SekoBot.exe -Algorithm SHA256 | Format-List
+          @{ commit = $env:GITHUB_SHA; sha256 = $hash; length = $size } |
+            ConvertTo-Json -Compress | Set-Content -Path publish/SekoBot.manifest.json -Encoding utf8
+          "SekoBot.exe: $size bytes, sha256 $hash"
 
-      - name: Upload backup build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: SekoBot-Windows-x64
-          path: publish/SekoBot.exe
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Publish direct EXE download (rolling preview)
+      - name: Publish rolling preview release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: preview
@@ -70,7 +63,5 @@ jobs:
             publish/SekoBot.exe
             publish/SekoBot.manifest.json
           body: |
-            Python / Godot kurulumu gerektirmeyen, tek dosyalı Windows x64 SekoBot.
-            Assets > SekoBot.exe ile doğrudan indirilebilir.
-            Şu anda açık pencereleri bulur, canlı görüntü alır ve PNG kaydeder.
+            Tek dosyalı Windows x64 SekoBot. Kurulum gerekmez; açılışta kendini otomatik günceller.
             Kod commit'i: ${{ github.sha }}

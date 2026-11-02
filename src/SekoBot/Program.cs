@@ -1,6 +1,3 @@
-using System;
-using System.Windows.Forms;
-
 namespace SekoBot;
 
 internal static class Program
@@ -9,6 +6,6 @@ internal static class Program
     private static void Main()
     {
         ApplicationConfiguration.Initialize();
-        Application.Run(new DashboardForm());
+        Application.Run(new UI.MainForm());
     }
 }

@@ -4,13 +4,13 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
-namespace SekoBot;
+namespace SekoBot.Update;
 
 internal sealed record PreparedUpdate(string Version, string FilePath);
 internal sealed record UpdateCheckResult(PreparedUpdate? Update, string? Error);
 
 /// <summary>
-/// User-approved auto-update from the project-owned GitHub preview release.
+/// Silent auto-update from the project-owned GitHub preview release.
 /// Downloads to a sibling temporary file and verifies SHA-256 before replacing anything.
 /// </summary>
 internal static class UpdateService
@@ -25,7 +25,7 @@ internal static class UpdateService
     private static HttpClient CreateClient()
     {
         var client = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
-        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SekoBot", "0.3"));
+        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SekoBot", "0.4"));
         return client;
     }
 
@@ -158,7 +158,7 @@ exit /B 1
         launch.ArgumentList.Add(executable);
         launch.ArgumentList.Add(update.FilePath);
 
-        Process.Start(launch)
+        _ = Process.Start(launch)
             ?? throw new InvalidOperationException("Windows güncelleme işlemi başlatılamadı.");
     }
 }
