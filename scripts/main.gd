@@ -485,8 +485,10 @@ func _refresh_windows() -> void:
 	if _windows.is_empty():
 		if bool(info.get("ready", false)):
 			_set_status("PENCERE BEKLENİYOR", MUTED)
+			_window_selector.set_item_text(0, "Uygun pencere bulunamadı")
 		else:
 			_set_status("TARANIYOR", MUTED)
+			_window_selector.set_item_text(0, "Windows pencereleri taranıyor...")
 		_preview_caption.text = "Pencere bulunamadı"
 	else:
 		_set_status("HAZIR", GREEN)
