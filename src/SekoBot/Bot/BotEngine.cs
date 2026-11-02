@@ -135,7 +135,7 @@ internal sealed class BotEngine : IDisposable
                         {
                             // Top-down camera: the name sits right on the mob.
                             int down = (int)(frame.Height * 0.02);
-                            var mobs = NameFinder.Find(frame)
+                            var mobs = NameFinder.Find(frame, profile.RequireLevelTag)
                                 .Select(n => new Point(n.X + n.Width / 2, n.Y + n.Height / 2 + down))
                                 .ToList();
                             state = state with { MobCandidates = mobs };

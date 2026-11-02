@@ -12,7 +12,12 @@ internal static class NameFinder
     private const int Cell = 4;
 
     /// <returns>Bounding boxes (client pixels) of red names, in no particular order.</returns>
-    public static List<Rectangle> Find(Frame frame)
+    public static List<Rectangle> Find(Frame frame) => Find(frame, requireLevelTag: true);
+
+    /// <param name="requireLevelTag">Only count red text with the green "Lv.N" tag right before
+    /// it, like every mob name has. Floating damage numbers, the HP bar over the character's
+    /// head and red effects don't have one.</param>
+    public static List<Rectangle> Find(Frame frame, bool requireLevelTag)
     {
         int w = frame.Width, h = frame.Height;
         int gw = w / Cell, gh = h / Cell;
@@ -84,9 +89,35 @@ internal static class NameFinder
             // (≤ 8 px, a bar) is not a name.
             if (ch <= 2 && PixelDensity(frame, box) > 0.6)
                 continue;
+            if (requireLevelTag && !HasLevelTag(frame, box))
+                continue;
             names.Add(box);
         }
         return names;
+    }
+
+    /// <summary>
+    /// The green "Lv.6" in front of a mob name. Measured on a real screenshot: pure green
+    /// (red and blue under 40 % of green), 75–82 such pixels next to each name, none on grass.
+    /// </summary>
+    private static bool HasLevelTag(Frame frame, Rectangle name)
+    {
+        int width = Math.Max(48, name.Height * 4);
+        int x0 = Math.Max(0, name.Left - width), x1 = Math.Min(frame.Width, name.Left + 4);
+        int y0 = Math.Max(0, name.Top - 4), y1 = Math.Min(frame.Height, name.Bottom + 4);
+        var data = frame.Data;
+        int green = 0;
+        for (int y = y0; y < y1; y++)
+        for (int x = x0; x < x1; x++)
+        {
+            int i = y * frame.Stride + x * 4;
+            int b = data[i], g = data[i + 1], r = data[i + 2];
+            int max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b));
+            if (g == max && g >= 110 && r * 100 < g * 60 && b * 100 < g * 60 && (max - min) * 255 >= 90 * max)
+                if (++green >= 12)
+                    return true;
+        }
+        return false;
     }
 
     /// <summary>

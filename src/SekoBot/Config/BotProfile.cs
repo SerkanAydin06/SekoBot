@@ -89,6 +89,9 @@ internal sealed class BotProfile
     public int CameraRefreshMs { get; set; } = 30000;
     /// <summary>A mob counts as "next to the character" within this part of the screen height.</summary>
     public double AttackRadius { get; set; } = 0.05;
+    /// <summary>Only red text with the green "Lv.N" in front counts as a mob name (filters out
+    /// damage numbers and the HP bar over the character).</summary>
+    public bool RequireLevelTag { get; set; } = true;
     /// <summary>While attacking, press the pickup key this often.</summary>
     public int LootEveryMs { get; set; } = 1500;
     /// <summary>No mob on screen: walk forward this long, then turn the camera, and look again.</summary>
