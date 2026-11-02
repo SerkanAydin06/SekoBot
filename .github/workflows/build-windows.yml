@@ -25,6 +25,12 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Embed Git commit into the executable
+        shell: pwsh
+        run: |
+          $code = 'namespace SekoBot; internal static class BuildInfo { internal const string Commit = "' + $env:GITHUB_SHA + '"; }'
+          Set-Content -Path src/BuildInfo.cs -Value $code -Encoding utf8
+
       - name: Restore project
         run: dotnet restore SekoBot.Windows.csproj -r win-x64
 
@@ -36,6 +42,10 @@ jobs:
             throw "Standalone SekoBot.exe was not generated."
           }
           Get-Item publish/SekoBot.exe | Select-Object Name, Length
+          $hash = (Get-FileHash publish/SekoBot.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $size = (Get-Item publish/SekoBot.exe).Length
+          $manifest = @{ commit = $env:GITHUB_SHA; sha256 = $hash; length = $size }
+          $manifest | ConvertTo-Json -Compress | Set-Content -Path publish/SekoBot.manifest.json -Encoding utf8
           Get-FileHash publish/SekoBot.exe -Algorithm SHA256 | Format-List
 
       - name: Upload backup build artifact
@@ -56,7 +66,9 @@ jobs:
           make_latest: false
           overwrite_files: true
           fail_on_unmatched_files: true
-          files: publish/SekoBot.exe
+          files: |
+            publish/SekoBot.exe
+            publish/SekoBot.manifest.json
           body: |
             Python / Godot kurulumu gerektirmeyen, tek dosyalı Windows x64 SekoBot.
             Assets > SekoBot.exe ile doğrudan indirilebilir.

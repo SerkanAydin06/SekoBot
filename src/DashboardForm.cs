@@ -209,11 +209,12 @@ internal sealed class DashboardForm : Form
                 RefreshWindows();
         };
 
-        Shown += (_, _) =>
+        Shown += async (_, _) =>
         {
             WriteLog("SekoBot başlatıldı. Godot veya Python gerekmiyor.");
             RefreshWindows();
             _scanTimer.Start();
+            await CheckForUpdatesAsync();
         };
         FormClosing += (_, _) =>
         {
@@ -500,6 +501,56 @@ internal sealed class DashboardForm : Form
         SetStatus("DURDURULDU", Muted);
         WriteLog("Pencere bağlantısı sonlandırıldı.");
         UpdateControls();
+    }
+
+    private async Task CheckForUpdatesAsync()
+    {
+        WriteLog("GitHub'da yeni sürüm kontrol ediliyor...");
+        UpdateCheckResult result = await UpdateService.CheckAndDownloadAsync();
+
+        if (IsDisposed || Disposing)
+            return;
+
+        if (!string.IsNullOrEmpty(result.Error))
+        {
+            WriteLog(result.Error);
+            return;
+        }
+
+        if (result.Update is not PreparedUpdate update)
+        {
+            WriteLog("SekoBot güncel.");
+            return;
+        }
+
+        WriteLog("Yeni sürüm indirildi; SHA-256 doğrulaması başarılı.");
+        var answer = MessageBox.Show(
+            this,
+            "SekoBot'un yeni sürümü indirildi ve doğrulandı.\n\n" +
+            "Şimdi yüklenip yeniden başlatılsın mı?\n\n" +
+            "Hayır dersen mevcut uygulama çalışmaya devam eder.",
+            "SekoBot güncellemesi",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Information);
+
+        if (answer != DialogResult.Yes)
+        {
+            WriteLog("Güncelleme ertelendi.");
+            return;
+        }
+
+        try
+        {
+            StopCapture();
+            UpdateService.InstallAfterExit(update);
+            Close();
+        }
+        catch (Exception ex)
+        {
+            WriteLog("Güncelleme uygulanamadı: " + ex.Message);
+            MessageBox.Show(this, "Güncelleme başlatılamadı:\n" + ex.Message,
+                "SekoBot", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private void SaveScreenshot()

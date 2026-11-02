@@ -52,3 +52,12 @@ Yeni kod `main` dalına gönderildiğinde GitHub aynı **preview** sürümündek
 ## Test durumu
 
 Derleme GitHub Actions üzerindeki Windows derleyicisi tarafından doğrulanır. Metin2 istemcisi üzerindeki gerçek görüntü yakalama testi ayrıca Windows bilgisayarda yapılmalıdır.
+
+
+## Otomatik güncelleme
+
+**SekoBot.exe dosyasını yalnızca ilk kurulumda indirmen yeterli.** Program açılırken mevcut GitHub `preview` sürümünü kontrol eder. Yeni sürüm varsa kullanıcı başka bir sayfaya gitmeden dosyayı indirir ve `SHA-256` doğrulaması yapar. Ardından yeniden başlatıp yüklemek için onay ister; onay verilirse eski dosya Windows yardımcı komutuyla değiştirilir ve SekoBot yeniden açılır.
+
+Güncellemenin uygulanabilmesi için SekoBot.exe dosyasının **yazılabilir bir klasörde** bulunması gerekir (örneğin kullanıcı hesabındaki uygulama klasörü veya İndirilenler). Korunan `Program Files` klasöründen yönetici izni olmadan kendini güncelleyemez. İnternet bağlantısı yoksa mevcut sürüm çalışmaya devam eder. Güncelleme kontrolü sadece GitHub Releases üzerinden yapılır; başka sunucu veya telemetri kullanılmaz.
+
+Yeni derleme kimliği `src/BuildInfo.cs` içine GitHub Actions sırasında yazılır; `SekoBot.manifest.json` SHA-256 doğrulaması için aynı Release'e yüklenir. Eski kurulumlarda bu güncelleme sistemi yoktur; otomatik güncellemeden faydalanmak için **yeni SekoBot.exe dosyasını bir kez indirmen gerekir**.

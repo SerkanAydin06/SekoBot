@@ -16,3 +16,10 @@
 - [ ] Arka plan / üstü örtülü pencere davranışı testi
 - [ ] Görsel hedef/Metin taşı tanıma
 - [ ] Kullanıcı kontrollü farm durum makinesi ve güvenli durdurma
+
+## v0.3.1 — Otomatik güncelleme
+- [x] Başlangıçta yeni GitHub Release sürümünü kontrol et
+- [x] Derleme commit kimliği + SHA-256 manifesti yayınla
+- [x] Yeni sürümü doğrulayarak indir ve kullanıcıya yeniden başlatma onayı ver
+- [x] Eski EXE dosyasını uygulama kapandıktan sonra değiştir
+- [ ] Gerçek Windows EXE üzerinde güncelleme testi

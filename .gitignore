@@ -1,9 +1,0 @@
-bin/
-obj/
-.vs/
-.idea/
-.vscode/
-artifacts/
-publish/
-*.user
-*.log
