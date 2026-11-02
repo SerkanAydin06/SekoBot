@@ -217,4 +217,15 @@ public class NameFinderTests
         var name = Assert.Single(NameFinder.Find(frame));
         Assert.InRange(name.X, 246, 254);
     }
+
+    [Theory]
+    [InlineData(130, 34, 32, true)]   // median name red on the real screenshot
+    [InlineData(189, 35, 37, true)]   // bright core of the letters
+    [InlineData(100, 12, 14, true)]   // dark edge of the letters
+    [InlineData(200, 90, 60, false)]  // reddish-orange hair / skin
+    [InlineData(230, 120, 40, false)] // orange (fire, gold)
+    [InlineData(250, 150, 150, false)] // pink
+    [InlineData(70, 15, 15, false)]   // too dark
+    public void Name_red_is_the_measured_pure_red(int r, int g, int b, bool expected) =>
+        Assert.Equal(expected, NameFinder.IsNameRed(r, g, b));
 }

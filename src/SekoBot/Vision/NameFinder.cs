@@ -42,7 +42,7 @@ internal static class NameFinder
                     for (int sx = 0; sx < Cell; sx++)
                     {
                         int i = row + (gx * Cell + sx) * 4;
-                        if (BarFinder.Classify(data[i + 2], data[i + 1], data[i]) == 1)
+                        if (IsNameRed(data[i + 2], data[i + 1], data[i]))
                             hits++;
                     }
                 }
@@ -97,18 +97,14 @@ internal static class NameFinder
     }
 
     /// <summary>
-    /// The green "Lv.6" right in front of a mob name, on the same line. Measured on real
-    /// screenshots: pure green (red and blue under 60 % of green), its right edge 7–17 px left
-    /// of the name, 14–62 such pixels in the name's middle rows; none on grass. Requiring the
-    /// same line keeps out red things just below someone's "Lv" tag, like the reddish hair of
-    /// the player's own character under its name.
+    /// The green "Lv.6" in front of a mob name. Measured on a real screenshot: pure green
+    /// (red and blue under 60 % of green), 75–82 such pixels next to each name, none on grass.
     /// </summary>
     private static bool HasLevelTag(Frame frame, Rectangle name)
     {
-        int width = Math.Max(24, name.Height * 2);
-        int centre = name.Top + name.Height / 2, half = Math.Max(2, name.Height / 4);
-        int x0 = Math.Max(0, name.Left - width), x1 = Math.Min(frame.Width, name.Left + 2);
-        int y0 = Math.Max(0, centre - half), y1 = Math.Min(frame.Height, centre + half + 1);
+        int width = Math.Max(48, name.Height * 4);
+        int x0 = Math.Max(0, name.Left - width), x1 = Math.Min(frame.Width, name.Left + 4);
+        int y0 = Math.Max(0, name.Top - 4), y1 = Math.Min(frame.Height, name.Bottom + 4);
         var data = frame.Data;
         int green = 0;
         for (int y = y0; y < y1; y++)
@@ -118,11 +114,19 @@ internal static class NameFinder
             int b = data[i], g = data[i + 1], r = data[i + 2];
             int max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b));
             if (g == max && g >= 110 && r * 100 < g * 60 && b * 100 < g * 60 && (max - min) * 255 >= 90 * max)
-                if (++green >= 8)
+                if (++green >= 12)
                     return true;
         }
         return false;
     }
+
+    /// <summary>
+    /// The red of mob names, measured on a real screenshot: pure red, median (130, 34, 32),
+    /// red 100–175, green and blue each at most ~40 % of red and about equal to each other.
+    /// Orange-ish reds (hair, skin, fire: green clearly above blue) don't match.
+    /// </summary>
+    internal static bool IsNameRed(int r, int g, int b) =>
+        r >= 90 && g * 100 <= r * 42 && b * 100 <= r * 42 && Math.Abs(g - b) * 100 <= r * 15;
 
     /// <summary>
     /// Screen parts that are UI, measured on a real 1920×1080 screenshot: the target bar at the
@@ -142,7 +146,7 @@ internal static class NameFinder
         {
             int i = y * frame.Stride + x * 4;
             total++;
-            if (BarFinder.Classify(data[i + 2], data[i + 1], data[i]) == 1)
+            if (IsNameRed(data[i + 2], data[i + 1], data[i]))
                 hits++;
         }
         return total == 0 ? 0 : (double)hits / total;
