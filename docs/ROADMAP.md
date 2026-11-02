@@ -23,3 +23,13 @@
 - [x] Yeni sürümü doğrulayarak indir ve kullanıcıya yeniden başlatma onayı ver
 - [x] Eski EXE dosyasını uygulama kapandıktan sonra değiştir
 - [ ] Gerçek Windows EXE üzerinde güncelleme testi
+
+## v0.3.2 — Yakalama döngüsü güvenilirliği
+- [x] Görüntü aktarımında UI iş parçacığını senkron beklemeyi kaldır
+- [x] UI meşgulse yeni görüntü kuyruğunun büyümesini engelle
+- [x] Yeniden bağlanmada eski oturumun yeni oturumu durdurmasını engelle
+- [x] 30 FPS önizleme seçeneği
+- [ ] Windows üzerinde gerçek FPS, CPU ve bellek kullanımını ölç
+- [ ] Uzun süreli çalışmada pencere kapatma / tekrar bağlanma stres testi
+- [ ] Windows Graphics Capture / DXGI desteği ve üstü örtülü pencere testi
+- [ ] Kullanıcı onayı olmadan girdi göndermeyen bağımsız otomasyon katmanı
