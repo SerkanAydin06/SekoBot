@@ -19,5 +19,5 @@
 - [ ] Ölüm algılama ve yeniden doğma
 - [ ] Envanter dolu algılama
 - [ ] Mini harita ile rota / alan sınırı
-- [x] Mob bulma: saldırı imleci ile tarama, hedef barı ile öğrenme
+- [x] Mob bulma: ekrandaki hareketten aday, tıklayıp hedef barıyla doğrulama (imleç yöntemi bu istemcide çalışmadı)
 - [ ] İsteğe bağlı Metin taşı algılama

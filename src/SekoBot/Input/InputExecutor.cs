@@ -21,23 +21,20 @@ internal sealed class InputExecutor : IDisposable
     private readonly HashSet<Keys> _held = [];
     private readonly Random _random = new();
     private readonly Task _worker;
-    private readonly MobCursors _cursors;
     private readonly Func<bool?> _hasTarget;
-    private bool _warnedFocus, _warnedCursor;
+    private readonly Action<Point> _missed;
+    private bool _warnedFocus, _learnedLogged;
 
     /// <param name="hasTarget">Whether a target bar is showing; null when it can't be told
     /// (target bar not known yet).</param>
-    private readonly Func<int> _hoverDelayMs;
-
-    public InputExecutor(WindowInfo window, bool dryRun, Action<string> log, MobCursors cursors, Func<bool?> hasTarget,
-        Func<int>? hoverDelayMs = null)
+    /// <param name="missed">Called with a candidate that was clicked but selected nothing.</param>
+    public InputExecutor(WindowInfo window, bool dryRun, Action<string> log, Func<bool?> hasTarget, Action<Point> missed)
     {
-        _hoverDelayMs = hoverDelayMs ?? (() => 80);
         _window = window;
         DryRun = dryRun;
         _log = log;
-        _cursors = cursors;
         _hasTarget = hasTarget;
+        _missed = missed;
         _worker = Task.Run(RunAsync);
     }
 
@@ -110,8 +107,8 @@ internal sealed class InputExecutor : IDisposable
             case KeyDownAction keyDown:
                 SendKey(keyDown.Key, down: true);
                 break;
-            case FindTargetAction:
-                await FindTargetAsync(token);
+            case FindTargetAction find:
+                await ClickCandidatesAsync(find.Candidates, token);
                 break;
             case KeyHoldAction hold:
                 SendKey(hold.Key, down: true);
@@ -123,66 +120,42 @@ internal sealed class InputExecutor : IDisposable
     }
 
     /// <summary>
-    /// Hovers points around the character (nearest first) and reads the cursor. Clicks the first
-    /// spot that shows a learned attack cursor, or a cursor different from the plain ground one,
-    /// then checks whether a target bar appears to learn which cursor means "monster".
+    /// Clicks probable mobs (nearest first) and waits for a target bar after each click.
+    /// Stops at the first one that gets selected. A miss usually makes the character walk,
+    /// which moves the camera and makes the other candidates stale, so give up after two.
     /// </summary>
-    private async Task FindTargetAsync(CancellationToken token)
+    private async Task ClickCandidatesAsync(IReadOnlyList<Point> candidates, CancellationToken token)
     {
-        if (!Win32.GetClientRect(_window.Handle, out var client))
-            return;
-        var points = MobSearch.ScanPoints(client.Right - client.Left, client.Bottom - client.Top);
-        var seen = new List<nint>(points.Count);
-        int pick = -1;
-        foreach (var point in points)
+        int misses = 0;
+        foreach (var spot in candidates)
         {
-            if (Win32.GetForegroundWindow() != _window.Handle)
+            if (Win32.GetForegroundWindow() != _window.Handle || misses >= 2)
                 return;
-            MoveMouse(WindowService.ClientToScreen(_window, point));
-            // The game only changes its cursor after it has noticed the mouse over the mob.
-            await Task.Delay(Math.Clamp(_hoverDelayMs(), 20, 1000), token);
-            seen.Add(Win32.CurrentCursor());
-            pick = MobSearch.Choose(seen, _cursors);
-            if (pick >= 0)
-                break;
-        }
-        if (pick < 0)
-            pick = MobSearch.Choose(seen, _cursors, final: true);
+            MoveMouse(WindowService.ClientToScreen(_window, spot));
+            await Task.Delay(_random.Next(40, 70), token);
+            SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);
+            await Task.Delay(_random.Next(35, 75), token);
+            SendMouse(Win32.MOUSEEVENTF_LEFTUP);
 
-        if (seen.Count > 0 && seen.All(c => c == seen[0]))
-        {
-            if (!_warnedCursor)
+            // Until the target bar has been found once, give the bar finder time to spot it.
+            int wait = _hasTarget() == null ? 1500 : 800;
+            for (int waited = 0; waited < wait; waited += 50)
             {
-                _warnedCursor = true;
-                _log(seen[0] == 0
-                    ? "Oyun imleci okunamıyor (oyun kendi imlecini çiziyor olabilir); mob arama kör saldırıya döner."
-                    : "Etrafta mob imleci görülmedi.");
+                if (_hasTarget() == true)
+                {
+                    if (!_learnedLogged)
+                    {
+                        _learnedLogged = true;
+                        _log("Mob bulundu ve seçildi ✓");
+                    }
+                    return;
+                }
+                await Task.Delay(50, token);
             }
-            return;
+            if (_hasTarget() != null)
+                _missed(spot);
+            misses++;
         }
-        if (pick < 0)
-            return;
-
-        nint cursor = seen[pick];
-        MoveMouse(WindowService.ClientToScreen(_window, points[pick]));
-        await Task.Delay(_random.Next(25, 45), token);
-        SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);
-        await Task.Delay(_random.Next(35, 75), token);
-        SendMouse(Win32.MOUSEEVENTF_LEFTUP);
-
-        if (_hasTarget() == null)
-            return; // Can't verify yet: the target bar hasn't been found.
-        for (int waited = 0; waited < 1500; waited += 50)
-        {
-            if (_hasTarget() == true)
-            {
-                if (_cursors.MarkGood(cursor))
-                    _log("Mob imleci öğrenildi ✓ Artık mobları kendisi bulup tıklayacak.");
-                return;
-            }
-            await Task.Delay(50, token);
-        }
-        _cursors.MarkFailed(cursor);
     }
 
     /// <summary>

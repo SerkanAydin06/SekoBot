@@ -41,7 +41,7 @@ internal sealed class BotEngine : IDisposable
     private ChannelWriter<Frame>? _writer;
     private SessionRecorder? _recorder;
     private readonly AutoBars _autoBars = new();
-    private readonly MobCursors _mobCursors = new();
+    private readonly MotionDetector _motion = new();
     private TimeSpan _lastBarSearch = TimeSpan.FromDays(-1), _barSearchStarted = TimeSpan.FromDays(-1);
     private bool _barSearchFailedLogged;
     private bool _disposed;
@@ -126,6 +126,8 @@ internal sealed class BotEngine : IDisposable
                     {
                         SearchBars(frame, profile, now);
                         var state = Perception.Analyze(frame, profile, now);
+                        if (profile.AutoTarget)
+                            state = state with { MobCandidates = _motion.Update(frame, now) };
                         Volatile.Write(ref _state, state);
                         var (phase, actions) = TickBot(state);
                         Volatile.Read(ref _recorder)?.Record(frame, state, phase, actions, IsImportant(actions, profile));
@@ -260,9 +262,9 @@ internal sealed class BotEngine : IDisposable
         {
             if (_input != null)
                 return true;
-            _input = new InputExecutor(_window, dryRun, _log, _mobCursors,
+            _input = new InputExecutor(_window, dryRun, _log,
                 () => Profile.TargetBar == null ? null : State?.HasTarget == true,
-                () => Profile.HoverDelayMs);
+                spot => _motion.MarkMiss(spot, _clock.Elapsed));
             _botStarted = _clock.Elapsed;
             _brain.Start(_clock.Elapsed);
         }

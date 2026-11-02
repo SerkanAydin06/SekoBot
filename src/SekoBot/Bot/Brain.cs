@@ -23,7 +23,7 @@ internal sealed class Brain
     private TimeSpan _lastAttackDown = Never, _lastHpPotion = Never, _lastMpPotion = Never;
     // When each low-bar condition was first seen; a single bad frame must not trigger anything.
     private TimeSpan _hpCriticalSince = Never, _hpLowSince = Never, _mpLowSince = Never;
-    private TimeSpan _targetGoneSince = Never;
+    private TimeSpan _targetGoneSince = Never, _searchSentAt = Never;
     private int _lootPresses, _failedSearches;
     private bool _searchSent, _blindFight;
 
@@ -168,7 +168,10 @@ internal sealed class Brain
 
     private static BotPhase NextAfterLoot(BotProfile p) => p.AutoTarget ? BotPhase.Searching : BotPhase.Fighting;
 
-    /// <summary>Ask the input worker to find and click a mob, then wait for its target bar.</summary>
+    /// <summary>
+    /// Wait for the camera to settle and moving things (mobs) to show up, then ask the input
+    /// worker to click them. Retries with fresh candidates; turns the camera when nothing works.
+    /// </summary>
     private void Search(GameState state, BotProfile p, List<BotAction> actions)
     {
         var now = state.Time;
@@ -180,19 +183,23 @@ internal sealed class Brain
             Fight(state, p, actions);
             return;
         }
-        if (!_searchSent)
+        // A click attempt takes up to ~1.5 s per candidate; allow fresh candidates after that.
+        if (_searchSent && now - _searchSentAt >= Ms(2500))
+            _searchSent = false;
+        // Give motion a moment to build up after the camera stopped.
+        if (!_searchSent && now - _phaseSince >= Ms(600) && state.MobCandidates.Count > 0)
         {
-            actions.Add(new FindTargetAction());
+            actions.Add(new FindTargetAction(state.MobCandidates.Take(3).ToArray()));
             _searchSent = true;
+            _searchSentAt = now;
             return;
         }
-        // The scan takes ~40 points × hover delay, plus up to 1.5 s to see the target bar.
-        if (now - _phaseSince < Ms(Math.Max(p.SearchTimeoutMs, p.HoverDelayMs * 40 + 2000)))
+        if (now - _phaseSince < Ms(p.SearchTimeoutMs))
             return;
 
         _failedSearches++;
         // Target bar not known yet (nothing to verify a click with), or several searches in a row
-        // found nothing (cursor can't be read, empty area): attack blindly so the bot never idles.
+        // found nothing: attack blindly so the bot never idles.
         if (state.TargetHp == null || _failedSearches >= 3)
         {
             _failedSearches = 0;
