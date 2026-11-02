@@ -15,7 +15,7 @@ Metin2 için tek dosyalı Windows farm botu. Kurulum gerekmez, açılışta kend
 3. **Kuru çalışma** açıkken **Başlat (F10)**: bot ne yapacağını yalnızca günlüğe yazar. Doğruysa kuru çalışmayı kapat.
 4. **F12** her zaman acil durdurur. HP belirlenen eşiğin altına düşerse bot kendini durdurur.
 
-Döngü: saldırı tuşu basılı (varsayılan 4 sn) → eşya topla → her N turda kamera döndür → tekrar. Tuşlar (Space saldırı, Z toplama, 1/2 iksir, E kamera, W yürüme) ve süreler `%LOCALAPPDATA%\SekoBot\profile.json` içinde; arayüzden **Profil klasörü** ile açılır.
+Döngü: **mob ara → tıkla → ölene kadar vur → eşya topla → tekrar.** Bot fareyi karakterin etrafında gezdirir; Metin2'de imleç bir mobun üstünde saldırı imlecine döner. Bot o noktaya tıklar ve üstte hedef barı çıkarsa o imlecin "mob" olduğunu öğrenir (günlükte "Mob imleci öğrenildi ✓"). Mob bulunamazsa kamerayı çevirir; üst üste 3 kez bulamazsa körlemesine saldırır. İlk tıklamalarda hedef barı henüz bilinmediği için ilk birkaç tur körlemesine olabilir, bu normal. Eski düz döngü için `profile.json` içinde `"AutoTarget": false`. Tuşlar (Space saldırı, Z toplama, 1/2 iksir, E kamera, W yürüme) ve süreler `%LOCALAPPDATA%\SekoBot\profile.json` içinde; arayüzden **Klasör** ile açılır.
 
 ## Kayıt ve tekrar oynatma
 

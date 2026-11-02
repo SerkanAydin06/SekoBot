@@ -21,13 +21,19 @@ internal sealed class InputExecutor : IDisposable
     private readonly HashSet<Keys> _held = [];
     private readonly Random _random = new();
     private readonly Task _worker;
-    private bool _warnedFocus;
+    private readonly MobCursors _cursors;
+    private readonly Func<bool?> _hasTarget;
+    private bool _warnedFocus, _warnedCursor;
 
-    public InputExecutor(WindowInfo window, bool dryRun, Action<string> log)
+    /// <param name="hasTarget">Whether a target bar is showing; null when it can't be told
+    /// (target bar not known yet).</param>
+    public InputExecutor(WindowInfo window, bool dryRun, Action<string> log, MobCursors cursors, Func<bool?> hasTarget)
     {
         _window = window;
         DryRun = dryRun;
         _log = log;
+        _cursors = cursors;
+        _hasTarget = hasTarget;
         _worker = Task.Run(RunAsync);
     }
 
@@ -100,6 +106,9 @@ internal sealed class InputExecutor : IDisposable
             case KeyDownAction keyDown:
                 SendKey(keyDown.Key, down: true);
                 break;
+            case FindTargetAction:
+                await FindTargetAsync(token);
+                break;
             case KeyHoldAction hold:
                 SendKey(hold.Key, down: true);
                 try { await Task.Delay(hold.Milliseconds, token); }
@@ -107,6 +116,71 @@ internal sealed class InputExecutor : IDisposable
                 break;
         }
         await Task.Delay(_random.Next(30, 70), token);
+    }
+
+    /// <summary>
+    /// Hovers points around the character (nearest first) and reads the cursor. Clicks the first
+    /// spot that shows a learned attack cursor, or a cursor different from the plain ground one,
+    /// then checks whether a target bar appears to learn which cursor means "monster".
+    /// </summary>
+    private async Task FindTargetAsync(CancellationToken token)
+    {
+        if (!Win32.GetClientRect(_window.Handle, out var client))
+            return;
+        var points = MobSearch.ScanPoints(client.Right - client.Left, client.Bottom - client.Top);
+        var seen = new List<nint>(points.Count);
+        int pick = -1;
+        foreach (var point in points)
+        {
+            if (Win32.GetForegroundWindow() != _window.Handle)
+                return;
+            var screen = WindowService.ClientToScreen(_window, point);
+            Win32.SetCursorPos(screen.X, screen.Y);
+            // The game updates its cursor on its next frame.
+            await Task.Delay(22, token);
+            seen.Add(Win32.CurrentCursor());
+            pick = MobSearch.Choose(seen, _cursors);
+            if (pick >= 0)
+                break;
+        }
+        if (pick < 0)
+            pick = MobSearch.Choose(seen, _cursors, final: true);
+
+        if (seen.Count > 0 && seen.All(c => c == seen[0]))
+        {
+            if (!_warnedCursor)
+            {
+                _warnedCursor = true;
+                _log(seen[0] == 0
+                    ? "Oyun imleci okunamıyor (oyun kendi imlecini çiziyor olabilir); mob arama kör saldırıya döner."
+                    : "Etrafta mob imleci görülmedi.");
+            }
+            return;
+        }
+        if (pick < 0)
+            return;
+
+        nint cursor = seen[pick];
+        var target = WindowService.ClientToScreen(_window, points[pick]);
+        Win32.SetCursorPos(target.X, target.Y);
+        await Task.Delay(_random.Next(25, 45), token);
+        SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);
+        await Task.Delay(_random.Next(35, 75), token);
+        SendMouse(Win32.MOUSEEVENTF_LEFTUP);
+
+        if (_hasTarget() == null)
+            return; // Can't verify yet: the target bar hasn't been found.
+        for (int waited = 0; waited < 1500; waited += 50)
+        {
+            if (_hasTarget() == true)
+            {
+                if (_cursors.MarkGood(cursor))
+                    _log("Mob imleci öğrenildi ✓ Artık mobları kendisi bulup tıklayacak.");
+                return;
+            }
+            await Task.Delay(50, token);
+        }
+        _cursors.MarkFailed(cursor);
     }
 
     private static void SendMouse(uint flags)

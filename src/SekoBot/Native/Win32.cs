@@ -47,6 +47,28 @@ internal static class Win32
         internal INPUTUNION u;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct CURSORINFO
+    {
+        internal int cbSize;
+        internal int flags;
+        internal nint hCursor;
+        internal POINT ptScreenPos;
+    }
+
+    internal const int CURSOR_SHOWING = 0x00000001;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetCursorInfo(ref CURSORINFO info);
+
+    /// <summary>Handle of the cursor currently shown on screen (0 when hidden or unknown).</summary>
+    internal static nint CurrentCursor()
+    {
+        var info = new CURSORINFO { cbSize = Marshal.SizeOf<CURSORINFO>() };
+        return GetCursorInfo(ref info) && (info.flags & CURSOR_SHOWING) != 0 ? info.hCursor : 0;
+    }
+
     internal const uint INPUT_MOUSE = 0;
     internal const uint INPUT_KEYBOARD = 1;
     internal const uint KEYEVENTF_KEYUP = 0x0002;

@@ -41,6 +41,7 @@ internal sealed class BotEngine : IDisposable
     private ChannelWriter<Frame>? _writer;
     private SessionRecorder? _recorder;
     private readonly AutoBars _autoBars = new();
+    private readonly MobCursors _mobCursors = new();
     private TimeSpan _lastBarSearch = TimeSpan.FromDays(-1), _barSearchStarted = TimeSpan.FromDays(-1);
     private bool _barSearchFailedLogged;
     private bool _disposed;
@@ -189,9 +190,10 @@ internal sealed class BotEngine : IDisposable
     {
         if (!profile.AutoDetectBars)
             return;
-        bool hpMissing = profile.HpBar == null;
-        // Look often until the HP bar is known, then now and then (to widen a bar that was not full).
-        if (now - _lastBarSearch < TimeSpan.FromSeconds(hpMissing ? 1 : 3))
+        bool missing = profile.HpBar == null || profile.TargetBar == null;
+        // Look often while a bar is unknown (the target bar only shows after a click),
+        // then now and then (to widen a bar that was not full).
+        if (now - _lastBarSearch < TimeSpan.FromSeconds(missing ? 1 : 3))
             return;
         _lastBarSearch = now;
         if (_barSearchStarted < TimeSpan.Zero)
@@ -258,7 +260,8 @@ internal sealed class BotEngine : IDisposable
         {
             if (_input != null)
                 return true;
-            _input = new InputExecutor(_window, dryRun, _log);
+            _input = new InputExecutor(_window, dryRun, _log, _mobCursors,
+                () => Profile.TargetBar == null ? null : State?.HasTarget == true);
             _botStarted = _clock.Elapsed;
             _brain.Start(_clock.Elapsed);
         }

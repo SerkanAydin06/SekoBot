@@ -12,7 +12,8 @@ public class BrainTests
 
     private static (Brain Brain, BotProfile Profile) Started(Action<BotProfile>? configure = null)
     {
-        var profile = new BotProfile();
+        // These tests cover the blind attack loop; mob search has its own tests.
+        var profile = new BotProfile { AutoTarget = false };
         configure?.Invoke(profile);
         var brain = new Brain(() => profile);
         brain.Start(TimeSpan.Zero);
