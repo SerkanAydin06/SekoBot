@@ -89,8 +89,16 @@ internal static class NameFinder
             // (≤ 8 px, a bar) is not a name.
             if (ch <= 2 && PixelDensity(frame, box) > 0.6)
                 continue;
-            if (requireLevelTag && !HasLevelTag(frame, box))
-                continue;
+            if (requireLevelTag)
+            {
+                // Red armour (ours or another player's) sits right under a player's white name,
+                // whose green "Lv.N" is close enough for the loose check. A real mob name has
+                // its tag on the same line; without that, red under a white name is a player.
+                if (!HasLevelTag(frame, box))
+                    continue;
+                if (!HasLevelTagOnSameLine(frame, box) && UnderPlayerName(frame, box))
+                    continue;
+            }
             names.Add(box);
         }
         return names;
@@ -118,6 +126,65 @@ internal static class NameFinder
                     return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Strict version: the green tag on the name's middle rows, at most 24 px (2 × height) to its
+    /// left. Measured on real screenshots: 14–62 green pixels there for most mob names, 0 for red
+    /// armour under a player's "Lv.N" (but also 0 for a name partly hidden behind an icon, so it
+    /// only decides when the red blob is under a player's name).
+    /// </summary>
+    private static bool HasLevelTagOnSameLine(Frame frame, Rectangle name)
+    {
+        int width = Math.Max(24, name.Height * 2);
+        int centre = name.Top + name.Height / 2, half = Math.Max(2, name.Height / 4);
+        int x0 = Math.Max(0, name.Left - width), x1 = Math.Min(frame.Width, name.Left + 2);
+        int y0 = Math.Max(0, centre - half), y1 = Math.Min(frame.Height, centre + half + 1);
+        return CountGreen(frame, x0, x1, y0, y1, 8) >= 8;
+    }
+
+    /// <summary>
+    /// A player's white/yellowish name right above the red blob (its body is under its name).
+    /// Measured on real screenshots: "KAIZER06" and "azad06" over red armour; mob names are red.
+    /// </summary>
+    private static bool UnderPlayerName(Frame frame, Rectangle red)
+    {
+        int margin = (int)(frame.Width * 0.06);
+        int x0 = Math.Max(0, red.Left - margin), x1 = Math.Min(frame.Width, red.Right + margin);
+        int y0 = Math.Max(0, red.Top - (int)(frame.Height * 0.09)), y1 = Math.Min(frame.Height, red.Top + 2);
+        var data = frame.Data;
+        var xs = new List<int>();
+        for (int y = y0; y < y1; y++)
+        for (int x = x0; x < x1; x++)
+        {
+            int i = y * frame.Stride + x * 4;
+            if (data[i + 2] >= 170 && data[i + 1] >= 170 && data[i] >= 90)
+                xs.Add(x);
+        }
+        if (xs.Count < 25)
+            return false;
+        xs.Sort();
+        int left = xs[xs.Count * 5 / 100], right = xs[xs.Count * 95 / 100];
+        double slack = 30.0 * frame.Height / 1080;
+        double centre = red.X + red.Width / 2.0;
+        return centre >= left - slack && centre <= right + slack;
+    }
+
+    private static int CountGreen(Frame frame, int x0, int x1, int y0, int y1, int enough)
+    {
+        var data = frame.Data;
+        int green = 0;
+        for (int y = y0; y < y1; y++)
+        for (int x = x0; x < x1; x++)
+        {
+            int i = y * frame.Stride + x * 4;
+            int b = data[i], g = data[i + 1], r = data[i + 2];
+            int max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b));
+            if (g == max && g >= 110 && r * 100 < g * 60 && b * 100 < g * 60 && (max - min) * 255 >= 90 * max)
+                if (++green >= enough)
+                    return green;
+        }
+        return green;
     }
 
     /// <summary>
