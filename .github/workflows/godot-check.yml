@@ -40,3 +40,14 @@ jobs:
           [SekoBot.WindowNative]::InitializeDpi()
           $windows = [SekoBot.WindowNative]::ListWindows()
           Write-Host ("Enumeration returned {0} desktop windows." -f @($windows).Count)
+      - name: Validate independent Get-Process fallback output
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $lines = & ".\tools\list_windows.ps1"
+          if ($LASTEXITCODE -ne 0 -and $null -ne $LASTEXITCODE) { throw "Fallback script failed." }
+          $line = @($lines | Where-Object { $_ -like "SEKOBOT_WINDOWS=*" }) | Select-Object -Last 1
+          if (-not $line) { throw "Missing fallback protocol marker." }
+          $json = $line.Substring("SEKOBOT_WINDOWS=".Length)
+          $parsed = ConvertFrom-Json -InputObject $json
+          Write-Host ("Fallback response parsed successfully.")

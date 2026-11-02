@@ -16,6 +16,11 @@ var _latest_frame := -1
 var _last_error := ""
 var _status: Dictionary = {}
 var _windows: Array = []
+var _native_windows: Array = []
+var _fallback_windows: Array = []
+var _fallback_scan_msec := -100000
+var _fallback_error := ""
+var _using_fallback := false
 var _start_msec := 0
 
 
@@ -70,6 +75,10 @@ func RestartHelper() -> void:
 	_last_error = ""
 	_status.clear()
 	_windows.clear()
+	_native_windows.clear()
+	_fallback_windows.clear()
+	_fallback_scan_msec = -100000
+	_using_fallback = false
 	_latest_frame = -1
 	_capture_enabled = false
 	if FileAccess.file_exists(_status_path):
@@ -81,13 +90,15 @@ func RestartHelper() -> void:
 func GetStatus() -> Dictionary:
 	_read_status()
 	var alive := _helper_pid > 0 and OS.is_process_running(_helper_pid)
-	var ready := bool(_status.get("ready", false))
+	var helper_ready := bool(_status.get("ready", false))
 	var message := ""
-	if not _last_error.is_empty():
+	if not _last_error.is_empty() and not _using_fallback:
 		message = _last_error
+	elif _using_fallback and not _windows.is_empty():
+		message = "Yedek tarama: %d pencere bulundu. Canlı görüntü için yardımcı işlem gereklidir." % _windows.size()
 	elif not alive:
 		message = "Windows yardımcısı kapalı. Yenile / Yeniden dene düğmesine bas."
-	elif not ready:
+	elif not helper_ready:
 		message = "Windows yardımcısı başlatılıyor; ilk tarama hazırlanıyor..."
 	elif int(_status.get("scan_done", -1)) < 0:
 		message = "Windows pencereleri taranıyor..."
@@ -97,7 +108,7 @@ func GetStatus() -> Dictionary:
 		message = "%d açık pencere bulundu. Listeden seçim yapabilirsin." % _windows.size()
 	return {
 		"alive": alive,
-		"ready": ready,
+		"ready": helper_ready or (_using_fallback and not _windows.is_empty()),
 		"scan_done": int(_status.get("scan_done", -1)),
 		"count": _windows.size(),
 		"message": message
@@ -108,7 +119,52 @@ func ListWindows() -> Array:
 	_read_status()
 	_scan_seq += 1
 	_write_command()
+	if not _native_windows.is_empty():
+		_windows = _native_windows.duplicate(true)
+		_using_fallback = false
+	else:
+		if Time.get_ticks_msec() - _fallback_scan_msec >= 6000:
+			_query_windows_directly()
+		_windows = _fallback_windows.duplicate(true)
+		_using_fallback = not _windows.is_empty()
 	return _windows.duplicate(true)
+
+
+func _query_windows_directly() -> void:
+	_fallback_scan_msec = Time.get_ticks_msec()
+	_fallback_windows.clear()
+	_fallback_error = ""
+	if OS.get_name() != "Windows":
+		return
+	var script_path := ProjectSettings.globalize_path("res://tools/list_windows.ps1")
+	if not FileAccess.file_exists(script_path):
+		_fallback_error = "Yedek pencere tarama dosyası eksik."
+		return
+	var output: Array = []
+	var exit_code := OS.execute(
+		"powershell.exe",
+		PackedStringArray([
+			"-NoLogo", "-NoProfile", "-NonInteractive",
+			"-ExecutionPolicy", "Bypass", "-File", script_path
+		]), output, true, false
+	)
+	if output.is_empty():
+		_fallback_error = "PowerShell taramasından yanıt alınamadı (kod %d)." % exit_code
+		return
+	var full_output: String = str(output[0])
+	var marker := "SEKOBOT_WINDOWS="
+	var marker_pos := full_output.rfind(marker)
+	if marker_pos < 0:
+		_fallback_error = "PowerShell taraması başarısız: " + full_output.strip_edges().left(180)
+		return
+	var json_line := full_output.substr(marker_pos + marker.length()).get_slice("\n", 0).strip_edges()
+	var parsed: Variant = JSON.parse_string(json_line)
+	if parsed is Array:
+		_fallback_windows = parsed
+	elif parsed is Dictionary:
+		_fallback_windows = [parsed]
+	else:
+		_fallback_error = "PowerShell pencere listesi çözümlenemedi."
 
 
 func StartCapture(window_handle: int, expected_pid: int, fps: int) -> void:
@@ -159,6 +215,10 @@ func CaptureFrame(_window_handle: int, _expected_pid: int) -> Image:
 
 func GetLastError() -> String:
 	_read_status()
+	if not _capture_enabled and _using_fallback and not _windows.is_empty():
+		return ""
+	if _last_error.is_empty() and not _fallback_error.is_empty() and _windows.is_empty():
+		return _fallback_error
 	return _last_error
 
 
@@ -175,7 +235,7 @@ func _read_status() -> void:
 				_last_error = str(_status.get("error", ""))
 				var reported_windows: Variant = _status.get("windows", [])
 				if reported_windows is Array:
-					_windows = reported_windows
+					_native_windows = reported_windows
 	if _helper_pid > 0 and Time.get_ticks_msec() - _start_msec > 7000:
 		if not OS.is_process_running(_helper_pid):
 			if _last_error.is_empty():

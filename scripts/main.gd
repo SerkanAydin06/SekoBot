@@ -463,7 +463,8 @@ func _refresh_windows() -> void:
 			var width: int = int(item.get("width", 0))
 			var height: int = int(item.get("height", 0))
 			var minimized_suffix := " [küçültülmüş]" if item.get("minimized", false) else ""
-			_window_selector.add_item("%s · %dx%d%s" % [title, width, height, minimized_suffix])
+			var dimensions := ("%dx%d" % [width, height]) if width > 0 and height > 0 else "boyut bekleniyor"
+			_window_selector.add_item("%s · %s%s" % [title, dimensions, minimized_suffix])
 			_window_selector.set_item_tooltip(i, "PID %d  |  %s" % [pid, title])
 			if item.get("metin2", false):
 				metin_indices.append(i)

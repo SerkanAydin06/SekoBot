@@ -48,3 +48,11 @@ PowerShell'in `-ExecutionPolicy Bypass` seçeneği yalnızca yerel yardımcı s�
 ## Kod kontrolü — EXE ve Releases yok
 
 GitHub Actions, Godot sahnesinin açılmasını ve yerel Windows PowerShell/Win32 yardımcısının derlenmesini kontrol eder. EXE veya Release üretmez. Bu testler gerçek oyun istemcisindeki görüntü yakalamanın yerine geçmez.
+
+
+## v0.2.2 — Pencere listesi bulunamıyorsa
+
+- `WindowCaptureBridge.gd` dosyasında Node'un `ready` sinyaliyle çakışan yerel değişken `helper_ready` olarak değiştirildi.
+- Win32 yardımcı işlem henüz hazır değilse veya pencere döndürmüyorsa `tools/list_windows.ps1` üzerinden ikinci bir tarama yapılır. Bu yol Windows'un `Get-Process` bilgisini kullanır ve genellikle her işlem için yalnızca bir ana pencereyi bulabilir.
+- Yedek taramada pencere boyutu bilinmeyebilir; gerçek yakalama ancak Win32 yardımcı işlemi sağlıklı çalıştığında kullanılabilir. Yedek tarama çözümü Windows'un ana pencere API'sinin sınırlarını aşmaz.
+- Yedek liste gelmiyorsa Godot **Sistem Günlüğü** ve PowerShell hata kayıtlarını kontrol et.
