@@ -1,57 +1,63 @@
-# SekoBot
+# SekoBot · Godot Desktop
 
-Windows için Metin2 oyun penceresi izleme ve ileride geliştirilecek farm otomasyonu altyapısı.
+Metin2 penceresi için **Godot 4.5 .NET** tabanlı Windows masaüstü arayüzü. Python, PySide6 ve otomatik GitHub Releases süreçleri kaldırılmıştır. Geliştirme sırasında doğrudan Godot editöründen çalışır.
 
-**v0.1:** Modern PySide6 arayüzü, açık pencereleri listeleme, tek Metin2 penceresine otomatik bağlanma, HWND/PID takibi, 5/10/15 FPS canlı önizleme ve yerel PNG ekran görüntüsü kaydı.
+## Kurulum (bir defalık)
 
-## Python kurmadan kullanma (önerilen)
+> **Godot'un standart sürümü yeterli değildir.** Windows pencerelerini listelemek/yakalamak için C# Win32 köprüsü vardır.
 
-SekoBot, GitHub Actions üzerinde Windows için **tek dosyalı taşınabilir SekoBot.exe** olarak derlenir. Kendi bilgisayarında Python kurulu olması gerekmez.
+- [Godot 4.5 .NET editor (Windows x64)](https://godotengine.org/download/windows/) — indirme sayfasından **.NET** sürümünü seç.
+- [.NET 8 SDK (Windows x64)](https://dotnet.microsoft.com/download/dotnet/8.0) — yalnızca Godot içinde C# kodunu derlemek için gerekir. Python gerekmez.
 
-1. [SekoBot Releases](https://github.com/SerkanAydin06/SekoBot/releases/tag/preview) sayfasına git.
-2. **Assets → SekoBot.exe** bağlantısına tıkla. ZIP olmadan doğrudan `.exe` indirilir.
-3. İndirilen dosyayı çift tıkla. Metin2 pencerede açık olduğunda program onu otomatik algılamayı dener.
+1. Depoyu klonla veya **Code → Download ZIP** ile indirip çıkar.
+2. Godot **.NET editörü** üzerinden **Import** seç ve bu klasördeki **project.godot** dosyasını aç.
+3. Üst menüde **Build** düğmesini bir kez çalıştır (C# köprüsü derlenir).
+4. **F6** (ana sahne açıksa) veya **F5** ile SekoBot'u çalıştır.
+5. Metin2'yi pencere modunda aç. SekoBot penceresini listeler; tek Metin2 varsa otomatik bağlanır. Gerekirse listeden seçip **Pencereye bağlan** butonuna bas.
 
-Başarılı bir derlemeden sonra doğrudan EXE adresi: [SekoBot.exe](https://github.com/SerkanAydin06/SekoBot/releases/download/preview/SekoBot.exe).
+Her kod değişikliğinde GitHub'a push/pull yapıp Godot'ta **Build** (C# değiştiyse) ve **F5** yeterlidir. **Releases, Python ve her güncelleme için EXE gerekmez.** Son sürüm hazır olduğunda Godot > Project > Export üzerinden Windows EXE üretilebilir.
 
-**Önemli:** Release ancak GitHub Actions derlemesi **başarıyla tamamlanırsa** yayınlanır. Önizleme bağlantısı henüz açılmıyorsa [Windows EXE Build](https://github.com/SerkanAydin06/SekoBot/actions/workflows/build-windows.yml) sayfasından iş akışını kontrol et. `Code → Download ZIP` yalnızca kaynak kodunu içerir. `Actions → Artifacts` yedeği ZIP olarak iner, `Releases` ise doğrudan EXE sunar.
+## Şu anda çalışan özellikler
 
-Her `main` güncellemesinde yeni sürüm mevcut `preview` sürümündeki EXE dosyasının yerini alır. Paketlenmiş EXE'nin ilk açılışı birkaç saniye sürebilir. Uygulama henüz dijital olarak imzalanmadığından Windows SmartScreen uyarısı gösterebilir. Güvenmediğin EXE dosyalarını çalıştırma.
+- Koyu temalı Godot arayüzü ve bağlantı durum paneli.
+- Açık Windows pencerelerini listeleme; Metin2 başlıklarını öne alma.
+- Seçilen pencereye **HWND + PID** ile bağlanma ve eski/değişmiş pencereyi reddetme.
+- Pencerenin **başlık çubuğu hariç yalnızca oyun alanını** yakalama.
+- Pencere konumu ve boyutu değiştiğinde her karede güncel koordinatları kullanma.
+- 5 / 10 / 15 FPS canlı önizleme ve çözünürlük/FPS/kare sayacı.
+- **Ekran görüntüsü kaydet**: varsayılan olarak \`%USERPROFILE%\Pictures\SekoBot\`.
+- Bağlantıyı durdurma; simge durumuna küçültme/hata senaryolarında uyarı.
+- FPS ayarını \`user://settings.cfg\` içerisinde hatırlama.
 
-## Geliştiriciler için Python ile çalıştırma (isteğe bağlı)
+## Proje yapısı
 
-Windows 10/11 ve Python 3.11+:
+\`\`\`text
+SekoBot/
+├── project.godot               # Godot proje giriş dosyası
+├── SekoBot.csproj              # Godot .NET 8 projesi
+├── scenes/
+│   └── main.tscn              # Ana Godot sahnesi
+├── scripts/
+│   ├── main.gd                # GDScript kontrol paneli
+│   └── WindowCaptureBridge.cs # C# / Win32 pencere keşfi ve görüntü yakalama
+└── docs/
+    └── ROADMAP.md             # Sonraki modüller ve test planı
+\`\`\`
 
-1. Depoyu indir veya klonla.
-2. `start.bat` dosyasını çalıştır: sanal ortam ve bağımlılıklar kurulur.
-3. Ya da PowerShell'de:
+## Bilinmesi gerekenler
 
-```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e .
-.\.venv\Scripts\python.exe -m sekobot
-```
+- **Bu sürüm bir ekran izleyicisidir**; otomatik farm, hareket, saldırı veya klavye/fare komutu henüz yoktur.
+- Windows **BitBlt/GDI** ekran yakalama kullanılır. Metin2 **görünür ve pencere modunda** olmalıdır. Üstünü kapatan başka pencere görüntüye girer; küçültülmüş pencereden görüntü alınamaz.
+- DirectX özel tam ekran veya donanım korumalı pencerelerde siyah görüntü oluşabilir. Önce pencere modunda deneyin; sonraki aşamada Windows Graphics Capture alternatifi eklenebilir.
+- Kare yakalama şu anda **Godot ana iş parçacığında** gerçekleşir; 10 FPS başlangıç için makuldür. Oyun ve bilgisayara göre hız ayarlanabilir. Daha sonra worker thread'e alınabilir.
+- Uygulama dışarıya veri göndermez. PNG'ler yerel diske kaydedilir.
+- Bu ortamda Godot .NET/Windows GUI çalıştırma imkânı olmadığından **gerçek pencere yakalama testi Windows üzerinde yapılmalıdır**.
 
-Test etmek için: `python -m pip install -e ".[dev]"` ve `python -m pytest -q`.
+## Sorun giderme
 
-## Kullanım
+- **C# script yüklenemedi:** Standart Godot yerine **.NET** sürümünü aç, .NET 8 SDK kur, editörde **Build** yap.
+- **Pencere listesi boş:** Metin2'yi pencere modunda aç; GDScript'in Build sonrası güncellendiğini kontrol et.
+- **Siyah/yanlış görüntü:** Tam ekranı kapat; oyun penceresinin başka pencere tarafından örtülmediğinden emin ol.
+- **Kare hızı düşük:** Önizlemeyi 5 FPS yap; daha düşük oyun çözünürlüğü dene.
 
-- Metin2'yi pencere modunda aç. Tek oyun penceresi varsa SekoBot otomatik bağlantıyı dener.
-- Birden çok Metin2 açıksa listeden pencere seçip **Pencereye bağlan**'a bas.
-- Canlı oyun görüntüsünü kontrol panelinde gör; **Ekran görüntüsü kaydet** ile PNG oluştur.
-- Görüntüler kullanıcı profilinin `Pictures\SekoBot` klasörüne kaydedilir.
-
-## Mimari
-
-- `windowing.py`: Win32 pencere seçimi, fiziksel ekran koordinatları ve HWND/PID doğrulaması.
-- `capture.py`: Test edilebilir pencere görüntü yakalama motoru.
-- `ui/worker.py`: Arka plan QThread yakalama döngüsü.
-- `ui/main_window.py`: Masaüstü kontrol paneli.
-- `ui/theme.py`: Tutarlı koyu arayüz teması.
-- `.github/workflows/build-windows.yml`: Windows'ta testler ve tek dosyalı EXE derlemesi.
-
-## Sınırlar
-
-İlk sürüm yalnızca **görüntü yakalar**. Farm/oyun kontrolü, bellek okuma veya tuş/fare gönderme içermez. MSS ekranda görünen pikselleri yakaladığından pencerenin üzeri örtülürse üstteki pencere görülebilir; simge durumunda görüntü alınamaz. Özel DirectX tam ekran modunda siyah görüntü oluşabilir. Pencere modu önerilir. İleride Windows Graphics Capture gibi ikinci bir backend eklenebilir.
-
-Görüntüler yalnızca yerel diske kaydedilir. Herhangi bir sunucuya yükleme yapılmaz.
+**Not:** Godot projeleri GDScript + C# ile hibrit çalışabilir. Arayüz sahneleri GDScript, Windows API erişimi C# olarak ayrılmıştır.
