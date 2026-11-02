@@ -5,7 +5,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using Godot;
-using GodotArray = Godot.Collections.Array;
+using GodotArray = Godot.Collections.Array<Godot.Collections.Dictionary>;
 using GodotDictionary = Godot.Collections.Dictionary;
 
 public partial class WindowCaptureBridge : Node
@@ -13,9 +13,9 @@ public partial class WindowCaptureBridge : Node
     private string _lastError = "";
 
     // These two entry points intentionally return only Godot-compatible types.
-    public GodotArray<GodotDictionary> ListWindows()
+    public GodotArray ListWindows()
     {
-        var result = new GodotArray<GodotDictionary>();
+        var result = new GodotArray();
         _lastError = "";
         if (!OperatingSystem.IsWindows())
         {
