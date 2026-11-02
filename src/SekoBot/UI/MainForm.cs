@@ -18,7 +18,7 @@ internal sealed class MainForm : Form
     private readonly ListBox _windows;
     private readonly Button _connect, _startBot, _stopBot, _record, _replay;
     private readonly CheckBox _dryRun, _background;
-    private readonly NumericUpDown _potionHp, _stopHp, _fightSeconds, _searchSeconds;
+    private readonly NumericUpDown _potionHp, _stopHp, _attackRange, _searchSeconds;
     private readonly PreviewControl _preview;
     private readonly Button[] _calibrationButtons;
     private readonly Label _status, _scanStatus, _captureName, _calibrationHint, _calibrationState;
@@ -126,14 +126,16 @@ internal sealed class MainForm : Form
         _potionHp = Theme.Number(botCard, new Rectangle(192, 156, 90, 26), 5, 95, (decimal)(_profile.PotionHpBelow * 100));
         Theme.Label(botCard, "Botu durdur HP (%)", new Rectangle(14, 188, 170, 26), 9f, Theme.Muted);
         _stopHp = Theme.Number(botCard, new Rectangle(192, 188, 90, 26), 0, 90, (decimal)(_profile.StopHpBelow * 100));
-        Theme.Label(botCard, "Saldırı süresi (sn)", new Rectangle(14, 220, 170, 26), 9f, Theme.Muted);
-        _fightSeconds = Theme.Number(botCard, new Rectangle(192, 220, 90, 26), 1, 30, (decimal)(_profile.FightMs / 1000.0), 1, 0.5m);
+        // Walk mode: how close (share of the screen height) a mob must be before Space is held.
+        Theme.Label(botCard, "Saldırı mesafesi (%)", new Rectangle(14, 220, 170, 26), 9f, Theme.Muted);
+        _attackRange = Theme.Number(botCard, new Rectangle(192, 220, 90, 26), 1, 20,
+            Math.Clamp((decimal)Math.Round(_profile.AttackRadius * 100, 1), 1, 20), 1, 0.5m);
         Theme.Label(botCard, "Mob arama süresi (sn)", new Rectangle(14, 252, 176, 26), 9f, Theme.Muted);
         _searchSeconds = Theme.Number(botCard, new Rectangle(192, 252, 90, 26), 2, 30,
             Math.Clamp(_profile.SearchTimeoutMs / 1000m, 2, 30), 0, 1);
         _potionHp.ValueChanged += (_, _) => { _profile.PotionHpBelow = (double)_potionHp.Value / 100; SaveProfile(); };
         _stopHp.ValueChanged += (_, _) => { _profile.StopHpBelow = (double)_stopHp.Value / 100; SaveProfile(); };
-        _fightSeconds.ValueChanged += (_, _) => { _profile.FightMs = (int)(_fightSeconds.Value * 1000); SaveProfile(); };
+        _attackRange.ValueChanged += (_, _) => { _profile.AttackRadius = (double)_attackRange.Value / 100; SaveProfile(); };
         _searchSeconds.ValueChanged += (_, _) => { _profile.SearchTimeoutMs = (int)(_searchSeconds.Value * 1000); SaveProfile(); };
 
         var openFolder = Theme.Button(botCard, "📁 Klasör", new Rectangle(14, 290, 80, 32), Theme.Secondary, Theme.SecondaryHover);

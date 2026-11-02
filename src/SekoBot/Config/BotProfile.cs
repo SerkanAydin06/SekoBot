@@ -49,6 +49,12 @@ internal sealed class KeyBindings
 
 internal sealed class BotProfile
 {
+    /// <summary>Current profile format; older files are upgraded once by <see cref="ProfileStore"/>.</summary>
+    public const int CurrentVersion = 2;
+
+    /// <summary>0 in files written before versioning.</summary>
+    public int Version { get; set; }
+
     /// <summary>Title of the game window; the bot connects to it on its own.</summary>
     public string GameWindowTitle { get; set; } = "Mobile2 Global";
 
@@ -82,7 +88,7 @@ internal sealed class BotProfile
     /// <summary>Press G and F again this often, in case the camera moved (0 = only at start).</summary>
     public int CameraRefreshMs { get; set; } = 30000;
     /// <summary>A mob counts as "next to the character" within this part of the screen height.</summary>
-    public double AttackRadius { get; set; } = 0.10;
+    public double AttackRadius { get; set; } = 0.05;
     /// <summary>While attacking, press the pickup key this often.</summary>
     public int LootEveryMs { get; set; } = 1500;
     /// <summary>No mob on screen: walk forward this long, then turn the camera, and look again.</summary>
@@ -139,14 +145,39 @@ internal static class ProfileStore
         try
         {
             if (File.Exists(ProfilePath))
-                return JsonSerializer.Deserialize<BotProfile>(File.ReadAllText(ProfilePath), Options) ?? new BotProfile();
+            {
+                var loaded = JsonSerializer.Deserialize<BotProfile>(File.ReadAllText(ProfilePath), Options);
+                if (loaded != null)
+                {
+                    if (Upgrade(loaded))
+                        try { Save(loaded); } catch { }
+                    return loaded;
+                }
+            }
         }
         catch
         {
             // A broken file must never block the app; keep a copy for the user.
             try { File.Copy(ProfilePath, ProfilePath + ".bozuk", true); } catch { }
         }
-        return new BotProfile();
+        return new BotProfile { Version = BotProfile.CurrentVersion };
+    }
+
+    /// <summary>
+    /// Brings an older profile up to date. Every setting is saved to the file, so a changed
+    /// default would never reach existing users; values that still equal the old default are
+    /// moved to the new one, values the user picked are kept.
+    /// </summary>
+    /// <returns>True when something changed.</returns>
+    internal static bool Upgrade(BotProfile profile)
+    {
+        if (profile.Version >= BotProfile.CurrentVersion)
+            return false;
+        // v2: attacking at 10 % of the screen height started too far from the mob.
+        if (Math.Abs(profile.AttackRadius - 0.10) < 0.0001)
+            profile.AttackRadius = 0.05;
+        profile.Version = BotProfile.CurrentVersion;
+        return true;
     }
 
     public static void Save(BotProfile profile)
