@@ -61,6 +61,8 @@ internal sealed class DashboardForm : Form
     private CancellationTokenSource? _captureCts;
     private bool _autoAttached;
     private long _frameCount;
+    // Never queue more than one unrendered frame on the UI thread.
+    private int _pendingFrame;
 
     public DashboardForm()
     {
@@ -145,7 +147,7 @@ internal sealed class DashboardForm : Form
             ForeColor = TextColor,
             Font = new Font("Segoe UI", 10f)
         };
-        _fpsSelector.Items.AddRange(new object[] { "5 FPS", "10 FPS", "15 FPS" });
+        _fpsSelector.Items.AddRange(new object[] { "5 FPS", "10 FPS", "15 FPS", "30 FPS" });
         _fpsSelector.SelectedIndex = 1;
         sidebar.Controls.Add(_fpsSelector);
 
@@ -386,7 +388,7 @@ internal sealed class DashboardForm : Form
         }
     }
 
-    private int TargetFps => _fpsSelector.SelectedIndex switch { 0 => 5, 2 => 15, _ => 10 };
+    private int TargetFps => _fpsSelector.SelectedIndex switch { 0 => 5, 2 => 15, 3 => 30, _ => 10 };
 
     private void StartCapture()
     {
@@ -414,11 +416,12 @@ internal sealed class DashboardForm : Form
         WriteLog($"Bağlanılıyor: {window.Title} (PID {window.ProcessId})");
         WriteLog("Not: Oyun görünür olmalı; üstünü başka pencere kapatmamalı.");
         UpdateControls();
-        _ = CaptureLoopAsync(window, TargetFps, _captureCts.Token);
+        _ = CaptureLoopAsync(window, TargetFps, _captureCts);
     }
 
-    private async Task CaptureLoopAsync(WindowInfo window, int captureFps, CancellationToken token)
+    private async Task CaptureLoopAsync(WindowInfo window, int captureFps, CancellationTokenSource session)
     {
+        var token = session.Token;
         var measure = Stopwatch.StartNew();
         int framesInSample = 0;
         try
@@ -438,6 +441,7 @@ internal sealed class DashboardForm : Form
                 {
                     PostUi(() =>
                     {
+                        if (!ReferenceEquals(_captureCts, session)) return;
                         StopCapture();
                         SetStatus("YAKALAMA HATASI", Red);
                         WriteLog(result.Error);
@@ -455,27 +459,20 @@ internal sealed class DashboardForm : Form
                     measure.Restart();
                 }
                 double displayedFps = fps;
-                if (!PostUi(() =>
+                // Frames are disposable and only one UI update may be queued.
+                // Slow UI painting must not block capture or create an unbounded queue.
+                if (Interlocked.CompareExchange(ref _pendingFrame, 1, 0) == 0)
                 {
-                    if (token.IsCancellationRequested)
+                    if (!TryPostFrame(bitmap, session, displayedFps))
                     {
+                        Interlocked.Exchange(ref _pendingFrame, 0);
                         bitmap.Dispose();
-                        return;
+                        break;
                     }
-                    var old = _preview.Image;
-                    _preview.Image = bitmap;
-                    old?.Dispose();
-                    _placeholder.Visible = false;
-                    _frameCount++;
-                    _sizeText.Text = $"{bitmap.Width} × {bitmap.Height}";
-                    _framesText.Text = _frameCount.ToString("N0");
-                    if (displayedFps > 0) _fpsText.Text = displayedFps.ToString("0.0");
-                    _saveButton.Enabled = true;
-                    SetStatus("BAĞLI", Green);
-                }))
+                }
+                else
                 {
                     bitmap.Dispose();
-                    break;
                 }
 
                 var remaining = Math.Max(1, (int)(1000.0 / captureFps - step.Elapsed.TotalMilliseconds));
@@ -490,11 +487,50 @@ internal sealed class DashboardForm : Form
         {
             PostUi(() =>
             {
+                if (!ReferenceEquals(_captureCts, session)) return;
                 StopCapture();
                 SetStatus("YAKALAMA HATASI", Red);
                 WriteLog("Yakalama döngüsü: " + ex.Message);
             });
         }
+    }
+
+    private bool TryPostFrame(Bitmap bitmap, CancellationTokenSource session, double fps)
+    {
+        if (IsDisposed || Disposing || !IsHandleCreated)
+            return false;
+        try
+        {
+            BeginInvoke((Action)(() =>
+            {
+                try
+                {
+                    if (IsDisposed || session.IsCancellationRequested ||
+                        !ReferenceEquals(_captureCts, session))
+                        return;
+
+                    var old = _preview.Image;
+                    _preview.Image = bitmap;
+                    bitmap = null!;
+                    old?.Dispose();
+                    _placeholder.Visible = false;
+                    _frameCount++;
+                    _sizeText.Text = $"{_preview.Image.Width} × {_preview.Image.Height}";
+                    _framesText.Text = _frameCount.ToString("N0");
+                    if (fps > 0) _fpsText.Text = fps.ToString("0.0");
+                    _saveButton.Enabled = true;
+                    SetStatus("BAĞLI", Green);
+                }
+                finally
+                {
+                    bitmap?.Dispose();
+                    Interlocked.Exchange(ref _pendingFrame, 0);
+                }
+            }));
+            return true;
+        }
+        catch (InvalidOperationException) { return false; }
+        catch (ObjectDisposedException) { return false; }
     }
 
     private bool PostUi(Action action)
