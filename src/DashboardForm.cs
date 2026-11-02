@@ -281,9 +281,8 @@ internal sealed class DashboardForm : Form
             return;
 
         bool selected = (e.State & DrawItemState.Selected) != 0;
-        e.Graphics.FillRectangle(
-            new SolidBrush(selected ? Color.FromArgb(36, 68, 112) : PreviewBackground),
-            e.Bounds);
+        using (var fill = new SolidBrush(selected ? Color.FromArgb(36, 68, 112) : PreviewBackground))
+            e.Graphics.FillRectangle(fill, e.Bounds);
         var nameBounds = new Rectangle(e.Bounds.X + 9, e.Bounds.Y + 4,
             e.Bounds.Width - 17, 18);
         using var bold = new Font("Segoe UI", 9f, FontStyle.Bold);
@@ -389,10 +388,10 @@ internal sealed class DashboardForm : Form
         WriteLog($"Bağlanılıyor: {window.Title} (PID {window.ProcessId})");
         WriteLog("Not: Oyun görünür olmalı; üstünü başka pencere kapatmamalı.");
         UpdateControls();
-        _ = CaptureLoopAsync(window, _captureCts.Token);
+        _ = CaptureLoopAsync(window, TargetFps, _captureCts.Token);
     }
 
-    private async Task CaptureLoopAsync(WindowInfo window, CancellationToken token)
+    private async Task CaptureLoopAsync(WindowInfo window, int captureFps, CancellationToken token)
     {
         var measure = Stopwatch.StartNew();
         int framesInSample = 0;
@@ -453,7 +452,7 @@ internal sealed class DashboardForm : Form
                     break;
                 }
 
-                var remaining = Math.Max(1, (int)(1000.0 / TargetFps - step.Elapsed.TotalMilliseconds));
+                var remaining = Math.Max(1, (int)(1000.0 / captureFps - step.Elapsed.TotalMilliseconds));
                 await Task.Delay(remaining, token).ConfigureAwait(false);
             }
         }

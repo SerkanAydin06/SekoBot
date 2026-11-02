@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -102,7 +103,7 @@ internal static class WindowService
                 return true;
 
             NativeWindows.GetWindowThreadProcessId(handle, out uint pid);
-            if (pid == Environment.ProcessId)
+            if (pid == (uint)Environment.ProcessId)
                 return true;
 
             found.Add(new WindowInfo(
