@@ -38,6 +38,13 @@ internal sealed class KeyBindings
     public Keys MpPotion { get; set; } = Keys.D2;
     public Keys RotateCamera { get; set; } = Keys.E;
     public Keys MoveForward { get; set; } = Keys.W;
+    public Keys MoveLeft { get; set; } = Keys.A;
+    public Keys MoveBack { get; set; } = Keys.S;
+    public Keys MoveRight { get; set; } = Keys.D;
+    /// <summary>Held at start: tilts the camera to look straight down.</summary>
+    public Keys CameraTop { get; set; } = Keys.G;
+    /// <summary>Held at start: zooms the camera out.</summary>
+    public Keys ZoomOut { get; set; } = Keys.F;
 }
 
 internal sealed class BotProfile
@@ -61,6 +68,24 @@ internal sealed class BotProfile
     public int PotionCooldownMs { get; set; } = 1500;
     /// <summary>A low HP/MP reading must last this long before a potion or stop (filters bad frames).</summary>
     public int BarConfirmMs { get; set; } = 300;
+
+    /// <summary>
+    /// Walk mode (default): camera to top-down + zoomed out (G, F), walk with W/A/S/D to the
+    /// nearest red mob name, hold Space when it is next to the character. Off: click mode.
+    /// </summary>
+    public bool NavigateMode { get; set; } = true;
+    /// <summary>How long G and F are held at start to set up the camera.</summary>
+    public int CameraSetupHoldMs { get; set; } = 1500;
+    /// <summary>Press G and F again this often, in case the camera moved (0 = only at start).</summary>
+    public int CameraRefreshMs { get; set; } = 30000;
+    /// <summary>A mob counts as "next to the character" within this part of the screen height.</summary>
+    public double AttackRadius { get; set; } = 0.10;
+    /// <summary>While attacking, press the pickup key this often.</summary>
+    public int LootEveryMs { get; set; } = 1500;
+    /// <summary>No mob on screen: walk forward this long, then turn the camera, and look again.</summary>
+    public int ExploreWalkMs { get; set; } = 1200;
+    /// <summary>Walking to the same mob longer than this means stuck: try exploring instead.</summary>
+    public int MoveStuckMs { get; set; } = 8000;
 
     /// <summary>Find mobs by their movement on screen and click them; a target bar confirms the hit.</summary>
     public bool AutoTarget { get; set; } = true;

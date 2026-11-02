@@ -89,9 +89,14 @@ internal static class NameFinder
         return names;
     }
 
-    /// <summary>HUD bars, minimap, and the player's own character/name in the middle.</summary>
+    /// <summary>
+    /// Screen parts that are UI, measured on a real 1920×1080 screenshot: the target bar at the
+    /// top, the skill/HP bar at the bottom (mobs walk right down to ~90 %), the minimap with
+    /// its texts (top right) and the red "Görevler"/"Mesaj" buttons (top left). The middle is
+    /// NOT ignored: a mob next to the character must be seen (player names aren't red).
+    /// </summary>
     private static bool Ignored(double x, double y) =>
-        y < 0.12 || y > 0.80 || (x > 0.78 && y < 0.32) || (Math.Abs(x - 0.5) < 0.07 && y > 0.30 && y < 0.62);
+        y < 0.08 || y > 0.91 || (x > 0.78 && y < 0.38) || (x < 0.11 && y < 0.50);
 
     private static double PixelDensity(Frame frame, Rectangle box)
     {

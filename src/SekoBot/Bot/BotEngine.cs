@@ -131,7 +131,16 @@ internal sealed class BotEngine : IDisposable
                     {
                         SearchBars(frame, profile, now);
                         var state = Perception.Analyze(frame, profile, now);
-                        if (profile.AutoTarget)
+                        if (profile.NavigateMode)
+                        {
+                            // Top-down camera: the name sits right on the mob.
+                            int down = (int)(frame.Height * 0.02);
+                            var mobs = NameFinder.Find(frame)
+                                .Select(n => new Point(n.X + n.Width / 2, n.Y + n.Height / 2 + down))
+                                .ToList();
+                            state = state with { MobCandidates = mobs };
+                        }
+                        else if (profile.AutoTarget)
                         {
                             var moving = _motion.Update(frame, now);
                             var mobs = MobLocator.Combine(NameFinder.Find(frame), moving, frame.Width, frame.Height,

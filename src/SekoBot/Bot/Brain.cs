@@ -13,7 +13,7 @@ namespace SekoBot.Bot;
 /// Any time → HP/MP potions with cooldown, stop on critical HP. A low reading must last
 ///            BarConfirmMs, so one bad frame (loading screen, menu, overlap) is ignored.
 /// </summary>
-internal sealed class Brain
+internal sealed partial class Brain
 {
     private static readonly TimeSpan Never = TimeSpan.FromDays(-1);
 
@@ -44,6 +44,12 @@ internal sealed class Brain
         _hpCriticalSince = _hpLowSince = _mpLowSince = Never;
         _failedSearches = 0;
         _blindFight = false;
+        if (_profile().NavigateMode)
+        {
+            ResetNavigation();
+            Enter(BotPhase.Setup, now);
+            return;
+        }
         Enter(_profile().AutoTarget ? BotPhase.Searching : BotPhase.Fighting, now);
     }
 
@@ -78,6 +84,12 @@ internal sealed class Brain
             actions.Add(new KeyTapAction(p.Keys.MpPotion));
             _lastMpPotion = now;
             Potions++;
+        }
+
+        if (p.NavigateMode)
+        {
+            Navigate(state, p, actions);
+            return actions;
         }
 
         if (!state.HasTarget)

@@ -48,7 +48,9 @@ internal sealed record StopAction(string Reason) : BotAction
 internal enum BotPhase
 {
     Stopped,
+    Setup,
     Searching,
+    Moving,
     Fighting,
     Looting,
     Turning
@@ -58,7 +60,9 @@ internal static class BotPhaseText
 {
     public static string ToTurkish(this BotPhase phase) => phase switch
     {
+        BotPhase.Setup => "Kamera ayarlanıyor",
         BotPhase.Searching => "Mob arıyor",
+        BotPhase.Moving => "Moba yürüyor",
         BotPhase.Fighting => "Saldırıyor",
         BotPhase.Looting => "Eşya toplanıyor",
         BotPhase.Turning => "Yön değiştiriyor",

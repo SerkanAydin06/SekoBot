@@ -58,14 +58,14 @@ public class NameFinderTests
     }
 
     [Fact]
-    public void Finds_red_names_but_not_bars_or_own_name()
+    public void Finds_red_names_but_not_bars_or_ui_buttons()
     {
         var c = new Canvas();
         c.Name(250, 150, 8);     // mob
         c.Name(600, 420, 5);     // another mob
         c.Fill(520, 250, 100, 6);  // thin solid red strip: a bar, not a name
         c.Label(150, 380, 40);     // "Kurt" on its dark red label
-        c.Name(380, 250, 6);     // own character's name, in the middle
+        c.Name(60, 200, 3);      // red "Görevler" button text, top left: UI
         c.Fill(20, 560, 120, 6); // HP bar in the HUD
         using var frame = c.ToFrame();
         var names = NameFinder.Find(frame);
@@ -162,5 +162,20 @@ public class NameFinderTests
     {
         using var frame = Grass();
         Assert.Null(MobLocator.BodyBelow(frame, new Rectangle(250, 150, 72, 12)));
+    }
+
+    [Fact]
+    public void Real_screenshot_finds_the_three_wolves_and_nothing_else()
+    {
+        // 1919×1078 top-down screenshot from the game: "Aç Mavi Kurt" ×2 and "Kurt" near the
+        // bottom; red "Görevler"/"Mesaj" buttons on the left must not count.
+        string path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "topdown-wolves.png");
+        using var frame = SekoBot.Recording.RecordingFormat.LoadPng(path);
+        var names = NameFinder.Find(frame);
+        Assert.Equal(3, names.Count);
+        Assert.Contains(names, n => Math.Abs(n.X - 368) <= 8 && Math.Abs(n.Y - 860) <= 8);
+        Assert.Contains(names, n => Math.Abs(n.X - 536) <= 8 && Math.Abs(n.Y - 868) <= 8);
+        Assert.Contains(names, n => Math.Abs(n.X - 860) <= 8 && Math.Abs(n.Y - 888) <= 8);
+        Assert.DoesNotContain(names, n => n.X < 250);
     }
 }
