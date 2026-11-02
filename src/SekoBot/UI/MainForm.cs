@@ -4,6 +4,7 @@ using SekoBot.Capture;
 using SekoBot.Config;
 using SekoBot.Input;
 using SekoBot.Native;
+using SekoBot.Recording;
 using SekoBot.Update;
 using SekoBot.Vision;
 
@@ -15,7 +16,7 @@ internal sealed class MainForm : Form
 
     private readonly BotProfile _profile = ProfileStore.Load();
     private readonly ListBox _windows;
-    private readonly Button _connect, _startBot, _stopBot;
+    private readonly Button _connect, _startBot, _stopBot, _record, _replay;
     private readonly CheckBox _dryRun;
     private readonly NumericUpDown _potionHp, _stopHp, _fightSeconds, _rotateEvery;
     private readonly PreviewControl _preview;
@@ -29,7 +30,9 @@ internal sealed class MainForm : Form
     private BotEngine? _engine;
     private Bitmap? _frameBitmap;
     private long _frameSequence;
-    private bool _autoAttached, _updating, _gameMinimized;
+    private bool _autoAttached, _updating, _gameMinimized, _replaying;
+    /// <summary>Verified update that arrived while the bot was running.</summary>
+    private PreparedUpdate? _pendingUpdate;
 
     protected override CreateParams CreateParams
     {
@@ -115,7 +118,7 @@ internal sealed class MainForm : Form
         _startBot = Theme.Button(botCard, "▶  Başlat  (F10)", new Rectangle(14, 64, 268, 38), Theme.Primary, Theme.PrimaryHover);
         _startBot.Click += (_, _) => ToggleBot();
         _stopBot = Theme.Button(botCard, "■  Durdur  (F12)", new Rectangle(14, 108, 268, 34), Theme.Danger, Theme.DangerHover);
-        _stopBot.Click += (_, _) => StopBot("kullanıcı durdurdu");
+        _stopBot.Click += (_, _) => StopBot("kullanıcı durdurdu", byUser: true);
 
         Theme.Label(botCard, "HP iksiri (%)", new Rectangle(14, 156, 170, 26), 9f, Theme.Muted);
         _potionHp = Theme.Number(botCard, new Rectangle(192, 156, 90, 26), 5, 95, (decimal)(_profile.PotionHpBelow * 100));
@@ -130,8 +133,14 @@ internal sealed class MainForm : Form
         _fightSeconds.ValueChanged += (_, _) => { _profile.FightMs = (int)(_fightSeconds.Value * 1000); SaveProfile(); };
         _rotateEvery.ValueChanged += (_, _) => { _profile.RotateEveryCycles = (int)_rotateEvery.Value; SaveProfile(); };
 
-        var openFolder = Theme.Button(botCard, "📁  Profil klasörü", new Rectangle(14, 290, 268, 32), Theme.Secondary, Theme.SecondaryHover);
+        var openFolder = Theme.Button(botCard, "📁 Klasör", new Rectangle(14, 290, 80, 32), Theme.Secondary, Theme.SecondaryHover);
         openFolder.Click += (_, _) => OpenProfileFolder();
+        _record = Theme.Button(botCard, "⏺ Kaydet", new Rectangle(98, 290, 88, 32), Theme.Secondary, Theme.SecondaryHover);
+        _record.Click += (_, _) => ToggleRecording();
+        _replay = Theme.Button(botCard, "▶ Kaydı oynat", new Rectangle(190, 290, 92, 32), Theme.Secondary, Theme.SecondaryHover);
+        _replay.Click += async (_, _) => await ReplayAsync();
+        foreach (var small in new[] { openFolder, _record, _replay })
+            small.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
         Theme.Label(botCard, "Tuşlar: profile.json  ·  F10 başlat · F12 dur", new Rectangle(14, 328, 268, 22), 8f, Theme.Muted);
 
         // ── Preview card ─────────────────────────────────────────
@@ -146,12 +155,12 @@ internal sealed class MainForm : Form
 
         _calibrationHint = Theme.Label(previewCard, "Önizlemede fareyle bir alan seç, sonra ne olduğunu işaretle:",
             new Rectangle(16, 398, 818, 20), 8.5f, Theme.Muted);
-        string[] names = ["HP barı", "MP barı", "Hedef HP barı (isteğe bağlı)", "Tümünü sıfırla"];
+        string[] names = ["HP barı", "MP barı", "Hedef HP barı (isteğe bağlı)", "Sıfırla / yeniden bul"];
         _calibrationButtons = new Button[names.Length];
         int bx = 16;
         for (int i = 0; i < names.Length; i++)
         {
-            int width = i == 2 ? 230 : 140;
+            int width = i == 2 ? 230 : i == 3 ? 190 : 140;
             int index = i;
             var button = Theme.Button(previewCard, names[i], new Rectangle(bx, 424, width, 38),
                 i == 3 ? Theme.Danger : Theme.Secondary, i == 3 ? Theme.DangerHover : Theme.SecondaryHover);
@@ -202,7 +211,7 @@ internal sealed class MainForm : Form
 
         if (!_hotkeys.Register(Keys.F10, () => BeginInvoke(new Action(ToggleBot))))
             WriteLog("F10 kısayolu başka bir uygulamada kullanılıyor.");
-        if (!_hotkeys.Register(Keys.F12, () => BeginInvoke(new Action(() => StopBot("F12 acil durdurma")))))
+        if (!_hotkeys.Register(Keys.F12, () => BeginInvoke(new Action(() => StopBot("F12 acil durdurma", byUser: true)))))
             WriteLog("F12 kısayolu başka bir uygulamada kullanılıyor.");
 
         Shown += async (_, _) =>
@@ -310,6 +319,13 @@ internal sealed class MainForm : Form
         {
             var engine = new BotEngine(window, _profile, message => PostLog(message));
             engine.CaptureFailed += message => PostUi(() => { if (_engine == engine) Disconnect(message); });
+            engine.BarsChanged += message => PostUi(() =>
+            {
+                SaveProfile();
+                if (message.Length > 0) WriteLog(message);
+                _preview.Invalidate();
+                UpdateControls();
+            });
             engine.BotStopped += reason => PostUi(() => { SetStatus("DURDU: " + reason, Theme.Yellow); UpdateControls(); });
             _engine = engine;
             engine.Start(previewFps: 30);
@@ -360,7 +376,7 @@ internal sealed class MainForm : Form
         }
         if (_engine.BotRunning)
         {
-            StopBot("duraklatıldı");
+            StopBot("duraklatıldı", byUser: true);
             return;
         }
         if (!_engine.StartBot(_dryRun.Checked, out string error))
@@ -373,13 +389,78 @@ internal sealed class MainForm : Form
         UpdateControls();
     }
 
-    private void StopBot(string reason)
+    /// <param name="byUser">F10/F12/button: a pending update may install now. Automatic stops
+    /// (critical HP, minimized game) keep the window as is so the user can see why it stopped.</param>
+    private void StopBot(string reason, bool byUser = false)
     {
         if (_engine?.BotRunning != true)
             return;
         _engine.StopBot(reason);
         SetStatus("BAĞLI", Theme.Green);
         UpdateControls();
+        if (byUser && _pendingUpdate is PreparedUpdate pending)
+            _ = ApplyUpdateAsync(pending);
+    }
+
+    // ── Recording / replay ───────────────────────────────────────
+
+    private void ToggleRecording()
+    {
+        if (_engine == null)
+            return;
+        try
+        {
+            if (_engine.IsRecording)
+                _engine.StopRecording();
+            else
+                _engine.StartRecording();
+        }
+        catch (Exception ex)
+        {
+            WriteLog("Kayıt başlatılamadı: " + ex.Message);
+        }
+        UpdateControls();
+    }
+
+    /// <summary>Runs a recording through the current calibration and bot logic, then shows the report.</summary>
+    private async Task ReplayAsync()
+    {
+        if (_replaying)
+            return;
+        using var dialog = new FolderBrowserDialog
+        {
+            Description = "Oynatılacak kayıt klasörünü seç (içinde ticks.jsonl olan)",
+            UseDescriptionForTitle = true,
+            InitialDirectory = Directory.Exists(RecordingFormat.Root) ? RecordingFormat.Root : ProfileStore.Directory
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+            return;
+        string folder = dialog.SelectedPath;
+        // The replay runs on a worker; give it a snapshot so UI edits can't race with it.
+        var profile = System.Text.Json.JsonSerializer.Deserialize<BotProfile>(
+            System.Text.Json.JsonSerializer.Serialize(_profile, RecordingFormat.Json), RecordingFormat.Json)!;
+        _replaying = true;
+        UpdateControls();
+        WriteLog("Kayıt oynatılıyor: " + folder);
+        try
+        {
+            string report = await Task.Run(() => Replayer.Report(SessionRecording.Load(folder), profile));
+            string reportPath = Path.Combine(folder, "replay-report.txt");
+            await File.WriteAllTextAsync(reportPath, report);
+            foreach (var line in report.Split(Environment.NewLine).Skip(3).Take(5))
+                if (line.Length > 0) WriteLog(line);
+            WriteLog("Rapor: " + reportPath);
+            Process.Start(new ProcessStartInfo(reportPath) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            WriteLog("Kayıt oynatılamadı: " + ex.Message);
+        }
+        finally
+        {
+            _replaying = false;
+            if (!IsDisposed) UpdateControls();
+        }
     }
 
     // ── Calibration ──────────────────────────────────────────────
@@ -426,7 +507,7 @@ internal sealed class MainForm : Form
     /// <summary>Deletes every marked bar (HP/MP/target).</summary>
     private void ResetCalibration()
     {
-        var answer = MessageBox.Show(this, "İşaretlenen tüm barlar (HP, MP, hedef) silinsin mi?",
+        var answer = MessageBox.Show(this, "Tüm barlar (HP, MP, hedef) silinsin ve otomatik olarak yeniden bulunsun mu?",
             "SekoBot", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         if (answer != DialogResult.Yes)
             return;
@@ -437,7 +518,7 @@ internal sealed class MainForm : Form
         SaveProfile();
         _preview.State = null;
         _preview.ClearSelection();
-        WriteLog("Kalibrasyon sıfırlandı: tüm işaretli barlar silindi.");
+        WriteLog("Barlar sıfırlandı; otomatik olarak yeniden aranıyor…");
         UpdateControls();
     }
 
@@ -489,9 +570,9 @@ internal sealed class MainForm : Form
             _preview.Image = _frameBitmap;
             _preview.State = _engine.State;
             var stats = _engine.Stats;
-            _preview.Overlay = stats.BotRunning
+            _preview.Overlay = (_engine.IsRecording ? "⏺ KAYIT  " : "") + (stats.BotRunning
                 ? (stats.DryRun ? "KURU · " : "") + stats.Phase.ToTurkish()
-                : "";
+                : "");
             _preview.Invalidate();
         }
     }
@@ -534,6 +615,12 @@ internal sealed class MainForm : Form
         _startBot.Enabled = connected;
         _startBot.Text = running ? "❚❚  Duraklat  (F10)" : "▶  Başlat  (F10)";
         _stopBot.Enabled = running;
+        bool recording = _engine?.IsRecording == true;
+        _record.Enabled = connected;
+        _record.Text = recording ? "■ Bitir" : "⏺ Kaydet";
+        _record.BackColor = recording ? Theme.Danger : Theme.Secondary;
+        _record.FlatAppearance.MouseOverBackColor = recording ? Theme.DangerHover : Theme.SecondaryHover;
+        _replay.Enabled = !_replaying;
         _dryRun.Enabled = !running;
         bool hasSelection = connected && _preview.Selection != null;
         for (int i = 0; i < 3; i++)
@@ -542,7 +629,9 @@ internal sealed class MainForm : Form
             ? "Kalibrasyon için önce oyuna bağlan."
             : hasSelection
                 ? "Seçili alanı ne olarak kaydedelim? (Bar seçerken bar dolu olmalı)"
-                : "Önizlemede fareyle bir bar seç (HP, MP veya hedef HP), sonra aşağıdan işaretle.";
+                : _profile.HpBar == null
+                    ? "HP/MP barları otomatik aranıyor… Bulunamazsa barı fareyle seçip aşağıdan işaretle."
+                    : "Barlar hazır. Yanlışsa barı fareyle seçip elle işaretle ya da 'Sıfırla / yeniden bul'.";
     }
 
     // ── Update ───────────────────────────────────────────────────
@@ -551,6 +640,11 @@ internal sealed class MainForm : Form
     {
         if (_updating || (!startup && _engine?.BotRunning == true))
             return;
+        if (_pendingUpdate is PreparedUpdate ready && File.Exists(ready.FilePath))
+        {
+            await ApplyUpdateAsync(ready);
+            return;
+        }
         if (startup)
             WriteLog("Güncelleme kontrol ediliyor…");
         var result = await UpdateService.CheckAndDownloadAsync();
@@ -566,26 +660,47 @@ internal sealed class MainForm : Form
             if (startup) WriteLog($"SekoBot güncel (v{BuildInfo.Version}).");
             return;
         }
-        // Never interrupt a running farm session; try again on the next timer tick.
+        await ApplyUpdateAsync(update);
+    }
+
+    private async Task ApplyUpdateAsync(PreparedUpdate update)
+    {
+        if (_updating || IsDisposed)
+            return;
+        // Never interrupt a running farm session; install when the user stops the bot.
         if (_engine?.BotRunning == true)
         {
-            WriteLog("Yeni sürüm hazır; bot durunca yüklenecek.");
+            if (_pendingUpdate == null)
+                WriteLog($"Yeni sürüm {update.Version} hazır; botu durdurduğunda (F10/F12) yüklenecek.");
+            _pendingUpdate = update;
             return;
         }
         _updating = true;
         SetStatus("GÜNCELLENİYOR", Theme.Yellow);
         WriteLog($"Yeni sürüm {update.Version} doğrulandı. SekoBot yeniden başlatılıyor…");
         await Task.Delay(1200);
+        if (IsDisposed)
+            return;
+        if (_engine?.BotRunning == true)
+        {
+            // The user restarted the bot during the countdown.
+            _updating = false;
+            _pendingUpdate = update;
+            WriteLog("Bot yeniden başladı; güncelleme bot durunca yüklenecek.");
+            return;
+        }
         try
         {
             _engine?.Dispose();
             _engine = null;
             UpdateService.InstallAfterExit(update);
+            _pendingUpdate = null;
             Close();
         }
         catch (Exception ex)
         {
             _updating = false;
+            _pendingUpdate = null;
             SetStatus("HAZIR", Theme.Green);
             WriteLog("Güncelleme uygulanamadı: " + ex.Message);
         }

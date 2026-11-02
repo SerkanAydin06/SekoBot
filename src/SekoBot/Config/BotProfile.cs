@@ -26,6 +26,8 @@ internal sealed class BarSpec
     public byte G { get; set; }
     public byte B { get; set; }
     public int Tolerance { get; set; } = 70;
+    /// <summary>Found automatically (may be widened/moved by the bot); false = marked by hand.</summary>
+    public bool Auto { get; set; }
 }
 
 internal sealed class KeyBindings
@@ -47,11 +49,15 @@ internal sealed class BotProfile
     public BarSpec? TargetBar { get; set; }
 
     public int PerceptionFps { get; set; } = 10;
+    /// <summary>Find HP/MP/target bars on screen automatically (manual marks always win).</summary>
+    public bool AutoDetectBars { get; set; } = true;
 
     public double PotionHpBelow { get; set; } = 0.55;
     public double PotionMpBelow { get; set; } = 0.25;
     public double StopHpBelow { get; set; } = 0.20;
     public int PotionCooldownMs { get; set; } = 1500;
+    /// <summary>A low HP/MP reading must last this long before a potion or stop (filters bad frames).</summary>
+    public int BarConfirmMs { get; set; } = 300;
 
     /// <summary>How long the attack key is held per cycle.</summary>
     public int FightMs { get; set; } = 4000;
@@ -64,6 +70,11 @@ internal sealed class BotProfile
     /// <summary>Walk forward every N cycles (0 = never).</summary>
     public int MoveEveryCycles { get; set; } = 0;
     public int MoveHoldMs { get; set; } = 1000;
+
+    /// <summary>Recording: store one PNG frame this often (potion/stop frames are always stored).</summary>
+    public int RecordFrameIntervalMs { get; set; } = 1000;
+    /// <summary>Recording: stop storing frames above this size; bar values keep being recorded.</summary>
+    public int RecordMaxMb { get; set; } = 1500;
 
     public KeyBindings Keys { get; set; } = new();
 }

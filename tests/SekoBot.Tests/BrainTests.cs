@@ -77,12 +77,29 @@ public class BrainTests
     public void Drinks_potion_with_cooldown_and_stops_on_critical_hp()
     {
         var (brain, p) = Started();
-        Assert.Contains(brain.Tick(State(100, hp: 0.4)).OfType<KeyTapAction>(), a => a.Key == p.Keys.HpPotion);
-        Assert.DoesNotContain(brain.Tick(State(300, hp: 0.4)).OfType<KeyTapAction>(), a => a.Key == p.Keys.HpPotion);
-        var stop = brain.Tick(State(500, hp: 0.1));
+        Assert.DoesNotContain(brain.Tick(State(100, hp: 0.4)).OfType<KeyTapAction>(), a => a.Key == p.Keys.HpPotion);
+        Assert.Contains(brain.Tick(State(450, hp: 0.4)).OfType<KeyTapAction>(), a => a.Key == p.Keys.HpPotion);
+        Assert.DoesNotContain(brain.Tick(State(600, hp: 0.4)).OfType<KeyTapAction>(), a => a.Key == p.Keys.HpPotion);
+        Assert.Empty(brain.Tick(State(700, hp: 0.1)).OfType<StopAction>());
+        var stop = brain.Tick(State(1050, hp: 0.1));
         Assert.Single(stop.OfType<StopAction>());
         Assert.Contains(stop, a => a is KeyUpAction);
         Assert.Equal(BotPhase.Stopped, brain.Phase);
         Assert.Equal(1, brain.Potions);
+    }
+
+    [Fact]
+    public void Single_bad_frames_do_not_stop_or_drink()
+    {
+        var (brain, p) = Started();
+        var actions = new List<BotAction>();
+        for (int i = 0; i < 15; i++)
+        {
+            actions.AddRange(brain.Tick(State(100 + i * 200, hp: 0.05)));
+            actions.AddRange(brain.Tick(State(200 + i * 200, hp: 1)));
+        }
+        Assert.DoesNotContain(actions, a => a is StopAction);
+        Assert.DoesNotContain(actions.OfType<KeyTapAction>(), a => a.Key == p.Keys.HpPotion);
+        Assert.Equal(BotPhase.Fighting, brain.Phase);
     }
 }

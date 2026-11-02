@@ -31,7 +31,16 @@ internal sealed class Frame : IDisposable
         new(width, height, ArrayPool<byte>.Shared.Rent(width * height * 4), true) { Sequence = sequence };
 
     /// <summary>Test helper / small frames.</summary>
-    public static Frame FromArray(int width, int height, byte[] data) => new(width, height, data, false);
+    public static Frame FromArray(int width, int height, byte[] data, long sequence = 0) =>
+        new(width, height, data, false) { Sequence = sequence };
+
+    /// <summary>Independent copy (own buffer) that outlives this frame.</summary>
+    public Frame Clone()
+    {
+        var copy = Rent(Width, Height, Sequence);
+        Buffer.BlockCopy(Data, 0, copy.Data, 0, Stride * Height);
+        return copy;
+    }
 
     public (byte B, byte G, byte R) Pixel(int x, int y)
     {

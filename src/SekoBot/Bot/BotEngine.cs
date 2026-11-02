@@ -5,6 +5,7 @@ using System.Threading.Channels;
 using SekoBot.Capture;
 using SekoBot.Config;
 using SekoBot.Input;
+using SekoBot.Recording;
 using SekoBot.Vision;
 
 namespace SekoBot.Bot;
@@ -38,6 +39,10 @@ internal sealed class BotEngine : IDisposable
     private long _framesReceived;
     private int _previewFps;
     private ChannelWriter<Frame>? _writer;
+    private SessionRecorder? _recorder;
+    private readonly AutoBars _autoBars = new();
+    private TimeSpan _lastBarSearch = TimeSpan.FromDays(-1), _barSearchStarted = TimeSpan.FromDays(-1);
+    private bool _barSearchFailedLogged;
     private bool _disposed;
 
     public BotEngine(WindowInfo window, BotProfile profile, Action<string> log)
@@ -56,6 +61,8 @@ internal sealed class BotEngine : IDisposable
     /// <summary>Raised from a worker thread when capture stops or the bot stops itself.</summary>
     public event Action<string>? CaptureFailed;
     public event Action<string>? BotStopped;
+    /// <summary>Raised from the pipeline thread when automatic bar detection changed the profile.</summary>
+    public event Action<string>? BarsChanged;
 
     public void Start(int previewFps)
     {
@@ -116,9 +123,11 @@ internal sealed class BotEngine : IDisposable
                     lastAnalysis = now;
                     try
                     {
+                        SearchBars(frame, profile, now);
                         var state = Perception.Analyze(frame, profile, now);
                         Volatile.Write(ref _state, state);
-                        TickBot(state);
+                        var (phase, actions) = TickBot(state);
+                        Volatile.Read(ref _recorder)?.Record(frame, state, phase, actions, IsImportant(actions, profile));
                     }
                     catch (Exception ex)
                     {
@@ -140,14 +149,19 @@ internal sealed class BotEngine : IDisposable
         }
     }
 
-    private void TickBot(GameState state)
+    /// <returns>The brain's phase and every action it produced this tick (for recording).</returns>
+    private (BotPhase Phase, IReadOnlyList<BotAction> Actions) TickBot(GameState state)
     {
         string? stopReason = null;
+        IReadOnlyList<BotAction> actions;
+        BotPhase phase;
         lock (_botGate)
         {
             if (_input == null)
-                return;
-            foreach (var action in _brain.Tick(state))
+                return (BotPhase.Stopped, Array.Empty<BotAction>());
+            actions = _brain.Tick(state);
+            phase = _brain.Phase;
+            foreach (var action in actions)
             {
                 if (action is StopAction stop)
                 {
@@ -162,6 +176,72 @@ internal sealed class BotEngine : IDisposable
             StopBot(stopReason);
             BotStopped?.Invoke(stopReason);
         }
+        return (phase, actions);
+    }
+
+    private static bool IsImportant(IReadOnlyList<BotAction> actions, BotProfile profile) =>
+        actions.Any(a => a is StopAction ||
+                         a is KeyTapAction tap && (tap.Key == profile.Keys.HpPotion || tap.Key == profile.Keys.MpPotion));
+
+    // ── Automatic bar detection ──────────────────────────────────
+
+    private void SearchBars(Frame frame, BotProfile profile, TimeSpan now)
+    {
+        if (!profile.AutoDetectBars)
+            return;
+        bool hpMissing = profile.HpBar == null;
+        // Look often until the HP bar is known, then now and then (to widen a bar that was not full).
+        if (now - _lastBarSearch < TimeSpan.FromSeconds(hpMissing ? 1 : 3))
+            return;
+        _lastBarSearch = now;
+        if (_barSearchStarted < TimeSpan.Zero)
+            _barSearchStarted = now;
+        try
+        {
+            var before = (profile.HpBar, profile.MpBar, profile.TargetBar);
+            var messages = _autoBars.Apply(profile, BarFinder.Find(frame), frame);
+            // Also fires when a bar was only widened (no message), so the profile gets saved.
+            if (before != (profile.HpBar, profile.MpBar, profile.TargetBar))
+                BarsChanged?.Invoke(string.Join("  ", messages));
+            if (profile.HpBar == null && !_barSearchFailedLogged && now - _barSearchStarted > TimeSpan.FromSeconds(10))
+            {
+                _barSearchFailedLogged = true;
+                string shot = Path.Combine(ProfileStore.Directory, "hp-bulunamadi.png");
+                try { Directory.CreateDirectory(ProfileStore.Directory); RecordingFormat.SavePng(frame, shot); } catch { }
+                _log("HP barı otomatik bulunamadı. Oyunda karakterin HP/MP barları ekranda görünür olmalı. " +
+                     $"Olmazsa şu resmi gönder: {shot}  (ya da önizlemede barı fareyle seçip 'HP barı'na bas)");
+            }
+        }
+        catch (Exception ex)
+        {
+            _log("Otomatik bar arama hatası: " + ex.Message);
+        }
+    }
+
+    // ── Recording ────────────────────────────────────────────────
+
+    public bool IsRecording => Volatile.Read(ref _recorder) != null;
+    public SessionRecorder? Recorder => Volatile.Read(ref _recorder);
+
+    /// <summary>Starts recording bar readings, decisions and frames into a new folder.</summary>
+    public string StartRecording()
+    {
+        if (Volatile.Read(ref _recorder) is { } running)
+            return running.Directory;
+        var recorder = new SessionRecorder(SessionRecorder.NewDirectory(), Profile, _window.Title, _log);
+        if (Interlocked.CompareExchange(ref _recorder, recorder, null) != null)
+            recorder.Dispose();
+        _log("Kayıt başladı: " + recorder.Directory);
+        return recorder.Directory;
+    }
+
+    public void StopRecording()
+    {
+        var recorder = Interlocked.Exchange(ref _recorder, null);
+        if (recorder == null)
+            return;
+        recorder.Dispose();
+        _log($"Kayıt bitti: {recorder.Ticks:N0} tur, {recorder.FramesSaved:N0} kare, {recorder.Bytes / 1024.0 / 1024.0:0.0} MB.");
     }
 
     public bool StartBot(bool dryRun, out string error)
@@ -261,6 +341,7 @@ internal sealed class BotEngine : IDisposable
             return;
         _disposed = true;
         StopBot("bağlantı kapandı");
+        StopRecording();
         _cts.Cancel();
         _capture?.Dispose();
         try { _loop?.Wait(1500); } catch { }
