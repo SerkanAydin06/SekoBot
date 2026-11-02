@@ -56,3 +56,7 @@ GitHub Actions, Godot sahnesinin açılmasını ve yerel Windows PowerShell/Win3
 - Win32 yardımcı işlem henüz hazır değilse veya pencere döndürmüyorsa `tools/list_windows.ps1` üzerinden ikinci bir tarama yapılır. Bu yol Windows'un `Get-Process` bilgisini kullanır ve genellikle her işlem için yalnızca bir ana pencereyi bulabilir.
 - Yedek taramada pencere boyutu bilinmeyebilir; gerçek yakalama ancak Win32 yardımcı işlemi sağlıklı çalıştığında kullanılabilir. Yedek tarama çözümü Windows'un ana pencere API'sinin sınırlarını aşmaz.
 - Yedek liste gelmiyorsa Godot **Sistem Günlüğü** ve PowerShell hata kayıtlarını kontrol et.
+
+## Küçük, çerçevesiz bot penceresi
+
+SekoBot 900×580 pencerede açılır; Windows başlık çubuğu yoktur. Üstteki SEKOBOT başlığından sürükleyerek taşı, **─** ile küçült, **×** ile kapat. Soldaki panel kısa ve kaydırılabilirdir. Yedek Windows taraması `GetClientRect` ile oyun alanının gerçek boyutunu alır (Win32 erişimi kısıtlıysa ölçü bilinmeyebilir). Bu yalnızca arayüz ve pencere algılama güncellemesidir; farm otomasyonu henüz etkin değildir.

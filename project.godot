@@ -8,10 +8,14 @@ config/features=PackedStringArray("4.5", "GL Compatibility")
 
 [display]
 
-window/size/viewport_width=1440
-window/size/viewport_height=860
-window/size/window_width_override=1440
-window/size/window_height_override=860
+window/size/viewport_width=900
+window/size/viewport_height=580
+window/size/window_width_override=900
+window/size/window_height_override=580
+window/size/mode=0
+window/size/initial_position_type=1
+window/size/borderless=true
+window/size/resizable=false
 window/stretch/mode="canvas_items"
 window/dpi/allow_hidpi=true
 

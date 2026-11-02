@@ -50,7 +50,12 @@ var _log_view: RichTextLabel
 
 
 func _ready() -> void:
-	get_window().min_size = Vector2i(1060, 700)
+	# Force a compact window even when the editor keeps older run dimensions.
+	get_window().mode = Window.MODE_WINDOWED
+	get_window().min_size = Vector2i(800, 500)
+	get_window().borderless = true
+	get_window().unresizable = true
+	get_window().size = Vector2i(900, 580)
 	_build_interface()
 	_settings.load("user://settings.cfg")
 	var saved_fps: int = int(_settings.get_value("capture", "fps", 10))
@@ -87,19 +92,19 @@ func _build_interface() -> void:
 	var margins := MarginContainer.new()
 	margins.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for side in ["left", "right"]:
-		margins.add_theme_constant_override("margin_" + side, 26)
+		margins.add_theme_constant_override("margin_" + side, 12)
 	for side in ["top", "bottom"]:
-		margins.add_theme_constant_override("margin_" + side, 22)
+		margins.add_theme_constant_override("margin_" + side, 10)
 	add_child(margins)
 
 	var page := VBoxContainer.new()
-	page.add_theme_constant_override("separation", 19)
+	page.add_theme_constant_override("separation", 9)
 	margins.add_child(page)
 	_make_header(page)
 
 	var body := HBoxContainer.new()
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 18)
+	body.add_theme_constant_override("separation", 10)
 	page.add_child(body)
 	_make_sidebar(body)
 	_make_workspace(body)
@@ -107,57 +112,93 @@ func _build_interface() -> void:
 
 func _make_header(parent: VBoxContainer) -> void:
 	var bar := HBoxContainer.new()
-	bar.add_theme_constant_override("separation", 14)
+	bar.add_theme_constant_override("separation", 9)
 	parent.add_child(bar)
 
-	var logo := _card(Color("#255ED8"), Color("#3778F5"), 13, 8)
-	logo.custom_minimum_size = Vector2(54, 54)
-	bar.add_child(logo)
-	var letter := _text("S", 28, WHITE)
-	letter.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	letter.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	logo.add_child(letter)
+	# Native Windows frame is removed; this becomes the draggable title bar.
+	var drag_title := Button.new()
+	drag_title.text = "◆  SEKOBOT    /    BOT PANELİ"
+	drag_title.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	drag_title.flat = true
+	drag_title.focus_mode = Control.FOCUS_NONE
+	drag_title.custom_minimum_size.y = 38
+	drag_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	drag_title.mouse_default_cursor_shape = Control.CURSOR_MOVE
+	drag_title.add_theme_font_size_override("font_size", 17)
+	drag_title.add_theme_color_override("font_color", WHITE)
+	drag_title.add_theme_color_override("font_hover_color", WHITE)
+	drag_title.gui_input.connect(_on_drag_header)
+	drag_title.tooltip_text = "Buradan tutarak pencereyi taşı"
+	bar.add_child(drag_title)
 
-	var brand := VBoxContainer.new()
-	brand.add_theme_constant_override("separation", 1)
-	brand.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	bar.add_child(brand)
-	brand.add_child(_text("SEKOBOT", 25, WHITE))
-	brand.add_child(_text("OYUN OTOMASYON MERKEZİ   /   GODOT V0.2", 11, MUTED))
-
-	var grow := Control.new()
-	grow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bar.add_child(grow)
-
-	_status_panel = _card(Color("#193447"), Color("#2C6375"), 15, 9)
+	_status_panel = _card(Color("#193447"), Color("#2C6375"), 11, 6)
 	_status_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	bar.add_child(_status_panel)
-	_status_text = _text("●  HAZIR", 12, GREEN)
+	_status_text = _text("●  HAZIR", 11, GREEN)
 	_status_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status_panel.add_child(_status_text)
+
+	var minimize_button := _window_button("─", "Küçült")
+	minimize_button.pressed.connect(_minimize_window)
+	bar.add_child(minimize_button)
+
+	var close_button := _window_button("×", "Kapat")
+	close_button.add_theme_color_override("font_hover_color", RED)
+	close_button.pressed.connect(_close_window)
+	bar.add_child(close_button)
+
+
+func _window_button(symbol: String, hint: String) -> Button:
+	var button := Button.new()
+	button.text = symbol
+	button.tooltip_text = hint
+	button.custom_minimum_size = Vector2(34, 32)
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_size_override("font_size", 18)
+	button.add_theme_color_override("font_color", MUTED)
+	button.add_theme_color_override("font_hover_color", WHITE)
+	button.add_theme_stylebox_override("normal", _panel_style(SURFACE, BORDER, 8, 4))
+	button.add_theme_stylebox_override("hover", _panel_style(Color("#26364F"), BLUE, 8, 4))
+	button.add_theme_stylebox_override("pressed", _panel_style(SURFACE_DEEP, BLUE, 8, 4))
+	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	return button
+
+
+func _on_drag_header(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			get_window().start_drag()
+
+
+func _minimize_window() -> void:
+	get_window().mode = Window.MODE_MINIMIZED
+
+
+func _close_window() -> void:
+	get_tree().quit()
 
 
 func _make_sidebar(parent: HBoxContainer) -> void:
 	var sidebar_scroll := ScrollContainer.new()
-	sidebar_scroll.custom_minimum_size.x = 355
+	sidebar_scroll.custom_minimum_size.x = 286
 	sidebar_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	parent.add_child(sidebar_scroll)
-	var panel := _card(SURFACE, BORDER, 17, 22)
-	panel.custom_minimum_size.x = 338
+	var panel := _card(SURFACE, BORDER, 13, 12)
+	panel.custom_minimum_size.x = 276
 	sidebar_scroll.add_child(panel)
 
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 13)
+	column.add_theme_constant_override("separation", 8)
 	panel.add_child(column)
 
 	column.add_child(_text("01   /   PENCERE BAĞLANTISI", 11, BLUE))
 	column.add_child(_text("Oyun penceresi", 19, WHITE))
-	var intro := _text("Metin2 otomatik algılanır. Birden fazla pencere varsa listeden seçim yapabilirsin.", 12, MUTED)
+	var intro := _text("Metin2 penceresini seç veya otomatik bağlan.", 11, MUTED)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(intro)
 
 	_window_selector = ItemList.new()
-	_window_selector.custom_minimum_size.y = 146
+	_window_selector.custom_minimum_size.y = 105
 	_window_selector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_window_selector.add_theme_stylebox_override("panel", _panel_style(SURFACE_DEEP, BORDER, 9, 6))
 	_window_selector.add_theme_stylebox_override("selected", _panel_style(Color("#254778"), Color("#5789C7"), 6, 5))
@@ -168,7 +209,7 @@ func _make_sidebar(parent: HBoxContainer) -> void:
 	_window_selector.add_item("Pencereler taranıyor...")
 	_window_selector.set_item_disabled(0, true)
 	column.add_child(_window_selector)
-	_scan_details = _text("Windows servisi başlatılıyor...", 11, MUTED)
+	_scan_details = _text("Pencereler taranıyor...", 10, MUTED)
 	_scan_details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_scan_details)
 
@@ -176,18 +217,18 @@ func _make_sidebar(parent: HBoxContainer) -> void:
 	refresh.pressed.connect(_force_refresh_windows)
 	column.add_child(refresh)
 
-	_spacer(column, 10)
+	_spacer(column, 3)
 	column.add_child(_text("02   /   GÖRÜNTÜ AYARLARI", 11, BLUE))
 	column.add_child(_text("Önizleme hızı", 15, WHITE))
 	_fps_selector = OptionButton.new()
-	_fps_selector.custom_minimum_size.y = 42
+	_fps_selector.custom_minimum_size.y = 34
 	for fps in [5, 10, 15]:
 		_fps_selector.add_item("%d FPS" % fps, fps)
 	_style_button(_fps_selector, "neutral")
 	_fps_selector.item_selected.connect(_on_fps_selected)
 	column.add_child(_fps_selector)
 
-	_spacer(column, 12)
+	_spacer(column, 3)
 	_connect_button = _button("▶   Pencereye bağlan", "primary")
 	_connect_button.pressed.connect(_begin_capture)
 	column.add_child(_connect_button)
@@ -200,9 +241,9 @@ func _make_sidebar(parent: HBoxContainer) -> void:
 	_save_button.pressed.connect(_save_screenshot)
 	column.add_child(_save_button)
 
-	_spacer(column, 10)
+	_spacer(column, 3)
 	column.add_child(_text("BAĞLANTI BİLGİLERİ", 11, BLUE))
-	_window_details = _text("Oyun penceresi aranıyor...", 12, MUTED)
+	_window_details = _text("Oyun penceresi aranıyor...", 11, MUTED)
 	_window_details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_window_details)
 
@@ -211,7 +252,7 @@ func _make_sidebar(parent: HBoxContainer) -> void:
 	column.add_child(flexible)
 	var separator := HSeparator.new()
 	column.add_child(separator)
-	var note := _text("İlk sürüm: pencere algılama, canlı görüntü ve PNG kaydı.\nFarm ve oyun kontrolü henüz etkin değil.", 12, MUTED)
+	var note := _text("Pencere izleme aktif. Farm henüz eklenmedi.", 10, MUTED)
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(note)
 
@@ -219,16 +260,16 @@ func _make_sidebar(parent: HBoxContainer) -> void:
 func _make_workspace(parent: HBoxContainer) -> void:
 	var workspace := VBoxContainer.new()
 	workspace.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	workspace.add_theme_constant_override("separation", 17)
+	workspace.add_theme_constant_override("separation", 9)
 	parent.add_child(workspace)
 
-	var preview_card := _card(SURFACE, BORDER, 17, 20)
+	var preview_card := _card(SURFACE, BORDER, 13, 12)
 	preview_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	workspace.add_child(preview_card)
 
 	var content := VBoxContainer.new()
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_theme_constant_override("separation", 13)
+	content.add_theme_constant_override("separation", 8)
 	preview_card.add_child(content)
 
 	var preview_header := HBoxContainer.new()
@@ -237,7 +278,7 @@ func _make_workspace(parent: HBoxContainer) -> void:
 	titles.add_theme_constant_override("separation", 4)
 	preview_header.add_child(titles)
 	titles.add_child(_text("CANLI PENCERE GÖRÜNTÜSÜ", 11, BLUE))
-	titles.add_child(_text("Oyun önizlemesi", 19, WHITE))
+	titles.add_child(_text("Oyun önizlemesi", 15, WHITE))
 	var fill := Control.new()
 	fill.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preview_header.add_child(fill)
@@ -247,7 +288,7 @@ func _make_workspace(parent: HBoxContainer) -> void:
 
 	var screen := PanelContainer.new()
 	screen.add_theme_stylebox_override("panel", _panel_style(SURFACE_DEEP, Color("#344865"), 12, 5))
-	screen.custom_minimum_size = Vector2(0, 390)
+	screen.custom_minimum_size = Vector2(0, 170)
 	screen.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content.add_child(screen)
 
@@ -279,7 +320,7 @@ func _make_workspace(parent: HBoxContainer) -> void:
 	empty_column.add_child(empty_help)
 
 	var metrics := HBoxContainer.new()
-	metrics.add_theme_constant_override("separation", 38)
+	metrics.add_theme_constant_override("separation", 18)
 	content.add_child(metrics)
 	_fps_metric = _metric(metrics, "ANLIK FPS", "—")
 	_resolution_metric = _metric(metrics, "ÇÖZÜNÜRLÜK", "—")
@@ -288,11 +329,11 @@ func _make_workspace(parent: HBoxContainer) -> void:
 	metric_flex.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	metrics.add_child(metric_flex)
 
-	var logs := _card(SURFACE, BORDER, 17, 16)
-	logs.custom_minimum_size.y = 148
+	var logs := _card(SURFACE, BORDER, 13, 9)
+	logs.custom_minimum_size.y = 108
 	workspace.add_child(logs)
 	var log_column := VBoxContainer.new()
-	log_column.add_theme_constant_override("separation", 9)
+	log_column.add_theme_constant_override("separation", 4)
 	logs.add_child(log_column)
 	log_column.add_child(_text("SİSTEM GÜNLÜĞÜ", 11, BLUE))
 	_log_view = RichTextLabel.new()
@@ -359,7 +400,7 @@ func _style_button(button: Button, variant: String) -> void:
 func _button(title: String, variant: String) -> Button:
 	var result := Button.new()
 	result.text = title
-	result.custom_minimum_size.y = 43
+	result.custom_minimum_size.y = 35
 	_style_button(result, variant)
 	return result
 
