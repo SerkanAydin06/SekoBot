@@ -162,8 +162,7 @@ internal sealed class MainForm : Form
             v => _profile.PotionHpBelow = v / 100);
         NumberRow(potions, "MP iksiri (% altında)", 0, 34, 0, 95, Math.Round(_profile.PotionMpBelow * 100), 0, 1,
             v => _profile.PotionMpBelow = v / 100);
-        Check(potions, "Bellekten HP/MP oku (yoksa bar)", 0, 68, 360, _profile.UseMemoryStats, v => _profile.UseMemoryStats = v);
-        Check(potions, "Ölünce yeniden başla", 0, 102, 300, _profile.ReviveOnDeath, v => _profile.ReviveOnDeath = v);
+        Check(potions, "Ölünce yeniden başla", 0, 68, 300, _profile.ReviveOnDeath, v => _profile.ReviveOnDeath = v);
         Theme.Label(potions, "Buff: kaç saniyede bir basılsın (0 = kapalı)", new Rectangle(370, 0, 360, 26), 9f, Theme.Muted);
         for (int i = 0; i < BotProfile.SkillSlots; i++)
         {
@@ -229,13 +228,13 @@ internal sealed class MainForm : Form
         _calibrationState = Theme.Label(advanced, "", new Rectangle(240, 0, 230, 26), 9f, Theme.Muted);
         _technical = Theme.Label(advanced, "", new Rectangle(476, 0, 260, 26), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.MiddleRight);
         _calibrationHint = Theme.Label(advanced, "", new Rectangle(0, 30, 736, 22), 8.5f, Theme.Muted);
-        string[] names = ["HP barı", "MP barı", "Hedef HP barı", "Barları sıfırla"];
+        string[] names = ["Hedef HP barı", "Hedef barını sıfırla"];
         _calibrationButtons = new Button[names.Length];
         for (int i = 0; i < names.Length; i++)
         {
             int index = i;
             var button = Theme.Button(advanced, names[i], new Rectangle(i * 150, 56, 142, 30),
-                i == 3 ? Theme.Danger : Theme.Secondary, i == 3 ? Theme.DangerHover : Theme.SecondaryHover);
+                i == 1 ? Theme.Danger : Theme.Secondary, i == 1 ? Theme.DangerHover : Theme.SecondaryHover);
             button.Click += (_, _) => Calibrate(index);
             _calibrationButtons[i] = button;
         }
@@ -611,7 +610,7 @@ internal sealed class MainForm : Form
 
     private void Calibrate(int kind)
     {
-        if (kind == 3)
+        if (kind == 1)
         {
             ResetCalibration();
             return;
@@ -648,21 +647,19 @@ internal sealed class MainForm : Form
 
     private static string ColorText(BarSpec? bar) => bar == null ? "." : $" (renk {bar.R},{bar.G},{bar.B}).";
 
-    /// <summary>Deletes every marked bar (HP/MP/target).</summary>
+    /// <summary>Resets only target HP calibration. Character stats always come from memory.</summary>
     private void ResetCalibration()
     {
-        var answer = MessageBox.Show(this, "Tüm barlar (HP, MP, hedef) silinsin ve otomatik olarak yeniden bulunsun mu?",
+        var answer = MessageBox.Show(this, "Hedef HP barı silinip yeniden bulunsun mu?",
             "SekoBot", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         if (answer != DialogResult.Yes)
             return;
         StopBot("kalibrasyon sıfırlandı");
-        _profile.HpBar = null;
-        _profile.MpBar = null;
         _profile.TargetBar = null;
         SaveProfile();
         _preview.State = null;
         _preview.ClearSelection();
-        WriteLog("Barlar sıfırlandı; otomatik olarak yeniden aranıyor…");
+        WriteLog("Hedef barı sıfırlandı; otomatik olarak yeniden aranıyor…");
         UpdateControls();
     }
 
@@ -720,7 +717,7 @@ internal sealed class MainForm : Form
 
     private void UpdateStats()
     {
-        _calibrationState.Text = $"Barlar:  HP {Mark(_profile.HpBar)}   MP {Mark(_profile.MpBar)}   Hedef {Mark(_profile.TargetBar)}";
+        _calibrationState.Text = $"HP/MP: bellek   Hedef {Mark(_profile.TargetBar)}";
 
         if (_engine == null)
         {
@@ -783,7 +780,7 @@ internal sealed class MainForm : Form
         _replay.Enabled = !_replaying;
         _dryRun.Enabled = !running;
         bool hasSelection = connected && _preview.Selection != null;
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < 1; i++)
             _calibrationButtons[i].Enabled = hasSelection;
         _calibrationHint.Text = !connected
             ? "Barları elle işaretlemek için önce oyuna bağlan."
