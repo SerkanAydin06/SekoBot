@@ -162,7 +162,8 @@ internal sealed class MainForm : Form
             v => _profile.PotionHpBelow = v / 100);
         NumberRow(potions, "MP iksiri (% altında)", 0, 34, 0, 95, Math.Round(_profile.PotionMpBelow * 100), 0, 1,
             v => _profile.PotionMpBelow = v / 100);
-        Check(potions, "Ölünce yeniden başla", 0, 68, 300, _profile.ReviveOnDeath, v => _profile.ReviveOnDeath = v);
+        Check(potions, "Bellekten HP/MP oku (yoksa bar)", 0, 68, 360, _profile.UseMemoryStats, v => _profile.UseMemoryStats = v);
+        Check(potions, "Ölünce yeniden başla", 0, 102, 300, _profile.ReviveOnDeath, v => _profile.ReviveOnDeath = v);
         Theme.Label(potions, "Buff: kaç saniyede bir basılsın (0 = kapalı)", new Rectangle(370, 0, 360, 26), 9f, Theme.Muted);
         for (int i = 0; i < BotProfile.SkillSlots; i++)
         {
@@ -732,7 +733,7 @@ internal sealed class MainForm : Form
         }
         var s = _engine.Stats;
         var state = _engine.State;
-        _technical.Text = $"{(s.CaptureName.StartsWith("Windows") ? "GPU" : "GDI")} · {s.CaptureFps:0} FPS · analiz {s.AnalysisMs:0.0} ms";
+        _technical.Text = $"{_engine.StatsSource} · {s.CaptureFps:0} FPS";
         _hpMeter.Value = state?.Hp;
         _mpMeter.Value = state?.Mp;
         _targetMeter.Value = state?.TargetHp;
