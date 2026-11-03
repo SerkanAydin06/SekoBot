@@ -5,6 +5,7 @@ using System.Threading.Channels;
 using SekoBot.Capture;
 using SekoBot.Config;
 using SekoBot.Input;
+using SekoBot.Memory;
 using SekoBot.Recording;
 using SekoBot.Vision;
 
@@ -25,6 +26,7 @@ internal sealed class BotEngine : IDisposable
     private readonly WindowInfo _window;
     private readonly Action<string> _log;
     private readonly Brain _brain;
+    private readonly CharacterStatsReader _statsReader;
     private readonly CancellationTokenSource _cts = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly object _frameGate = new();
@@ -58,12 +60,14 @@ internal sealed class BotEngine : IDisposable
         Profile = profile;
         _log = log;
         _brain = new Brain(() => Profile);
+        _statsReader = new CharacterStatsReader(window.ProcessId);
     }
 
     public WindowInfo Window => _window;
     public bool GameMinimized => WindowService.IsMinimized(_window);
     public BotProfile Profile { get; set; }
     public GameState? State => Volatile.Read(ref _state);
+    public string StatsSource => !Profile.UseMemoryStats ? "Görüntü" : _statsReader.Status;
 
     /// <summary>Raised from a worker thread when capture stops or the bot stops itself.</summary>
     public event Action<string>? CaptureFailed;
@@ -132,6 +136,10 @@ internal sealed class BotEngine : IDisposable
                     {
                         SearchBars(frame, profile, now);
                         var state = Perception.Analyze(frame, profile, now);
+                        // Memory stats override visual bars only when all four values are valid.
+                        // Target HP and all other perception remain visual.
+                        if (profile.UseMemoryStats && _statsReader.TryRead(out var stats))
+                            state = state with { Hp = stats.HpFraction, Mp = stats.MpFraction };
                         if (profile.ReviveOnDeath && BotRunning)
                         {
                             var (dead, ready) = DeathDetector.Check(frame);
@@ -352,7 +360,7 @@ internal sealed class BotEngine : IDisposable
             error = "Oyun simge durumunda; önce oyunu geri aç.";
             return false;
         }
-        if (Profile.HpBar == null)
+        if (!Profile.UseMemoryStats && Profile.HpBar == null)
             _log("Uyarı: HP barı işaretli değil; iksir ve HP güvenlik durdurması çalışmaz.");
         lock (_botGate)
         {
@@ -458,6 +466,7 @@ internal sealed class BotEngine : IDisposable
             _latest?.Dispose();
             _latest = null;
         }
+        _statsReader.Dispose();
         _cts.Dispose();
     }
 }
