@@ -9,7 +9,7 @@ Metin2 için tek dosyalı Windows farm botu. Kurulum gerekmez, açılışta kend
 ## Kullanım
 
 1. Oyunu (Mobile2 Global) pencere modunda aç, SekoBot.exe'yi çalıştır. Oyun açılınca SekoBot kendiliğinden bağlanır; sağ üstte **● Mobile2 Global'e bağlı** yazar. Birden fazla oyun penceresi varsa **Oyunu seç ▾** ile birini seç.
-2. **HP ve MP barları otomatik bulunur.** Sağdaki **KARAKTER** bölümünde HP/MP/Hedef çubukları dolar. Bulunamazsa **Gelişmiş** sekmesinde: barı canlı görüntüde fareyle seç, **HP barı** / **MP barı** düğmesine bas. Yanlış yer bulunduysa **Barları sıfırla**.
+2. **HP ve MP doğrudan oyun belleğinden okunur.** Sağdaki KARAKTER alanındaki doluluk çubukları bu verilere göre gösterilir. Hedef yaratığın HP barı görüntüyle tespit edilir; gerekirse Gelişmiş sekmesinden yalnızca hedef HP barını kalibre edebilirsin.
 3. **▶ BAŞLAT (F10)** ile başlat, **■ DURDUR (F11)** her zaman acil durdurur. (F12'yi Windows ayırdığı için kısayol F11'dir.) Üstteki satır botun ne yaptığını gösterir (ör. "Saldırıyor · Alanın içinde").
 
 **Arayüz:** Ortada canlı görüntü (sarı halka = bulunan mob), sağda **OTURUM** (süre, öldürülen mob, saatte mob, ölüm, iksir, alan durumu). Altta ayar sekmeleri, her değişiklik hemen kaydedilir:
@@ -77,10 +77,10 @@ tests/SekoBot.Tests/    farm döngüsü, bar okuma, kayıt/oynatma testleri
 .NET 10 SDK ile `dotnet test` ve `dotnet run --project src/SekoBot`. Her push GitHub Actions'ta test edilip derlenir; `main` dalı `preview` sürümünü günceller.
 
 
-### HP/MP bellek okuma ve otomatik iksir
+### Bellek tabanlı HP/MP ve arka planda otomatik iksir
 
-**İksir & Buff** sekmesinde **Bellekten HP/MP oku (yoksa bar)** seçeneği varsayılan açık gelir. Mobile2 oyun penceresi seçildiğinde, bot yalnızca `mobilemmo-Win64-Shipping.exe` işleminden güncel HP, MP, maksimum HP ve maksimum MP değerlerini **salt okunur** biçimde almaya çalışır. Kaynak, Gelişmiş sekmesinde gösterilir. Bellek verisi geçersizse veya Windows işlem erişimine izin vermiyorsa mevcut görsel HP/MP barları kullanılmaya devam edilir; görünür bar da yoksa iksir kararı verilmez.
+Karakter HP, MP, maksimum HP ve maksimum MP verileri yalnızca `mobilemmo-Win64-Shipping.exe` işleminden salt okunur bellek erişimiyle alınır. Eski görüntü tabanlı HP/MP okuma ve kalibrasyon devre dışı bırakılmıştır; görüntü analizi yalnızca hedef yaratığın HP barı gibi diğer işlevlerde kalır. Bellek okunamazsa karakter HP/MP yüzdeleri bilinmiyor kabul edilir ve otomatik pot gönderilmez; uydurma değer veya görsel bar yedeği kullanılmaz.
 
-Mevcut **HP iksiri (% altında)** ve **MP iksiri (% altında)** eşikleri, **Tuşlar** sekmesindeki iksir tuşları ve iksir bekleme süresi değişmeden çalışır. Örneğin HP 400/1000 ise HP yüzdesi %40'tır. İksir basımı yalnızca bot **BAŞLAT** ile çalışırken yapılır; **Kuru çalışma** tuş göndermez. Oyun varsayılan olarak ön planda olmalıdır. Bellek erişimi için Windows'ta bazı istemcilerde yönetici yetkisi gerekir.
+**İksir & Buff** sekmesindeki HP/MP eşikleri, **Tuşlar** sekmesindeki pot tuşları, bekleme ve ölçüm onay süreleri korunur. Bot **BAŞLAT** durumunda iksirleri mevcut InputExecutor üzerinden gönderir: arka plan modu etkinse aynı oyun penceresine arka planda tuş gönderimi kullanılır; normal modda oyun ön planda olmalıdır. Arka planda girdi gönderimi oyunun ve Windows sürümünün davranışına bağlı olabilir. Kuru çalışma modunda tuş gönderilmez.
 
-Bellek pointer'ları kullanıcının test ettiği `Hp_Mp.CT` dosyasından alınmıştır; istemci güncellendiğinde adresler değişebilir. Maksimum değerler yalnızca mevcut karakterin değerleriyle doğrulanmıştır; maksimum HP/MP değiştiğinde yeniden test edin. Anti-cheat veya istemci güvenlik önlemlerini aşmaya yönelik bir işlem yapılmaz.
+Bellek pointer'ları `Hp_Mp.CT` tablosuna dayanır. İstemci güncellemesi veya değişen karakter veri düzeni pointer'ları bozabilir. Maksimum HP/MP alanlarının farklı maksimum değerlerde doğrulanması önerilir. Gerekli işlem erişimi olmayan sistemlerde yönetici yetkisi gerekebilir; güvenlik mekanizmalarını aşma işlevi yoktur.
