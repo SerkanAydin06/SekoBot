@@ -106,3 +106,143 @@ internal sealed class Card : Panel
         e.Graphics.DrawPath(pen, path);
     }
 }
+
+/// <summary>A labelled fill bar (HP / MP / target).</summary>
+internal sealed class Meter : Control
+{
+    private static readonly Font CaptionFont = new("Segoe UI", 8.5f, FontStyle.Bold);
+    private double? _value;
+
+    public Meter()
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
+                 ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+        BackColor = Theme.Inset;
+    }
+
+    public Color Fill { get; set; } = Theme.Green;
+    public string Caption { get; set; } = "";
+
+    public double? Value
+    {
+        get => _value;
+        set
+        {
+            if (_value == value) return;
+            _value = value;
+            Invalidate();
+        }
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(Theme.Inset);
+        if (_value is double v)
+        {
+            int w = (int)Math.Round(Math.Clamp(v, 0, 1) * Width);
+            using var brush = new SolidBrush(Color.FromArgb(150, Fill));
+            g.FillRectangle(brush, 0, 0, w, Height);
+        }
+        var text = new Rectangle(8, 0, Width - 16, Height);
+        TextRenderer.DrawText(g, Caption, CaptionFont, text, Theme.Text,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+        TextRenderer.DrawText(g, _value is double p ? $"%{p * 100:0}" : "—", CaptionFont, text, Theme.Text,
+            TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+    }
+}
+
+/// <summary>Button that shows a key; click it, then press the new key.</summary>
+internal sealed class KeyPicker : Button
+{
+    private bool _waiting, _swallowUp;
+    private Keys _key;
+
+    public KeyPicker()
+    {
+        BackColor = Theme.Inset;
+        ForeColor = Theme.Text;
+        Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+        FlatStyle = FlatStyle.Flat;
+        Cursor = Cursors.Hand;
+        TabStop = false;
+        FlatAppearance.BorderColor = Theme.Border;
+        FlatAppearance.MouseOverBackColor = Theme.SecondaryHover;
+    }
+
+    public event Action<Keys>? KeyChanged;
+
+    public Keys Key
+    {
+        get => _key;
+        set
+        {
+            _key = value;
+            if (!_waiting) Text = Name(value);
+        }
+    }
+
+    public static string Name(Keys key) => key switch
+    {
+        Keys.Space => "Boşluk",
+        Keys.Escape => "Esc",
+        Keys.Return => "Enter",
+        Keys.Back => "Geri sil",
+        >= Keys.D0 and <= Keys.D9 => ((int)(key - Keys.D0)).ToString(),
+        >= Keys.NumPad0 and <= Keys.NumPad9 => "Num " + (int)(key - Keys.NumPad0),
+        Keys.ShiftKey => "Shift",
+        Keys.ControlKey => "Ctrl",
+        Keys.Menu => "Alt",
+        _ => key.ToString()
+    };
+
+    protected override void OnClick(EventArgs e)
+    {
+        base.OnClick(e);
+        _waiting = true;
+        Text = "Tuşa bas…";
+        BackColor = Theme.Primary;
+        Focus();
+    }
+
+    protected override void OnPreviewKeyDown(PreviewKeyDownEventArgs e)
+    {
+        if (_waiting) e.IsInputKey = true;
+        base.OnPreviewKeyDown(e);
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (!_waiting)
+        {
+            base.OnKeyDown(e);
+            return;
+        }
+        e.Handled = e.SuppressKeyPress = true;
+        _swallowUp = true;
+        _waiting = false;
+        BackColor = Theme.Inset;
+        Key = e.KeyCode;
+        KeyChanged?.Invoke(e.KeyCode);
+    }
+
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        if (_swallowUp)
+        {
+            _swallowUp = false;
+            e.Handled = true;
+            return;
+        }
+        base.OnKeyUp(e);
+    }
+
+    protected override void OnLostFocus(EventArgs e)
+    {
+        base.OnLostFocus(e);
+        if (!_waiting) return;
+        _waiting = false;
+        BackColor = Theme.Inset;
+        Text = Name(_key);
+    }
+}

@@ -37,6 +37,13 @@ internal sealed partial class Brain
     /// <summary>The engine reads the big map only while the bot is looking at it.</summary>
     public bool WantsMap => _mapStage != MapStage.Idle;
 
+    /// <summary>Short text for the UI: where the bot is relative to its starting area.</summary>
+    public string AreaStatus =>
+        _profile().LeashRadius <= 0 || !_profile().NavigateMode ? "Alan sınırı kapalı"
+        : _home == null ? "Başlangıç noktası alınıyor"
+        : _returning ? "Alana geri dönülüyor"
+        : "Alanın içinde";
+
     private void ResetLeash()
     {
         _mapStage = MapStage.Idle;

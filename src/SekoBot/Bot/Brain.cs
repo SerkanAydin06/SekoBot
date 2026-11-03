@@ -38,9 +38,11 @@ internal sealed partial class Brain
     public BotPhase Phase { get; private set; } = BotPhase.Stopped;
     public int Cycles { get; private set; }
     public int Potions { get; private set; }
+    public int Deaths { get; private set; }
 
     public void Start(TimeSpan now)
     {
+        Cycles = Potions = Deaths = 0;
         _lastAttackDown = Never;
         _hpLowSince = _mpLowSince = _lastEsc = Never;
         ResetSkills();
@@ -277,6 +279,7 @@ internal sealed partial class Brain
             }
             actions.Add(new NoteAction("Karakter öldü; \"Burada yeniden başla\" bekleniyor."));
             Enter(BotPhase.Dead, now);
+            Deaths++;
             _lastReviveClick = Never;
         }
         if (state.ReviveReady && now - _lastReviveClick >= Ms(3000))

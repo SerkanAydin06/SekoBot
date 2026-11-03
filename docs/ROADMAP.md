@@ -5,7 +5,7 @@
 - [x] Kare kuyruğu yok: her katman en son kareyi işler
 - [x] HP/MP/hedef barı okuma (renk kalibrasyonu)
 - [x] Basit farm döngüsü: saldır → topla → dön (Metin taşı arama kaldırıldı)
-- [x] Tarama kodlu girdi, odak kontrolü, F10/F12 kısayolları, kuru çalışma modu
+- [x] Tarama kodlu girdi, odak kontrolü, F10/F11 kısayolları, kuru çalışma modu
 - [x] Önizlemede debug katmanı ve fareyle kalibrasyon
 - [x] Sessiz otomatik güncelleme
 - [x] DPI ölçeklendirme

@@ -8,16 +8,20 @@ Metin2 için tek dosyalı Windows farm botu. Kurulum gerekmez, açılışta kend
 
 ## Kullanım
 
-1. Metin2'yi pencere modunda aç, SekoBot.exe'yi çalıştır. Tek Metin2 penceresi varsa otomatik bağlanır.
-2. **HP ve MP barları otomatik bulunur.** Önizlemede yeşil (HP) ve mavi (MP) çerçeve görünür, günlükte "HP barı otomatik bulundu ✓" yazar. Bir moba tıkladığında üstteki hedef barı da kendiliğinden bulunur. HP o an dolu değilse sorun değil; HP doldukça bot ölçüyü kendisi büyütür.
-   - Bulamazsa 10 sn sonra `hp-bulunamadi.png` kaydedilir (yolu günlükte yazar). Bu resmi geliştiriciye gönder. Beklerken barı önizlemede fareyle seçip **HP barı** / **MP barı** düğmesine basarak elle işaretleyebilirsin.
-   - Yanlış yer bulunduysa **Sıfırla / yeniden bul**.
-3. **Kuru çalışma** açıkken **Başlat (F10)**: bot ne yapacağını yalnızca günlüğe yazar. Doğruysa kuru çalışmayı kapat.
-4. **F12** her zaman acil durdurur. HP belirlenen eşiğin altına düşerse bot kendini durdurur.
+1. Oyunu (Mobile2 Global) pencere modunda aç, SekoBot.exe'yi çalıştır. Oyun açılınca SekoBot kendiliğinden bağlanır; sağ üstte **● Mobile2 Global'e bağlı** yazar. Birden fazla oyun penceresi varsa **Oyunu seç ▾** ile birini seç.
+2. **HP ve MP barları otomatik bulunur.** Sağdaki **KARAKTER** bölümünde HP/MP/Hedef çubukları dolar. Bulunamazsa **Gelişmiş** sekmesinde: barı canlı görüntüde fareyle seç, **HP barı** / **MP barı** düğmesine bas. Yanlış yer bulunduysa **Barları sıfırla**.
+3. **▶ BAŞLAT (F10)** ile başlat, **■ DURDUR (F11)** her zaman acil durdurur. (F12'yi Windows ayırdığı için kısayol F11'dir.) Üstteki satır botun ne yaptığını gösterir (ör. "Saldırıyor · Alanın içinde").
+
+**Arayüz:** Ortada canlı görüntü (sarı halka = bulunan mob), sağda **OTURUM** (süre, öldürülen mob, saatte mob, ölüm, iksir, alan durumu). Altta ayar sekmeleri, her değişiklik hemen kaydedilir:
+- **Saldırı:** saldırı mesafesi, eşya toplama sıklığı, Kalabalığa git, kalabalık için en az mob.
+- **İksir & Buff:** HP/MP iksiri eşiği, ölünce yeniden başla, F1–F5 buff süreleri.
+- **Alan:** alan sınırı ve haritaya bakma sıklığı.
+- **Tuşlar:** tüm tuşlar; tuşa tıkla, yeni tuşa bas.
+- **Gelişmiş:** kuru çalışma (tuş göndermeden dener), bar işaretleme, kayıt / kaydı oynat, ayar klasörü.
 
 **Yürüme modu (varsayılan):** Bot başlarken **G**'ye basılı tutup kamerayı tepeden bakışa alır, **F** ile uzaklaştırır. Sonra ekrandaki **kırmızı mob isimlerinden** karaktere en yakın olanı seçer, **W/A/S/D** ile ona doğru yürür (çapraz için iki tuş), mob yanına gelince **Space**'e basılı tutar, saldırırken de mobu ortada tutmak için **W/A/S/D** ile yönlendirmeye devam eder **Z**'ye her zaman (yürürken de) 1,5 sn'de bir basarak eşya toplar. Kamera kaymasın diye 30 sn'de bir **G** ve **F**'ye tekrar basar; bunu yürümeyi ya da saldırıyı durdurmadan, aynı anda yapar. Yakında mob kalmayınca eşyayı toplayıp en yakın kırmızı isme gider; ekranda hiç isim yoksa biraz yürüyüp kamerayı çevirerek bakar. 8 sn'de ulaşamadığı mobu bırakır. Ayarlar `profile.json` içinde: `CameraSetupHoldMs`, `CameraRefreshMs` (30000), `AttackRadius` (ekran yüksekliğinin oranı, 0.05; arayüzde "Saldırı mesafesi (%)"), `LootEveryMs`, `ExploreWalkMs`, `MoveStuckMs`; tuşlar `MoveLeft`/`MoveBack`/`MoveRight`/`CameraTop`/`ZoomOut`. Eski tıklama modu için `"NavigateMode": false`.
 
-Tuşlar (Space saldırı, Z toplama, 1/2 iksir, E kamera, W yürüme) ve süreler `%LOCALAPPDATA%\SekoBot\profile.json` içinde; arayüzden **Klasör** ile açılır.
+Tuşlar arayüzdeki **Tuşlar** sekmesinden değişir; diğer ince ayarlar `%LOCALAPPDATA%\SekoBot\profile.json` içinde (**Gelişmiş → Ayar klasörü**).
 
 ## Ölünce
 

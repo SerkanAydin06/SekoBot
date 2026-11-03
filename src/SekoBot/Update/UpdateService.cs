@@ -133,7 +133,7 @@ set "replacement=%~2"
 set "old=%~1.old"
 set "pid=%~3"
 rem Wait (max ~30 s) until the old SekoBot has really exited: a running EXE can be renamed,
-rem so without this the new one could start while the old one still owns the F10/F12 hotkeys.
+rem so without this the new one could start while the old one still owns the F10/F11 hotkeys.
 for /L %%I in (1,1,30) do (
   tasklist /FI "PID eq %pid%" /NH 2>NUL | find " %pid% " >NUL || goto swap
   ping -n 2 127.0.0.1 >NUL
