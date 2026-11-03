@@ -115,8 +115,6 @@ internal sealed class PreviewControl : Control
         using var small = new Font("Segoe UI", 8f, FontStyle.Bold);
         if (Profile is { } p)
         {
-            DrawBar(g, p.HpBar, w, h, Theme.Green, "HP", small);
-            DrawBar(g, p.MpBar, w, h, Theme.Accent, "MP", small);
             DrawBar(g, p.TargetBar, w, h, Theme.Red, "HEDEF", small);
         }
         if (State is { MobCandidates.Count: > 0 } st)
