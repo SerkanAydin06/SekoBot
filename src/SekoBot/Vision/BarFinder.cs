@@ -150,8 +150,6 @@ internal sealed class AutoBars
     public List<string> Apply(BotProfile profile, BarDetection found, Frame frame)
     {
         var messages = new List<string>();
-        profile.HpBar = Update(profile.HpBar, found.Hp, frame, "HP", messages);
-        profile.MpBar = Update(profile.MpBar, found.Mp, frame, "MP", messages);
         var target = found.Target is Rectangle t && IsRejected(t, frame) ? null : found.Target;
         profile.TargetBar = Update(profile.TargetBar, target, frame, "Hedef HP", messages);
         return messages;
