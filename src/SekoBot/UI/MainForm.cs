@@ -10,20 +10,25 @@ using SekoBot.Vision;
 
 namespace SekoBot.UI;
 
+/// <summary>
+/// Layout: header (connection) → control bar (Start F10 / Stop F11, one-line status) →
+/// live preview + session stats → settings tabs + log.
+/// </summary>
 internal sealed class MainForm : Form
 {
     private const int CsDropShadow = 0x00020000;
 
     private readonly BotProfile _profile = ProfileStore.Load();
-    private readonly ListBox _windows;
-    private readonly Button _connect, _startBot, _stopBot, _record, _replay;
+    private readonly Button _gameButton, _startBot, _stopBot, _record, _replay;
+    private readonly ContextMenuStrip _gameMenu = new();
     private readonly CheckBox _dryRun;
-    private readonly NumericUpDown _potionHp, _attackRange, _leash;
-    private readonly NumericUpDown[] _skillEvery;
     private readonly PreviewControl _preview;
     private readonly Button[] _calibrationButtons;
-    private readonly Label _status, _scanStatus, _captureName, _calibrationHint, _calibrationState;
-    private readonly Label _statPhase, _statFps, _statAnalysis, _statCycles, _statPotions, _statTime, _statBars;
+    private readonly Label _connection, _status, _calibrationHint, _calibrationState, _technical;
+    private readonly Label _statTime, _statMobs, _statRate, _statDeaths, _statPotions, _statArea;
+    private readonly Meter _hpMeter, _mpMeter, _targetMeter;
+    private readonly Button[] _tabButtons;
+    private readonly Panel[] _tabPages;
     private readonly RichTextBox _log;
     private readonly System.Windows.Forms.Timer _scanTimer, _previewTimer, _statsTimer, _updateTimer;
     private readonly GlobalHotkeys _hotkeys = new();
@@ -32,6 +37,9 @@ internal sealed class MainForm : Form
     private Bitmap? _frameBitmap;
     private long _frameSequence;
     private bool _autoAttached, _updating, _gameMinimized, _replaying;
+    private List<WindowInfo> _games = [], _others = [];
+    /// <summary>Why the bot last stopped (shown in the status line until it starts again).</summary>
+    private string? _stopReason;
     /// <summary>Verified update that arrived while the bot was running.</summary>
     private PreparedUpdate? _pendingUpdate;
 
@@ -53,7 +61,7 @@ internal sealed class MainForm : Form
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
         Text = "SekoBot";
-        ClientSize = new Size(1180, 724);
+        ClientSize = new Size(1180, 760);
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Theme.Background;
@@ -62,160 +70,188 @@ internal sealed class MainForm : Form
         DoubleBuffered = true;
         KeyPreview = true;
 
-        // ── Header ────────────────────────────────────────────────
+        // ── Header: name, version, connection ─────────────────────
         var header = new Card { Bounds = new Rectangle(12, 10, 1156, 46) };
         Controls.Add(header);
-        var title = Theme.Label(header, "◆  SEKOBOT", new Rectangle(14, 8, 170, 30), 13.5f, Theme.Text, FontStyle.Bold);
-        Theme.Label(header, "v" + BuildInfo.Version, new Rectangle(176, 13, 140, 22), 8.5f, Theme.Muted);
-        _status = Theme.Label(header, "● HAZIR", new Rectangle(820, 13, 230, 22), 9f, Theme.Green, FontStyle.Bold, ContentAlignment.MiddleRight);
-        foreach (Control c in new Control[] { header, title })
+        var title = Theme.Label(header, "◆  SEKOBOT", new Rectangle(14, 8, 150, 30), 13.5f, Theme.Text, FontStyle.Bold);
+        var version = Theme.Label(header, "v" + BuildInfo.Version, new Rectangle(160, 13, 110, 22), 8.5f, Theme.Muted);
+        _connection = Theme.Label(header, "○  Oyun bekleniyor", new Rectangle(560, 12, 380, 22), 9.5f, Theme.Muted,
+            FontStyle.Bold, ContentAlignment.MiddleRight);
+        foreach (Control c in new Control[] { header, title, version, _connection })
         {
             c.MouseDown += DragWindow;
             c.Cursor = Cursors.SizeAll;
         }
+        _gameButton = Theme.Button(header, "Oyunu seç  ▾", new Rectangle(950, 7, 110, 32), Theme.Secondary, Theme.SecondaryHover);
+        _gameButton.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+        _gameButton.Click += (_, _) => ShowGameMenu();
         var minimize = Theme.Button(header, "—", new Rectangle(1068, 7, 36, 32), Theme.Surface, Theme.Secondary);
         minimize.Click += (_, _) => WindowState = FormWindowState.Minimized;
         var close = Theme.Button(header, "×", new Rectangle(1110, 7, 36, 32), Theme.Surface, Theme.Danger);
         close.Font = new Font("Segoe UI", 14f);
         close.Click += (_, _) => Close();
 
-        // ── Window card ──────────────────────────────────────────
-        var windowCard = new Card { Bounds = new Rectangle(12, 66, 296, 268) };
-        Controls.Add(windowCard);
-        Theme.Label(windowCard, "01  /  OYUN PENCERESİ", new Rectangle(14, 10, 268, 20), 8f, Theme.Accent, FontStyle.Bold);
-        _scanStatus = Theme.Label(windowCard, "Pencereler aranıyor…", new Rectangle(14, 30, 268, 20), 8.5f, Theme.Muted);
-        _windows = new ListBox
-        {
-            Bounds = new Rectangle(14, 54, 268, 116),
-            DrawMode = DrawMode.OwnerDrawFixed,
-            ItemHeight = 36,
-            IntegralHeight = false,
-            BorderStyle = BorderStyle.None,
-            BackColor = Theme.Inset,
-            ForeColor = Theme.Text
-        };
-        _windows.DrawItem += DrawWindowItem;
-        _windows.SelectedIndexChanged += (_, _) => UpdateControls();
-        _windows.DoubleClick += (_, _) => Connect();
-        windowCard.Controls.Add(_windows);
-        var refresh = Theme.Button(windowCard, "↻  Yenile", new Rectangle(14, 178, 92, 34), Theme.Secondary, Theme.SecondaryHover);
-        refresh.Click += (_, _) => RefreshWindows();
-        _connect = Theme.Button(windowCard, "▶  Bağlan", new Rectangle(112, 178, 170, 34), Theme.Primary, Theme.PrimaryHover);
-        _connect.Click += (_, _) => { if (_engine == null) Connect(); else Disconnect("Bağlantı kapatıldı."); };
-        _captureName = Theme.Label(windowCard, "Bağlı değil", new Rectangle(14, 220, 268, 38), 8f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
-
-        // ── Bot card ─────────────────────────────────────────────
-        var botCard = new Card { Bounds = new Rectangle(12, 344, 296, 368) };
-        Controls.Add(botCard);
-        Theme.Label(botCard, "02  /  FARM BOTU", new Rectangle(14, 10, 268, 20), 8f, Theme.Accent, FontStyle.Bold);
-        _dryRun = new CheckBox
-        {
-            Text = "Kuru çalışma",
-            Checked = true,
-            Bounds = new Rectangle(14, 34, 120, 24),
-            ForeColor = Theme.Text,
-            BackColor = botCard.BackColor,
-            Font = new Font("Segoe UI", 9f)
-        };
-        botCard.Controls.Add(_dryRun);
-        // Walk into groups of mobs rather than to the single nearest one.
-        var crowds = new CheckBox
-        {
-            Text = "Kalabalığa git",
-            Checked = _profile.PreferCrowds,
-            Bounds = new Rectangle(146, 34, 136, 24),
-            ForeColor = Theme.Text,
-            BackColor = botCard.BackColor,
-            Font = new Font("Segoe UI", 9f)
-        };
-        crowds.CheckedChanged += (_, _) => { _profile.PreferCrowds = crowds.Checked; SaveProfile(); };
-        botCard.Controls.Add(crowds);
-        _startBot = Theme.Button(botCard, "▶  Başlat  (F10)", new Rectangle(14, 64, 268, 38), Theme.Primary, Theme.PrimaryHover);
+        // ── Control bar: Start / Stop and what the bot is doing ───
+        var bar = new Card { Bounds = new Rectangle(12, 64, 1156, 64) };
+        Controls.Add(bar);
+        _startBot = Theme.Button(bar, "▶  BAŞLAT   F10", new Rectangle(12, 10, 220, 44), Theme.Primary, Theme.PrimaryHover);
+        _startBot.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
         _startBot.Click += (_, _) => ToggleBot();
-        _stopBot = Theme.Button(botCard, "■  Durdur  (F12)", new Rectangle(14, 108, 268, 34), Theme.Danger, Theme.DangerHover);
+        _stopBot = Theme.Button(bar, "■  DURDUR   F11", new Rectangle(242, 10, 200, 44), Theme.Danger, Theme.DangerHover);
+        _stopBot.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
         _stopBot.Click += (_, _) => StopBot("kullanıcı durdurdu", byUser: true);
+        _status = Theme.Label(bar, "Oyun bekleniyor", new Rectangle(464, 10, 680, 44), 12f, Theme.Muted, FontStyle.Bold);
 
-        Theme.Label(botCard, "HP iksiri (%)", new Rectangle(14, 150, 170, 26), 9f, Theme.Muted);
-        _potionHp = Theme.Number(botCard, new Rectangle(192, 150, 90, 26), 5, 95, (decimal)(_profile.PotionHpBelow * 100));
-        // Walk mode: how close (share of the screen height) a mob must be before Space is held.
-        Theme.Label(botCard, "Saldırı mesafesi (%)", new Rectangle(14, 180, 170, 26), 9f, Theme.Muted);
-        _attackRange = Theme.Number(botCard, new Rectangle(192, 180, 90, 26), 1, 20,
-            Math.Clamp((decimal)Math.Round(_profile.AttackRadius * 100, 1), 1, 20), 1, 0.5m);
-        // How far from the starting point the bot may wander (share of the big map, 0 = no limit).
-        Theme.Label(botCard, "Alan sınırı (harita %)", new Rectangle(14, 210, 176, 26), 9f, Theme.Muted);
-        _leash = Theme.Number(botCard, new Rectangle(192, 210, 90, 26), 0, 30,
-            Math.Clamp((decimal)Math.Round(_profile.LeashRadius * 100, 1), 0, 30), 1, 0.5m);
-        _potionHp.ValueChanged += (_, _) => { _profile.PotionHpBelow = (double)_potionHp.Value / 100; SaveProfile(); };
-        _attackRange.ValueChanged += (_, _) => { _profile.AttackRadius = (double)_attackRange.Value / 100; SaveProfile(); };
-        _leash.ValueChanged += (_, _) => { _profile.LeashRadius = (double)_leash.Value / 100; SaveProfile(); };
-
-        // Buff skills: F1–F5, each pressed again every N seconds (0 = off).
-        Theme.Label(botCard, "Buff becerileri: kaç saniyede bir (0 = kapalı)", new Rectangle(14, 240, 268, 18), 8f, Theme.Muted);
-        _skillEvery = new NumericUpDown[BotProfile.SkillSlots];
-        for (int i = 0; i < BotProfile.SkillSlots; i++)
-        {
-            int slot = i;
-            int x = 14 + (i % 3) * 90, y = 262 + (i / 3) * 30;
-            Theme.Label(botCard, "F" + (i + 1), new Rectangle(x, y, 24, 26), 9f, Theme.Text, FontStyle.Bold);
-            _skillEvery[i] = Theme.Number(botCard, new Rectangle(x + 24, y, 60, 26), 0, 3600,
-                Math.Clamp(_profile.SkillEverySec[i], 0, 3600));
-            _skillEvery[i].ValueChanged += (_, _) => { _profile.SkillEverySec[slot] = (int)_skillEvery[slot].Value; SaveProfile(); };
-        }
-
-        var openFolder = Theme.Button(botCard, "📁 Klasör", new Rectangle(14, 326, 80, 32), Theme.Secondary, Theme.SecondaryHover);
-        openFolder.Click += (_, _) => OpenProfileFolder();
-        _record = Theme.Button(botCard, "⏺ Kaydet", new Rectangle(98, 326, 88, 32), Theme.Secondary, Theme.SecondaryHover);
-        _record.Click += (_, _) => ToggleRecording();
-        _replay = Theme.Button(botCard, "▶ Kaydı oynat", new Rectangle(190, 326, 92, 32), Theme.Secondary, Theme.SecondaryHover);
-        _replay.Click += async (_, _) => await ReplayAsync();
-        foreach (var small in new[] { openFolder, _record, _replay })
-            small.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
-
-        // ── Preview card ─────────────────────────────────────────
-        var previewCard = new Card { Bounds = new Rectangle(318, 66, 850, 478) };
+        // ── Live preview ─────────────────────────────────────────
+        var previewCard = new Card { Bounds = new Rectangle(12, 136, 800, 400) };
         Controls.Add(previewCard);
-        Theme.Label(previewCard, "CANLI GÖRÜNTÜ  ·  KALİBRASYON", new Rectangle(16, 10, 400, 20), 8f, Theme.Accent, FontStyle.Bold);
-        _calibrationState = Theme.Label(previewCard, "", new Rectangle(560, 10, 274, 20), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.MiddleRight);
-        _preview = new PreviewControl { Bounds = new Rectangle(16, 34, 818, 360), Profile = _profile };
+        Theme.Label(previewCard, "CANLI GÖRÜNTÜ", new Rectangle(16, 8, 300, 20), 8f, Theme.Accent, FontStyle.Bold);
+        Theme.Label(previewCard, "Sarı halka = bulunan mob", new Rectangle(420, 8, 364, 20), 8f, Theme.Muted,
+            FontStyle.Regular, ContentAlignment.MiddleRight);
+        _preview = new PreviewControl { Bounds = new Rectangle(14, 32, 772, 354), Profile = _profile };
         _preview.SelectionChanged += UpdateControls;
         _preview.MouseClick += (_, _) => { if (_engine != null && _gameMinimized) WindowService.Restore(_engine.Window); };
         previewCard.Controls.Add(_preview);
 
-        _calibrationHint = Theme.Label(previewCard, "Önizlemede fareyle bir alan seç, sonra ne olduğunu işaretle:",
-            new Rectangle(16, 398, 818, 20), 8.5f, Theme.Muted);
-        string[] names = ["HP barı", "MP barı", "Hedef HP barı (isteğe bağlı)", "Sıfırla / yeniden bul"];
+        // ── Session stats ────────────────────────────────────────
+        var statsCard = new Card { Bounds = new Rectangle(822, 136, 346, 400) };
+        Controls.Add(statsCard);
+        Theme.Label(statsCard, "OTURUM", new Rectangle(16, 8, 200, 20), 8f, Theme.Accent, FontStyle.Bold);
+        _statTime = Tile(statsCard, "SÜRE", 16, 36);
+        _statMobs = Tile(statsCard, "ÖLDÜRÜLEN MOB", 180, 36);
+        _statRate = Tile(statsCard, "SAATTE MOB", 16, 104);
+        _statDeaths = Tile(statsCard, "ÖLÜM", 180, 104);
+        _statPotions = Tile(statsCard, "İKSİR", 16, 172);
+        _statArea = Tile(statsCard, "ALAN", 180, 172, small: true);
+        Theme.Label(statsCard, "KARAKTER", new Rectangle(16, 244, 200, 18), 8f, Theme.Accent, FontStyle.Bold);
+        _hpMeter = AddMeter(statsCard, "HP", Theme.Red, 268);
+        _mpMeter = AddMeter(statsCard, "MP", Theme.Accent, 304);
+        _targetMeter = AddMeter(statsCard, "HEDEF", Theme.Yellow, 340);
+
+        // ── Settings tabs ────────────────────────────────────────
+        var settings = new Card { Bounds = new Rectangle(12, 544, 760, 204) };
+        Controls.Add(settings);
+        string[] tabNames = ["Saldırı", "İksir & Buff", "Alan", "Tuşlar", "Gelişmiş"];
+        _tabButtons = new Button[tabNames.Length];
+        _tabPages = new Panel[tabNames.Length];
+        for (int i = 0; i < tabNames.Length; i++)
+        {
+            int index = i;
+            _tabButtons[i] = Theme.Button(settings, tabNames[i], new Rectangle(12 + i * 124, 10, 118, 30), Theme.Secondary, Theme.SecondaryHover);
+            _tabButtons[i].Click += (_, _) => SelectTab(index);
+            _tabPages[i] = new Panel { Bounds = new Rectangle(12, 50, 736, 146), BackColor = Theme.Surface, Visible = false };
+            settings.Controls.Add(_tabPages[i]);
+        }
+
+        // Saldırı
+        var attack = _tabPages[0];
+        NumberRow(attack, "Saldırı mesafesi (%)", 0, 0, 1, 20, Math.Round(_profile.AttackRadius * 100, 1), 1, 0.5m,
+            v => _profile.AttackRadius = v / 100);
+        NumberRow(attack, "Eşya toplama (sn)", 0, 34, 0.5m, 10, _profile.LootEveryMs / 1000.0, 1, 0.5m,
+            v => _profile.LootEveryMs = (int)(v * 1000));
+        Check(attack, "Kalabalığa git (mobların toplu olduğu yere)", 370, 0, 360, _profile.PreferCrowds,
+            v => _profile.PreferCrowds = v);
+        NumberRow(attack, "Kalabalık: en az mob", 370, 34, 2, 10, _profile.CrowdMinMobs, 0, 1,
+            v => _profile.CrowdMinMobs = (int)v);
+        Hint(attack, "Saldırı mesafesi: mob karaktere bu kadar yaklaşınca saldırır (ekran yüksekliğinin %'si). " +
+            "Küçük sayı = daha yakından saldırır.", 76);
+
+        // İksir & Buff
+        var potions = _tabPages[1];
+        NumberRow(potions, "HP iksiri (% altında)", 0, 0, 5, 95, Math.Round(_profile.PotionHpBelow * 100), 0, 1,
+            v => _profile.PotionHpBelow = v / 100);
+        NumberRow(potions, "MP iksiri (% altında)", 0, 34, 0, 95, Math.Round(_profile.PotionMpBelow * 100), 0, 1,
+            v => _profile.PotionMpBelow = v / 100);
+        Check(potions, "Ölünce yeniden başla", 0, 68, 300, _profile.ReviveOnDeath, v => _profile.ReviveOnDeath = v);
+        Theme.Label(potions, "Buff: kaç saniyede bir basılsın (0 = kapalı)", new Rectangle(370, 0, 360, 26), 9f, Theme.Muted);
+        for (int i = 0; i < BotProfile.SkillSlots; i++)
+        {
+            int slot = i;
+            int x = 370 + (i % 3) * 120, y = 34 + (i / 3) * 34;
+            string key = i < _profile.Keys.Skills.Length ? KeyPicker.Name(_profile.Keys.Skills[i]) : "F" + (i + 1);
+            Theme.Label(potions, key, new Rectangle(x, y, 34, 26), 9.5f, Theme.Text, FontStyle.Bold);
+            var number = Theme.Number(potions, new Rectangle(x + 36, y, 70, 26), 0, 3600, Math.Clamp(_profile.SkillEverySec[i], 0, 3600));
+            number.ValueChanged += (_, _) => { _profile.SkillEverySec[slot] = (int)number.Value; SaveProfile(); };
+        }
+
+        // Alan
+        var area = _tabPages[2];
+        NumberRow(area, "Alan sınırı (harita %)", 0, 0, 0, 30, Math.Round(_profile.LeashRadius * 100, 1), 1, 0.5m,
+            v => _profile.LeashRadius = v / 100);
+        NumberRow(area, "Haritaya bakma (sn)", 0, 34, 5, 120, _profile.LeashCheckMs / 1000.0, 0, 5,
+            v => _profile.LeashCheckMs = (int)(v * 1000));
+        Theme.Label(area, "Bot başladığı yeri hatırlar. Arada bir büyük haritayı (M) açıp bakar; bu sınırın dışına " +
+            "çıktıysa başladığı yere geri yürür. Bir şeye takılırsa yana kayarak dolanır.\n0 = sınır yok.",
+            new Rectangle(370, 0, 360, 100), 9f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+
+        // Tuşlar
+        var keys = _tabPages[3];
+        var k = _profile.Keys;
+        (string, Func<Keys>, Action<Keys>)[] bindings =
+        [
+            ("Saldırı", () => k.Attack, v => k.Attack = v),
+            ("Eşya topla", () => k.Pickup, v => k.Pickup = v),
+            ("HP iksiri", () => k.HpPotion, v => k.HpPotion = v),
+            ("MP iksiri", () => k.MpPotion, v => k.MpPotion = v),
+            ("İleri", () => k.MoveForward, v => k.MoveForward = v),
+            ("Sol", () => k.MoveLeft, v => k.MoveLeft = v),
+            ("Geri", () => k.MoveBack, v => k.MoveBack = v),
+            ("Sağ", () => k.MoveRight, v => k.MoveRight = v),
+            ("Kamera yukarı", () => k.CameraTop, v => k.CameraTop = v),
+            ("Uzaklaştır", () => k.ZoomOut, v => k.ZoomOut = v),
+            ("Büyük harita", () => k.Map, v => k.Map = v),
+            ("Pencere kapat", () => k.CloseWindow, v => k.CloseWindow = v),
+        ];
+        for (int i = 0; i < bindings.Length; i++)
+        {
+            var (caption, get, set) = bindings[i];
+            int x = (i / 4) * 246, y = (i % 4) * 30;
+            Theme.Label(keys, caption, new Rectangle(x, y, 120, 26), 9f, Theme.Muted);
+            var picker = new KeyPicker { Bounds = new Rectangle(x + 122, y, 104, 26), Key = get() };
+            picker.KeyChanged += key => { set(key); SaveProfile(); WriteLog($"{caption} tuşu: {KeyPicker.Name(key)}"); };
+            keys.Controls.Add(picker);
+        }
+        Theme.Label(keys, "Değiştirmek için tuşa tıkla, sonra yeni tuşa bas.", new Rectangle(0, 122, 736, 22), 8.5f, Theme.Muted);
+
+        // Gelişmiş
+        var advanced = _tabPages[4];
+        _dryRun = new CheckBox
+        {
+            Text = "Kuru çalışma (tuş göndermez)",
+            Checked = false,
+            Bounds = new Rectangle(0, 0, 230, 26),
+            ForeColor = Theme.Text,
+            BackColor = advanced.BackColor,
+            Font = new Font("Segoe UI", 9f)
+        };
+        advanced.Controls.Add(_dryRun);
+        _calibrationState = Theme.Label(advanced, "", new Rectangle(240, 0, 230, 26), 9f, Theme.Muted);
+        _technical = Theme.Label(advanced, "", new Rectangle(476, 0, 260, 26), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.MiddleRight);
+        _calibrationHint = Theme.Label(advanced, "", new Rectangle(0, 30, 736, 22), 8.5f, Theme.Muted);
+        string[] names = ["HP barı", "MP barı", "Hedef HP barı", "Barları sıfırla"];
         _calibrationButtons = new Button[names.Length];
-        int bx = 16;
         for (int i = 0; i < names.Length; i++)
         {
-            int width = i == 2 ? 230 : i == 3 ? 190 : 140;
             int index = i;
-            var button = Theme.Button(previewCard, names[i], new Rectangle(bx, 424, width, 38),
+            var button = Theme.Button(advanced, names[i], new Rectangle(i * 150, 56, 142, 30),
                 i == 3 ? Theme.Danger : Theme.Secondary, i == 3 ? Theme.DangerHover : Theme.SecondaryHover);
             button.Click += (_, _) => Calibrate(index);
             _calibrationButtons[i] = button;
-            bx += width + 8;
         }
+        _record = Theme.Button(advanced, "⏺  Kaydet", new Rectangle(0, 100, 142, 30), Theme.Secondary, Theme.SecondaryHover);
+        _record.Click += (_, _) => ToggleRecording();
+        _replay = Theme.Button(advanced, "▶  Kaydı oynat", new Rectangle(150, 100, 142, 30), Theme.Secondary, Theme.SecondaryHover);
+        _replay.Click += async (_, _) => await ReplayAsync();
+        var openFolder = Theme.Button(advanced, "📁  Ayar klasörü", new Rectangle(300, 100, 142, 30), Theme.Secondary, Theme.SecondaryHover);
+        openFolder.Click += (_, _) => OpenProfileFolder();
 
-        // ── Stats card ───────────────────────────────────────────
-        var statsCard = new Card { Bounds = new Rectangle(318, 554, 420, 158) };
-        Controls.Add(statsCard);
-        Theme.Label(statsCard, "İSTATİSTİK", new Rectangle(16, 10, 200, 20), 8f, Theme.Accent, FontStyle.Bold);
-        _statPhase = Stat(statsCard, "DURUM", 16, 34, 196);
-        _statBars = Stat(statsCard, "HP / MP / HEDEF", 216, 34, 190);
-        _statCycles = Stat(statsCard, "TUR", 16, 78, 120);
-        _statPotions = Stat(statsCard, "İKSİR", 140, 78, 90);
-        _statTime = Stat(statsCard, "SÜRE", 234, 78, 170);
-        _statFps = Stat(statsCard, "YAKALAMA FPS", 16, 116, 196, small: true);
-        _statAnalysis = Stat(statsCard, "ANALİZ", 216, 116, 190, small: true);
-
-        // ── Log card ─────────────────────────────────────────────
-        var logCard = new Card { Bounds = new Rectangle(748, 554, 420, 158) };
+        // ── Log ──────────────────────────────────────────────────
+        var logCard = new Card { Bounds = new Rectangle(782, 544, 386, 204) };
         Controls.Add(logCard);
-        Theme.Label(logCard, "SİSTEM GÜNLÜĞÜ", new Rectangle(16, 10, 200, 20), 8f, Theme.Accent, FontStyle.Bold);
+        Theme.Label(logCard, "GÜNLÜK", new Rectangle(16, 8, 200, 20), 8f, Theme.Accent, FontStyle.Bold);
         _log = new RichTextBox
         {
-            Bounds = new Rectangle(16, 34, 390, 112),
+            Bounds = new Rectangle(14, 32, 358, 160),
             BorderStyle = BorderStyle.None,
             ReadOnly = true,
             ScrollBars = RichTextBoxScrollBars.Vertical,
@@ -226,6 +262,7 @@ internal sealed class MainForm : Form
             TabStop = false
         };
         logCard.Controls.Add(_log);
+        SelectTab(0);
 
         // ── Timers & hotkeys ─────────────────────────────────────
         _scanTimer = new System.Windows.Forms.Timer { Interval = 2000 };
@@ -239,8 +276,9 @@ internal sealed class MainForm : Form
 
         if (!_hotkeys.Register(Keys.F10, () => BeginInvoke(new Action(ToggleBot))))
             WriteLog("F10 kısayolu başka bir uygulamada kullanılıyor.");
-        if (!_hotkeys.Register(Keys.F12, () => BeginInvoke(new Action(() => StopBot("F12 acil durdurma", byUser: true)))))
-            WriteLog("F12 kısayolu başka bir uygulamada kullanılıyor.");
+        // F12 is reserved by Windows for debuggers, so the emergency stop is F11.
+        if (!_hotkeys.Register(Keys.F11, () => BeginInvoke(new Action(() => StopBot("F11 acil durdurma", byUser: true)))))
+            WriteLog("F11 kısayolu başka bir uygulamada kullanılıyor; Durdur düğmesini kullan.");
 
         Shown += async (_, _) =>
         {
@@ -263,13 +301,62 @@ internal sealed class MainForm : Form
 
         ResumeLayout(false);
         UpdateControls();
+        UpdateStats();
     }
 
-    private static Label Stat(Control parent, string caption, int x, int y, int width, bool small = false)
+    // ── Layout helpers ───────────────────────────────────────────
+
+    private static Label Tile(Control parent, string caption, int x, int y, bool small = false)
     {
-        Theme.Label(parent, caption, new Rectangle(x, y, width, 14), 7.5f, Theme.Muted);
-        return Theme.Label(parent, "—", new Rectangle(x, y + 14, width, small ? 20 : 24),
-            small ? 9f : 11.5f, Theme.Text, FontStyle.Bold);
+        var tile = new Panel { Bounds = new Rectangle(x, y, 150, 60), BackColor = Theme.Inset };
+        parent.Controls.Add(tile);
+        Theme.Label(tile, caption, new Rectangle(10, 6, 136, 16), 7.5f, Theme.Muted, FontStyle.Bold);
+        return Theme.Label(tile, "—", new Rectangle(10, 24, 136, 30), small ? 8.5f : 15f, Theme.Text, FontStyle.Bold);
+    }
+
+    private static Meter AddMeter(Control parent, string caption, Color fill, int y)
+    {
+        var meter = new Meter { Bounds = new Rectangle(16, y, 314, 28), Caption = caption, Fill = fill };
+        parent.Controls.Add(meter);
+        return meter;
+    }
+
+    private void NumberRow(Control parent, string caption, int x, int y, decimal min, decimal max, double value,
+        int decimals, decimal step, Action<double> apply)
+    {
+        Theme.Label(parent, caption, new Rectangle(x, y, 190, 26), 9f, Theme.Muted);
+        var number = Theme.Number(parent, new Rectangle(x + 196, y, 90, 26), min, max,
+            Math.Clamp((decimal)value, min, max), decimals, step);
+        number.ValueChanged += (_, _) => { apply((double)number.Value); SaveProfile(); };
+    }
+
+    private void Check(Control parent, string text, int x, int y, int width, bool value, Action<bool> apply)
+    {
+        var box = new CheckBox
+        {
+            Text = text,
+            Checked = value,
+            Bounds = new Rectangle(x, y, width, 26),
+            ForeColor = Theme.Text,
+            BackColor = parent.BackColor,
+            Font = new Font("Segoe UI", 9f)
+        };
+        box.CheckedChanged += (_, _) => { apply(box.Checked); SaveProfile(); };
+        parent.Controls.Add(box);
+    }
+
+    private static void Hint(Control parent, string text, int y) =>
+        Theme.Label(parent, text, new Rectangle(0, y, 736, 44), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+
+    private void SelectTab(int index)
+    {
+        for (int i = 0; i < _tabPages.Length; i++)
+        {
+            bool on = i == index;
+            _tabPages[i].Visible = on;
+            _tabButtons[i].BackColor = on ? Theme.Primary : Theme.Secondary;
+            _tabButtons[i].FlatAppearance.MouseOverBackColor = on ? Theme.PrimaryHover : Theme.SecondaryHover;
+        }
     }
 
     // ── Windows ──────────────────────────────────────────────────
@@ -282,22 +369,38 @@ internal sealed class MainForm : Form
         Win32.SendMessage(Handle, 0x00A1, 2, 0);
     }
 
-    private void DrawWindowItem(object? sender, DrawItemEventArgs e)
+    /// <summary>Game windows first; every other window only as a fallback.</summary>
+    private void ShowGameMenu()
     {
-        if (e.Index < 0 || _windows.Items[e.Index] is not WindowInfo w)
-            return;
-        bool selected = (e.State & DrawItemState.Selected) != 0;
-        using (var fill = new SolidBrush(selected ? Color.FromArgb(36, 68, 112) : Theme.Inset))
-            e.Graphics.FillRectangle(fill, e.Bounds);
-        using var bold = new Font("Segoe UI", 9f, FontStyle.Bold);
-        using var small = new Font("Segoe UI", 7.5f);
-        TextRenderer.DrawText(e.Graphics, (w.IsMetin2 ? "★ " : "") + w.Title, bold,
-            new Rectangle(e.Bounds.X + 8, e.Bounds.Y + 3, e.Bounds.Width - 14, 18), Theme.Text,
-            TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
-        string details = $"{w.Width} × {w.Height}  •  PID {w.ProcessId}" + (w.IsMinimized ? "  •  küçültülmüş" : "");
-        TextRenderer.DrawText(e.Graphics, details, small,
-            new Rectangle(e.Bounds.X + 8, e.Bounds.Y + 20, e.Bounds.Width - 14, 14), Theme.Muted,
-            TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        _gameMenu.Items.Clear();
+        if (_engine != null)
+        {
+            _gameMenu.Items.Add("Bağlantıyı kes", null, (_, _) => Disconnect("Bağlantı kapatıldı."));
+        }
+        else
+        {
+            RefreshWindows();
+            foreach (var w in _games)
+            {
+                var window = w;
+                _gameMenu.Items.Add($"★  {w.Title}   ({w.Width}×{w.Height}{(w.IsMinimized ? ", küçültülmüş" : "")})",
+                    null, (_, _) => Connect(window));
+            }
+            if (_games.Count == 0)
+                _gameMenu.Items.Add(new ToolStripMenuItem($"{_profile.GameWindowTitle} açık değil") { Enabled = false });
+            if (_others.Count > 0)
+            {
+                var more = new ToolStripMenuItem("Diğer pencereler");
+                foreach (var w in _others)
+                {
+                    var window = w;
+                    more.DropDownItems.Add(w.Title, null, (_, _) => Connect(window));
+                }
+                _gameMenu.Items.Add(new ToolStripSeparator());
+                _gameMenu.Items.Add(more);
+            }
+        }
+        _gameMenu.Show(_gameButton, new Point(0, _gameButton.Height));
     }
 
     private void RefreshWindows()
@@ -306,45 +409,36 @@ internal sealed class MainForm : Form
             return;
         try
         {
-            var previous = _windows.SelectedItem as WindowInfo;
             var all = WindowService.GetOpenWindows();
-            var games = all.Where(w => w.IsMetin2).ToList();
-            // Only the game is of interest; show everything just as a fallback when it isn't open.
-            IReadOnlyList<WindowInfo> list = games.Count > 0 ? games : all;
-            _windows.BeginUpdate();
-            _windows.Items.Clear();
-            foreach (var w in list)
-                _windows.Items.Add(w);
-            int index = previous == null ? -1 : list.ToList().FindIndex(w => w.Handle == previous.Handle && w.ProcessId == previous.ProcessId);
-            if (index < 0 && list.Count > 0) index = 0;
-            _windows.SelectedIndex = index;
-            _windows.EndUpdate();
-            _scanStatus.Text = games.Count switch
+            _games = all.Where(w => w.IsMetin2).ToList();
+            _others = all.Where(w => !w.IsMetin2).ToList();
+            var ready = _games.Where(w => !w.IsMinimized).ToList();
+            string waiting = _games.Count switch
             {
-                0 => $"{_profile.GameWindowTitle} bekleniyor… Açılınca kendiliğinden bağlanır.",
-                1 => $"{_profile.GameWindowTitle} bulundu.",
-                _ => $"{games.Count} oyun penceresi var; birini seçip Bağlan'a bas."
+                0 => $"{_profile.GameWindowTitle} bekleniyor.\nOyun açılınca kendiliğinden bağlanır.",
+                _ when ready.Count == 0 => $"{_profile.GameWindowTitle} simge durumunda.\nOyunu aç, kendiliğinden bağlanır.",
+                1 => $"{_profile.GameWindowTitle} bulundu, bağlanılıyor…",
+                _ => $"{_games.Count} oyun penceresi açık.\nSağ üstten 'Oyunu seç' ile birini seç."
             };
-            UpdateControls();
+            _preview.Placeholder = waiting;
+            _preview.Invalidate();
 
-            var ready = games.Where(w => !w.IsMinimized).ToList();
-            if (!_autoAttached && ready.Count == 1)
+            if (!_autoAttached && ready.Count == 1 && _games.Count == 1)
             {
                 _autoAttached = true;
-                _windows.SelectedItem = ready[0];
-                BeginInvoke(new Action(Connect));
+                BeginInvoke(new Action(() => Connect(ready[0])));
             }
         }
         catch (Exception ex)
         {
-            _scanStatus.Text = "Tarama hatası.";
             WriteLog("Pencere tarama hatası: " + ex.Message);
         }
+        UpdateControls();
     }
 
-    private void Connect()
+    private void Connect(WindowInfo window)
     {
-        if (_engine != null || _updating || _windows.SelectedItem is not WindowInfo window)
+        if (_engine != null || _updating)
             return;
         if (!WindowService.IsAlive(window, out string error))
         {
@@ -372,24 +466,25 @@ internal sealed class MainForm : Form
                 _preview.Invalidate();
                 UpdateControls();
             });
-            engine.BotStopped += reason => PostUi(() => { SetStatus("DURDU: " + reason, Theme.Yellow); UpdateControls(); });
+            engine.BotStopped += reason => PostUi(() => { _stopReason = reason; UpdateControls(); UpdateStats(); });
             _engine = engine;
             engine.Start(previewFps: 30);
             _frameSequence = 0;
             _gameMinimized = false;
+            _autoAttached = true;
             _previewTimer.Start();
-            _captureName.Text = $"{window.Title}\n{engine.Stats.CaptureName}";
-            SetStatus("BAĞLI", Theme.Green);
-            WriteLog($"Bağlandı: {window.Title} (PID {window.ProcessId}).");
+            SetStatus($"{window.Title}'e bağlı", Theme.Green);
+            WriteLog($"Bağlandı: {window.Title} (PID {window.ProcessId}, {engine.Stats.CaptureName}).");
         }
         catch (Exception ex)
         {
             _engine?.Dispose();
             _engine = null;
-            SetStatus("BAĞLANTI HATASI", Theme.Red);
+            SetStatus("Bağlantı hatası", Theme.Red);
             WriteLog("Bağlanılamadı: " + ex.Message);
         }
         UpdateControls();
+        UpdateStats();
     }
 
     private void Disconnect(string reason)
@@ -402,13 +497,11 @@ internal sealed class MainForm : Form
         _preview.Image = null;
         _preview.State = null;
         _preview.Overlay = "";
-        _preview.Placeholder = "Oyun penceresi bekleniyor";
         _preview.Invalidate();
-        _captureName.Text = "Bağlı değil";
-        SetStatus("BAĞLI DEĞİL", Theme.Muted);
+        SetStatus("Bağlı değil", Theme.Muted, filled: false);
         WriteLog(reason);
-        UpdateControls();
         RefreshWindows();
+        UpdateStats();
     }
 
     // ── Bot ──────────────────────────────────────────────────────
@@ -417,7 +510,7 @@ internal sealed class MainForm : Form
     {
         if (_engine == null)
         {
-            WriteLog("Önce oyun penceresine bağlanın.");
+            WriteLog("Önce oyun açık olmalı; açılınca kendiliğinden bağlanır.");
             return;
         }
         if (_engine.BotRunning)
@@ -429,23 +522,25 @@ internal sealed class MainForm : Form
         if (!_engine.StartBot(_dryRun.Checked, background: true, out string error))
         {
             WriteLog(error);
-            SetStatus("BAŞLATILAMADI", Theme.Yellow);
+            _stopReason = "başlatılamadı: " + error;
+            UpdateStats();
             return;
         }
-        SetStatus(_dryRun.Checked ? "BOT · KURU ÇALIŞMA" : "BOT ÇALIŞIYOR",
-            _dryRun.Checked ? Theme.Yellow : Theme.Green);
+        _stopReason = null;
         UpdateControls();
+        UpdateStats();
     }
 
-    /// <param name="byUser">F10/F12/button: a pending update may install now. Automatic stops
-    /// (critical HP, minimized game) keep the window as is so the user can see why it stopped.</param>
+    /// <param name="byUser">F10/F11/button: a pending update may install now. Automatic stops
+    /// (minimized game) keep the window as is so the user can see why it stopped.</param>
     private void StopBot(string reason, bool byUser = false)
     {
         if (_engine?.BotRunning != true)
             return;
         _engine.StopBot(reason);
-        SetStatus("BAĞLI", Theme.Green);
+        _stopReason = reason;
         UpdateControls();
+        UpdateStats();
         if (byUser && _pendingUpdate is PreparedUpdate pending)
             _ = ApplyUpdateAsync(pending);
     }
@@ -617,55 +712,71 @@ internal sealed class MainForm : Form
         {
             _preview.Image = _frameBitmap;
             _preview.State = _engine.State;
-            var stats = _engine.Stats;
-            _preview.Overlay = (_engine.IsRecording ? "⏺ KAYIT  " : "") + (stats.BotRunning
-                ? (stats.DryRun ? "KURU · " : "") + stats.Phase.ToTurkish()
-                : "");
+            _preview.Overlay = _engine.IsRecording ? "⏺ KAYIT" : "";
             _preview.Invalidate();
         }
     }
 
     private void UpdateStats()
     {
-        _calibrationState.Text = $"HP {Mark(_profile.HpBar)}   MP {Mark(_profile.MpBar)}   Hedef {Mark(_profile.TargetBar)}";
+        _calibrationState.Text = $"Barlar:  HP {Mark(_profile.HpBar)}   MP {Mark(_profile.MpBar)}   Hedef {Mark(_profile.TargetBar)}";
 
         if (_engine == null)
         {
-            foreach (var l in new[] { _statPhase, _statFps, _statAnalysis, _statBars, _statCycles, _statPotions, _statTime })
+            foreach (var l in new[] { _statTime, _statMobs, _statRate, _statDeaths, _statPotions, _statArea })
                 l.Text = "—";
+            _hpMeter.Value = _mpMeter.Value = _targetMeter.Value = null;
+            _technical.Text = "";
+            SetLine(_updating ? "Güncelleniyor…" : "Oyun bekleniyor", Theme.Muted);
             return;
         }
         var s = _engine.Stats;
         var state = _engine.State;
-        _statPhase.Text = s.BotRunning ? s.Phase.ToTurkish() : "Bot kapalı";
-        _statPhase.ForeColor = s.BotRunning ? Theme.Green : Theme.Muted;
-        _statFps.Text = $"{s.CaptureFps:0.0}  ·  {(s.CaptureName.StartsWith("Windows") ? "GPU" : "GDI")}";
-        _statAnalysis.Text = $"{s.AnalysisMs:0.00} ms";
-        _statBars.Text = $"{Pct(state?.Hp)} / {Pct(state?.Mp)} / {Pct(state?.TargetHp)}";
-        _statCycles.Text = s.Cycles.ToString("N0");
-        _statPotions.Text = s.Potions.ToString("N0");
-        _statTime.Text = s.BotUptime.ToString(@"hh\:mm\:ss");
+        _technical.Text = $"{(s.CaptureName.StartsWith("Windows") ? "GPU" : "GDI")} · {s.CaptureFps:0} FPS · analiz {s.AnalysisMs:0.0} ms";
+        _hpMeter.Value = state?.Hp;
+        _mpMeter.Value = state?.Mp;
+        _targetMeter.Value = state?.TargetHp;
+
+        if (s.BotRunning)
+        {
+            _statTime.Text = s.BotUptime.ToString(@"hh\:mm\:ss");
+            _statMobs.Text = s.Cycles.ToString("N0");
+            _statRate.Text = s.BotUptime.TotalMinutes >= 1 ? (s.Cycles / s.BotUptime.TotalHours).ToString("N0") : "—";
+            _statDeaths.Text = s.Deaths.ToString("N0");
+            _statDeaths.ForeColor = s.Deaths > 0 ? Theme.Red : Theme.Text;
+            _statPotions.Text = s.Potions.ToString("N0");
+            _statArea.Text = s.Area;
+            string line = (s.DryRun ? "KURU ÇALIŞMA · " : "") + s.Phase.ToTurkish() + "  ·  " + s.Area;
+            SetLine(line, s.DryRun ? Theme.Yellow : s.Phase == BotPhase.Dead ? Theme.Red : Theme.Green);
+        }
+        else
+        {
+            SetLine(_stopReason is string reason
+                    ? $"Durdu ({reason}). Devam etmek için BAŞLAT ya da F10."
+                    : "Hazır. Başlatmak için BAŞLAT ya da F10.",
+                _stopReason != null ? Theme.Yellow : Theme.Text);
+        }
+    }
+
+    private void SetLine(string text, Color color)
+    {
+        if (_status.Text != text) _status.Text = text;
+        _status.ForeColor = color;
     }
 
     private static string Mark(BarSpec? bar) => bar == null ? "✗" : "✓";
-
-    private static string Pct(double? value) => value is double v ? $"%{v * 100:0}" : "—";
 
     private void UpdateControls()
     {
         bool connected = _engine != null;
         bool running = _engine?.BotRunning == true;
-        _windows.Enabled = !connected;
-        _connect.Enabled = connected || _windows.SelectedItem is WindowInfo;
-        _connect.Text = connected ? "■  Bağlantıyı kes" : "▶  Bağlan";
-        _connect.BackColor = connected ? Theme.Danger : Theme.Primary;
-        _connect.FlatAppearance.MouseOverBackColor = connected ? Theme.DangerHover : Theme.PrimaryHover;
+        _gameButton.Text = connected ? "Bağlantı  ▾" : "Oyunu seç  ▾";
         _startBot.Enabled = connected;
-        _startBot.Text = running ? "❚❚  Duraklat  (F10)" : "▶  Başlat  (F10)";
+        _startBot.Text = running ? "❚❚  DURAKLAT   F10" : "▶  BAŞLAT   F10";
         _stopBot.Enabled = running;
         bool recording = _engine?.IsRecording == true;
         _record.Enabled = connected;
-        _record.Text = recording ? "■ Bitir" : "⏺ Kaydet";
+        _record.Text = recording ? "■  Kaydı bitir" : "⏺  Kaydet";
         _record.BackColor = recording ? Theme.Danger : Theme.Secondary;
         _record.FlatAppearance.MouseOverBackColor = recording ? Theme.DangerHover : Theme.SecondaryHover;
         _replay.Enabled = !_replaying;
@@ -674,12 +785,12 @@ internal sealed class MainForm : Form
         for (int i = 0; i < 3; i++)
             _calibrationButtons[i].Enabled = hasSelection;
         _calibrationHint.Text = !connected
-            ? "Kalibrasyon için önce oyuna bağlan."
+            ? "Barları elle işaretlemek için önce oyuna bağlan."
             : hasSelection
-                ? "Seçili alanı ne olarak kaydedelim? (Bar seçerken bar dolu olmalı)"
+                ? "Seçili alan ne? Aşağıdan seç (bar seçerken bar dolu olmalı)."
                 : _profile.HpBar == null
-                    ? "HP/MP barları otomatik aranıyor… Bulunamazsa barı fareyle seçip aşağıdan işaretle."
-                    : "Barlar hazır. Yanlışsa barı fareyle seçip elle işaretle ya da 'Sıfırla / yeniden bul'.";
+                    ? "HP/MP barları otomatik aranıyor… Bulunamazsa barı canlı görüntüde fareyle seç."
+                    : "Barlar otomatik bulundu. Yanlışsa barı canlı görüntüde fareyle seçip işaretle.";
     }
 
     // ── Update ───────────────────────────────────────────────────
@@ -719,12 +830,12 @@ internal sealed class MainForm : Form
         if (_engine?.BotRunning == true)
         {
             if (_pendingUpdate == null)
-                WriteLog($"Yeni sürüm {update.Version} hazır; botu durdurduğunda (F10/F12) yüklenecek.");
+                WriteLog($"Yeni sürüm {update.Version} hazır; botu durdurduğunda (F10/F11) yüklenecek.");
             _pendingUpdate = update;
             return;
         }
         _updating = true;
-        SetStatus("GÜNCELLENİYOR", Theme.Yellow);
+        SetStatus("Güncelleniyor", Theme.Yellow);
         WriteLog($"Yeni sürüm {update.Version} doğrulandı. SekoBot yeniden başlatılıyor…");
         await Task.Delay(1200);
         if (IsDisposed)
@@ -749,18 +860,21 @@ internal sealed class MainForm : Form
         {
             _updating = false;
             _pendingUpdate = null;
-            SetStatus("HAZIR", Theme.Green);
+            SetStatus("Bağlı değil", Theme.Muted, filled: false);
+            _autoAttached = false;
             WriteLog("Güncelleme uygulanamadı: " + ex.Message);
         }
     }
 
     // ── Helpers ──────────────────────────────────────────────────
 
-    private void SetStatus(string text, Color color)
+    /// <summary>The connection text in the header.</summary>
+    private void SetStatus(string text, Color color, bool filled = true)
     {
-        _status.Text = "● " + text;
-        _status.ForeColor = color;
+        _connection.Text = (filled ? "●  " : "○  ") + text;
+        _connection.ForeColor = color;
     }
+
 
     private void PostUi(Action action)
     {

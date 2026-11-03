@@ -12,7 +12,8 @@ namespace SekoBot.Bot;
 
 internal sealed record EngineStats(
     string CaptureName, double CaptureFps, double AnalysisMs, BotPhase Phase,
-    bool BotRunning, bool DryRun, int Cycles, int Potions, TimeSpan BotUptime);
+    bool BotRunning, bool DryRun, int Cycles, int Potions, TimeSpan BotUptime,
+    int Deaths, string Area);
 
 /// <summary>
 /// Pipeline: capture → (latest frame only) → perception → brain → input.
@@ -367,8 +368,8 @@ internal sealed class BotEngine : IDisposable
             _brain.Start(_clock.Elapsed);
         }
         _log(dryRun ? "Bot kuru çalışmada başladı (girdi gönderilmez)."
-            : background ? "Bot başladı (oyun arka planda kalabilir). Acil durdurma: F12"
-            : "Bot başladı. Acil durdurma: F12");
+            : background ? "Bot başladı (oyun arka planda kalabilir). Acil durdurma: F11"
+            : "Bot başladı. Acil durdurma: F11");
         return true;
     }
 
@@ -401,7 +402,8 @@ internal sealed class BotEngine : IDisposable
                 return new EngineStats(_capture?.Name ?? "—", _captureFps, State?.AnalysisMs ?? 0,
                     _brain.Phase, _input != null, _input?.DryRun ?? true,
                     _brain.Cycles, _brain.Potions,
-                    _input != null ? _clock.Elapsed - _botStarted : TimeSpan.Zero);
+                    _input != null ? _clock.Elapsed - _botStarted : TimeSpan.Zero,
+                    _brain.Deaths, _brain.AreaStatus);
             }
         }
     }
