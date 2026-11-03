@@ -51,7 +51,6 @@ internal sealed class BotEngine : IDisposable
     private TimeSpan _targetConstSince = TimeSpan.FromDays(-1);
     private double _targetConstValue = -1;
     private TimeSpan _lastBarSearch = TimeSpan.FromDays(-1), _barSearchStarted = TimeSpan.FromDays(-1);
-    private bool _barSearchFailedLogged;
     private bool _disposed;
 
     public BotEngine(WindowInfo window, BotProfile profile, Action<string> log)
@@ -67,7 +66,7 @@ internal sealed class BotEngine : IDisposable
     public bool GameMinimized => WindowService.IsMinimized(_window);
     public BotProfile Profile { get; set; }
     public GameState? State => Volatile.Read(ref _state);
-    public string StatsSource => !Profile.UseMemoryStats ? "Görüntü" : _statsReader.Status;
+    public string StatsSource => _statsReader.Status;
 
     /// <summary>Raised from a worker thread when capture stops or the bot stops itself.</summary>
     public event Action<string>? CaptureFailed;
@@ -138,7 +137,7 @@ internal sealed class BotEngine : IDisposable
                         var state = Perception.Analyze(frame, profile, now);
                         // Memory stats override visual bars only when all four values are valid.
                         // Target HP and all other perception remain visual.
-                        if (profile.UseMemoryStats && _statsReader.TryRead(out var stats))
+                        if (_statsReader.TryRead(out var stats))
                             state = state with { Hp = stats.HpFraction, Mp = stats.MpFraction };
                         if (profile.ReviveOnDeath && BotRunning)
                         {
@@ -294,7 +293,7 @@ internal sealed class BotEngine : IDisposable
     {
         if (!profile.AutoDetectBars)
             return;
-        bool missing = profile.HpBar == null || profile.TargetBar == null;
+        bool missing = profile.TargetBar == null;
         // Look often while a bar is unknown (the target bar only shows after a click),
         // then now and then (to widen a bar that was not full).
         if (now - _lastBarSearch < TimeSpan.FromSeconds(missing ? 1 : 3))
@@ -304,19 +303,11 @@ internal sealed class BotEngine : IDisposable
             _barSearchStarted = now;
         try
         {
-            var before = (profile.HpBar, profile.MpBar, profile.TargetBar);
+            var before = profile.TargetBar;
             var messages = _autoBars.Apply(profile, BarFinder.Find(frame), frame);
             // Also fires when a bar was only widened (no message), so the profile gets saved.
-            if (before != (profile.HpBar, profile.MpBar, profile.TargetBar))
+            if (before != profile.TargetBar)
                 BarsChanged?.Invoke(string.Join("  ", messages));
-            if (profile.HpBar == null && !_barSearchFailedLogged && now - _barSearchStarted > TimeSpan.FromSeconds(10))
-            {
-                _barSearchFailedLogged = true;
-                string shot = Path.Combine(ProfileStore.Directory, "hp-bulunamadi.png");
-                try { Directory.CreateDirectory(ProfileStore.Directory); RecordingFormat.SavePng(frame, shot); } catch { }
-                _log("HP barı otomatik bulunamadı. Oyunda karakterin HP/MP barları ekranda görünür olmalı. " +
-                     $"Olmazsa şu resmi gönder: {shot}  (ya da önizlemede barı fareyle seçip 'HP barı'na bas)");
-            }
         }
         catch (Exception ex)
         {
@@ -360,8 +351,8 @@ internal sealed class BotEngine : IDisposable
             error = "Oyun simge durumunda; önce oyunu geri aç.";
             return false;
         }
-        if (!Profile.UseMemoryStats && Profile.HpBar == null)
-            _log("Uyarı: HP barı işaretli değil; iksir ve HP güvenlik durdurması çalışmaz.");
+        if (!_statsReader.TryRead(out _))
+            _log("HP/MP bellek okuması henüz hazır değil: " + _statsReader.Status + ". Pot kullanımı ölçüm gelene kadar kapalı.");
         lock (_botGate)
         {
             if (_input != null)
