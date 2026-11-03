@@ -75,3 +75,12 @@ tests/SekoBot.Tests/    farm döngüsü, bar okuma, kayıt/oynatma testleri
 ```
 
 .NET 10 SDK ile `dotnet test` ve `dotnet run --project src/SekoBot`. Her push GitHub Actions'ta test edilip derlenir; `main` dalı `preview` sürümünü günceller.
+
+
+### HP/MP bellek okuma ve otomatik iksir
+
+**İksir & Buff** sekmesinde **Bellekten HP/MP oku (yoksa bar)** seçeneği varsayılan açık gelir. Mobile2 oyun penceresi seçildiğinde, bot yalnızca `mobilemmo-Win64-Shipping.exe` işleminden güncel HP, MP, maksimum HP ve maksimum MP değerlerini **salt okunur** biçimde almaya çalışır. Kaynak, Gelişmiş sekmesinde gösterilir. Bellek verisi geçersizse veya Windows işlem erişimine izin vermiyorsa mevcut görsel HP/MP barları kullanılmaya devam edilir; görünür bar da yoksa iksir kararı verilmez.
+
+Mevcut **HP iksiri (% altında)** ve **MP iksiri (% altında)** eşikleri, **Tuşlar** sekmesindeki iksir tuşları ve iksir bekleme süresi değişmeden çalışır. Örneğin HP 400/1000 ise HP yüzdesi %40'tır. İksir basımı yalnızca bot **BAŞLAT** ile çalışırken yapılır; **Kuru çalışma** tuş göndermez. Oyun varsayılan olarak ön planda olmalıdır. Bellek erişimi için Windows'ta bazı istemcilerde yönetici yetkisi gerekir.
+
+Bellek pointer'ları kullanıcının test ettiği `Hp_Mp.CT` dosyasından alınmıştır; istemci güncellendiğinde adresler değişebilir. Maksimum değerler yalnızca mevcut karakterin değerleriyle doğrulanmıştır; maksimum HP/MP değiştiğinde yeniden test edin. Anti-cheat veya istemci güvenlik önlemlerini aşmaya yönelik bir işlem yapılmaz.
