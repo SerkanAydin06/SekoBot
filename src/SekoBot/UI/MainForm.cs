@@ -621,18 +621,8 @@ internal sealed class MainForm : Form
         {
             string message = _engine.WithLatestFrame(frame =>
             {
-                switch (kind)
-                {
-                    case 0:
-                        _profile.HpBar = BarReader.Calibrate(frame, selection);
-                        return "HP barı kaydedildi" + ColorText(_profile.HpBar);
-                    case 1:
-                        _profile.MpBar = BarReader.Calibrate(frame, selection);
-                        return "MP barı kaydedildi" + ColorText(_profile.MpBar);
-                    default:
-                        _profile.TargetBar = BarReader.Calibrate(frame, selection);
-                        return "Hedef HP barı kaydedildi" + ColorText(_profile.TargetBar);
-                }
+                _profile.TargetBar = BarReader.Calibrate(frame, selection);
+                return "Hedef HP barı kaydedildi" + ColorText(_profile.TargetBar);
             }) ?? "Henüz görüntü yok.";
             SaveProfile();
             WriteLog(message);
@@ -783,12 +773,12 @@ internal sealed class MainForm : Form
         for (int i = 0; i < 1; i++)
             _calibrationButtons[i].Enabled = hasSelection;
         _calibrationHint.Text = !connected
-            ? "Barları elle işaretlemek için önce oyuna bağlan."
+            ? "HP/MP bellekten okunur. Hedef barını işaretlemek için oyuna bağlan."
             : hasSelection
-                ? "Seçili alan ne? Aşağıdan seç (bar seçerken bar dolu olmalı)."
-                : _profile.HpBar == null
-                    ? "HP/MP barları otomatik aranıyor… Bulunamazsa barı canlı görüntüde fareyle seç."
-                    : "Barlar otomatik bulundu. Yanlışsa barı canlı görüntüde fareyle seçip işaretle.";
+                ? "Hedef HP barını seçtiysen düğmesine bas."
+                : _profile.TargetBar == null
+                    ? "Hedef barı otomatik aranıyor; gerekirse canlı görüntüden seç."
+                    : "HP/MP bellekten; hedef barı görüntüden okunuyor.";
     }
 
     // ── Update ───────────────────────────────────────────────────
