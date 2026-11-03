@@ -74,18 +74,13 @@ internal sealed class BotProfile
     /// <summary>Title of the game window; the bot connects to it on its own.</summary>
     public string GameWindowTitle { get; set; } = "Mobile2 Global";
 
-    public BarSpec? HpBar { get; set; }
-    public BarSpec? MpBar { get; set; }
     /// <summary>Optional: the selected target's HP bar. Lets the bot keep hitting a living mob
     /// and turn around when nothing is left.</summary>
     public BarSpec? TargetBar { get; set; }
 
     public int PerceptionFps { get; set; } = 10;
-    /// <summary>Find HP/MP/target bars on screen automatically (manual marks always win).</summary>
+    /// <summary>Automatically detect the selected target HP bar (not character HP/MP).</summary>
     public bool AutoDetectBars { get; set; } = true;
-
-    /// <summary>Prefer read-only HP/MP memory stats; fall back to visual bars if unavailable.</summary>
-    public bool UseMemoryStats { get; set; } = true;
 
     public double PotionHpBelow { get; set; } = 0.55;
     public double PotionMpBelow { get; set; } = 0.25;
