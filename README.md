@@ -59,7 +59,7 @@ Böylece yeni bir ayarı ya da kalibrasyonu oyunda denemeden önce eski bir otur
 ## Nasıl çalışır
 
 - **Yakalama:** Windows Graphics Capture (GPU); oyunun üstü örtülse de çalışır. Desteklenmezse GDI'ya düşer. Küçültülmüş pencere Windows tarafından çizilmez, görüntü alınamaz.
-- **Algılama:** HP (kırmızı) ve MP (mavi) barları ekranın altındaki ince yatay renk şeritleri olarak, hedef barı üst ortadaki kırmızı şerit olarak otomatik bulunur; sonra bulunan renge göre okunur (kare başına <1 ms).
+- **Algılama:** Karakterin HP/MP'si yalnızca bellekten okunur, ekrandan hiç okunmaz. Ekranda yalnızca hedef barı (üst ortadaki kırmızı şerit) otomatik bulunur ve rengine göre okunur (kare başına <1 ms).
 - **Karar:** Saldır → topla → dön döngüsü, iksir bekleme süreleri, kritik HP'de durma.
 - **Girdi:** Tarama kodlu `SendInput`; oyun odakta değilse hiçbir şey gönderilmez ve basılı tuşlar bırakılır.
 
@@ -79,7 +79,7 @@ tests/SekoBot.Tests/    farm döngüsü, bar okuma, kayıt/oynatma testleri
 
 ### Bellek tabanlı HP/MP ve arka planda otomatik iksir
 
-Karakter HP, MP, maksimum HP ve maksimum MP verileri yalnızca `mobilemmo-Win64-Shipping.exe` işleminden salt okunur bellek erişimiyle alınır. Eski görüntü tabanlı HP/MP okuma ve kalibrasyon devre dışı bırakılmıştır; görüntü analizi yalnızca hedef yaratığın HP barı gibi diğer işlevlerde kalır. Bellek okunamazsa karakter HP/MP yüzdeleri bilinmiyor kabul edilir ve otomatik pot gönderilmez; uydurma değer veya görsel bar yedeği kullanılmaz.
+Karakter HP, MP, maksimum HP ve maksimum MP verileri yalnızca `mobilemmo-Win64-Shipping.exe` işleminden salt okunur bellek erişimiyle alınır. Eski görüntü tabanlı HP/MP okuma ve kalibrasyon devre dışı bırakılmıştır; görüntü analizi yalnızca hedef yaratığın HP barı gibi diğer işlevlerde kalır. Bellek okunamazsa karakter HP/MP yüzdeleri bilinmiyor kabul edilir ve otomatik pot gönderilmez; uydurma değer veya görsel bar yedeği kullanılmaz. Okuma 2 sn'den uzun süre bozulursa günlüğe uyarı düşer ve üstteki durum satırı kırmızı **⚠ HP/MP okunamıyor, iksir içilmiyor** yazar; okuma geri gelince bot kendiliğinden devam eder.
 
 **İksir & Buff** sekmesindeki HP/MP eşikleri, **Tuşlar** sekmesindeki pot tuşları, bekleme ve ölçüm onay süreleri korunur. Bot **BAŞLAT** durumunda iksirleri mevcut InputExecutor üzerinden gönderir: arka plan modu etkinse aynı oyun penceresine arka planda tuş gönderimi kullanılır; normal modda oyun ön planda olmalıdır. Arka planda girdi gönderimi oyunun ve Windows sürümünün davranışına bağlı olabilir. Kuru çalışma modunda tuş gönderilmez.
 

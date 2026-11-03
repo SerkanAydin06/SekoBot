@@ -16,6 +16,7 @@ internal sealed class CharacterStatsReader : IDisposable
     private const uint ProcessQueryInformation = 0x0400;
 
     private readonly uint _processId;
+    private readonly object _gate = new();
     private nint _handle;
     private long _moduleBase;
     private DateTime _retryAfterUtc;
@@ -26,6 +27,13 @@ internal sealed class CharacterStatsReader : IDisposable
 
     /// <summary>Returns false unless all four values pass plausibility checks.</summary>
     public bool TryRead(out CharacterStats stats)
+    {
+        // One reader at a time: Connect must not open two handles, Dispose must not close one mid-read.
+        lock (_gate)
+            return TryReadLocked(out stats);
+    }
+
+    private bool TryReadLocked(out CharacterStats stats)
     {
         stats = default;
         if (!Connect()) return false;
@@ -123,10 +131,14 @@ internal sealed class CharacterStatsReader : IDisposable
 
     public void Dispose()
     {
-        if (_handle != 0)
+        lock (_gate)
         {
-            CloseHandle(_handle);
-            _handle = 0;
+            if (_handle != 0)
+            {
+                CloseHandle(_handle);
+                _handle = 0;
+            }
+            _retryAfterUtc = DateTime.MaxValue; // never reconnect after dispose
         }
     }
 

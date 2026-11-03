@@ -735,7 +735,11 @@ internal sealed class MainForm : Form
             _statPotions.Text = s.Potions.ToString("N0");
             _statArea.Text = s.Area;
             string line = (s.DryRun ? "KURU ÇALIŞMA · " : "") + s.Phase.ToTurkish() + "  ·  " + s.Area;
-            SetLine(line, s.DryRun ? Theme.Yellow : s.Phase == BotPhase.Dead ? Theme.Red : Theme.Green);
+            if (!_engine.StatsOk)
+                // Without HP/MP the bot can't drink potions: make that impossible to miss.
+                SetLine("⚠ HP/MP okunamıyor, iksir içilmiyor  ·  " + s.Phase.ToTurkish(), Theme.Red);
+            else
+                SetLine(line, s.DryRun ? Theme.Yellow : s.Phase == BotPhase.Dead ? Theme.Red : Theme.Green);
         }
         else
         {

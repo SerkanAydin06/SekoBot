@@ -8,13 +8,13 @@ internal enum BarColor { Red = 1, Blue = 2 }
 /// <summary>A thin, solid, horizontal coloured strip found on screen.</summary>
 internal readonly record struct BarCandidate(Rectangle Area, BarColor Color, double Density);
 
-internal sealed record BarDetection(Rectangle? Hp, Rectangle? Mp, Rectangle? Target, IReadOnlyList<BarCandidate> Candidates);
+internal sealed record BarDetection(Rectangle? Target, IReadOnlyList<BarCandidate> Candidates);
 
 /// <summary>
-/// Finds the HP (red) and MP (blue) bars without user calibration: they are the most solid
-/// thin horizontal red/blue strips in the lower part of the screen. A red strip near the top
-/// centre is the selected target's HP bar. Only the filled part is visible, so the result is
-/// as wide as the bar is full; <see cref="AutoBars"/> widens it later when the bar fills up.
+/// Finds the selected target's HP bar without user calibration: the most solid thin red strip
+/// near the top centre of the screen. (The character's own HP/MP come from memory, never from
+/// the screen.) Only the filled part is visible, so the result is as wide as the bar is full;
+/// <see cref="AutoBars"/> widens it later when the bar fills up.
 /// </summary>
 internal static class BarFinder
 {
@@ -23,33 +23,19 @@ internal static class BarFinder
         int w = frame.Width, h = frame.Height;
         int minRun = Math.Max(20, w / 50);
         var candidates = new List<BarCandidate>();
-        // Bars are thin, so every row is scanned, but only where bars can be.
+        // Bars are thin, so every row is scanned, but only where the target bar can be.
         Scan(frame, 0, (int)(h * 0.30), minRun, candidates);
-        Scan(frame, (int)(h * 0.50), h, minRun, candidates);
-
-        BarCandidate? hp = candidates
-            .Where(c => c.Color == BarColor.Red && Center(c).Y > h * 0.55)
-            .OrderByDescending(Score).Cast<BarCandidate?>().FirstOrDefault();
-
-        BarCandidate? mp = candidates
-            .Where(c => c.Color == BarColor.Blue && Center(c).Y > h * 0.55)
-            .OrderByDescending(c => Score(c) * (hp is { } r && NearHp(c.Area, r.Area, w, h) ? 3 : 1))
-            .Cast<BarCandidate?>().FirstOrDefault();
 
         BarCandidate? target = candidates
             .Where(c => c.Color == BarColor.Red && Center(c).Y < h * 0.30 && Math.Abs(Center(c).X - w / 2.0) < w * 0.25)
             .OrderByDescending(Score).Cast<BarCandidate?>().FirstOrDefault();
 
-        return new BarDetection(hp?.Area, mp?.Area, target?.Area, candidates);
+        return new BarDetection(target?.Area, candidates);
     }
 
     private static PointF Center(BarCandidate c) => new(c.Area.X + c.Area.Width / 2f, c.Area.Y + c.Area.Height / 2f);
 
     private static double Score(BarCandidate c) => c.Area.Width * c.Density * Math.Min(c.Area.Height, 10);
-
-    /// <summary>Metin2 stacks the MP bar right next to the HP bar.</summary>
-    private static bool NearHp(Rectangle mp, Rectangle hp, int w, int h) =>
-        Math.Abs(mp.Left - hp.Left) < w * 0.06 && Math.Abs(mp.Top - hp.Top) < h * 0.08;
 
     /// <summary>0 = nothing, 1 = red, 2 = blue. Needs a bright, clearly coloured pixel.</summary>
     internal static int Classify(byte r, byte g, byte b)

@@ -60,13 +60,13 @@ public class BarFinderTests
     }
 
     [Fact]
-    public void Finds_hp_mp_and_target_bars()
+    public void Finds_target_bar_and_ignores_character_bars()
     {
         using var frame = GameFrame(target: true);
         var found = BarFinder.Find(frame);
-        AssertNear(HpArea, found.Hp);
-        AssertNear(MpArea, found.Mp);
         AssertNear(TargetArea, found.Target);
+        // The character's HP/MP bars at the bottom are never looked at (they come from memory).
+        Assert.DoesNotContain(found.Candidates, c => c.Area.IntersectsWith(HpArea) || c.Area.IntersectsWith(MpArea));
     }
 
     [Fact]

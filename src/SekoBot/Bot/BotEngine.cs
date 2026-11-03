@@ -52,6 +52,8 @@ internal sealed class BotEngine : IDisposable
     private double _targetConstValue = -1;
     private TimeSpan _lastBarSearch = TimeSpan.FromDays(-1), _barSearchStarted = TimeSpan.FromDays(-1);
     private bool _disposed;
+    private bool _statsOk = true, _statsWarned;
+    private TimeSpan _statsFailSince = TimeSpan.FromDays(-1);
 
     public BotEngine(WindowInfo window, BotProfile profile, Action<string> log)
     {
@@ -67,6 +69,8 @@ internal sealed class BotEngine : IDisposable
     public BotProfile Profile { get; set; }
     public GameState? State => Volatile.Read(ref _state);
     public string StatsSource => _statsReader.Status;
+    /// <summary>False while HP/MP could not be read from memory for a while: no potions then.</summary>
+    public bool StatsOk => Volatile.Read(ref _statsOk);
 
     /// <summary>Raised from a worker thread when capture stops or the bot stops itself.</summary>
     public event Action<string>? CaptureFailed;
@@ -139,6 +143,7 @@ internal sealed class BotEngine : IDisposable
                         // Target HP and all other perception remain visual.
                         if (_statsReader.TryRead(out var stats))
                             state = state with { Hp = stats.HpFraction, Mp = stats.MpFraction };
+                        TrackStats(state.Hp != null, now);
                         if (profile.ReviveOnDeath && BotRunning)
                         {
                             var (dead, ready) = DeathDetector.Check(frame);
@@ -351,8 +356,9 @@ internal sealed class BotEngine : IDisposable
             error = "Oyun simge durumunda; önce oyunu geri aç.";
             return false;
         }
-        if (!_statsReader.TryRead(out _))
-            _log("HP/MP bellek okuması henüz hazır değil: " + _statsReader.Status + ". Pot kullanımı ölçüm gelene kadar kapalı.");
+        // Memory is only read on the perception thread; here just report what it last saw.
+        if (!StatsOk)
+            _log("Uyarı: HP/MP bellekten okunamıyor (" + _statsReader.Status + "). Okunana kadar iksir içilmez.");
         lock (_botGate)
         {
             if (_input != null)
@@ -440,6 +446,33 @@ internal sealed class BotEngine : IDisposable
     {
         lock (_frameGate)
             return _latest == null ? default : work(_latest);
+    }
+
+    /// <summary>A failed read is only reported after 2 s (loading screens, teleports), and once.</summary>
+    private void TrackStats(bool ok, TimeSpan now)
+    {
+        if (ok)
+        {
+            _statsFailSince = TimeSpan.FromDays(-1);
+            Volatile.Write(ref _statsOk, true);
+            if (_statsWarned)
+            {
+                _statsWarned = false;
+                _log("HP/MP yeniden bellekten okunuyor ✓");
+            }
+            return;
+        }
+        if (_statsFailSince < TimeSpan.Zero)
+            _statsFailSince = now;
+        if (now - _statsFailSince < TimeSpan.FromSeconds(2))
+            return;
+        Volatile.Write(ref _statsOk, false);
+        if (!_statsWarned)
+        {
+            _statsWarned = true;
+            _log("Uyarı: HP/MP bellekten okunamıyor (" + _statsReader.Status + "). Okunana kadar iksir içilmez. " +
+                 "Oyun güncellendiyse bellek adresleri değişmiş olabilir.");
+        }
     }
 
     public void Dispose()
