@@ -77,46 +77,24 @@ public class BarFinderTests
     }
 
     [Fact]
-    public void Auto_bars_read_correct_values()
+    public void Automatically_tracks_only_target_bar()
     {
-        var profile = new BotProfile { SkillEverySec = new int[5] };
+        var profile = new BotProfile();
         var auto = new AutoBars();
-        using (var full = GameFrame())
-            Assert.NotEmpty(auto.Apply(profile, BarFinder.Find(full), full));
-        Assert.True(profile.HpBar!.Auto);
-        using var half = GameFrame(hp: 0.5, mp: 0.25);
-        Assert.InRange(BarReader.Read(half, profile.HpBar)!.Value, 0.42, 0.58);
-        Assert.InRange(BarReader.Read(half, profile.MpBar!)!.Value, 0.18, 0.32);
+        using var frame = GameFrame(target: true);
+        auto.Apply(profile, BarFinder.Find(frame), frame);
+        Assert.NotNull(profile.TargetBar);
+        Assert.InRange(BarReader.Read(frame, profile.TargetBar!)!.Value, 0.90, 1.0);
     }
 
     [Fact]
-    public void Bar_found_while_not_full_grows_later_and_never_shrinks()
+    public void Manual_target_bar_is_preserved()
     {
-        var profile = new BotProfile { SkillEverySec = new int[5] };
+        var manual = new BarSpec { Area = NormRect.FromPixels(TargetArea, W, H) };
+        var profile = new BotProfile { TargetBar = manual };
         var auto = new AutoBars();
-        using (var half = GameFrame(hp: 0.5))
-            auto.Apply(profile, BarFinder.Find(half), half);
-        Assert.InRange(profile.HpBar!.Area.ToPixels(W, H).Width, 55, 65);
-
-        using (var full = GameFrame())
-            auto.Apply(profile, BarFinder.Find(full), full);
-        AssertNear(HpArea, profile.HpBar!.Area.ToPixels(W, H));
-
-        using (var low = GameFrame(hp: 0.3))
-            auto.Apply(profile, BarFinder.Find(low), low);
-        AssertNear(HpArea, profile.HpBar!.Area.ToPixels(W, H));
-    }
-
-    [Fact]
-    public void Manually_marked_bar_is_never_replaced()
-    {
-        var manual = new BarSpec { Area = NormRect.FromPixels(new Rectangle(500, 100, 50, 5), W, H) };
-        var profile = new BotProfile { SkillEverySec = new int[5], HpBar = manual };
-        var auto = new AutoBars();
-        for (int i = 0; i < 20; i++)
-            using (var frame = GameFrame())
-                auto.Apply(profile, BarFinder.Find(frame), frame);
-        Assert.Same(manual, profile.HpBar);
-        Assert.NotNull(profile.MpBar);
+        using var frame = GameFrame(target: true);
+        auto.Apply(profile, BarFinder.Find(frame), frame);
+        Assert.Same(manual, profile.TargetBar);
     }
 }
