@@ -84,6 +84,9 @@ internal sealed class BotProfile
     /// <summary>Find HP/MP/target bars on screen automatically (manual marks always win).</summary>
     public bool AutoDetectBars { get; set; } = true;
 
+    /// <summary>Prefer read-only HP/MP memory stats; fall back to visual bars if unavailable.</summary>
+    public bool UseMemoryStats { get; set; } = true;
+
     public double PotionHpBelow { get; set; } = 0.55;
     public double PotionMpBelow { get; set; } = 0.25;
     public int PotionCooldownMs { get; set; } = 1500;
