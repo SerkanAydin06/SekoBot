@@ -46,6 +46,8 @@ public class LeashTests
         public PointF Pos = new(0.30f, 0.40f);
         public bool MapOpen;
         public bool MapWorks = true;
+        /// <summary>The position is also known from memory (after "Koordinat bul").</summary>
+        public bool Live;
         public bool Started; // the character stands still until the bot first looks at the map
         public int MapTaps;
         public readonly HashSet<Keys> Held = [];
@@ -80,7 +82,8 @@ public class LeashTests
             new(TimeSpan.FromMilliseconds(ms), 1920, 1080, 1, 1, null, 1)
             {
                 MapOpen = MapOpen,
-                MapPosition = MapOpen ? Pos : null
+                MapPosition = MapOpen ? Pos : null,
+                LivePosition = Live ? Pos : null
             };
     }
 
@@ -148,6 +151,27 @@ public class LeashTests
         // Exploring drifts between two checks (every 3 s here), but it is always pulled back.
         Assert.True(furthestAfterReturn <= 0.13, $"wandered {furthestAfterReturn:0.000} after coming back");
         Assert.False(world.MapOpen); // always closed again
+    }
+
+    [Fact]
+    public void With_the_position_from_memory_the_map_is_only_opened_once()
+    {
+        var p = Profile();
+        var world = new World(NorthUp) { Live = true };
+        var home = world.Pos;
+        bool returned = false;
+        var actions = Simulate(world, p, 45_000, t =>
+        {
+            if (t == 12_000)
+                world.Pos = new PointF(home.X + 0.10f, home.Y + 0.01f);
+            if (t > 12_000 && Distance(world.Pos, home) < 0.035)
+                returned = true;
+        });
+        Assert.Equal(2, world.MapTaps); // opened once to check the start, then closed for good
+        Assert.Contains(actions, a => a is NoteAction n && n.Text.Contains("yönü ayarlandı"));
+        Assert.Contains(actions, a => a is NoteAction n && n.Text.Contains("sınırı aşıldı"));
+        Assert.True(returned);
+        Assert.False(world.MapOpen);
     }
 
     [Fact]

@@ -35,6 +35,8 @@ Level atlayınca çıkan reklam penceresi ve yanlışlıkla açılan Esc menüs�
 
 **Alan sınırı (harita %)** (varsayılan 6, 0 = kapalı): Bot başlarken **M** ile büyük haritayı açar, sarı oktan başlangıç yerini kaydeder ve kapatır; hemen ardından kısa bir yürüyüşle haritanın hangi yönünün ekranın üstü olduğunu ölçer. Sonra 20 sn'de bir (hiç saldırı ortasında değil) haritaya bakar; başlangıçtan haritanın genişliğinin %6'sından fazla uzaklaştıysa başlangıca geri yürür (yanındaki mobla yine savaşır). Bu yüzden bot kamerayı artık E ile çevirmez; mob ararken zikzak yürür.
 
+**Koordinat bul (Alan sekmesi):** Botun yerini haritayı hiç açmadan bilmesini sağlar. Açık, düz bir yerde dur ve **📍 Koordinat bul**'a bas. Karakter 1–2 dakika boyunca birkaç yöne yürür, her yürüyüşten sonra büyük harita açılıp sarı ok okunur ve oyunun belleğinde okla birlikte değişen değer aranır (Cheat Engine'deki "değişti / değişmedi" taraması gibi, ama otomatik). Bulununca bot yerini saniyede iki kez bellekten okur; haritayı yalnızca başlarken bir kez, kontrol için açar. Bellek yalnızca okunur, oyuna hiçbir şey yazılmaz. Karakterin nesnelerinden giden kalıcı bir yol da bulunursa oyunu yeniden açınca da çalışır; bulunamazsa oyunu her açışta bir kez daha **Koordinat bul**'a basman gerekir. Haritadaki okla uyuşmazsa bot bunu fark eder ve eskisi gibi haritaya bakmaya döner.
+
 **Takılma:** W/A/S/D basılıyken ekran 0,7 sn kımıldamıyorsa karakter bir ağaca/kayaya takılmıştır; bot yana kayarak dolanır (her seferinde diğer yana), sonra yoluna devam eder.
 
 ## Kalabalığa git

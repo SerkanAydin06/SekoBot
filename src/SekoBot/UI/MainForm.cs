@@ -26,6 +26,8 @@ internal sealed class MainForm : Form
     private readonly Button[] _calibrationButtons;
     private readonly Label _connection, _status, _calibrationHint, _calibrationState, _technical;
     private readonly Label _statTime, _statMobs, _statRate, _statDeaths, _statPotions, _statArea;
+    private readonly Label _positionState;
+    private readonly Button _findPosition;
     private readonly Meter _hpMeter, _mpMeter, _targetMeter;
     private readonly Button[] _tabButtons;
     private readonly Panel[] _tabPages;
@@ -180,9 +182,15 @@ internal sealed class MainForm : Form
             v => _profile.LeashRadius = v / 100);
         NumberRow(area, "Haritaya bakma (sn)", 0, 34, 5, 120, _profile.LeashCheckMs / 1000.0, 0, 5,
             v => _profile.LeashCheckMs = (int)(v * 1000));
-        Theme.Label(area, "Bot başladığı yeri hatırlar. Arada bir büyük haritayı (M) açıp bakar; bu sınırın dışına " +
-            "çıktıysa başladığı yere geri yürür. Bir şeye takılırsa yana kayarak dolanır.\n0 = sınır yok.",
-            new Rectangle(370, 0, 360, 100), 9f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+        Theme.Label(area, "Bot başladığı yeri hatırlar ve bu sınırın dışına çıkınca geri yürür. Koordinat " +
+            "bulunduysa yerini bellekten okur; yoksa arada bir büyük haritayı (M) açıp bakar. 0 = sınır yok.",
+            new Rectangle(370, 0, 360, 68), 9f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+        // Finds the character's position in memory by walking and watching the map arrow.
+        _findPosition = Theme.Button(area, "📍  Koordinat bul", new Rectangle(0, 74, 180, 32), Theme.Primary, Theme.PrimaryHover);
+        _findPosition.Click += (_, _) => ToggleCoordinateFinder();
+        _positionState = Theme.Label(area, "", new Rectangle(190, 74, 546, 32), 9f, Theme.Muted);
+        Theme.Label(area, "Açık, düz bir yerde dur ve bas: karakter 1–2 dakika birkaç yöne yürür, harita açılıp kapanır.",
+            new Rectangle(0, 112, 736, 26), 8.5f, Theme.Muted);
 
         // Tuşlar
         var keys = _tabPages[3];
@@ -467,6 +475,7 @@ internal sealed class MainForm : Form
                 UpdateControls();
             });
             engine.BotStopped += reason => PostUi(() => { _stopReason = reason; UpdateControls(); UpdateStats(); });
+            engine.CoordinatesFinished += _ => PostUi(() => { SaveProfile(); UpdateControls(); UpdateStats(); });
             _engine = engine;
             engine.Start(previewFps: 30);
             _frameSequence = 0;
@@ -543,6 +552,26 @@ internal sealed class MainForm : Form
         UpdateStats();
         if (byUser && _pendingUpdate is PreparedUpdate pending)
             _ = ApplyUpdateAsync(pending);
+    }
+
+    // ── Coordinates ──────────────────────────────────────────────
+
+    private void ToggleCoordinateFinder()
+    {
+        if (_engine == null)
+        {
+            WriteLog("Önce oyun açık olmalı.");
+            return;
+        }
+        if (_engine.FindingCoordinates)
+        {
+            _engine.StopCoordinateFinder();
+            return;
+        }
+        if (!_engine.StartCoordinateFinder(out string error))
+            WriteLog(error);
+        UpdateControls();
+        UpdateStats();
     }
 
     // ── Recording / replay ───────────────────────────────────────
@@ -715,12 +744,20 @@ internal sealed class MainForm : Form
                 l.Text = "—";
             _hpMeter.Value = _mpMeter.Value = _targetMeter.Value = null;
             _technical.Text = "";
+            _positionState.Text = "";
             SetLine(_updating ? "Güncelleniyor…" : "Oyun bekleniyor", Theme.Muted);
             return;
         }
         var s = _engine.Stats;
         var state = _engine.State;
         _technical.Text = $"{_engine.StatsSource} · {s.CaptureFps:0} FPS";
+        bool finding = _engine.FindingCoordinates;
+        _positionState.Text = finding
+            ? "Aranıyor… ilerleyişi günlükte görebilirsin."
+            : _engine.PositionStatus + (state?.LivePosition is PointF live ? $"   (harita {live.X:0.000}, {live.Y:0.000})" : "");
+        _positionState.ForeColor = state?.LivePosition != null ? Theme.Green : Theme.Muted;
+        if (_findPosition.Text != (finding ? "■  Aramayı durdur" : "📍  Koordinat bul"))
+            UpdateControls();
         _hpMeter.Value = state?.Hp;
         _mpMeter.Value = state?.Mp;
         _targetMeter.Value = state?.TargetHp;
@@ -743,10 +780,13 @@ internal sealed class MainForm : Form
         }
         else
         {
-            SetLine(_stopReason is string reason
-                    ? $"Durdu ({reason}). Devam etmek için BAŞLAT ya da F10."
-                    : "Hazır. Başlatmak için BAŞLAT ya da F10.",
-                _stopReason != null ? Theme.Yellow : Theme.Text);
+            if (_engine.FindingCoordinates)
+                SetLine("📍 Koordinat aranıyor… Karakter kendi yürüyor, oyuna dokunma.", Theme.Yellow);
+            else
+                SetLine(_stopReason is string reason
+                        ? $"Durdu ({reason}). Devam etmek için BAŞLAT ya da F10."
+                        : "Hazır. Başlatmak için BAŞLAT ya da F10.",
+                    _stopReason != null ? Theme.Yellow : Theme.Text);
         }
     }
 
@@ -763,7 +803,10 @@ internal sealed class MainForm : Form
         bool connected = _engine != null;
         bool running = _engine?.BotRunning == true;
         _gameButton.Text = connected ? "Bağlantı  ▾" : "Oyunu seç  ▾";
-        _startBot.Enabled = connected;
+        bool finding = _engine?.FindingCoordinates == true;
+        _startBot.Enabled = connected && !finding;
+        _findPosition.Enabled = connected && !running;
+        _findPosition.Text = finding ? "■  Aramayı durdur" : "📍  Koordinat bul";
         _startBot.Text = running ? "❚❚  DURAKLAT   F10" : "▶  BAŞLAT   F10";
         _stopBot.Enabled = running;
         bool recording = _engine?.IsRecording == true;
