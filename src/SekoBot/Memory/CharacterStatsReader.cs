@@ -9,9 +9,9 @@ namespace SekoBot.Memory;
 /// </summary>
 internal sealed class CharacterStatsReader : IDisposable
 {
-    private const string GameModule = "mobilemmo-Win64-Shipping.exe";
-    private const long HpBaseOffset = 0x04D35448;
-    private static readonly long[] HpPath = [0x18, 0x8, 0x80, 0xC8, 0x1F8, 0x398];
+    internal const string GameModule = "mobilemmo-Win64-Shipping.exe";
+    internal const long HpBaseOffset = 0x04D35448;
+    internal static readonly long[] HpPath = [0x18, 0x8, 0x80, 0xC8, 0x1F8, 0x398];
     private const uint ProcessVmRead = 0x0010;
     private const uint ProcessQueryInformation = 0x0400;
 

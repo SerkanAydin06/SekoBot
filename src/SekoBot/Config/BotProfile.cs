@@ -30,6 +30,30 @@ internal sealed class BarSpec
     public bool Auto { get; set; }
 }
 
+/// <summary>
+/// Where the character's position is in the game's memory (found with "Koordinat bul"), and how
+/// it converts to the big map (0..1 of its width).
+/// </summary>
+internal sealed class PositionSpec
+{
+    /// <summary>4 = float, 8 = double.</summary>
+    public int Size { get; set; } = 4;
+    public double Ax { get; set; }
+    public double Bx { get; set; }
+    public double Ay { get; set; }
+    public double By { get; set; }
+    /// <summary>Lasting path: object index on the HP pointer path (-1 = none), then pointer offsets.</summary>
+    public int Node { get; set; } = -1;
+    public long[] Offsets { get; set; } = [];
+    public long XOffset { get; set; }
+    public long YOffset { get; set; }
+    /// <summary>Plain addresses: only valid in the game session they were found in.</summary>
+    public long XAddress { get; set; }
+    public long YAddress { get; set; }
+    public uint ProcessId { get; set; }
+    public long ProcessStartTicks { get; set; }
+}
+
 internal sealed class KeyBindings
 {
     public Keys Attack { get; set; } = Keys.Space;
@@ -166,6 +190,9 @@ internal sealed class BotProfile
     public int RecordMaxMb { get; set; } = 1500;
 
     public KeyBindings Keys { get; set; } = new();
+
+    /// <summary>The character's position in memory; null until "Koordinat bul" found it.</summary>
+    public PositionSpec? Position { get; set; }
 }
 
 internal static class ProfileStore

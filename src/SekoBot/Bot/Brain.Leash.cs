@@ -179,17 +179,40 @@ internal sealed partial class Brain
                 return true;
             }
             _calibUntil = Never;
+            if (state.LivePosition is PointF walked)
+            {
+                // Position from memory: no need to open the map.
+                SetMoves([], p, actions, refresh: false);
+                _lastMapCheck = now;
+                OnMapReading(walked, now, p, actions);
+                return true;
+            }
             StartMapCheck(state, p, actions);
             return true;
         }
 
-        var interval = Ms(_returning ? p.LeashReturnCheckMs : p.LeashCheckMs);
-        bool cameraBusy = _timed.Count > 0; // G/F still being held: the map would be in the way
-        if ((_lastMapCheck == Never || now - _lastMapCheck >= interval) &&
-            !cameraBusy && Phase != BotPhase.Fighting && !mobNextToUs)
+        // Position from memory (after the first map reading set home and checked it): look
+        // twice a second, even mid-fight, without opening the map.
+        if (state.LivePosition is PointF live && _home != null)
         {
-            StartMapCheck(state, p, actions);
-            return true;
+            if (now - _lastMapCheck >= Ms(500))
+            {
+                _lastMapCheck = now;
+                OnMapReading(live, now, p, actions);
+                if (_calibUntil != Never)
+                    return true; // a calibration walk just started
+            }
+        }
+        else
+        {
+            var interval = Ms(_returning ? p.LeashReturnCheckMs : p.LeashCheckMs);
+            bool cameraBusy = _timed.Count > 0; // G/F still being held: the map would be in the way
+            if ((_lastMapCheck == Never || now - _lastMapCheck >= interval) &&
+                !cameraBusy && Phase != BotPhase.Fighting && !mobNextToUs)
+            {
+                StartMapCheck(state, p, actions);
+                return true;
+            }
         }
 
         // Too far from home: walk back (a mob right next to us is fought first).

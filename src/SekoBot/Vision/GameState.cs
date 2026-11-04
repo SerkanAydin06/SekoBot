@@ -24,6 +24,9 @@ internal sealed record GameState(
     /// <summary>Our position on the big map (0..1 of its width), when it is open and the arrow was found.</summary>
     public PointF? MapPosition { get; init; }
 
+    /// <summary>Our position on the big map read from memory (no need to open the map), when known.</summary>
+    public PointF? LivePosition { get; init; }
+
     /// <summary>The death dialog is showing.</summary>
     public bool Dead { get; init; }
 

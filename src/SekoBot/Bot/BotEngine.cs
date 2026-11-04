@@ -21,7 +21,7 @@ internal sealed record EngineStats(
 /// Each stage runs at its own pace; a slow stage only ever sees the newest frame,
 /// so nothing queues up and latency stays flat.
 /// </summary>
-internal sealed class BotEngine : IDisposable
+internal sealed partial class BotEngine : IDisposable
 {
     private readonly WindowInfo _window;
     private readonly Action<string> _log;
@@ -144,6 +144,8 @@ internal sealed class BotEngine : IDisposable
                         if (_statsReader.TryRead(out var stats))
                             state = state with { Hp = stats.HpFraction, Mp = stats.MpFraction };
                         TrackStats(state.Hp != null, now);
+                        if (ReadLivePosition() is PointF live)
+                            state = state with { LivePosition = live };
                         if (profile.ReviveOnDeath && BotRunning)
                         {
                             var (dead, ready) = DeathDetector.Check(frame);
@@ -164,8 +166,6 @@ internal sealed class BotEngine : IDisposable
                                 MobCandidates = mobs,
                                 ScreenMoving = _motion.LastChange > 0.08
                             };
-                            if (_brain.WantsMap && MapReader.Read(frame) is { } map)
-                                state = state with { MapOpen = true, MapPosition = map.Arrow };
                         }
                         else if (profile.AutoTarget)
                         {
@@ -175,6 +175,9 @@ internal sealed class BotEngine : IDisposable
                                 .Where(m => !_motion.RecentlyMissed(m, now)).ToList();
                             state = state with { MobCandidates = mobs, TargetSpot = TrackTarget(state, mobs, now) };
                         }
+                        if ((_brain.WantsMap || _finderWantsMap) && MapReader.Read(frame) is { } map)
+                            state = state with { MapOpen = true, MapPosition = map.Arrow };
+                        CheckPosition(state);
                         Volatile.Write(ref _state, state);
                         CheckTargetBar(state, profile, frame, now);
                         var (phase, actions) = TickBot(state);
@@ -350,6 +353,11 @@ internal sealed class BotEngine : IDisposable
 
     public bool StartBot(bool dryRun, bool background, out string error)
     {
+        if (FindingCoordinates)
+        {
+            error = "Koordinat aranıyor; bitmesini bekle (ya da aramayı durdur).";
+            return false;
+        }
         error = "";
         if (GameMinimized)
         {
@@ -482,7 +490,9 @@ internal sealed class BotEngine : IDisposable
         _disposed = true;
         StopBot("bağlantı kapandı");
         StopRecording();
+        _finderCts?.Cancel();
         _cts.Cancel();
+        try { _finderTask?.Wait(2000); } catch { }
         _capture?.Dispose();
         try { _loop?.Wait(1500); } catch { }
         lock (_frameGate)
@@ -491,6 +501,11 @@ internal sealed class BotEngine : IDisposable
             _latest = null;
         }
         _statsReader.Dispose();
+        lock (_positionGate)
+        {
+            _position?.Dispose();
+            _position = null;
+        }
         _cts.Dispose();
     }
 }
