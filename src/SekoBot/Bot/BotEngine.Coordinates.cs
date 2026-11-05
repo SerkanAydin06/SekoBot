@@ -164,9 +164,29 @@ internal sealed partial class BotEngine
             _log($"Koordinat aranıyor… {i + 1}/{walks.Length} (kalan aday {search.Count:N0})");
         }
 
-        var match = search.Result();
-        if (match == null)
+        var matches = search.Results(10);
+        if (matches.Count == 0)
             return "Koordinat bulunamadı: haritadaki okla birlikte değişen bir değer çıkmadı. Daha açık bir alanda tekrar dene.";
+
+        // Check: one more walk, and the found values must put us where the arrow is.
+        _log($"{matches.Count} olası koordinat var; son bir yürüyüşle doğrulanıyor…");
+        await WalkAsync(input, [keys.MoveBack, keys.MoveLeft], FinderWalkMs, token);
+        if (await ReadArrowAsync(input, keys.Map, token) is not PointF check)
+            return "Koordinat doğrulanamadı: harita okunamadı. Tekrar dene.";
+        CoordinateMatch? match = null;
+        foreach (var candidate in matches)
+        {
+            if (CoordinateSearch.Predict(memory, candidate) is PointF predicted && Distance(predicted, check) <= 0.015)
+            {
+                match = candidate;
+                break;
+            }
+        }
+        if (match == null)
+            return "Koordinat bulunamadı: bulunan değerler son yürüyüşte haritadaki okla uyuşmadı. Açık bir yerde tekrar dene.";
+        if (memory.TryReadNumber(match.MapXAddress, match.Size, out double foundX) &&
+            memory.TryReadNumber(match.MapYAddress, match.Size, out double foundY))
+            _log($"Bulunan değerler: X={foundX:0.##}, Y={foundY:0.##} (harita genişliği ≈ {1 / Math.Abs(match.Ax):N0} birim).");
 
         var spec = new PositionSpec
         {
