@@ -80,6 +80,8 @@ internal sealed partial class BotEngine
                 size = _position.Size;
                 world = _position.WorldPerMap;
             }
+            if (!CoordinateSearch.Plausible(first) || !CoordinateSearch.Plausible(second))
+                return "Mob tarama: okunan koordinat geçersiz görünüyor; Alan sekmesinden 'Koordinat bul'u yeniden çalıştır.";
             var names = state.MobCandidates
                 .Select(m => new PointF(m.X - state.Width / 2f, m.Y - state.Height / 2f)).ToList();
             double radius = 0.05 * world; // 5 % of the big map around us: more than the screen shows

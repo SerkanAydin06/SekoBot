@@ -113,7 +113,12 @@ internal sealed class CoordinateSearch
     private static double Number(byte[] data, int offset, int size) =>
         size == 8 ? BitConverter.ToDouble(data, offset) : BitConverter.ToSingle(data, offset);
 
-    private static bool Plausible(double v) => double.IsFinite(v) && Math.Abs(v) < 1e9;
+    /// <summary>
+    /// Could be a world coordinate. Halves of pointers and other non-numbers read as floats are
+    /// tiny denormals (like 4e-43) or huge (like -1e26); a coordinate is neither.
+    /// </summary>
+    internal static bool Plausible(double v) =>
+        double.IsFinite(v) && (v == 0 || (Math.Abs(v) >= 1e-3 && Math.Abs(v) < 1e7));
 
     private static bool Changed(byte[] old, byte[] now, int offset, int size)
     {
@@ -161,9 +166,8 @@ internal sealed class CoordinateSearch
         {
             if (double.IsNaN(now[i]))
                 return false;
-            double walked = Math.Abs(last[i] - previous[i]);
-            double tolerance = Math.Max(0.05 * walked, 1e-6 * Math.Max(1, Math.Abs(last[i])));
-            return Math.Abs(now[i] - last[i]) <= tolerance;
+            // Standing still, the position stays exactly where it is.
+            return Math.Abs(now[i] - last[i]) <= 1e-3 + 1e-7 * Math.Abs(last[i]);
         });
     }
 
@@ -253,21 +257,33 @@ internal sealed class CoordinateSearch
     }
 
     /// <summary>The best pair of neighbouring values (X next to Y) following the arrow, or null.</summary>
-    public CoordinateMatch? Result()
+    public CoordinateMatch? Result() => Results(1).FirstOrDefault();
+
+    /// <summary>Changed in most walks: our position moves with every walk (unless something blocked it).</summary>
+    private bool MovesWithUs(int candidate)
     {
+        int changes = 0;
+        for (int s = 1; s < _values.Count; s++)
+            if (Math.Abs(_values[s][candidate] - _values[s - 1][candidate]) > 1e-3)
+                changes++;
+        return changes * 2 >= _values.Count - 1;
+    }
+
+    /// <summary>The best pairs, best first (to be checked one by one with a last walk).</summary>
+    public List<CoordinateMatch> Results(int max)
+    {
+        var results = new List<(double Score, CoordinateMatch Match)>();
         if (_arrows.Count < 4 || _address.Length == 0)
-            return null;
+            return [];
         var fits = new Dictionary<long, (int Index, (double R2, double A, double B) X, (double R2, double A, double B) Y)>();
         for (int i = 0; i < _address.Length; i++)
         {
             var x = Fit(i, mapY: false);
             var y = Fit(i, mapY: true);
-            if (Math.Max(x.R2, y.R2) >= MinFit)
+            if (Math.Max(x.R2, y.R2) >= MinFit && MovesWithUs(i))
                 fits[_address[i] * 16 + _size[i]] = (i, x, y);
         }
 
-        CoordinateMatch? best = null;
-        double bestScore = 0;
         foreach (var first in fits.Values)
         {
             int size = _size[first.Index];
@@ -285,15 +301,24 @@ internal sealed class CoordinateSearch
                 double ratio = Math.Abs(fx.A) / Math.Abs(fy.A);
                 if (!(ratio > 0.5 && ratio < 2))
                     continue;
-                double score = fx.R2 + fy.R2;
-                if (score <= bestScore)
+                // World units across the map: from a tiny arena (100) to a huge world.
+                double worldPerMap = 1 / Math.Abs(fx.A);
+                if (!(worldPerMap > 100 && worldPerMap < 1e8))
                     continue;
-                bestScore = score;
                 long xAddress = firstIsX ? address : address + size, yAddress = firstIsX ? address + size : address;
-                best = new CoordinateMatch(xAddress, yAddress, size, fx.A, fx.B, fy.A, fy.B, fx.R2, fy.R2);
+                results.Add((fx.R2 + fy.R2, new CoordinateMatch(xAddress, yAddress, size, fx.A, fx.B, fy.A, fy.B, fx.R2, fy.R2)));
             }
         }
-        return best;
+        return results.OrderByDescending(r => r.Score).Take(max).Select(r => r.Match).ToList();
+    }
+
+    /// <summary>Where a match puts us now (map coordinates), to check it against the arrow.</summary>
+    public static PointF? Predict(IMemorySource memory, CoordinateMatch match)
+    {
+        if (!memory.TryReadNumber(match.MapXAddress, match.Size, out double x) ||
+            !memory.TryReadNumber(match.MapYAddress, match.Size, out double y))
+            return null;
+        return new PointF((float)(match.Ax * x + match.Bx), (float)(match.Ay * y + match.By));
     }
 }
 

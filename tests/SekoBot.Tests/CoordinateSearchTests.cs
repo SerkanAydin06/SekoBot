@@ -178,6 +178,20 @@ public class CoordinateSearchTests
         Assert.InRange(read.Y, game.Map.Y - 0.01, game.Map.Y + 0.01);
     }
 
+    [Theory]
+    [InlineData(4.0777785e-43)] // the high half of a pointer read as a float
+    [InlineData(-1.29e26)]      // the low half of a pointer
+    [InlineData(double.NaN)]
+    [InlineData(2e7)]
+    public void Pointer_halves_and_other_non_numbers_are_not_coordinates(double value) =>
+        Assert.False(CoordinateSearch.Plausible(value));
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3525.5)]
+    [InlineData(-104450)]
+    public void World_coordinates_are_plausible(double value) => Assert.True(CoordinateSearch.Plausible(value));
+
     [Fact]
     public void Nothing_found_when_nothing_follows_the_arrow()
     {

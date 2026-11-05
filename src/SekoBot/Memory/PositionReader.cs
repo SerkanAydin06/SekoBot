@@ -98,7 +98,8 @@ internal sealed class PositionReader : IDisposable
     {
         if (!Addresses(out long x, out long y))
             return null;
-        if (!_memory.TryReadNumber(x, _spec.Size, out double vx) || !_memory.TryReadNumber(y, _spec.Size, out double vy))
+        if (!_memory.TryReadNumber(x, _spec.Size, out double vx) || !_memory.TryReadNumber(y, _spec.Size, out double vy) ||
+            !CoordinateSearch.Plausible(vx) || !CoordinateSearch.Plausible(vy))
             return null;
         double mx = _spec.Ax * vx + _spec.Bx, my = _spec.Ay * vy + _spec.By;
         // Far off the map: not our position (wrong address, loading screen).
