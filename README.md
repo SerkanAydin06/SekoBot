@@ -37,6 +37,8 @@ Level atlayınca çıkan reklam penceresi ve yanlışlıkla açılan Esc menüs�
 
 **Koordinat bul (Alan sekmesi):** Botun yerini haritayı hiç açmadan bilmesini sağlar. Açık, düz bir yerde dur ve **📍 Koordinat bul**'a bas. Karakter 1–2 dakika boyunca birkaç yöne yürür, her yürüyüşten sonra büyük harita açılıp sarı ok okunur ve oyunun belleğinde okla birlikte değişen değer aranır (Cheat Engine'deki "değişti / değişmedi" taraması gibi, ama otomatik). Bulununca bot yerini saniyede iki kez bellekten okur; haritayı yalnızca başlarken bir kez, kontrol için açar. Bellek yalnızca okunur, oyuna hiçbir şey yazılmaz. Karakterin nesnelerinden giden kalıcı bir yol da bulunursa oyunu yeniden açınca da çalışır; bulunamazsa oyunu her açışta bir kez daha **Koordinat bul**'a basman gerekir. Haritadaki okla uyuşmazsa bot bunu fark eder ve eskisi gibi haritaya bakmaya döner.
 
+**Mob tara (Gelişmiş sekmesi, deneme):** Mobları ekrandaki kırmızı isimler yerine bellekten okumanın ilk adımı. Önce **Koordinat bul** çalışmış olmalı. Kırmızı isimli mobların yanında dur ve **🔍 Mob tara**'ya bas: bot 6 kez, bellekte kendi konumuna yakın konumları toplar ve hangilerinin ekrandaki mob isimlerinin altına düştüğünü bulur (kameranın ölçeğini ve dönüşünü de kendisi çıkarır). Sonuç günlüğe ve `%LOCALAPPDATA%\SekoBot\mob-tarama.json` dosyasına yazılır; bu dosya, botun mobları her an bellekten görmesini kurmak için geliştiriciye gönderilir. Bellek yalnızca okunur.
+
 **Takılma:** W/A/S/D basılıyken ekran 0,7 sn kımıldamıyorsa karakter bir ağaca/kayaya takılmıştır; bot yana kayarak dolanır (her seferinde diğer yana), sonra yoluna devam eder.
 
 ## Kalabalığa git
