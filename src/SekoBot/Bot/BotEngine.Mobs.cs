@@ -97,8 +97,17 @@ internal sealed partial class BotEngine
         if (frames.Sum(f => f.Names.Count) == 0)
             return "Mob tarama: ekranda hiç kırmızı mob ismi görülmedi. Mobların yanında dur ve tekrar dene.";
 
-        var match = await Task.Run(() => MobScan.Match(frames), token);
+        // Mobs walk around; data that never moves in 10 s (terrain, UI) is not a mob list.
+        var firstFrame = frames[0].Positions.ToDictionary(p => p.Address, p => (p.Dx, p.Dy));
+        int moving = frames[^1].Positions.Count(p =>
+            firstFrame.TryGetValue(p.Address, out var was) && (Math.Abs(was.Dx - p.Dx) > 0.01 || Math.Abs(was.Dy - p.Dy) > 0.01));
+        _log($"Mob tarama: {moving:N0} konum taramalar arasında yer değiştirdi.");
+
+        var match = moving == 0 ? null : await Task.Run(() => MobScan.Match(frames), token);
         string file = SaveMobScan(memory, frames, match, size, ownAddress);
+        if (moving == 0)
+            return "Mob tarama: bellekte bulunan konumların hiçbiri kıpırdamadı, bunlar mob değil. " +
+                   $"Koordinat bul büyük ihtimalle gerçek konum yerine başka bir değer buldu; yeniden çalıştır. Sonuç dosyası: {file}";
         if (match == null)
             return $"Mob tarama: ekrandaki isimlerle eşleşen bir konum bulunamadı. Sonuç dosyası: {file} (bunu gönder).";
         double share = 100.0 * match.Matched / Math.Max(1, match.Names);

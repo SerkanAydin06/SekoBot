@@ -30,6 +30,11 @@ internal sealed class PositionReader : IDisposable
             status = "Koordinat bilinmiyor (haritaya bakılıyor)";
             return null;
         }
+        if (spec.Version < PositionSpec.CurrentVersion)
+        {
+            status = "Koordinat eski yöntemle bulunmuş: 'Koordinat bul' ile yeniden bul";
+            return null;
+        }
         bool sameSession = spec.XAddress != 0 && spec.ProcessId == processId &&
                            spec.ProcessStartTicks != 0 && spec.ProcessStartTicks == ProcessMemory.StartTicksOf(processId);
         if (!sameSession && spec.Node < 0)

@@ -67,6 +67,8 @@ public class CoordinateSearchTests
         public PointF Map = new(0.42f, 0.57f);
         private (double X, double Y) _facing = (0, -1);
         public bool SwappedAxes;
+        /// <summary>The arrow's place on screen in pixels: only updated while the map is open.</summary>
+        public const long UiArrow = Heap + 0xC0000;
 
         public Game(bool doubles = false, bool swapped = false)
         {
@@ -123,6 +125,9 @@ public class CoordinateSearchTests
 
         public PointF Arrow()
         {
+            // Opening the map moves the arrow widget: whole pixels, following the arrow exactly.
+            Memory.WriteFloat(UiArrow, (float)Math.Round(900 + Map.X * 505));
+            Memory.WriteFloat(UiArrow + 4, (float)Math.Round(100 + Map.Y * 505));
             double noise() => (_random.NextDouble() - 0.5) * 1.2 / 370;
             return new PointF((float)(Map.X + noise() + _facing.X * 1.0 / 370), (float)(Map.Y + noise() + _facing.Y * 1.0 / 370));
         }
@@ -140,7 +145,9 @@ public class CoordinateSearchTests
         (double, double)[] walks = [(0, -1), (1, 0), (1, 0), (0, 1), (-1, 0), (0, 1), (0.7, -0.7)];
         for (int i = 0; i < walks.Length; i++)
         {
-            game.Walk(walks[i].Item1, walks[i].Item2);
+            game.Walk(walks[i].Item1 / 2, walks[i].Item2 / 2);
+            search.MidWalk(game.Memory); // map closed, still walking
+            game.Walk(walks[i].Item1 / 2, walks[i].Item2 / 2);
             search.Move(game.Memory, game.Arrow());
             if (i % 2 == 1)
             {
