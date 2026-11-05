@@ -90,7 +90,7 @@ internal sealed class PositionReader : IDisposable
             return false;
         lowAddress = Math.Min(x, y);
         return _memory.TryReadNumber(lowAddress, _spec.Size, out first) &&
-               _memory.TryReadNumber(lowAddress + _spec.Size, out second);
+               _memory.TryReadNumber(lowAddress + _spec.Size, _spec.Size, out second);
     }
 
     /// <summary>Position on the big map (0..1 of its width), or null when it can't be read.</summary>
