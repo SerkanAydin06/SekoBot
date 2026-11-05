@@ -36,6 +36,10 @@ internal sealed class BarSpec
 /// </summary>
 internal sealed class PositionSpec
 {
+    /// <summary>Searches before v2 could pick the map arrow's place on screen instead of the
+    /// real position; such results are not used.</summary>
+    public const int CurrentVersion = 2;
+    public int Version { get; set; }
     /// <summary>4 = float, 8 = double.</summary>
     public int Size { get; set; } = 4;
     public double Ax { get; set; }

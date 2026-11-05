@@ -156,7 +156,8 @@ internal sealed partial class BotEngine
         ];
         for (int i = 0; i < walks.Length; i++)
         {
-            await WalkAsync(input, walks[i], FinderWalkMs, token);
+            await WalkAsync(input, walks[i], FinderWalkMs, token,
+                () => Task.Run(() => search.MidWalk(memory), token));
             if (await ReadArrowAsync(input, keys.Map, token) is PointF arrow)
                 await Task.Run(() => search.Move(memory, arrow), token);
             if (i % 2 == 1)
@@ -190,6 +191,7 @@ internal sealed partial class BotEngine
 
         var spec = new PositionSpec
         {
+            Version = PositionSpec.CurrentVersion,
             Size = match.Size,
             Ax = match.Ax, Bx = match.Bx, Ay = match.Ay, By = match.By,
             XAddress = match.MapXAddress, YAddress = match.MapYAddress,
@@ -222,13 +224,18 @@ internal sealed partial class BotEngine
 
     private static double Distance(PointF a, PointF b) => Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(a.Y - b.Y, 2));
 
-    private static async Task WalkAsync(InputExecutor input, Keys[] keys, int ms, CancellationToken token)
+    /// <param name="midway">Runs halfway through the walk (while still walking, map closed).</param>
+    private static async Task WalkAsync(InputExecutor input, Keys[] keys, int ms, CancellationToken token,
+        Func<Task>? midway = null)
     {
         foreach (var key in keys)
             input.Enqueue(new KeyDownAction(key));
         try
         {
-            await Task.Delay(ms, token);
+            await Task.Delay(ms / 2, token);
+            if (midway != null)
+                await midway();
+            await Task.Delay(ms - ms / 2, token);
         }
         finally
         {

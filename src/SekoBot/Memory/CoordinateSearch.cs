@@ -38,6 +38,8 @@ internal sealed class CoordinateSearch
     /// <summary>One column per reading where the character had walked (the first is the start).</summary>
     private readonly List<double[]> _values = [];
     private readonly List<(double X, double Y)> _arrows = [];
+    /// <summary>Values read in the middle of the current walk (map closed), or null.</summary>
+    private double[]? _midWalk;
 
     /// <summary>Values still in the running.</summary>
     public int Count => _address.Length;
@@ -172,14 +174,32 @@ internal sealed class CoordinateSearch
     }
 
     /// <summary>Call after another walk, with the arrow's new place on the map.</summary>
+    /// <summary>
+    /// Call halfway through a walk, with the map closed. Our real position changes while we walk;
+    /// a copy that is only updated while the map is open (the arrow's place on screen) doesn't.
+    /// </summary>
+    public void MidWalk(IMemorySource memory)
+    {
+        if (_values.Count >= 2)
+            _midWalk = ReadAll(memory);
+    }
+
     public void Move(IMemorySource memory, PointF arrow)
     {
         if (_values.Count < 2)
             return;
         var now = ReadAll(memory);
+        var last = _values[^1];
+        var mid = _midWalk;
+        _midWalk = null;
+        var before = _arrows[^1];
+        // Only when the walk really took us somewhere (not blocked).
+        bool walked = Math.Sqrt(Math.Pow(arrow.X - before.X, 2) + Math.Pow(arrow.Y - before.Y, 2)) >= 0.004;
         _values.Add(now);
         _arrows.Add((arrow.X, arrow.Y));
-        Keep(i => !double.IsNaN(now[i]));
+        Keep(i => !double.IsNaN(now[i]) &&
+                  (mid == null || !walked || (!double.IsNaN(mid[i]) && Math.Abs(mid[i] - last[i]) > 1e-3) ||
+                   Math.Abs(now[i] - last[i]) <= 1e-3));
     }
 
     /// <summary>Current value of every candidate (NaN when it can't be read any more).</summary>
@@ -262,6 +282,12 @@ internal sealed class CoordinateSearch
     /// <summary>Changed in most walks: our position moves with every walk (unless something blocked it).</summary>
     private bool MovesWithUs(int candidate)
     {
+        // Whole numbers every time: a place on screen in pixels (UI), not a world position.
+        bool whole = true;
+        for (int s = 0; s < _values.Count && whole; s++)
+            whole = _values[s][candidate] == Math.Round(_values[s][candidate]);
+        if (whole)
+            return false;
         int changes = 0;
         for (int s = 1; s < _values.Count; s++)
             if (Math.Abs(_values[s][candidate] - _values[s - 1][candidate]) > 1e-3)
