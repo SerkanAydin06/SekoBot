@@ -173,45 +173,69 @@ internal sealed class InputExecutor : IDisposable
         }
     }
 
-    /// <summary>Left click at a point of the game's client area.</summary>
     /// <summary>
-    /// Clicks a game UI button the way a person does. The game checks where the real cursor is,
-    /// so a posted click alone (cursor elsewhere) misses: put the cursor on the button, let it
-    /// hover, hold the button down a moment, then put the cursor back where it was.
+    /// Clicks a game UI button (e.g. "Burada yeniden başla") the way a person does. The game's UI
+    /// ignores clicks posted to a window in the background and clicks that are too quick, so:
+    /// bring the game to the front for a moment, move the real cursor onto the button and let it
+    /// hover, press with a real mouse event, hold, release, and wait for the game to take it.
+    /// Afterwards the cursor and the window that was in front are put back.
     /// </summary>
     private async Task ClickButtonAsync(Point client, CancellationToken token)
     {
         Win32.GetCursorPos(out var previous);
+        nint before = Win32.GetForegroundWindow();
+        bool front = before == _window.Handle || BringGameToFront();
+        if (front && before != _window.Handle)
+            await Task.Delay(300, token);
         var screen = WindowService.ClientToScreen(_window, client);
         nint lParam = (nint)((client.Y << 16) | (client.X & 0xFFFF));
         try
         {
-            for (int i = 0; i < 3; i++)
+            // Come in with a few small moves so the button sees the cursor arrive (hover).
+            for (int i = 0; i < 5; i++)
             {
-                Win32.SetCursorPos(screen.X, screen.Y);
-                if (_background)
-                    Win32.PostMessage(_window.Handle, Win32.WM_MOUSEMOVE, 0, lParam);
-                else
-                    MoveMouse(screen);
-                await Task.Delay(80, token);
+                int d = 8 - i * 2;
+                MoveMouse(new Point(screen.X + d, screen.Y + d / 2));
+                Win32.PostMessage(_window.Handle, Win32.WM_MOUSEMOVE, 0, lParam);
+                await Task.Delay(60, token);
             }
-            await Task.Delay(150, token);
-            if (_background)
-                Win32.PostMessage(_window.Handle, Win32.WM_LBUTTONDOWN, Win32.MK_LBUTTON, lParam);
-            else
+            MoveMouse(screen);
+            await Task.Delay(300, token);
+            if (front)
                 SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);
-            await Task.Delay(150, token);
-            if (_background)
-                Win32.PostMessage(_window.Handle, Win32.WM_LBUTTONUP, 0, lParam);
             else
+                Win32.PostMessage(_window.Handle, Win32.WM_LBUTTONDOWN, Win32.MK_LBUTTON, lParam);
+            await Task.Delay(250, token);
+            if (front)
                 SendMouse(Win32.MOUSEEVENTF_LEFTUP);
-            await Task.Delay(150, token);
+            else
+                Win32.PostMessage(_window.Handle, Win32.WM_LBUTTONUP, 0, lParam);
+            await Task.Delay(500, token); // keep the cursor there while the game handles it
         }
         finally
         {
             Win32.SetCursorPos(previous.X, previous.Y);
+            if (front && before != _window.Handle && before != 0)
+                Win32.SetForegroundWindow(before);
         }
+        if (!front)
+            _log("Oyun penceresi öne getirilemedi; tıklama arka plandan gönderildi.");
     }
+
+    /// <summary>Puts the game window in front. Windows only lets a program do that right after
+    /// a key event, hence the Alt tap first.</summary>
+    private bool BringGameToFront()
+    {
+        var alt = new Win32.INPUT { type = Win32.INPUT_KEYBOARD };
+        alt.u.ki.wVk = 0x12; // VK_MENU
+        var altUp = alt;
+        altUp.u.ki.dwFlags = Win32.KEYEVENTF_KEYUP;
+        Win32.SendInput(2, [alt, altUp], Marshal.SizeOf<Win32.INPUT>());
+        Win32.SetForegroundWindow(_window.Handle);
+        return Win32.GetForegroundWindow() == _window.Handle;
+    }
+
+    /// <summary>Left click at a point of the game's client area.</summary>
 
     private async Task ClickAsync(Point client, int settleMin, int settleMax, CancellationToken token)
     {
