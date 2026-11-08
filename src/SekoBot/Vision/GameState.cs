@@ -25,9 +25,6 @@ internal sealed record GameState(
     /// <summary>Mobs to go for before the others (attacking us, or Metin stones when preferred).</summary>
     public IReadOnlyList<Point> PriorityMobs { get; init; } = [];
 
-    /// <summary>The <see cref="PriorityMobs"/> are Metin stones (big: attacked from further away).</summary>
-    public bool PriorityAreMetins { get; init; }
-
     /// <summary>Items on the ground close to the character (on screen).</summary>
     public IReadOnlyList<GroundSpot> Drops { get; init; } = [];
 

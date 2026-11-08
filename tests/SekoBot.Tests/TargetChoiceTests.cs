@@ -84,17 +84,6 @@ public class TargetChoiceTests
     }
 
     [Fact]
-    public void Attacks_a_metin_stone_from_further_away()
-    {
-        var (brain, p) = Ready();
-        // 1.5 × the attack distance away: too far for a mob, close enough for the big stone.
-        var stone = new Point(Center.X + (int)(H * p.AttackRadius * 1.5), Center.Y);
-        var actions = Run(brain, 4000, 4500, t => State(t, [stone], [stone]) with { PriorityAreMetins = true });
-        Assert.Equal(BotPhase.Fighting, brain.Phase);
-        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.Attack);
-    }
-
-    [Fact]
     public void Goes_for_the_mob_attacking_us_before_a_nearer_one()
     {
         var (brain, p) = Ready();
