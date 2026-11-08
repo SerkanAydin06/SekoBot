@@ -133,11 +133,17 @@ internal sealed record CameraView(Vec3 Location, double Pitch, double Yaw, doubl
 /// <param name="Drops">Items lying on the ground.</param>
 /// <param name="InSafeZone">The character is in a safe zone (town).</param>
 /// <param name="OpenWindows">The game's windows (UI parts like "EscMenu", "inventory") that are showing.</param>
+/// <param name="ReviveIn">The death window is showing: seconds until "Burada yeniden başla" can be
+/// clicked (0 or less = now). Null when the window isn't showing.</param>
 internal sealed record WorldSnapshot(Vec3 Player, CameraView? Camera, IReadOnlyList<WorldMob> Mobs, int OtherPlayers, string MapName,
     WorldMob? Target = null, CharacterStats? Stats = null, bool Dead = false, int Level = 0,
     IReadOnlyList<DeadMob>? DeadMobs = null, CharacterProgress? Progress = null, IReadOnlyList<OtherPlayer>? Players = null,
-    IReadOnlyList<GroundItem>? Drops = null, bool InSafeZone = false, IReadOnlyList<string>? OpenWindows = null)
+    IReadOnlyList<GroundItem>? Drops = null, bool InSafeZone = false, IReadOnlyList<string>? OpenWindows = null,
+    double? ReviveIn = null)
 {
+    /// <summary>Dead, and "Burada yeniden başla" can be clicked.</summary>
+    public bool ReviveReady => Dead && ReviveIn is <= 0;
+
     /// <summary>The selected mob's health (0..1); 0 when nothing (alive) is selected.</summary>
     public double TargetHp => Target is { MaxHp: > 0 } t ? Math.Clamp((double)t.Hp / t.MaxHp, 0, 1) : 0;
 
@@ -202,6 +208,9 @@ internal sealed class GameWorldReader : IDisposable
         ("playerMove", "isInSafe", 0x87C),
         ("m2data_C", "uiMain", 0x1210),
         ("Widget", "Visibility", 0xCB),
+        ("UI_C", "reSpawn", 0x818),
+        ("reSpawn_C", "Timer", 0x2A8),
+        ("reSpawn_C", "wait", 0x2AC),
         ("NPC", "thismob.vnum", 0x348),
         ("NPC", "thismob.Name", 0x348 + 0x8),
         ("NPC", "thismob.Level", 0x348 + 0x3C),
@@ -382,8 +391,9 @@ internal sealed class GameWorldReader : IDisposable
             _windowsReadAt = DateTime.UtcNow;
         }
         var windows = _windows;
+        double? reviveIn = dead ? ReviveIn(Pointer(instance + Offset(instanceClass, "m2data_C", "uiMain"))) : null;
         return new WorldSnapshot(player, camera, mobs, players.Count, mapName, target, stats, dead, characterLevel, deadMobs, progress, players,
-            drops, safe, windows);
+            drops, safe, windows, reviveIn);
     }
 
     private (CharacterStats? Stats, int Level) ReadStats(long loader)
@@ -456,6 +466,26 @@ internal sealed class GameWorldReader : IDisposable
             widget = ClassName(c) == "Widget";
         _isWidget[cls] = widget;
         return widget;
+    }
+
+    /// <summary>
+    /// The death window ("reSpawn"): after it opens, "wait" counts down (the window appearing),
+    /// then "Timer" counts down from 12; at 0 "Burada yeniden başla" can be clicked (seen in the game).
+    /// </summary>
+    private double? ReviveIn(long ui)
+    {
+        if (!MemoryReads.IsPointer(ui))
+            return null;
+        long window = Pointer(ui + Offset(Pointer(ui + ObjClass), "UI_C", "reSpawn"));
+        if (!MemoryReads.IsPointer(window))
+            return null;
+        long cls = Pointer(window + ObjClass);
+        if (Byte(window + Offset(cls, "Widget", "Visibility")) is not byte visibility || visibility is 1 or 2)
+            return null;
+        if (Float(window + Offset(cls, "reSpawn_C", "Timer")) is not double timer ||
+            Float(window + Offset(cls, "reSpawn_C", "wait")) is not double wait)
+            return null;
+        return Math.Max(0, wait) + timer;
     }
 
     private CharacterProgress? ReadProgress(long loader)

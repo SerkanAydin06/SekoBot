@@ -1,7 +1,6 @@
 using SekoBot.Bot;
 using SekoBot.Capture;
 using SekoBot.Config;
-using SekoBot.Recording;
 using SekoBot.Vision;
 using Xunit;
 
@@ -9,46 +8,6 @@ namespace SekoBot.Tests;
 
 public class DeathTests
 {
-    private static string Fixture(string name) => Path.Combine(AppContext.BaseDirectory, "Fixtures", name);
-
-    [Fact]
-    public void Death_screen_is_seen_and_revive_here_is_still_locked()
-    {
-        using var frame = RecordingFormat.LoadPng(Fixture("death-screen.png"));
-        var (dead, ready) = DeathDetector.Check(frame);
-        Assert.True(dead);
-        Assert.False(ready); // "Burada yeniden başla" is still grey on this screenshot
-    }
-
-    [Fact]
-    public void Revive_here_is_ready_once_its_text_turns_white()
-    {
-        using var frame = RecordingFormat.LoadPng(Fixture("death-screen.png"));
-        // Turn the grey text of the upper button white, as it looks once it can be clicked.
-        int x0 = (int)(frame.Width * 0.44), x1 = (int)(frame.Width * 0.56);
-        int y0 = (int)(frame.Height * 0.13), y1 = (int)(frame.Height * 0.16);
-        for (int y = y0; y < y1; y++)
-        for (int x = x0; x < x1; x++)
-        {
-            int i = y * frame.Stride + x * 4;
-            if (frame.Data[i] + frame.Data[i + 1] + frame.Data[i + 2] >= 120)
-                frame.Data[i] = frame.Data[i + 1] = frame.Data[i + 2] = 255;
-        }
-        Assert.Equal((true, true), DeathDetector.Check(frame));
-    }
-
-    [Theory]
-    [InlineData("topdown-wolves.png")]
-    [InlineData("red-armor.png")]
-    [InlineData("other-player.png")]
-    [InlineData("levelup-popup.png")]
-    [InlineData("esc-menu.png")]
-    public void Other_screens_are_not_death(string file)
-    {
-        using var frame = RecordingFormat.LoadPng(Fixture(file));
-        Assert.False(DeathDetector.Check(frame).Dead);
-    }
-
     private static GameState At(double ms, double? hp, bool dead = false, bool ready = false, params Point[] mobs) =>
         new(TimeSpan.FromMilliseconds(ms), 1920, 1080, hp, 1, null, 1)
         {

@@ -139,9 +139,8 @@ internal sealed partial class BotEngine : IDisposable
                             Dead = world?.Dead == true,
                             TargetSpot = MemoryTargetSpot(world, frame.Width, frame.Height),
                         };
-                        // The "Burada yeniden başla" button and pop-up windows are only on screen.
-                        if (state.Dead && profile.ReviveOnDeath && BotRunning)
-                            state = state with { ReviveReady = DeathDetector.Check(frame).ReviveReady };
+                        if (world is { Dead: true })
+                            state = state with { ReviveReady = world.ReviveReady };
                         if (profile.ClosePopups && BotRunning && !state.Dead)
                             state = state with { PopupOpen = PopupOpen(world) };
                         var view = MemoryView(world, profile, frame.Width, frame.Height);

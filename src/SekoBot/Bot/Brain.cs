@@ -283,11 +283,15 @@ internal sealed partial class Brain
         }
         if (state.ReviveReady && now - _lastReviveClick >= Ms(3000))
         {
-            actions.Add(new ClickAction(DeathDetector.ReviveHereButton(state.Width, state.Height), Slow: true));
+            actions.Add(new ClickAction(ReviveHereButton(state.Width, state.Height), Slow: true));
             actions.Add(new NoteAction("\"Burada yeniden başla\" tıklandı."));
             _lastReviveClick = now;
         }
     }
+
+    /// <summary>Where "Burada yeniden başla" is on the death window (client pixels; measured on
+    /// a 1920×1080 screenshot, the window scales with the screen).</summary>
+    internal static Point ReviveHereButton(int width, int height) => new(width / 2, (int)(height * 0.144));
 
     /// <summary>Right after reviving: drink HP potions up to ReviveHealTo before fighting again.</summary>
     /// <returns>True while still healing (nothing else should happen this tick).</returns>
