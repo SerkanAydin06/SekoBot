@@ -40,8 +40,27 @@ internal enum SkillKind
 /// <param name="DurationSec">How long a buff lasts (0 for attacks).</param>
 internal sealed record SkillInfo(int Id, string Name, int Level, SkillKind Kind, int Mana, int CooldownSec, int DurationSec, int Distance);
 
-/// <summary>An item lying on the ground.</summary>
-internal readonly record struct GroundItem(long Id, Vec3 Position);
+/// <summary>An item lying on the ground: its item number (1 = yang) and how many (the yang amount).</summary>
+internal readonly record struct GroundItem(long Id, Vec3 Position, int Vnum = 0, int Count = 0)
+{
+    public LootKind Kind => Loot.KindOf(Vnum);
+}
+
+/// <summary>What kind of thing an item is, by its number (Metin2's item numbers).</summary>
+internal enum LootKind { Unknown, Yang, Potion, Equipment, Other }
+
+internal static class Loot
+{
+    public static LootKind KindOf(int vnum) => vnum switch
+    {
+        <= 0 => LootKind.Unknown,
+        1 => LootKind.Yang,
+        >= 27000 and < 28000 => LootKind.Potion,
+        < 8000 => LootKind.Equipment,                      // weapons
+        >= 11000 and < 18000 => LootKind.Equipment,        // armour, helmets, shields, jewellery, shoes
+        _ => LootKind.Other,                               // materials, books, scrolls, …
+    };
+}
 
 /// <summary>A mob that just died (it stays in the world for a moment).</summary>
 internal readonly record struct DeadMob(int Id, Vec3 Position);
@@ -224,6 +243,7 @@ internal sealed class GameWorldReader : IDisposable
         ("gameManager", "playerPos", 0xA10),
         ("gameManager", "mapname", 0x958),
         ("gameManager", "Player", 0x380),
+        ("gameManager", "drops", 0x850),
         ("playerMove", "dead", 0x778),
         ("playerMove", "isInSafe", 0x87C),
         ("m2data_C", "uiMain", 0x1210),
@@ -385,7 +405,10 @@ internal sealed class GameWorldReader : IDisposable
             {
                 // Lying on the ground (a picked-up item is removed from the world).
                 if (Pointer(actor + ActorRoot) is long itemRoot && TryVec3(itemRoot + ComponentWorldLocation, out var at))
-                    drops.Add(new GroundItem(actor, at));
+                {
+                    var (vnum, amount) = DropInfo(gm, gmClass, actor);
+                    drops.Add(new GroundItem(actor, at, vnum, amount));
+                }
             }
             else
                 _otherActors.Add(actor);
@@ -524,6 +547,45 @@ internal sealed class GameWorldReader : IDisposable
             Float(window + Offset(cls, "reSpawn_C", "wait")) is not double wait)
             return null;
         return Math.Max(0, wait) + timer;
+    }
+
+    private readonly Dictionary<long, (int Vnum, int Count)> _dropInfo = [];
+    private long _dropInfoGm;
+    private DateTime _dropInfoAt = DateTime.MinValue;
+
+    /// <summary>
+    /// What a ground item is. The game keeps its drops in gameManager.drops (TMap id → dropItem:
+    /// the item actor at +0, then id, item number at +0xC and count at +0x10 — seen in the game:
+    /// yang is item 1 with the amount as count). Read once per tick at most.
+    /// </summary>
+    private (int Vnum, int Count) DropInfo(long gm, long gmClass, long actor)
+    {
+        if (gm != _dropInfoGm || DateTime.UtcNow - _dropInfoAt > TimeSpan.FromMilliseconds(200))
+        {
+            _dropInfo.Clear();
+            _dropInfoGm = gm;
+            _dropInfoAt = DateTime.UtcNow;
+            long map = gm + Offset(gmClass, "gameManager", "drops");
+            long data = Pointer(map);
+            int count = Int32(map + 8) ?? 0;
+            const int stride = 8 + 0x38 + 8;
+            if (MemoryReads.IsPointer(data) && count is > 0 and <= 5000)
+            {
+                int maxBits = Int32(map + 0x2C) ?? 0;
+                var bits = new byte[(Math.Max(count, 128) + 7) / 8];
+                long bitsAt = maxBits > 128 ? Pointer(map + 0x20) : map + 0x10;
+                var elements = new byte[count * stride];
+                if (MemoryReads.IsPointer(bitsAt) && _memory.Read(bitsAt, bits, (count + 7) / 8) && _memory.Read(data, elements, elements.Length))
+                    for (int i = 0; i < count; i++)
+                        if ((bits[i / 8] & (1 << (i % 8))) != 0)
+                        {
+                            int at = i * stride + 8;
+                            _dropInfo[BitConverter.ToInt64(elements, at)] =
+                                (BitConverter.ToInt32(elements, at + 0xC), BitConverter.ToInt32(elements, at + 0x10));
+                        }
+            }
+        }
+        return _dropInfo.TryGetValue(actor, out var info) ? info : (0, 0);
     }
 
     private CharacterProgress? ReadProgress(long loader)

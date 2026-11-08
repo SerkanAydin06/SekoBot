@@ -36,7 +36,7 @@ internal sealed partial class BotEngine
         }
         var drops = new List<GroundSpot>();
         if (profile.PickUpDrops)
-            foreach (var item in (world.Drops ?? []).OrderBy(d => d.Position.DistanceXY(world.Player)))
+            foreach (var item in (world.Drops ?? []).Where(d => WantedLoot(d, profile)).OrderBy(d => d.Position.DistanceXY(world.Player)))
                 if (item.Position.DistanceXY(world.Player) <= profile.DropRangeMetres * 100 &&
                     camera.ToScreen(item.Position, width, height) is PointF p && OnPlayfield(p, width, height))
                     drops.Add(new GroundSpot(item.Id, Point.Round(p)));
@@ -73,6 +73,16 @@ internal sealed partial class BotEngine
         }
         return slots;
     }
+
+    /// <summary>Whether to walk to this item (unknown items: yes, they may be anything).</summary>
+    internal static bool WantedLoot(GroundItem item, BotProfile profile) => item.Kind switch
+    {
+        LootKind.Yang => profile.LootYang,
+        LootKind.Potion => profile.LootPotions,
+        LootKind.Equipment => profile.LootEquipment,
+        LootKind.Other => profile.LootOther,
+        _ => true,
+    };
 
     /// <summary>Whether the bot should go for this mob, by the profile's choices. A mob that is
     /// attacking us is always fought back, and a Metin stone set to "first" is always gone for
