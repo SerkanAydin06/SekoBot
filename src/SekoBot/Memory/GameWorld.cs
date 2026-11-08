@@ -8,7 +8,14 @@ internal readonly record struct Vec3(double X, double Y, double Z)
     public double DistanceXY(Vec3 other) => Math.Sqrt(Math.Pow(X - other.X, 2) + Math.Pow(Y - other.Y, 2));
 }
 
-/// <summary>A living mob that can be attacked.</summary>
+/// <summary>The character's health and mana.</summary>
+internal readonly record struct CharacterStats(int Hp, int Mp, int MaxHp, int MaxMp)
+{
+    public double HpFraction => (double)Hp / MaxHp;
+    public double MpFraction => (double)Mp / MaxMp;
+}
+
+/// <summary>A mob that can be attacked.</summary>
 internal sealed record WorldMob(int Id, int Vnum, string Name, int Level, int Hp, int MaxHp, Vec3 Position);
 
 /// <summary>Where the game camera is and where it looks (Unreal's FMinimalViewInfo).</summary>
@@ -32,13 +39,24 @@ internal sealed record CameraView(Vec3 Location, double Pitch, double Yaw, doubl
         double focal = width / 2.0 / Math.Tan(Math.Clamp(Fov, 1, 170) * Math.PI / 360);
         return new PointF((float)(width / 2.0 + right * focal / depth), (float)(height / 2.0 - up * focal / depth));
     }
+
+    /// <summary>Turns a world direction on the ground into screen directions: (right, up) on screen.
+    /// W walks "screen up", D "screen right".</summary>
+    public (double Right, double Up) ToScreenDirection(double dx, double dy)
+    {
+        double yaw = Yaw * Math.PI / 180;
+        double forwardX = Math.Cos(yaw), forwardY = Math.Sin(yaw);
+        return (dx * -forwardY + dy * forwardX, dx * forwardX + dy * forwardY);
+    }
 }
 
 /// <summary>One look at the game world.</summary>
 /// <param name="OtherPlayers">Other players around (not mobs).</param>
 /// <param name="Target">The mob selected in the game (its bar shows at the top), or null.</param>
+/// <param name="Stats">The character's HP/MP, when they look valid.</param>
+/// <param name="Dead">The character is dead.</param>
 internal sealed record WorldSnapshot(Vec3 Player, CameraView? Camera, IReadOnlyList<WorldMob> Mobs, int OtherPlayers, string MapName,
-    WorldMob? Target = null)
+    WorldMob? Target = null, CharacterStats? Stats = null, bool Dead = false, int Level = 0)
 {
     /// <summary>The selected mob's health (0..1); 0 when nothing (alive) is selected.</summary>
     public double TargetHp => Target is { MaxHp: > 0 } t ? Math.Clamp((double)t.Hp / t.MaxHp, 0, 1) : 0;
@@ -48,26 +66,26 @@ internal sealed record WorldSnapshot(Vec3 Player, CameraView? Camera, IReadOnlyL
 }
 
 /// <summary>
-/// Reads the character's world position, the camera and the mobs around from the game's memory.
-/// The game is made with Unreal Engine 4.27: everything in the world is an "actor" in the level's
-/// actor list; mobs (and other players) are actors of the game class "NPC". The game's own field
-/// names (HP, dead, attackable, …) are looked up in Unreal's type information, so a game update
-/// that moves those fields around doesn't break the reader. Only ever reads; never writes.
+/// Reads everything the bot needs from the game's memory: the character (position, HP/MP, dead),
+/// the camera, the mobs around and the selected mob. The game is made with Unreal Engine 4.27:
+/// the game instance ("m2data_C") is found through one fixed pointer in the game's exe, everything
+/// else through the game's own field names in Unreal's type information ("gm", "loader", "HP",
+/// "dead", …). When a game update moves the fixed pointer or the name table, they are searched for
+/// automatically. Only ever reads; never writes.
 /// </summary>
 internal sealed class GameWorldReader : IDisposable
 {
-    // ── Fixed places in this game build (Unreal Engine 4.27) ──
-    /// <summary>Same root as the HP pointer; the first four steps of its path lead to the game data
-    /// ("m2data_C", which knows the selected mob), the fifth to "gameManager".</summary>
-    internal static readonly long[] GameManagerPath = [0x18, 0x8, 0x80, 0xC8, 0x1F8];
+    // ── Fixed places in the tested game build (searched for when they don't fit) ──
+    /// <summary>Static pointer to the game instance ("m2data_C").</summary>
+    internal const long GameInstanceOffset = 0x04CED428;
     /// <summary>FNamePool (all object and field names); its block pointers start at +0x10.</summary>
     internal const long NamePoolOffset = 0x04D8AFC0;
     // UObject
     internal const int ObjClass = 0x10, ObjName = 0x18, ObjOuter = 0x20;
     // UStruct / UClass
     internal const int StructSuper = 0x48, StructProperties = 0x58;
-    // FField / FProperty
-    internal const int FieldClass = 0x08, FieldNext = 0x20, FieldName = 0x28, PropertyOffset = 0x4C;
+    // FField / FProperty (FStructProperty: the struct's type at +0x78)
+    internal const int FieldClass = 0x08, FieldNext = 0x20, FieldName = 0x28, PropertyOffset = 0x4C, StructPropertyType = 0x78;
     // ULevel: Actors (TArray)
     internal const int LevelActors = 0xA0;
     // AActor: RootComponent; USceneComponent: ComponentToWorld translation
@@ -76,12 +94,25 @@ internal sealed class GameWorldReader : IDisposable
     internal const int CameraCachePov = 0x10;
     private const int MaxActors = 50_000;
 
-    /// <summary>The game fields the reader uses, with where they were in the tested build (fallbacks).</summary>
+    /// <summary>The game fields the reader uses ("a.b" = field b of struct field a), with where
+    /// they were in the tested build (used only when the type information doesn't know them).</summary>
     internal static readonly (string Class, string Field, int Fallback)[] Fields =
     [
+        ("m2data_C", "gm", 0x1F8),
+        ("m2data_C", "loader", 0x1188),
+        ("m2data_C", "selectedActor", 0x1C0),
+        ("loader", "charData.HP", 0x770 + 0x34),
+        ("loader", "charData.SP", 0x770 + 0x3C),
+        ("loader", "charData.fullHP", 0x770 + 0x68),
+        ("loader", "charData.fullSp", 0x770 + 0x88),
+        ("loader", "charData.Level", 0x770 + 0x90),
         ("gameManager", "playerPos", 0xA10),
         ("gameManager", "mapname", 0x958),
-        ("NPC", "thismob", 0x348),
+        ("gameManager", "Player", 0x380),
+        ("playerMove", "dead", 0x778),
+        ("NPC", "thismob.vnum", 0x348),
+        ("NPC", "thismob.Name", 0x348 + 0x8),
+        ("NPC", "thismob.Level", 0x348 + 0x3C),
         ("NPC", "Remove", 0x502),
         ("NPC", "spawned", 0x506),
         ("NPC", "dead", 0x50C),
@@ -92,13 +123,10 @@ internal sealed class GameWorldReader : IDisposable
         ("NPC", "attackable", 0x798),
         ("NPC", "isOwnedMob", 0x7A2),
         ("PlayerCameraManager", "CameraCachePrivate", 0x1AF0),
-        ("m2data_C", "selectedActor", 0x1C0),
     ];
-    // In the "mob" struct (thismob): vnum, Name (FString), Level
-    private const int MobVnum = 0x0, MobName = 0x8, MobLevel = 0x3C;
 
     private readonly IMemorySource _memory;
-    private readonly long _moduleBase;
+    private readonly long _moduleBase, _moduleSize;
     private readonly IDisposable? _owned;
     private readonly Dictionary<int, string> _names = [];
     private readonly Dictionary<(long Class, string Field), int> _offsets = [];
@@ -109,21 +137,37 @@ internal sealed class GameWorldReader : IDisposable
     private readonly HashSet<long> _otherActors = [];
     private DateTime _otherActorsSince = DateTime.UtcNow;
     private byte[] _npc = [];
+    private long _namePool = NamePoolOffset, _gameInstance = GameInstanceOffset;
+    private bool _located;
+    private DateTime _locateAfter = DateTime.MinValue;
 
-    internal GameWorldReader(IMemorySource memory, long moduleBase, IDisposable? owned = null)
+    /// <param name="moduleSize">Size of the game's exe in memory (to search it after a game update; 0 = don't search).</param>
+    internal GameWorldReader(IMemorySource memory, long moduleBase, long moduleSize = 0, IDisposable? owned = null)
     {
         _memory = memory;
         _moduleBase = moduleBase;
+        _moduleSize = moduleSize;
         _owned = owned;
     }
 
     public string Status { get; private set; } = "Dünya bilgisi bekleniyor";
 
+    /// <summary>For tests: start from other fixed places (as after a game update).</summary>
+    internal void UseOffsets(long namePool, long gameInstance)
+    {
+        _namePool = namePool;
+        _gameInstance = gameInstance;
+        _located = false;
+    }
+
+    /// <summary>The fixed places weren't right (game update) and were found by searching.</summary>
+    public bool Searched { get; private set; }
+
     /// <returns>A reader, or null (with the reason) when the game can't be read.</returns>
     public static GameWorldReader? Open(uint processId, out string error)
     {
         var memory = ProcessMemory.Open(processId, out error);
-        return memory == null ? null : new GameWorldReader(memory, memory.ModuleBase, memory);
+        return memory == null ? null : new GameWorldReader(memory, memory.ModuleBase, memory.ModuleSize, memory);
     }
 
     /// <summary>Reads everything once; null when the game isn't in the world (loading, character select).</summary>
@@ -142,14 +186,24 @@ internal sealed class GameWorldReader : IDisposable
 
     private WorldSnapshot? ReadCore()
     {
-        if (GameManager(out long gameData) is not long gm)
+        if (!Locate())
+            return null;
+        long instance = Pointer(_moduleBase + _gameInstance);
+        long instanceClass = Pointer(instance + ObjClass);
+        if (ClassName(instanceClass) != "m2data_C")
         {
-            Status = "Oyun dünyası bulunamadı (yükleme ekranı ya da oyun güncellendi)";
+            _located = false;
+            Status = "Oyun verisi bulunamadı (oyun yükleniyor olabilir)";
             return null;
         }
+        long gm = Pointer(instance + Offset(instanceClass, "m2data_C", "gm"));
         long gmClass = Pointer(gm + ObjClass);
-        int posOffset = Offset(gmClass, "gameManager", "playerPos");
-        if (!TryVec3(gm + posOffset, out var player))
+        if (!MemoryReads.IsPointer(gm) || ClassName(gmClass) != "gameManager")
+        {
+            Status = "Oyun dünyası bulunamadı (giriş ekranı ya da yükleme ekranı)";
+            return null;
+        }
+        if (!TryVec3(gm + Offset(gmClass, "gameManager", "playerPos"), out var player))
         {
             Status = "Karakter konumu okunamadı";
             return null;
@@ -193,13 +247,33 @@ internal sealed class GameWorldReader : IDisposable
             else
                 _otherActors.Add(actor);
         }
+
         WorldMob? target = null;
-        long dataClass = Pointer(gameData + ObjClass);
-        long selected = Pointer(gameData + Offset(dataClass, "m2data_C", "selectedActor"));
+        long selected = Pointer(instance + Offset(instanceClass, "m2data_C", "selectedActor"));
         if (MemoryReads.IsPointer(selected) && Pointer(selected + ObjClass) is long selectedClass && ClassName(selectedClass) == "NPC")
             target = ReadNpc(selected, selectedClass, selected: true) as WorldMob;
-        Status = $"Bellekten: {mobs.Count} mob";
-        return new WorldSnapshot(player, camera, mobs, players, mapName, target);
+
+        var (stats, characterLevel) = ReadStats(Pointer(instance + Offset(instanceClass, "m2data_C", "loader")));
+        bool dead = false;
+        long pawn = Pointer(gm + Offset(gmClass, "gameManager", "Player"));
+        if (MemoryReads.IsPointer(pawn))
+            dead = Byte(pawn + Offset(Pointer(pawn + ObjClass), "playerMove", "dead")) is byte b && b != 0;
+
+        Status = Searched ? $"Bellekten: {mobs.Count} mob (adresler yeniden bulundu)" : $"Bellekten: {mobs.Count} mob";
+        return new WorldSnapshot(player, camera, mobs, players, mapName, target, stats, dead, characterLevel);
+    }
+
+    private (CharacterStats? Stats, int Level) ReadStats(long loader)
+    {
+        if (!MemoryReads.IsPointer(loader))
+            return (null, 0);
+        long cls = Pointer(loader + ObjClass);
+        int Int(string field) => Int32(loader + Offset(cls, "loader", field)) ?? -1;
+        int hp = Int("charData.HP"), mp = Int("charData.SP"), maxHp = Int("charData.fullHP"), maxMp = Int("charData.fullSp");
+        int level = Math.Max(0, Int("charData.Level"));
+        if (maxHp is <= 0 or > 10_000_000 || maxMp is <= 0 or > 10_000_000 || hp < 0 || mp < 0 || hp > maxHp || mp > maxMp)
+            return (null, level);
+        return (new CharacterStats(hp, mp, maxHp, maxMp), level);
     }
 
     /// <returns>A <see cref="WorldMob"/>, true for another player, or null for anything else.</returns>
@@ -211,7 +285,7 @@ internal sealed class GameWorldReader : IDisposable
         foreach (var f in Fields)
             if (f.Class == "NPC")
                 span = Math.Max(span, Offset(cls, "NPC", f.Field));
-        span = Math.Max(span + 0x100, ActorRoot + 8); // + the "mob" struct's first fields
+        span = Math.Max(span + 0x10, ActorRoot + 8);
         if (_npc.Length != span)
             _npc = new byte[span];
         if (!_memory.Read(actor, _npc, span))
@@ -232,12 +306,12 @@ internal sealed class GameWorldReader : IDisposable
         long root = BitConverter.ToInt64(data, ActorRoot);
         if (!MemoryReads.IsPointer(root) || !TryVec3(root + ComponentWorldLocation, out var position))
             return null;
-        int mob = Offset(cls, "NPC", "thismob");
-        int vnum = BitConverter.ToInt32(data, mob + MobVnum);
-        long text = BitConverter.ToInt64(data, mob + MobName);
+        int vnum = Int("thismob.vnum");
+        int nameAt = Offset(cls, "NPC", "thismob.Name");
+        long text = BitConverter.ToInt64(data, nameAt);
         if (!_mobNames.TryGetValue((vnum, text), out string? name))
-            _mobNames[(vnum, text)] = name = ReadFString(actor + mob + MobName, 64);
-        return new WorldMob(Int("ID"), vnum, name, BitConverter.ToInt32(data, mob + MobLevel), hp, maxHp, position);
+            _mobNames[(vnum, text)] = name = ReadFString(actor + nameAt, 64);
+        return new WorldMob(Int("ID"), vnum, name, Int("thismob.Level"), hp, maxHp, position);
     }
 
     private CameraView? ReadCamera(long pov)
@@ -249,26 +323,14 @@ internal sealed class GameWorldReader : IDisposable
         return new CameraView(location, pitch, yaw, roll, fov);
     }
 
-    private long? GameManager(out long gameData)
-    {
-        gameData = 0;
-        long cursor = Pointer(_moduleBase + CharacterStatsReader.HpBaseOffset);
-        foreach (long offset in GameManagerPath)
-        {
-            if (!MemoryReads.IsPointer(cursor))
-                return null;
-            gameData = cursor;
-            cursor = Pointer(cursor + offset);
-        }
-        return MemoryReads.IsPointer(cursor) && ClassName(Pointer(cursor + ObjClass)) == "gameManager" ? cursor : null;
-    }
-
     private bool TryActors(long level, out long[] actors)
     {
         actors = [];
         long data = Pointer(level + LevelActors);
-        int count = Int32(level + LevelActors + 8) ?? 0;
-        if (!MemoryReads.IsPointer(data) || count <= 0 || count > MaxActors)
+        int count = Int32(level + LevelActors + 8) ?? -1;
+        if (count == 0)
+            return true;
+        if (!MemoryReads.IsPointer(data) || count < 0 || count > MaxActors)
             return false;
         var bytes = new byte[count * 8];
         if (!_memory.Read(data, bytes, bytes.Length))
@@ -278,6 +340,93 @@ internal sealed class GameWorldReader : IDisposable
         return true;
     }
 
+    // ── Finding the two fixed places ──
+
+    /// <summary>Checks the name table and the game instance pointer; searches the exe for them when
+    /// they don't fit (after a game update). Searching is slow, so not more often than every 15 s.</summary>
+    private bool Locate()
+    {
+        if (_located)
+            return true;
+        if (IsNamePool(_moduleBase + _namePool) && IsGameInstancePointer(_moduleBase + _gameInstance))
+            return _located = true;
+        if (DateTime.UtcNow < _locateAfter)
+            return false;
+        _locateAfter = DateTime.UtcNow.AddSeconds(15);
+        if (_moduleSize <= 0)
+        {
+            Status = "Oyun belleğinde başlangıç noktası bulunamadı";
+            return false;
+        }
+        Status = "Oyun güncellenmiş olabilir; bellekte adresler aranıyor…";
+        if (!IsNamePool(_moduleBase + _namePool))
+        {
+            if (Search(IsNamePoolCandidate) is not long pool)
+            {
+                Status = "Oyunun isim tablosu bulunamadı (oyun güncellenmiş; yeni SekoBot sürümü gerekebilir)";
+                return false;
+            }
+            _namePool = pool - 0x10; // the found slot is the first block pointer
+            _names.Clear();
+            _classNames.Clear();
+            _offsets.Clear();
+            Searched = true;
+        }
+        if (!IsGameInstancePointer(_moduleBase + _gameInstance))
+        {
+            if (Search(IsGameInstancePointer) is not long instance)
+            {
+                Status = "Oyun verisi bulunamadı (karakterle oyuna girdin mi?)";
+                return false;
+            }
+            _gameInstance = instance;
+            Searched = true;
+        }
+        return _located = true;
+    }
+
+    private bool IsNamePoolCandidate(long address) => IsNamePool(address - 0x10);
+
+    /// <summary>The first two names of every Unreal name table are "None" and "ByteProperty".</summary>
+    private bool IsNamePool(long pool)
+    {
+        long block = Pointer(pool + 0x10);
+        var bytes = new byte[2 + 4 + 2 + 12];
+        if (!MemoryReads.IsPointer(block) || !_memory.Read(block, bytes, bytes.Length))
+            return false;
+        return BitConverter.ToUInt16(bytes, 0) >> 6 == 4 && Encoding.ASCII.GetString(bytes, 2, 4) == "None" &&
+               BitConverter.ToUInt16(bytes, 6) >> 6 == 12 && Encoding.ASCII.GetString(bytes, 8, 12) == "ByteProperty";
+    }
+
+    private bool IsGameInstancePointer(long address)
+    {
+        long instance = Pointer(address);
+        return MemoryReads.IsPointer(instance) && ClassName(Pointer(instance + ObjClass)) == "m2data_C";
+    }
+
+    /// <summary>Goes through every pointer-sized slot of the exe; returns the offset of the first one that passes.</summary>
+    private long? Search(Func<long, bool> test)
+    {
+        const int chunk = 0x10000;
+        var data = new byte[chunk];
+        for (long offset = 0; offset < _moduleSize; offset += chunk)
+        {
+            int size = (int)Math.Min(chunk, _moduleSize - offset);
+            if (!_memory.Read(_moduleBase + offset, data, size))
+                continue;
+            for (int i = 0; i + 8 <= size; i += 8)
+            {
+                long value = BitConverter.ToInt64(data, i);
+                // Only pointers to the heap, never into the exe itself.
+                if (!MemoryReads.IsPointer(value) || value >= _moduleBase && value < _moduleBase + _moduleSize)
+                    continue;
+                if (test(_moduleBase + offset + i))
+                    return offset + i;
+            }
+        }
+        return null;
+    }
+
     // ── Unreal type information ──
 
     /// <summary>Where a field of a game class is, from the class' own field list (fallback: the tested build).</summary>
@@ -285,19 +434,34 @@ internal sealed class GameWorldReader : IDisposable
     {
         if (_offsets.TryGetValue((cls, field), out int offset))
             return offset;
-        offset = FindProperty(cls, field) ?? Fields.First(f => f.Class == className && f.Field == field).Fallback;
+        offset = FindPath(cls, field) ?? Fields.First(f => f.Class == className && f.Field == field).Fallback;
         _offsets[(cls, field)] = offset;
         return offset;
     }
 
-    private int? FindProperty(long cls, string field)
+    /// <summary>"a.b": field b of the struct field a.</summary>
+    private int? FindPath(long cls, string path)
+    {
+        int total = 0;
+        long type = cls;
+        foreach (string part in path.Split('.'))
+        {
+            if (FindProperty(type, part) is not (int offset, long property))
+                return null;
+            total += offset;
+            type = Pointer(property + StructPropertyType);
+        }
+        return total;
+    }
+
+    private (int Offset, long Property)? FindProperty(long cls, string field)
     {
         for (int depth = 0; depth < 8 && MemoryReads.IsPointer(cls); depth++, cls = Pointer(cls + StructSuper))
         {
             long property = Pointer(cls + StructProperties);
             for (int i = 0; i < 2000 && MemoryReads.IsPointer(property); i++, property = Pointer(property + FieldNext))
                 if (Int32(property + FieldName) is int name && Name(name) == field)
-                    return Int32(property + PropertyOffset) is int o and >= 0 and < 0x100000 ? o : null;
+                    return Int32(property + PropertyOffset) is int o and >= 0 and < 0x100000 ? (o, property) : null;
         }
         return null;
     }
@@ -317,7 +481,7 @@ internal sealed class GameWorldReader : IDisposable
         if (_names.TryGetValue(index, out string? text))
             return text;
         text = "";
-        long block = Pointer(_moduleBase + NamePoolOffset + 0x10 + 8L * ((uint)index >> 16));
+        long block = Pointer(_moduleBase + _namePool + 0x10 + 8L * ((uint)index >> 16));
         if (MemoryReads.IsPointer(block))
         {
             long entry = block + 2L * (index & 0xFFFF);

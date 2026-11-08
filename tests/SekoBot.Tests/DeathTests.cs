@@ -58,7 +58,7 @@ public class DeathTests
     [Fact]
     public void Dies_waits_clicks_revive_here_heals_then_carries_on()
     {
-        var p = new BotProfile { LeashRadius = 0, SkillEverySec = new int[5] };
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5] };
         var brain = new Brain(() => p);
         brain.Start(TimeSpan.Zero);
         brain.Tick(At(0, 1));
@@ -105,7 +105,7 @@ public class DeathTests
     [Fact]
     public void Gives_up_healing_after_the_time_limit()
     {
-        var p = new BotProfile { LeashRadius = 0, SkillEverySec = new int[5] };
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5] };
         var brain = new Brain(() => p);
         brain.Start(TimeSpan.Zero);
         brain.Tick(At(0, 1));

@@ -30,7 +30,7 @@ internal sealed record KeyHoldAction(Keys Key, int Milliseconds) : BotAction
     public override string ToString() => $"Basılı tut {Key} {Milliseconds} ms";
 }
 
-/// <summary>Click the probable mobs (nearest first) until one gets selected (target bar shows).</summary>
+/// <summary>Click the probable mobs (nearest first) until one gets selected (memory shows a selected mob).</summary>
 internal sealed record FindTargetAction(IReadOnlyList<Point> Candidates) : BotAction
 {
     public override string ToString() => $"Mob ara ({Candidates.Count} aday)";

@@ -3,62 +3,6 @@ using System.Text.Json.Serialization;
 
 namespace SekoBot.Config;
 
-/// <summary>Rectangle in 0..1 coordinates of the game client area (resolution independent).</summary>
-internal readonly record struct NormRect(double X, double Y, double W, double H)
-{
-    public Rectangle ToPixels(int width, int height)
-    {
-        var r = Rectangle.FromLTRB(
-            (int)Math.Round(X * width), (int)Math.Round(Y * height),
-            (int)Math.Round((X + W) * width), (int)Math.Round((Y + H) * height));
-        return Rectangle.Intersect(r, new Rectangle(0, 0, width, height));
-    }
-
-    public static NormRect FromPixels(Rectangle r, int width, int height) =>
-        new((double)r.X / width, (double)r.Y / height, (double)r.Width / width, (double)r.Height / height);
-}
-
-/// <summary>A horizontal bar (HP/MP/target HP) and the colour of its filled part.</summary>
-internal sealed class BarSpec
-{
-    public NormRect Area { get; set; }
-    public byte R { get; set; }
-    public byte G { get; set; }
-    public byte B { get; set; }
-    public int Tolerance { get; set; } = 70;
-    /// <summary>Found automatically (may be widened/moved by the bot); false = marked by hand.</summary>
-    public bool Auto { get; set; }
-}
-
-/// <summary>
-/// How the character's world position (read from memory) converts to the big map (0..1 of its
-/// width). Learned with "Koordinat bul" or whenever the big map is open.
-/// </summary>
-internal sealed class PositionSpec
-{
-    /// <summary>v3: the position comes from the game's own player object; older searches
-    /// found the wrong values and are not used.</summary>
-    public const int CurrentVersion = 3;
-    public int Version { get; set; }
-    /// <summary>The game map this was learned on (each map has its own big map).</summary>
-    public string MapName { get; set; } = "";
-    /// <summary>The big map's x follows the world's Y (and its y the world's X).</summary>
-    public bool Swapped { get; set; }
-    public double Ax { get; set; }
-    public double Bx { get; set; }
-    public double Ay { get; set; }
-    public double By { get; set; }
-    /// <summary>How well the pairs fitted when learned (1 = perfectly).</summary>
-    public double Fit { get; set; }
-
-    /// <summary>Position on the big map (0..1 of its width) of a world position.</summary>
-    public PointF ToMap(Memory.Vec3 world)
-    {
-        double u = Swapped ? world.Y : world.X, v = Swapped ? world.X : world.Y;
-        return new PointF((float)(Ax * u + Bx), (float)(Ay * v + By));
-    }
-}
-
 internal sealed class KeyBindings
 {
     public Keys Attack { get; set; } = Keys.Space;
@@ -76,8 +20,6 @@ internal sealed class KeyBindings
     public Keys ZoomOut { get; set; } = Keys.F;
     /// <summary>Buff skills, pressed in a loop (see <see cref="BotProfile.SkillEverySec"/>).</summary>
     public Keys[] Skills { get; set; } = [Keys.F1, Keys.F2, Keys.F3, Keys.F4, Keys.F5];
-    /// <summary>Opens/closes the big map (used to stay in the starting area).</summary>
-    public Keys Map { get; set; } = Keys.M;
     /// <summary>Closes a window opened over the game (shop advert after a level-up).</summary>
     public Keys CloseWindow { get; set; } = Keys.Escape;
 }
@@ -85,7 +27,7 @@ internal sealed class KeyBindings
 internal sealed class BotProfile
 {
     /// <summary>Current profile format; older files are upgraded once by <see cref="ProfileStore"/>.</summary>
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     /// <summary>Number of skill keys (F1–F5).</summary>
     public const int SkillSlots = 5;
@@ -103,13 +45,7 @@ internal sealed class BotProfile
     /// <summary>Title of the game window; the bot connects to it on its own.</summary>
     public string GameWindowTitle { get; set; } = "Mobile2 Global";
 
-    /// <summary>Optional: the selected target's HP bar. Lets the bot keep hitting a living mob
-    /// and turn around when nothing is left.</summary>
-    public BarSpec? TargetBar { get; set; }
-
     public int PerceptionFps { get; set; } = 10;
-    /// <summary>Automatically detect the selected target HP bar (not character HP/MP).</summary>
-    public bool AutoDetectBars { get; set; } = true;
 
     public double PotionHpBelow { get; set; } = 0.55;
     public double PotionMpBelow { get; set; } = 0.25;
@@ -119,7 +55,7 @@ internal sealed class BotProfile
 
     /// <summary>
     /// Walk mode (default): camera to top-down + zoomed out (G, F), walk with W/A/S/D to the
-    /// nearest red mob name, hold Space when it is next to the character. Off: click mode.
+    /// nearest mob (from memory), hold Space when it is next to the character. Off: click mode.
     /// </summary>
     public bool NavigateMode { get; set; } = true;
     /// <summary>Walk into the biggest nearby group of mobs instead of to the single nearest one.</summary>
@@ -129,16 +65,10 @@ internal sealed class BotProfile
     /// <summary>Mobs within this share of the screen height of each other form a group.</summary>
     public double CrowdRadius { get; set; } = 0.12;
 
-    /// <summary>Stay within this distance of the starting point, as a share of the big map's
-    /// width (0 = no limit). Checked with the big map (M).</summary>
-    public double LeashRadius { get; set; } = 0.06;
-    /// <summary>How often the big map is checked (never mid-fight).</summary>
-    public int LeashCheckMs { get; set; } = 20000;
-    /// <summary>How often while walking back home.</summary>
-    public int LeashReturnCheckMs { get; set; } = 4000;
-    /// <summary>Walk this long after the first reading to learn the map direction.</summary>
-    public int CalibrationWalkMs { get; set; } = 1500;
-    /// <summary>Walking keys held but the picture still for this long = stuck against something.</summary>
+    /// <summary>Stay within this many metres of the starting point (0 = no limit). The position
+    /// comes from memory.</summary>
+    public double LeashMeters { get; set; } = 40;
+    /// <summary>Walking keys held but the character not moving for this long = stuck against something.</summary>
     public int BlockedMs { get; set; } = 700;
     /// <summary>How long to step sideways around an obstacle.</summary>
     public int SidestepMs { get; set; } = 700;
@@ -149,9 +79,6 @@ internal sealed class BotProfile
     public int CameraRefreshMs { get; set; } = 30000;
     /// <summary>A mob counts as "next to the character" within this part of the screen height.</summary>
     public double AttackRadius { get; set; } = 0.05;
-    /// <summary>Only red text with the green "Lv.N" in front counts as a mob name (filters out
-    /// damage numbers and the HP bar over the character).</summary>
-    public bool RequireLevelTag { get; set; } = true;
     /// <summary>After dying: wait until "Burada yeniden başla" can be clicked, click it, drink HP
     /// potions up to <see cref="ReviveHealTo"/>, then carry on. While on, low HP doesn't stop the bot.</summary>
     public bool ReviveOnDeath { get; set; } = true;
@@ -168,7 +95,7 @@ internal sealed class BotProfile
     /// <summary>Walking to the same mob longer than this means stuck: try exploring instead.</summary>
     public int MoveStuckMs { get; set; } = 8000;
 
-    /// <summary>Find mobs by their movement on screen and click them; a target bar confirms the hit.</summary>
+    /// <summary>Click mode: click the mobs (from memory) and check in memory that one got selected.</summary>
     public bool AutoTarget { get; set; } = true;
     /// <summary>How long to look for a mob before turning the camera.</summary>
     public int SearchTimeoutMs { get; set; } = 6000;
@@ -179,7 +106,7 @@ internal sealed class BotProfile
 
     /// <summary>How long the attack key is held per cycle (blind attack, without mob search).</summary>
     public int FightMs { get; set; } = 4000;
-    /// <summary>Upper limit while the target bar still shows a living target.</summary>
+    /// <summary>Upper limit while the selected mob is still alive.</summary>
     public int FightMaxMs { get; set; } = 20000;
     public int LootPresses { get; set; } = 3;
     /// <summary>Rotate the camera every N cycles (0 = only when nothing is around).</summary>
@@ -195,9 +122,6 @@ internal sealed class BotProfile
     public int RecordMaxMb { get; set; } = 1500;
 
     public KeyBindings Keys { get; set; } = new();
-
-    /// <summary>The character's position in memory; null until "Koordinat bul" found it.</summary>
-    public PositionSpec? Position { get; set; }
 }
 
 internal static class ProfileStore
@@ -267,6 +191,9 @@ internal static class ProfileStore
         // v2: attacking at 10 % of the screen height started too far from the mob.
         if (Math.Abs(profile.AttackRadius - 0.10) < 0.0001)
             profile.AttackRadius = 0.05;
+        // v3: everything from memory; the area limit is in metres now (the old one was a share of the big map).
+        if (profile.Version < 3 && profile.LeashMeters <= 0)
+            profile.LeashMeters = 40;
         profile.Version = BotProfile.CurrentVersion;
         return true;
     }

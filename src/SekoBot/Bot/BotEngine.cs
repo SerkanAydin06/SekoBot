@@ -17,7 +17,7 @@ internal sealed record EngineStats(
     int Deaths, string Area);
 
 /// <summary>
-/// Pipeline: capture → (latest frame only) → perception → brain → input.
+/// Pipeline: capture → (latest frame only) → memory + perception → brain → input.
 /// Each stage runs at its own pace; a slow stage only ever sees the newest frame,
 /// so nothing queues up and latency stays flat.
 /// </summary>
@@ -26,7 +26,6 @@ internal sealed partial class BotEngine : IDisposable
     private readonly WindowInfo _window;
     private readonly Action<string> _log;
     private readonly Brain _brain;
-    private readonly CharacterStatsReader _statsReader;
     private readonly CancellationTokenSource _cts = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly object _frameGate = new();
@@ -43,14 +42,6 @@ internal sealed partial class BotEngine : IDisposable
     private int _previewFps;
     private ChannelWriter<Frame>? _writer;
     private SessionRecorder? _recorder;
-    private readonly AutoBars _autoBars = new();
-    private readonly MotionDetector _motion = new();
-    private readonly object _spotGate = new();
-    private Point? _targetSpot;
-    private TimeSpan _targetSpotAt;
-    private TimeSpan _targetConstSince = TimeSpan.FromDays(-1);
-    private double _targetConstValue = -1;
-    private TimeSpan _lastBarSearch = TimeSpan.FromDays(-1), _barSearchStarted = TimeSpan.FromDays(-1);
     private bool _disposed;
     private bool _statsOk = true, _statsWarned;
     private TimeSpan _statsFailSince = TimeSpan.FromDays(-1);
@@ -61,22 +52,19 @@ internal sealed partial class BotEngine : IDisposable
         Profile = profile;
         _log = log;
         _brain = new Brain(() => Profile);
-        _statsReader = new CharacterStatsReader(window.ProcessId);
     }
 
     public WindowInfo Window => _window;
     public bool GameMinimized => WindowService.IsMinimized(_window);
     public BotProfile Profile { get; set; }
     public GameState? State => Volatile.Read(ref _state);
-    public string StatsSource => _statsReader.Status;
-    /// <summary>False while HP/MP could not be read from memory for a while: no potions then.</summary>
+    public string StatsSource => _memoryStatus;
+    /// <summary>False while the game's memory could not be read for a while.</summary>
     public bool StatsOk => Volatile.Read(ref _statsOk);
 
     /// <summary>Raised from a worker thread when capture stops or the bot stops itself.</summary>
     public event Action<string>? CaptureFailed;
     public event Action<string>? BotStopped;
-    /// <summary>Raised from the pipeline thread when automatic bar detection changed the profile.</summary>
-    public event Action<string>? BarsChanged;
 
     public void Start(int previewFps)
     {
@@ -137,60 +125,33 @@ internal sealed partial class BotEngine : IDisposable
                     lastAnalysis = now;
                     try
                     {
+                        var watch = Stopwatch.StartNew();
                         var world = ReadWorld(now);
-                        // With the selected mob from memory, the target bar on screen isn't needed.
-                        if (world == null)
-                            SearchBars(frame, profile, now);
-                        var state = Perception.Analyze(frame, profile, now);
-                        if (world != null)
-                            state = state with { TargetHp = world.TargetHp, TargetFromMemory = true };
-                        // Memory stats override visual bars only when all four values are valid.
-                        // Target HP and all other perception remain visual.
-                        if (_statsReader.TryRead(out var stats))
-                            state = state with { Hp = stats.HpFraction, Mp = stats.MpFraction };
-                        TrackStats(state.Hp != null, now);
-                        if (LivePosition(world) is PointF live)
-                            state = state with { LivePosition = live };
-                        if (profile.ReviveOnDeath && BotRunning)
+                        var state = new GameState(now, frame.Width, frame.Height,
+                            world?.Stats?.HpFraction, world?.Stats?.MpFraction, world?.TargetHp, 0)
                         {
-                            var (dead, ready) = DeathDetector.Check(frame);
-                            state = state with { Dead = dead, ReviveReady = ready };
-                        }
+                            Position = world?.Player,
+                            Camera = world?.Camera,
+                            Walking = Walking(world, now),
+                            Dead = world?.Dead == true,
+                            TargetSpot = MemoryTargetSpot(world, frame.Width, frame.Height),
+                        };
+                        // The "Burada yeniden başla" button and pop-up windows are only on screen.
+                        if (state.Dead && profile.ReviveOnDeath && BotRunning)
+                            state = state with { ReviveReady = DeathDetector.Check(frame).ReviveReady };
                         if (profile.ClosePopups && BotRunning && !state.Dead)
                             state = state with { PopupOpen = PopupDetector.IsOpen(frame) };
-                        if (profile.NavigateMode)
-                        {
-                            // Mobs from memory; without memory the red names (top-down camera: the name sits right on the mob).
-                            int down = (int)(frame.Height * 0.02);
-                            var mobs = MemoryMobs(world, frame.Width, frame.Height) ??
-                                       NameFinder.Find(frame, profile.RequireLevelTag)
-                                           .Select(n => new Point(n.X + n.Width / 2, n.Y + n.Height / 2 + down))
-                                           .ToList();
-                            _motion.Update(frame, now); // only to tell whether the picture moves (walking vs stuck)
-                            state = state with
-                            {
-                                MobCandidates = mobs,
-                                ScreenMoving = _motion.LastChange > 0.08
-                            };
-                        }
-                        else if (profile.AutoTarget)
-                        {
-                            var moving = _motion.Update(frame, now);
-                            var mobs = (MemoryMobs(world, frame.Width, frame.Height) ??
-                                        MobLocator.Combine(NameFinder.Find(frame), moving, frame.Width, frame.Height,
-                                            name => MobLocator.BodyBelow(frame, name)))
-                                .Where(m => !_motion.RecentlyMissed(m, now)).ToList();
-                            state = state with { MobCandidates = mobs, TargetSpot = TrackTarget(state, mobs, now) };
-                        }
-                        if (MemoryTargetSpot(world, frame.Width, frame.Height) is Point targetSpot)
-                            state = state with { TargetSpot = targetSpot };
-                        if ((_brain.WantsMap || _finderWantsMap) && MapReader.Read(frame) is { } map)
-                            state = state with { MapOpen = true, MapPosition = map.Arrow };
-                        LearnMap(state, world);
+                        var mobs = MemoryMobs(world, frame.Width, frame.Height) ?? [];
+                        if (!profile.NavigateMode)
+                            mobs = mobs.Where(m => !RecentlyMissed(m, now)).ToList();
+                        state = state with { MobCandidates = mobs, AnalysisMs = watch.Elapsed.TotalMilliseconds };
                         Volatile.Write(ref _state, state);
-                        CheckTargetBar(state, profile, frame, now);
-                        var (phase, actions) = TickBot(state);
-                        Volatile.Read(ref _recorder)?.Record(frame, state, phase, actions, IsImportant(actions, profile));
+                        // No memory (loading screen): the bot waits.
+                        if (TrackMemory(world != null, now))
+                        {
+                            var (phase, actions) = TickBot(state);
+                            Volatile.Read(ref _recorder)?.Record(frame, state, phase, actions, IsImportant(actions, profile));
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -251,87 +212,6 @@ internal sealed partial class BotEngine : IDisposable
         actions.Any(a => a is StopAction ||
                          a is KeyTapAction tap && (tap.Key == profile.Keys.HpPotion || tap.Key == profile.Keys.MpPotion));
 
-    /// <summary>
-    /// A real target bar changes (mob gets hit) or disappears (mob dies, nothing selected).
-    /// One that shows the same value for 45 s while the bot runs is some other red thing at
-    /// the top of the screen: forget it, never pick that spot again, and look for the real one.
-    /// </summary>
-    private void CheckTargetBar(GameState state, BotProfile profile, Frame frame, TimeSpan now)
-    {
-        if (profile.TargetBar is not { Auto: true } bar || !BotRunning || !state.HasTarget || state.TargetFromMemory)
-        {
-            _targetConstSince = TimeSpan.FromDays(-1);
-            return;
-        }
-        double value = state.TargetHp!.Value;
-        if (_targetConstSince < TimeSpan.Zero || Math.Abs(value - _targetConstValue) > 0.01)
-        {
-            _targetConstSince = now;
-            _targetConstValue = value;
-            return;
-        }
-        if (now - _targetConstSince < TimeSpan.FromSeconds(45))
-            return;
-        _targetConstSince = TimeSpan.FromDays(-1);
-        _autoBars.Reject(bar.Area.ToPixels(frame.Width, frame.Height), frame.Width, frame.Height);
-        profile.TargetBar = null;
-        _log("Hedef barı sanılan yer hiç değişmiyor; gerçek hedef barı değil. Yeniden aranıyor.");
-        BarsChanged?.Invoke("");
-    }
-
-    /// <summary>Follows the selected mob on screen: the moving thing nearest to where it was.</summary>
-    private Point? TrackTarget(GameState state, IReadOnlyList<Point> mobs, TimeSpan now)
-    {
-        lock (_spotGate)
-        {
-            if (_targetSpot is not Point spot)
-                return null;
-            if (!state.HasTarget)
-            {
-                // Give the target bar a moment to show after the click, then forget the spot.
-                if (now - _targetSpotAt > TimeSpan.FromSeconds(2))
-                    _targetSpot = null;
-                return _targetSpot;
-            }
-            static double Dist(Point a, Point b) => Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(a.Y - b.Y, 2));
-            var nearest = mobs.Where(m => Dist(m, spot) < 120).OrderBy(m => Dist(m, spot)).ToList();
-            if (nearest.Count > 0)
-            {
-                _targetSpot = nearest[0];
-                _targetSpotAt = now;
-            }
-            return _targetSpot;
-        }
-    }
-
-    // ── Automatic bar detection ──────────────────────────────────
-
-    private void SearchBars(Frame frame, BotProfile profile, TimeSpan now)
-    {
-        if (!profile.AutoDetectBars)
-            return;
-        bool missing = profile.TargetBar == null;
-        // Look often while a bar is unknown (the target bar only shows after a click),
-        // then now and then (to widen a bar that was not full).
-        if (now - _lastBarSearch < TimeSpan.FromSeconds(missing ? 1 : 3))
-            return;
-        _lastBarSearch = now;
-        if (_barSearchStarted < TimeSpan.Zero)
-            _barSearchStarted = now;
-        try
-        {
-            var before = profile.TargetBar;
-            var messages = _autoBars.Apply(profile, BarFinder.Find(frame), frame);
-            // Also fires when a bar was only widened (no message), so the profile gets saved.
-            if (before != profile.TargetBar)
-                BarsChanged?.Invoke(string.Join("  ", messages));
-        }
-        catch (Exception ex)
-        {
-            _log("Otomatik bar arama hatası: " + ex.Message);
-        }
-    }
-
     // ── Recording ────────────────────────────────────────────────
 
     public bool IsRecording => Volatile.Read(ref _recorder) != null;
@@ -362,29 +242,27 @@ internal sealed partial class BotEngine : IDisposable
 
     public bool StartBot(bool dryRun, bool background, out string error)
     {
-        if (FindingCoordinates)
-        {
-            error = "Koordinat aranıyor; bitmesini bekle (ya da aramayı durdur).";
-            return false;
-        }
         error = "";
         if (GameMinimized)
         {
             error = "Oyun simge durumunda; önce oyunu geri aç.";
             return false;
         }
-        // Memory is only read on the perception thread; here just report what it last saw.
-        if (!StatsOk)
-            _log("Uyarı: HP/MP bellekten okunamıyor (" + _statsReader.Status + "). Okunana kadar iksir içilmez.");
+        // Memory is only read on the perception thread; here just look at what it last saw.
+        if (World == null)
+        {
+            error = "Oyunun belleği okunamıyor (" + _memoryStatus + "). SekoBot'u yönetici olarak aç ve karakterle oyuna gir.";
+            return false;
+        }
         lock (_botGate)
         {
             if (_input != null)
                 return true;
             _input = new InputExecutor(_window, dryRun, _log,
-                () => State is { TargetFromMemory: true } s ? s.HasTarget : Profile.TargetBar == null ? null : State?.HasTarget == true,
+                () => State is { TargetHp: not null } s ? s.HasTarget : null,
                 () => State?.TargetHp,
-                spot => _motion.MarkMiss(spot, _clock.Elapsed),
-                spot => { lock (_spotGate) { _targetSpot = spot; _targetSpotAt = _clock.Elapsed; } },
+                MarkMiss,
+                _ => { }, // the selected mob's place on screen comes from memory
                 background);
             _botStarted = _clock.Elapsed;
             _brain.Start(_clock.Elapsed);
@@ -465,8 +343,10 @@ internal sealed partial class BotEngine : IDisposable
             return _latest == null ? default : work(_latest);
     }
 
-    /// <summary>A failed read is only reported after 2 s (loading screens, teleports), and once.</summary>
-    private void TrackStats(bool ok, TimeSpan now)
+    /// <summary>Notes whether memory could be read. A short gap (loading screen, teleport) is
+    /// waited out; a long one is reported and stops the bot.</summary>
+    /// <returns>True when the bot may act this tick.</returns>
+    private bool TrackMemory(bool ok, TimeSpan now)
     {
         if (ok)
         {
@@ -475,21 +355,27 @@ internal sealed partial class BotEngine : IDisposable
             if (_statsWarned)
             {
                 _statsWarned = false;
-                _log("HP/MP yeniden bellekten okunuyor ✓");
+                _log("Oyunun belleği yeniden okunuyor ✓");
             }
-            return;
+            return true;
         }
         if (_statsFailSince < TimeSpan.Zero)
             _statsFailSince = now;
         if (now - _statsFailSince < TimeSpan.FromSeconds(2))
-            return;
+            return false;
         Volatile.Write(ref _statsOk, false);
         if (!_statsWarned)
         {
             _statsWarned = true;
-            _log("Uyarı: HP/MP bellekten okunamıyor (" + _statsReader.Status + "). Okunana kadar iksir içilmez. " +
-                 "Oyun güncellendiyse bellek adresleri değişmiş olabilir.");
+            _log("Uyarı: oyunun belleği okunamıyor (" + _memoryStatus + "). Bot bekliyor.");
         }
+        if (BotRunning && now - _statsFailSince >= MemoryLostStop)
+        {
+            const string reason = "oyunun belleği okunamıyor";
+            StopBot(reason);
+            BotStopped?.Invoke(reason);
+        }
+        return false;
     }
 
     public void Dispose()
@@ -499,9 +385,7 @@ internal sealed partial class BotEngine : IDisposable
         _disposed = true;
         StopBot("bağlantı kapandı");
         StopRecording();
-        _finderCts?.Cancel();
         _cts.Cancel();
-        try { _finderTask?.Wait(2000); } catch { }
         _capture?.Dispose();
         try { _loop?.Wait(1500); } catch { }
         lock (_frameGate)
@@ -509,7 +393,6 @@ internal sealed partial class BotEngine : IDisposable
             _latest?.Dispose();
             _latest = null;
         }
-        _statsReader.Dispose();
         lock (_worldGate)
         {
             _world?.Dispose();
