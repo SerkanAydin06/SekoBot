@@ -13,7 +13,7 @@ internal sealed partial class BotEngine
 {
     /// <summary>What the bot sees on screen from memory: the mobs it may go for (nearest to us
     /// first), the ones to go for first, and the items close by. Null when the camera can't be read.</summary>
-    internal static (List<Point> Mobs, List<Point> Priority, List<GroundSpot> Drops)? MemoryView(
+    internal static (List<Point> Mobs, List<Point> Priority, List<GroundSpot> Drops, bool Metins)? MemoryView(
         WorldSnapshot? world, BotProfile profile, int width, int height)
     {
         if (world?.Camera is not CameraView camera)
@@ -38,15 +38,26 @@ internal sealed partial class BotEngine
                 if (item.Position.DistanceXY(world.Player) <= profile.DropRangeMetres * 100 &&
                     camera.ToScreen(item.Position, width, height) is PointF p && OnPlayfield(p, width, height))
                     drops.Add(new GroundSpot(item.Id, Point.Round(p)));
-        return (mobs, attackers.Count > 0 ? attackers : metins, drops);
+        // Metin stones set to "first" come before everything, also before mobs attacking us
+        // (those stand around the stone and get hit too).
+        return (mobs, metins.Count > 0 ? metins : attackers, drops, metins.Count > 0);
     }
 
     /// <summary>Whether the bot should go for this mob, by the profile's choices. A mob that is
-    /// attacking us is always fought back (except a Metin stone set to "skip", which never attacks).</summary>
+    /// attacking us is always fought back, and a Metin stone set to "first" is always gone for
+    /// (the level and name filters are for mobs).</summary>
     internal static bool Wanted(WorldMob mob, BotProfile profile)
     {
-        if (mob.IsMetin && profile.Metins == MetinMode.Skip)
-            return false;
+        if (mob.IsMetin)
+            return profile.Metins != MetinMode.Skip &&
+                   (profile.Metins == MetinMode.Prefer || WantedByFilters(mob, profile));
+        if (mob.AttacksMe)
+            return true;
+        return WantedByFilters(mob, profile);
+    }
+
+    private static bool WantedByFilters(WorldMob mob, BotProfile profile)
+    {
         if (mob.AttacksMe)
             return true;
         if (profile.MaxMobLevel > 0 && mob.Level > profile.MaxMobLevel)
@@ -54,8 +65,7 @@ internal sealed partial class BotEngine
         if (Names(profile.SkipMobs).Any(n => mob.Name.Contains(n, StringComparison.CurrentCultureIgnoreCase)))
             return false;
         var only = Names(profile.OnlyMobs);
-        if (only.Count > 0 && !(mob.IsMetin && profile.Metins == MetinMode.Prefer) &&
-            !only.Any(n => mob.Name.Contains(n, StringComparison.CurrentCultureIgnoreCase)))
+        if (only.Count > 0 && !only.Any(n => mob.Name.Contains(n, StringComparison.CurrentCultureIgnoreCase)))
             return false;
         return true;
     }

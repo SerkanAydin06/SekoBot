@@ -151,6 +151,7 @@ internal sealed partial class BotEngine : IDisposable
                         {
                             MobCandidates = mobs,
                             PriorityMobs = view?.Priority ?? [],
+                            PriorityAreMetins = view?.Metins == true,
                             Drops = view?.Drops ?? [],
                             AnalysisMs = watch.Elapsed.TotalMilliseconds,
                         };
