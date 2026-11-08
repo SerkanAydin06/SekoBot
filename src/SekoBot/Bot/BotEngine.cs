@@ -144,10 +144,17 @@ internal sealed partial class BotEngine : IDisposable
                             state = state with { ReviveReady = DeathDetector.Check(frame).ReviveReady };
                         if (profile.ClosePopups && BotRunning && !state.Dead)
                             state = state with { PopupOpen = PopupDetector.IsOpen(frame) };
-                        var mobs = MemoryMobs(world, frame.Width, frame.Height) ?? [];
+                        var view = MemoryView(world, profile, frame.Width, frame.Height);
+                        var mobs = view?.Mobs ?? [];
                         if (!profile.NavigateMode)
                             mobs = mobs.Where(m => !RecentlyMissed(m, now)).ToList();
-                        state = state with { MobCandidates = mobs, AnalysisMs = watch.Elapsed.TotalMilliseconds };
+                        state = state with
+                        {
+                            MobCandidates = mobs,
+                            PriorityMobs = view?.Priority ?? [],
+                            Drops = view?.Drops ?? [],
+                            AnalysisMs = watch.Elapsed.TotalMilliseconds,
+                        };
                         Volatile.Write(ref _state, state);
                         // No memory (loading screen): the bot waits.
                         if (TrackMemory(world != null, now))
@@ -260,6 +267,11 @@ internal sealed partial class BotEngine : IDisposable
         if (World == null)
         {
             error = "Oyunun belleği okunamıyor (" + _memoryStatus + "). SekoBot'u yönetici olarak aç ve karakterle oyuna gir.";
+            return false;
+        }
+        if (World.InSafeZone && Profile.StopInSafeZone)
+        {
+            error = "Karakter güvenli bölgede (şehirde). Önce avlanma alanına git.";
             return false;
         }
         lock (_botGate)

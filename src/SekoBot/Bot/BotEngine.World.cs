@@ -95,6 +95,14 @@ internal sealed partial class BotEngine
                 StopFor($"GM görüldü ({gm.Name})");
         }
 
+        if (world.InSafeZone && profile.StopInSafeZone)
+        {
+            _log("⚠ Karakter güvenli bölgeye (şehre) girdi; bot durduruluyor.");
+            Alert();
+            StopFor("güvenli bölge");
+            return;
+        }
+
         if (world.Progress?.FreeSlots() is not int free)
             return;
         if (free <= 0 && profile.StopWhenInventoryFull)

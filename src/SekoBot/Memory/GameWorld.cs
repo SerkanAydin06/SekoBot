@@ -16,7 +16,13 @@ internal readonly record struct CharacterStats(int Hp, int Mp, int MaxHp, int Ma
 }
 
 /// <summary>A mob that can be attacked.</summary>
-internal sealed record WorldMob(int Id, int Vnum, string Name, int Level, int Hp, int MaxHp, Vec3 Position);
+/// <param name="AttacksMe">The mob is after our character.</param>
+/// <param name="IsMetin">A Metin stone (doesn't move or fight back, has a lot of HP).</param>
+internal sealed record WorldMob(int Id, int Vnum, string Name, int Level, int Hp, int MaxHp, Vec3 Position,
+    bool AttacksMe = false, bool IsMetin = false);
+
+/// <summary>An item lying on the ground.</summary>
+internal readonly record struct GroundItem(long Id, Vec3 Position);
 
 /// <summary>A mob that just died (it stays in the world for a moment).</summary>
 internal readonly record struct DeadMob(int Id, Vec3 Position);
@@ -124,9 +130,12 @@ internal sealed record CameraView(Vec3 Location, double Pitch, double Yaw, doubl
 /// <param name="DeadMobs">Mobs that just died.</param>
 /// <param name="Progress">Experience, money and inventory, when they could be read.</param>
 /// <param name="Players">The other players around (with <paramref name="OtherPlayers"/> of them).</param>
+/// <param name="Drops">Items lying on the ground.</param>
+/// <param name="InSafeZone">The character is in a safe zone (town).</param>
 internal sealed record WorldSnapshot(Vec3 Player, CameraView? Camera, IReadOnlyList<WorldMob> Mobs, int OtherPlayers, string MapName,
     WorldMob? Target = null, CharacterStats? Stats = null, bool Dead = false, int Level = 0,
-    IReadOnlyList<DeadMob>? DeadMobs = null, CharacterProgress? Progress = null, IReadOnlyList<OtherPlayer>? Players = null)
+    IReadOnlyList<DeadMob>? DeadMobs = null, CharacterProgress? Progress = null, IReadOnlyList<OtherPlayer>? Players = null,
+    IReadOnlyList<GroundItem>? Drops = null, bool InSafeZone = false)
 {
     /// <summary>The selected mob's health (0..1); 0 when nothing (alive) is selected.</summary>
     public double TargetHp => Target is { MaxHp: > 0 } t ? Math.Clamp((double)t.Hp / t.MaxHp, 0, 1) : 0;
@@ -189,6 +198,8 @@ internal sealed class GameWorldReader : IDisposable
         ("gameManager", "mapname", 0x958),
         ("gameManager", "Player", 0x380),
         ("playerMove", "dead", 0x778),
+        ("playerMove", "isInSafe", 0x87C),
+        ("droppedItem", "Disabled", 0x234),
         ("NPC", "thismob.vnum", 0x348),
         ("NPC", "thismob.Name", 0x348 + 0x8),
         ("NPC", "thismob.Level", 0x348 + 0x3C),
@@ -203,6 +214,8 @@ internal sealed class GameWorldReader : IDisposable
         ("NPC", "isOwnedMob", 0x7A2),
         ("NPC", "playername", 0x640),
         ("NPC", "isGM", 0x6B5),
+        ("NPC", "targetActorMe", 0x860),
+        ("NPC", "thismob.Type", 0x348 + 0x28),
         ("PlayerCameraManager", "CameraCachePrivate", 0x1AF0),
     ];
 
@@ -213,6 +226,9 @@ internal sealed class GameWorldReader : IDisposable
     private readonly Dictionary<(long Class, string Field), int> _offsets = [];
     private readonly Dictionary<long, string> _classNames = [];
     private readonly Dictionary<(int Vnum, long Text), string> _mobNames = [];
+    private readonly Dictionary<int, bool> _metins = [];
+    /// <summary>Our character (the pawn), to tell which mobs are after us.</summary>
+    private long _pawn;
     private readonly byte[] _buffer = new byte[64];
     /// <summary>Actors that are not NPCs (trees, lights, …): their class isn't read again for a while.</summary>
     private readonly HashSet<long> _otherActors = [];
@@ -291,6 +307,7 @@ internal sealed class GameWorldReader : IDisposable
         }
         string mapName = ReadFString(gm + Offset(gmClass, "gameManager", "mapname"), 64);
 
+        _pawn = Pointer(gm + Offset(gmClass, "gameManager", "Player"));
         long level = Pointer(gm + ObjOuter);
         if (!MemoryReads.IsPointer(level) || !TryActors(level, out long[] actors))
         {
@@ -302,6 +319,7 @@ internal sealed class GameWorldReader : IDisposable
         var mobs = new List<WorldMob>();
         var deadMobs = new List<DeadMob>();
         var players = new List<OtherPlayer>();
+        var drops = new List<GroundItem>();
         if (DateTime.UtcNow - _otherActorsSince > TimeSpan.FromSeconds(10))
         {
             // Memory of removed actors gets reused: look at everything again now and then.
@@ -327,6 +345,13 @@ internal sealed class GameWorldReader : IDisposable
             }
             else if (className == "PlayerCameraManager")
                 camera ??= ReadCamera(actor + Offset(cls, className, "CameraCachePrivate") + CameraCachePov);
+            else if (className == "droppedItem")
+            {
+                // Picked-up items are kept around switched off.
+                if (Byte(actor + Offset(cls, className, "Disabled")) == 0 &&
+                    Pointer(actor + ActorRoot) is long itemRoot && TryVec3(itemRoot + ComponentWorldLocation, out var at))
+                    drops.Add(new GroundItem(actor, at));
+            }
             else
                 _otherActors.Add(actor);
         }
@@ -339,13 +364,18 @@ internal sealed class GameWorldReader : IDisposable
         long loader = Pointer(instance + Offset(instanceClass, "m2data_C", "loader"));
         var (stats, characterLevel) = ReadStats(loader);
         var progress = ReadProgress(loader);
-        bool dead = false;
-        long pawn = Pointer(gm + Offset(gmClass, "gameManager", "Player"));
+        bool dead = false, safe = false;
+        long pawn = _pawn;
         if (MemoryReads.IsPointer(pawn))
-            dead = Byte(pawn + Offset(Pointer(pawn + ObjClass), "playerMove", "dead")) is byte b && b != 0;
+        {
+            long pawnClass = Pointer(pawn + ObjClass);
+            dead = Byte(pawn + Offset(pawnClass, "playerMove", "dead")) is byte b && b != 0;
+            safe = Byte(pawn + Offset(pawnClass, "playerMove", "isInSafe")) is byte s && s != 0;
+        }
 
         Status = Searched ? $"Bellekten: {mobs.Count} mob (adresler yeniden bulundu)" : $"Bellekten: {mobs.Count} mob";
-        return new WorldSnapshot(player, camera, mobs, players.Count, mapName, target, stats, dead, characterLevel, deadMobs, progress, players);
+        return new WorldSnapshot(player, camera, mobs, players.Count, mapName, target, stats, dead, characterLevel, deadMobs, progress, players,
+            drops, safe);
     }
 
     private (CharacterStats? Stats, int Level) ReadStats(long loader)
@@ -462,7 +492,11 @@ internal sealed class GameWorldReader : IDisposable
         long text = BitConverter.ToInt64(data, nameAt);
         if (!_mobNames.TryGetValue((vnum, text), out string? name))
             _mobNames[(vnum, text)] = name = ReadFString(actor + nameAt, 64);
-        return new WorldMob(Int("ID"), vnum, name, Int("thismob.Level"), hp, maxHp, position);
+        if (!_metins.TryGetValue(vnum, out bool metin))
+            _metins[vnum] = metin = vnum is >= 8000 and < 9000 || ReadFString(actor + Offset(cls, "NPC", "thismob.Type"), 8) == "2";
+        long after = BitConverter.ToInt64(data, Offset(cls, "NPC", "targetActorMe"));
+        bool attacksMe = _pawn != 0 && after == _pawn;
+        return new WorldMob(Int("ID"), vnum, name, Int("thismob.Level"), hp, maxHp, position, attacksMe, metin);
     }
 
     private CameraView? ReadCamera(long pov)

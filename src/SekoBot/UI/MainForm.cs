@@ -136,7 +136,7 @@ internal sealed class MainForm : Form
         // ── Settings tabs ────────────────────────────────────────
         var settings = new Card { Bounds = new Rectangle(12, 544, 760, 204) };
         Controls.Add(settings);
-        string[] tabNames = ["Saldırı", "İksir & Buff", "Alan", "Tuşlar", "Gelişmiş"];
+        string[] tabNames = ["Saldırı", "Hedef", "İksir & Buff", "Alan", "Tuşlar", "Gelişmiş"];
         _tabButtons = new Button[tabNames.Length];
         _tabPages = new Panel[tabNames.Length];
         for (int i = 0; i < tabNames.Length; i++)
@@ -162,7 +162,32 @@ internal sealed class MainForm : Form
             "Küçük sayı = daha yakından saldırır.", 76);
 
         // İksir & Buff
-        var potions = _tabPages[1];
+        // Hedef: which mobs to go for, and loot.
+        var targets = _tabPages[1];
+        NumberRow(targets, "En yüksek mob seviyesi", 0, 0, 0, 120, _profile.MaxMobLevel, 0, 1,
+            v => _profile.MaxMobLevel = (int)v);
+        Check(targets, "Önce bana saldıran mobu kes", 370, 0, 360, _profile.AttackersFirst, v => _profile.AttackersFirst = v);
+        Theme.Label(targets, "Metin taşları", new Rectangle(0, 34, 190, 26), 9f, Theme.Muted);
+        var metins = new ComboBox
+        {
+            Bounds = new Rectangle(196, 34, 150, 26),
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            BackColor = Theme.Inset,
+            ForeColor = Theme.Text,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 9f),
+        };
+        metins.Items.AddRange(["Atla", "Normal mob gibi", "Önce onlara git"]);
+        metins.SelectedIndex = (int)_profile.Metins;
+        metins.SelectedIndexChanged += (_, _) => { _profile.Metins = (MetinMode)metins.SelectedIndex; SaveProfile(); };
+        targets.Controls.Add(metins);
+        Check(targets, "Yerdeki eşyalara yürüyüp topla", 370, 34, 360, _profile.PickUpDrops, v => _profile.PickUpDrops = v);
+        TextRow(targets, "Sadece bu moblar", 0, 68, _profile.OnlyMobs, v => _profile.OnlyMobs = v);
+        TextRow(targets, "Bu mobları atla", 370, 68, _profile.SkipMobs, v => _profile.SkipMobs = v);
+        Hint(targets, "Mob adlarını virgülle yaz (ör. \"Kurt, Domuz\"); adın bir kısmı yeter. Boş = hepsi. " +
+            "Seviye 0 = sınırsız. Sana saldıran mob her zaman kesilir.", 102);
+
+        var potions = _tabPages[2];
         NumberRow(potions, "HP iksiri (% altında)", 0, 0, 5, 95, Math.Round(_profile.PotionHpBelow * 100), 0, 1,
             v => _profile.PotionHpBelow = v / 100);
         NumberRow(potions, "MP iksiri (% altında)", 0, 34, 0, 95, Math.Round(_profile.PotionMpBelow * 100), 0, 1,
@@ -180,7 +205,7 @@ internal sealed class MainForm : Form
         }
 
         // Alan
-        var area = _tabPages[2];
+        var area = _tabPages[3];
         NumberRow(area, "Alan sınırı (metre)", 0, 0, 0, 500, Math.Round(_profile.LeashMeters), 0, 5,
             v => _profile.LeashMeters = v);
         Theme.Label(area, "Bot başladığı yeri hatırlar ve bu sınırın dışına çıkınca geri yürür. Yerini oyunun " +
@@ -188,10 +213,11 @@ internal sealed class MainForm : Form
             new Rectangle(370, 0, 360, 68), 9f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
         Check(area, "GM görünce dur", 0, 34, 180, _profile.StopNearGm, v => _profile.StopNearGm = v);
         Check(area, "Envanter dolunca dur", 190, 34, 175, _profile.StopWhenInventoryFull, v => _profile.StopWhenInventoryFull = v);
+        Check(area, "Güvenli bölgede (şehirde) dur", 0, 110, 300, _profile.StopInSafeZone, v => _profile.StopInSafeZone = v);
         _positionState = Theme.Label(area, "", new Rectangle(0, 74, 736, 32), 9f, Theme.Muted);
 
         // Tuşlar
-        var keys = _tabPages[3];
+        var keys = _tabPages[4];
         var k = _profile.Keys;
         (string, Func<Keys>, Action<Keys>)[] bindings =
         [
@@ -219,7 +245,7 @@ internal sealed class MainForm : Form
         Theme.Label(keys, "Değiştirmek için tuşa tıkla, sonra yeni tuşa bas.", new Rectangle(0, 122, 736, 22), 8.5f, Theme.Muted);
 
         // Gelişmiş
-        var advanced = _tabPages[4];
+        var advanced = _tabPages[5];
         _dryRun = new CheckBox
         {
             Text = "Kuru çalışma (tuş göndermez)",
@@ -344,6 +370,22 @@ internal sealed class MainForm : Form
             Font = new Font("Segoe UI", 9f)
         };
         box.CheckedChanged += (_, _) => { apply(box.Checked); SaveProfile(); };
+        parent.Controls.Add(box);
+    }
+
+    private void TextRow(Control parent, string caption, int x, int y, string value, Action<string> apply)
+    {
+        Theme.Label(parent, caption, new Rectangle(x, y, 130, 26), 9f, Theme.Muted);
+        var box = new TextBox
+        {
+            Bounds = new Rectangle(x + 134, y, 220, 26),
+            Text = value,
+            BackColor = Theme.Inset,
+            ForeColor = Theme.Text,
+            BorderStyle = BorderStyle.FixedSingle,
+            Font = new Font("Segoe UI", 9f),
+        };
+        box.TextChanged += (_, _) => { apply(box.Text); SaveProfile(); };
         parent.Controls.Add(box);
     }
 
