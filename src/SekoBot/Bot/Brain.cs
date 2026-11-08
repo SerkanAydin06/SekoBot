@@ -21,6 +21,7 @@ internal sealed partial class Brain
     private TimeSpan _phaseSince, _lastLoot, _turnDuration;
     private TimeSpan _lastAttackDown = Never, _lastHpPotion = Never, _lastMpPotion = Never, _lastEsc = Never;
     private TimeSpan _lastReviveClick = Never, _recoverSince = Never;
+    private int _reviveTries;
     // When each low-bar condition was first seen; a single bad frame must not trigger anything.
     private TimeSpan _hpLowSince = Never, _mpLowSince = Never;
     private TimeSpan _targetGoneSince = Never, _searchSentAt = Never, _lastProgress = Never;
@@ -280,12 +281,21 @@ internal sealed partial class Brain
             Enter(BotPhase.Dead, now);
             Deaths++;
             _lastReviveClick = Never;
+            _reviveTries = 0;
         }
         if (state.ReviveReady && now - _lastReviveClick >= Ms(3000))
         {
-            actions.Add(new ClickAction(ReviveHereButton(state.Width, state.Height), Slow: true));
-            actions.Add(new NoteAction("\"Burada yeniden başla\" tıklandı."));
+            // Still dead after a click: the button may sit a little higher or lower on this
+            // window size, so the next tries go a bit up, then a bit down.
+            double shift = (_reviveTries % 3) switch { 1 => -0.015, 2 => 0.015, _ => 0 };
+            var spot = ReviveHereButton(state.Width, state.Height);
+            spot.Y += (int)(state.Height * shift);
+            actions.Add(new ClickAction(spot, Slow: true));
+            actions.Add(new NoteAction(_reviveTries == 0
+                ? "\"Burada yeniden başla\" tıklandı."
+                : $"Hâlâ ölü; \"Burada yeniden başla\" tekrar tıklandı ({_reviveTries + 1}. deneme)."));
             _lastReviveClick = now;
+            _reviveTries++;
         }
     }
 

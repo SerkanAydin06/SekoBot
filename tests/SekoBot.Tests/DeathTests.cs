@@ -62,6 +62,21 @@ public class DeathTests
     }
 
     [Fact]
+    public void Clicks_revive_again_a_little_higher_and_lower_while_still_dead()
+    {
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5] };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        var clicks = new List<ClickAction>();
+        for (double t = 0; t < 10_000; t += 100)
+            clicks.AddRange(brain.Tick(At(t, 0, dead: true, ready: true)).OfType<ClickAction>());
+        Assert.True(clicks.Count >= 3);
+        Assert.All(clicks, c => Assert.True(c.Slow));
+        Assert.Equal(3, clicks.Take(3).Select(c => c.Client.Y).Distinct().Count());
+        Assert.All(clicks, c => Assert.Equal(960, c.Client.X));
+    }
+
+    [Fact]
     public void Gives_up_healing_after_the_time_limit()
     {
         var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5] };
