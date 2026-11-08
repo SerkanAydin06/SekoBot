@@ -132,10 +132,11 @@ internal sealed record CameraView(Vec3 Location, double Pitch, double Yaw, doubl
 /// <param name="Players">The other players around (with <paramref name="OtherPlayers"/> of them).</param>
 /// <param name="Drops">Items lying on the ground.</param>
 /// <param name="InSafeZone">The character is in a safe zone (town).</param>
+/// <param name="OpenWindows">The game's windows (UI parts like "EscMenu", "inventory") that are showing.</param>
 internal sealed record WorldSnapshot(Vec3 Player, CameraView? Camera, IReadOnlyList<WorldMob> Mobs, int OtherPlayers, string MapName,
     WorldMob? Target = null, CharacterStats? Stats = null, bool Dead = false, int Level = 0,
     IReadOnlyList<DeadMob>? DeadMobs = null, CharacterProgress? Progress = null, IReadOnlyList<OtherPlayer>? Players = null,
-    IReadOnlyList<GroundItem>? Drops = null, bool InSafeZone = false)
+    IReadOnlyList<GroundItem>? Drops = null, bool InSafeZone = false, IReadOnlyList<string>? OpenWindows = null)
 {
     /// <summary>The selected mob's health (0..1); 0 when nothing (alive) is selected.</summary>
     public double TargetHp => Target is { MaxHp: > 0 } t ? Math.Clamp((double)t.Hp / t.MaxHp, 0, 1) : 0;
@@ -199,7 +200,8 @@ internal sealed class GameWorldReader : IDisposable
         ("gameManager", "Player", 0x380),
         ("playerMove", "dead", 0x778),
         ("playerMove", "isInSafe", 0x87C),
-        ("droppedItem", "Disabled", 0x234),
+        ("m2data_C", "uiMain", 0x1210),
+        ("Widget", "Visibility", 0xCB),
         ("NPC", "thismob.vnum", 0x348),
         ("NPC", "thismob.Name", 0x348 + 0x8),
         ("NPC", "thismob.Level", 0x348 + 0x3C),
@@ -347,9 +349,8 @@ internal sealed class GameWorldReader : IDisposable
                 camera ??= ReadCamera(actor + Offset(cls, className, "CameraCachePrivate") + CameraCachePov);
             else if (className == "droppedItem")
             {
-                // Picked-up items are kept around switched off.
-                if (Byte(actor + Offset(cls, className, "Disabled")) == 0 &&
-                    Pointer(actor + ActorRoot) is long itemRoot && TryVec3(itemRoot + ComponentWorldLocation, out var at))
+                // Lying on the ground (a picked-up item is removed from the world).
+                if (Pointer(actor + ActorRoot) is long itemRoot && TryVec3(itemRoot + ComponentWorldLocation, out var at))
                     drops.Add(new GroundItem(actor, at));
             }
             else
@@ -374,8 +375,15 @@ internal sealed class GameWorldReader : IDisposable
         }
 
         Status = Searched ? $"Bellekten: {mobs.Count} mob (adresler yeniden bulundu)" : $"Bellekten: {mobs.Count} mob";
+        // Windows don't open that often: look twice a second (it takes ~100 reads).
+        if (DateTime.UtcNow - _windowsReadAt >= TimeSpan.FromMilliseconds(500))
+        {
+            _windows = ReadWindows(Pointer(instance + Offset(instanceClass, "m2data_C", "uiMain")));
+            _windowsReadAt = DateTime.UtcNow;
+        }
+        var windows = _windows;
         return new WorldSnapshot(player, camera, mobs, players.Count, mapName, target, stats, dead, characterLevel, deadMobs, progress, players,
-            drops, safe);
+            drops, safe, windows);
     }
 
     private (CharacterStats? Stats, int Level) ReadStats(long loader)
@@ -389,6 +397,65 @@ internal sealed class GameWorldReader : IDisposable
         if (maxHp is <= 0 or > 10_000_000 || maxMp is <= 0 or > 10_000_000 || hp < 0 || mp < 0 || hp > maxHp || mp > maxMp)
             return (null, level);
         return (new CharacterStats(hp, mp, maxHp, maxMp), level);
+    }
+
+    private readonly Dictionary<long, List<(string Name, int Offset)>> _widgetFields = [];
+    private readonly Dictionary<long, bool> _isWidget = [];
+    private List<string> _windows = [];
+    private DateTime _windowsReadAt = DateTime.MinValue;
+
+    /// <summary>
+    /// The game's own windows (the "_C" widgets held by the main UI, e.g. "EscMenu", "inventory",
+    /// "settings") that are showing. Unreal's ESlateVisibility: 1 Collapsed and 2 Hidden are not showing.
+    /// </summary>
+    private List<string> ReadWindows(long ui)
+    {
+        var open = new List<string>();
+        if (!MemoryReads.IsPointer(ui))
+            return open;
+        long uiClass = Pointer(ui + ObjClass);
+        if (!_widgetFields.TryGetValue(uiClass, out var fields))
+            _widgetFields[uiClass] = fields = ObjectFields(uiClass);
+        foreach (var (name, offset) in fields)
+        {
+            long widget = Pointer(ui + offset);
+            if (!MemoryReads.IsPointer(widget))
+                continue;
+            long cls = Pointer(widget + ObjClass);
+            if (!ClassName(cls).EndsWith("_C", StringComparison.Ordinal) || !IsWidget(cls))
+                continue;
+            if (Byte(widget + Offset(cls, "Widget", "Visibility")) is byte visibility and not (1 or 2))
+                open.Add(name);
+        }
+        return open;
+    }
+
+    /// <summary>The object fields of a class (own and inherited, up to the engine's widget classes).</summary>
+    private List<(string Name, int Offset)> ObjectFields(long cls)
+    {
+        var fields = new List<(string, int)>();
+        for (int depth = 0; depth < 4 && MemoryReads.IsPointer(cls); depth++, cls = Pointer(cls + StructSuper))
+        {
+            if (ClassName(cls) is "UserWidget" or "Widget" or "Object")
+                break;
+            long property = Pointer(cls + StructProperties);
+            for (int i = 0; i < 2000 && MemoryReads.IsPointer(property); i++, property = Pointer(property + FieldNext))
+                if (Int32(Pointer(property + FieldClass)) is int type && Name(type) == "ObjectProperty" &&
+                    Int32(property + FieldName) is int name && Int32(property + PropertyOffset) is int offset and >= 0)
+                    fields.Add((Name(name), offset));
+        }
+        return fields;
+    }
+
+    private bool IsWidget(long cls)
+    {
+        if (_isWidget.TryGetValue(cls, out bool widget))
+            return widget;
+        long c = cls;
+        for (int depth = 0; depth < 12 && MemoryReads.IsPointer(c) && !widget; depth++, c = Pointer(c + StructSuper))
+            widget = ClassName(c) == "Widget";
+        _isWidget[cls] = widget;
+        return widget;
     }
 
     private CharacterProgress? ReadProgress(long loader)
