@@ -1,6 +1,5 @@
 using SekoBot.Bot;
 using SekoBot.Config;
-using SekoBot.Recording;
 using SekoBot.Vision;
 using Xunit;
 
@@ -8,34 +7,6 @@ namespace SekoBot.Tests;
 
 public class PopupTests
 {
-    private static string Fixture(string name) => Path.Combine(AppContext.BaseDirectory, "Fixtures", name);
-
-    [Fact]
-    public void Advert_after_level_up_is_seen()
-    {
-        using var frame = RecordingFormat.LoadPng(Fixture("levelup-popup.png"));
-        Assert.True(PopupDetector.IsOpen(frame));
-    }
-
-    [Fact]
-    public void Esc_system_menu_over_the_blurred_game_is_seen()
-    {
-        using var frame = RecordingFormat.LoadPng(Fixture("esc-menu.png"));
-        Assert.True(PopupDetector.IsOpen(frame));
-    }
-
-    [Theory]
-    [InlineData("topdown-wolves.png")]
-    [InlineData("red-armor.png")]
-    [InlineData("other-player.png")]
-    [InlineData("trees-preview.png")] // big blurry leaves in front of the camera (preview, scaled up)
-    [InlineData("death-screen.png")]  // handled by the death logic, not by Esc
-    public void Plain_game_screen_has_no_popup(string file)
-    {
-        using var frame = RecordingFormat.LoadPng(Fixture(file));
-        Assert.False(PopupDetector.IsOpen(frame));
-    }
-
     [Fact]
     public void Bot_presses_esc_once_and_only_again_if_the_window_is_still_there()
     {

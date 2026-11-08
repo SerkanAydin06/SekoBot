@@ -73,6 +73,40 @@ internal sealed partial class BotEngine
         return world.Player.DistanceXY(past.Position) > 15;
     }
 
+    /// <summary>The game's windows that are closed with Esc when they show up (from memory).</summary>
+    internal static readonly HashSet<string> KnownWindows =
+    [
+        "EscMenu", "settings", "inventory", "Character", "skills", "community", "costume", "events",
+        "friendRequests", "efsunData", "oXGameUI", "pop_ayir", "pop_weaponArmor", "happyHourBoxMobile",
+    ];
+    /// <summary>Parts of the screen that come and go on their own (not windows to close).</summary>
+    private static readonly HashSet<string> NotWindows =
+    [
+        "targetDetail", "dmNotifyer", "w_view", "w_viewSmall", "ustData", "data", "UIhandler", "taskbar",
+        "miniMap", "chatBox", "dmBox", "happyHourBox", "closeCinematic", "WBP_QuestingInfoPanel",
+    ];
+    private HashSet<string> _windowsAtStart = [];
+    private string _windowsSeen = "";
+
+    /// <summary>
+    /// A window is open over the game: one of the known ones, or any other game window that wasn't
+    /// showing when the bot started. Logs which one, once.
+    /// </summary>
+    private bool PopupOpen(WorldSnapshot? world)
+    {
+        var open = (world?.OpenWindows ?? [])
+            .Where(w => KnownWindows.Contains(w) || !_windowsAtStart.Contains(w) && !NotWindows.Contains(w))
+            .ToList();
+        string seen = string.Join(", ", open);
+        if (seen != _windowsSeen)
+        {
+            _windowsSeen = seen;
+            if (open.Count > 0)
+                _log($"Açık pencere (bellekten): {seen}");
+        }
+        return open.Count > 0;
+    }
+
     private int _inventoryWarnedAt = int.MaxValue;
     private string? _gmSeen;
 

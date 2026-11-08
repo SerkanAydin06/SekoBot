@@ -88,6 +88,26 @@ public class GameWorldTests
             return cls;
         }
 
+        /// <summary>A class whose fields are object pointers (like the game's main UI), with a parent class.</summary>
+        public long ObjectClass(string name, long super, params (string Name, int Offset)[] fields)
+        {
+            long cls = Class(name, fields);
+            Memory.WriteLong(cls + GameWorldReader.StructSuper, super);
+            long fieldClass = Alloc(0x10);
+            Int(fieldClass, Name("ObjectProperty"));
+            for (long p = BitConverter.ToInt64(Bytes(cls + GameWorldReader.StructProperties, 8)); p != 0;
+                 p = BitConverter.ToInt64(Bytes(p + GameWorldReader.FieldNext, 8)))
+                Memory.WriteLong(p + GameWorldReader.FieldClass, fieldClass);
+            return cls;
+        }
+
+        private byte[] Bytes(long address, int count)
+        {
+            var bytes = new byte[count];
+            Memory.Read(address, bytes, count);
+            return bytes;
+        }
+
         public long Object(long cls, int size)
         {
             long obj = Alloc(size);
@@ -300,7 +320,7 @@ public class GameWorldTests
             long root = game.Object(0, 0x200);
             game.Memory.WriteLong(item + GameWorldReader.ActorRoot, root);
             game.Vec(root + GameWorldReader.ComponentWorldLocation, 19660, 18060, 900);
-            game.Memory.Write(item + 0x234, (byte)(disabled ? 1 : 0)); // picked up already
+            game.Memory.Write(item + 0x234, (byte)(disabled ? 1 : 0)); // "Disabled" is set on items lying there too
             actors.Add(item);
         }
         SetActors(game, level, actors);
@@ -310,11 +330,40 @@ public class GameWorldTests
         Assert.True(world.Mobs.Single(m => m.Name == "Aç Alfa Kurt").AttacksMe);
         Assert.True(world.Mobs.Single(m => m.Name == "Savaş Metini").IsMetin);
         Assert.False(world.Mobs.Single(m => m.Name == "Aç Alfa Kurt").IsMetin);
-        Assert.Single(world.Drops!);
+        Assert.Equal(2, world.Drops!.Count); // a picked-up item is removed from the world, not switched off
         Assert.False(world.InSafeZone);
 
         game.Memory.Write(pawn + 0x87C, 1); // isInSafe
         Assert.True(reader.Read()!.InSafeZone);
+    }
+
+    [Fact]
+    public void Reads_which_game_windows_are_showing()
+    {
+        var (game, level, actors, _) = World(out long gameData);
+        SetActors(game, level, actors);
+        long widget = game.Class("Widget", ("Visibility", 0xCB));
+        long userWidget = game.Class("UserWidget");
+        game.Memory.WriteLong(userWidget + GameWorldReader.StructSuper, widget);
+        long escClass = game.Class("WBP_EscMenu_C");
+        game.Memory.WriteLong(escClass + GameWorldReader.StructSuper, userWidget);
+        long invClass = game.Class("inventory_C");
+        game.Memory.WriteLong(invClass + GameWorldReader.StructSuper, userWidget);
+        long uiClass = game.ObjectClass("UI_C", userWidget, ("EscMenu", 0x300), ("inventory", 0x308), ("Canvas", 0x310));
+        long ui = game.Object(uiClass, 0x400);
+        long esc = game.Object(escClass, 0x200);
+        long inventory = game.Object(invClass, 0x200);
+        game.Memory.WriteLong(ui + 0x300, esc);
+        game.Memory.WriteLong(ui + 0x308, inventory);
+        game.Memory.Write(esc + 0xCB, 1);       // Collapsed
+        game.Memory.Write(inventory + 0xCB, 4); // SelfHitTestInvisible: showing
+        game.Memory.WriteLong(gameData + 0x1210, ui);
+        using var reader = new GameWorldReader(game.Memory, Module);
+
+        Assert.Equal(["inventory"], reader.Read()!.OpenWindows);
+        game.Memory.Write(esc + 0xCB, 4);
+        using var later = new GameWorldReader(game.Memory, Module); // windows are read twice a second
+        Assert.Equal(["EscMenu", "inventory"], later.Read()!.OpenWindows);
     }
 
     [Fact]

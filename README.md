@@ -30,7 +30,7 @@ Karakterin öldüğünü bot bellekten görür: tuşları bırakır, **"Burada y
 
 ## Açılır pencereler
 
-Level atlayınca çıkan reklam penceresi ve yanlışlıkla açılan Esc menüsü gibi oyunun üstüne açılan pencereleri bot görür (ekranın ortasındaki uzun, düz başlık çubuğundan ya da menünün arkasında bulanıklaşan oyundan), yürümeyi ve saldırıyı bırakır ve **bir kez Esc**'ye basar. Pencere 3 sn sonra hâlâ açıksa tekrar basar; böylece boşuna Esc basıp oyun menüsünü açmaz. Kapatmak için `profile.json` içinde `"ClosePopups": false`. Not: bot çalışırken envanter gibi bir pencereyi kendin açarsan onu da kapatır.
+Bot oyunun kendi pencerelerinin (Esc menüsü, envanter, karakter, beceriler, ayarlar, etkinlik, arkadaşlık istekleri, …) açık olup olmadığını bellekten okur. Bot başladığında kapalı olan bir oyun penceresi açılırsa (ör. level atlayınca çıkan reklam) yürümeyi ve saldırıyı bırakır ve **bir kez Esc**'ye basar; pencere 3 sn sonra hâlâ açıksa tekrar basar. Hangi pencereyi gördüğünü günlüğe adıyla yazar ("Açık pencere (bellekten): EscMenu"). Kapatmak için `profile.json` içinde `"ClosePopups": false`. Not: bot çalışırken envanter gibi bir pencereyi kendin açarsan onu da kapatır.
 
 ## Alan sınırı ve takılma
 
@@ -54,7 +54,7 @@ Level atlayınca çıkan reklam penceresi ve yanlışlıkla açılan Esc menüs�
 - **Önce bana saldıran mobu kes** (varsayılan açık): Bir mobun sana saldırdığını bot bellekten görür ve daha yakında başka mob olsa da önce onu keser.
 - **En yüksek mob seviyesi** (0 = sınırsız): Üstündeki mobları atlar. **Sadece bu moblar / Bu mobları atla:** mob adlarını virgülle yaz (ör. "Kurt, Domuz"), adın bir kısmı yeter. Sana saldıran mob bu ayarlardan bağımsız her zaman kesilir.
 - **Metin taşları:** *Atla* (hiç gitme), *Normal mob gibi* (varsayılan), *Önce onlara git*.
-- **Yerdeki eşyalara yürüyüp topla** (varsayılan açık): Yanında mob yokken 6 m içindeki eşyaya yürür ve toplama tuşuna basar. 5 sn'de alınamayan eşyayı (başkasının olabilir) bir dakika boyunca bırakır.
+- **Yerdeki eşyalara yürüyüp topla** (varsayılan açık): Yanında mob yokken 6 m içindeki eşyaya (yerdeki eşyalar bellekte görünür, alınınca kaybolur) yürür ve toplama tuşuna basar. 5 sn'de alınamayan eşyayı (başkasının olabilir) bir dakika boyunca bırakır.
 
 ## Güvenlik: GM ve envanter
 
@@ -84,7 +84,7 @@ Böylece yeni bir ayarı oyunda denemeden önce eski bir oturumun üzerinde test
 ## Nasıl çalışır
 
 - **Yakalama:** Windows Graphics Capture (GPU); oyunun üstü örtülse de çalışır. Desteklenmezse GDI'ya düşer. Küçültülmüş pencere Windows tarafından çizilmez, görüntü alınamaz.
-- **Algılama:** Oyunla ilgili her şey bellekten salt okunur. Ekrandan yalnızca iki şeye bakılır: ölünce "Burada yeniden başla" düğmesinin tıklanabilir olması ve oyunun üstüne açılan pencereler (kapatmak için).
+- **Algılama:** Oyunla ilgili her şey bellekten salt okunur. Ekrandan yalnızca bir şeye bakılır: ölünce "Burada yeniden başla" düğmesinin tıklanabilir olması.
 - **Karar:** Saldır → topla → dön döngüsü, iksir bekleme süreleri, kritik HP'de durma.
 - **Girdi:** Tarama kodlu `SendInput`; oyun odakta değilse hiçbir şey gönderilmez ve basılı tuşlar bırakılır.
 

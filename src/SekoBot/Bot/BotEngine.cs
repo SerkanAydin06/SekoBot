@@ -143,7 +143,7 @@ internal sealed partial class BotEngine : IDisposable
                         if (state.Dead && profile.ReviveOnDeath && BotRunning)
                             state = state with { ReviveReady = DeathDetector.Check(frame).ReviveReady };
                         if (profile.ClosePopups && BotRunning && !state.Dead)
-                            state = state with { PopupOpen = PopupDetector.IsOpen(frame) };
+                            state = state with { PopupOpen = PopupOpen(world) };
                         var view = MemoryView(world, profile, frame.Width, frame.Height);
                         var mobs = view?.Mobs ?? [];
                         if (!profile.NavigateMode)
@@ -287,6 +287,9 @@ internal sealed partial class BotEngine : IDisposable
             _botStarted = _clock.Elapsed;
             _brain.Start(_clock.Elapsed);
             _session.Reset(_clock.Elapsed);
+            // Windows already showing when the bot starts (chat, minimap, …) belong to the screen.
+            _windowsAtStart = [.. World?.OpenWindows ?? []];
+            _windowsSeen = "";
             _sessionStarted = true;
         }
         _log(dryRun ? "Bot kuru çalışmada başladı (girdi gönderilmez)."
