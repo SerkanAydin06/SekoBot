@@ -70,6 +70,7 @@ Bot her mobun oyundaki bilgisini bellekten okur: verdiği EXP, canı, en sert vu
 - **Yarım mobu bitir:** Dövüştüğü mob yaralı ve yakındaysa, daha değerli bir mob görünse de önce onu bitirir; başka moba geçmek için onun açıkça (1,3 kat) daha iyi olması gerekir (zikzak yapmaz).
 - **Gerçek mesafe:** Saldırıya başlama mesafesi ekran yüzdesiyle değil, oyunun menziliyle (merkezden merkeze 120 birime kadar yaklaşır, dövüşürken 180'e kadar vurmaya devam eder) hesaplanır; büyük gövdeli moblarda (metin taşı) bu mesafe gövdeye göre büyür. Oyunda ölçüldü: vuruşlar 70–145 birimden geliyor. Kamera yakınlaşsa/uzaklaşsa da kaymaz.
 - Sana saldıran moblar ve "önce" seçili metin taşları yine öncelikli; puan bunların kendi aralarında kullanılır.
+- **Ekran dışındaki moblar da:** kamera yalnızca ~10 m gösterir; bot bellekte gördüğü 25 m içindeki bütün moblar arasından seçer ve ekran dışındakine yönünü kameradan hesaplayıp yürür.
 
 ## Yoğun bölge hafızası
 
