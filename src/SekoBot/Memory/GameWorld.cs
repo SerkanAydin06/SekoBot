@@ -580,8 +580,11 @@ internal sealed class GameWorldReader : IDisposable
         int hp = Int("HP"), maxHp = Int("maxHP");
         if (selected && (Flag("dead") || Flag("Remove")))
             hp = 0;
-        if (maxHp <= 0 || hp > maxHp || hp < 0)
+        // A mob's HP can be a little above its max (seen on a Metin stone: 34083 / 34050):
+        // count it as full. Only nonsense (no max, negative, far above) is dropped.
+        if (maxHp <= 0 || hp < 0 || hp > maxHp * 2L)
             return null;
+        hp = Math.Min(hp, maxHp);
         if (!selected && hp == 0)
             return new DeadMob(Int("ID"), position);
         int vnum = Int("thismob.vnum");

@@ -328,7 +328,8 @@ public class GameWorldTests
         long wolf = Npc(game, npc, "Aç Alfa Kurt", 4, 145, 145, 19700, 18000);
         game.Memory.WriteLong(wolf + 0x860, pawn); // targetActorMe: after us
         actors.Add(wolf);
-        long stone = Npc(game, npc, "Savaş Metini", 15, 34050, 34050, 19800, 18000);
+        // Seen in the game: a stone's HP a little above its max.
+        long stone = Npc(game, npc, "Savaş Metini", 15, 34083, 34050, 19800, 18000);
         game.Int(stone + 0x348, 8003);
         actors.Add(stone);
         long itemClass = game.Class("droppedItem");
@@ -347,6 +348,7 @@ public class GameWorldTests
         var world = reader.Read()!;
         Assert.True(world.Mobs.Single(m => m.Name == "Aç Alfa Kurt").AttacksMe);
         Assert.True(world.Mobs.Single(m => m.Name == "Savaş Metini").IsMetin);
+        Assert.Equal(34050, world.Mobs.Single(m => m.Name == "Savaş Metini").Hp); // counted as full
         Assert.False(world.Mobs.Single(m => m.Name == "Aç Alfa Kurt").IsMetin);
         Assert.Equal(2, world.Drops!.Count); // a picked-up item is removed from the world, not switched off
         Assert.False(world.InSafeZone);
