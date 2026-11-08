@@ -54,7 +54,11 @@ internal sealed partial class BotEngine : IDisposable
         Profile = profile;
         _log = log;
         _brain = new Brain(() => Profile);
-        _session.PotionsRanOut += kind => _log($"⚠ {kind} iksiri bitti! Envanterde kalmadı.");
+        _session.PotionsRanOut += kind =>
+        {
+            _log($"⚠ {kind} iksiri bitti! Envanterde kalmadı.");
+            Notify($"⚠ {kind} iksiri bitti!");
+        };
     }
 
     public WindowInfo Window => _window;
@@ -155,6 +159,7 @@ internal sealed partial class BotEngine : IDisposable
                             Attackers = view?.Attackers ?? [],
                             Targets = view?.Targets ?? [],
                             AttackPower = world?.AttackPower ?? 0,
+                            Hotspot = Hotspot(world, profile, now),
                             Skills = SkillKeys(world, profile),
                             MpPoints = world?.Stats?.Mp,
                             HpPotionsLeft = world is null ? null : PotionsLeft().Hp,
@@ -168,6 +173,7 @@ internal sealed partial class BotEngine : IDisposable
                             {
                                 _session.Update(world, now, PotionVnum(world, profile.Keys.HpPotion), PotionVnum(world, profile.Keys.MpPotion));
                                 CheckSafety(world, profile);
+                                NotifyEvents(world);
                             }
                             var (phase, actions) = TickBot(state);
                             Volatile.Read(ref _recorder)?.Record(frame, state, phase, actions, IsImportant(actions, profile));
@@ -224,6 +230,7 @@ internal sealed partial class BotEngine : IDisposable
         {
             StopBot(stopReason);
             BotStopped?.Invoke(stopReason);
+            Notify("⏹ Bot durdu: " + stopReason);
         }
         return (phase, actions);
     }
@@ -292,6 +299,7 @@ internal sealed partial class BotEngine : IDisposable
             _botStarted = _clock.Elapsed;
             _brain.Start(_clock.Elapsed);
             _session.Reset(_clock.Elapsed);
+            _botHome = World?.Player;
             // Windows already showing when the bot starts (chat, minimap, …) belong to the screen.
             _windowsAtStart = [.. World?.OpenWindows ?? []];
             _windowsSeen = "";
@@ -405,6 +413,7 @@ internal sealed partial class BotEngine : IDisposable
             const string reason = "oyunun belleği okunamıyor";
             StopBot(reason);
             BotStopped?.Invoke(reason);
+            Notify("⏹ Bot durdu: " + reason);
         }
         return false;
     }

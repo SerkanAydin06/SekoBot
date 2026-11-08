@@ -70,13 +70,22 @@ Bot her mobun oyundaki bilgisini bellekten okur: verdiği EXP, canı, en sert vu
 - **Gerçek mesafe:** Saldırıya başlama mesafesi ekran yüzdesiyle değil, oyunun menziliyle (merkezden merkeze 120 birime kadar yaklaşır, dövüşürken 180'e kadar vurmaya devam eder) hesaplanır; büyük gövdeli moblarda (metin taşı) bu mesafe gövdeye göre büyür. Oyunda ölçüldü: vuruşlar 70–145 birimden geliyor. Kamera yakınlaşsa/uzaklaşsa da kaymaz.
 - Sana saldıran moblar ve "önce" seçili metin taşları yine öncelikli; puan bunların kendi aralarında kullanılır.
 
+## Yoğun bölge hafızası
+
+Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü hatırlar (etrafını gördükçe tazeler; boşalan kare düşer, görülmeyen kareler yavaşça unutulur). Metin taşı olan kareler 5 mob sayılır. Ekranda mob kalmayınca rastgele dolaşmak yerine en çok mobun olduğu yakın kareye yürür ("Etrafta mob yok; mobların çok olduğu yere gidiliyor"). Alan sınırı açıksa sınırın dışındaki kareler seçilmez. Başka haritaya geçince hafıza sıfırlanır.
+
+## Telegram bildirimi
+
+**Bildirim** sekmesi: kendi Telegram botuna mesaj gönderir — GM görüldü, karakter öldü, seviye atladın, iksir bitti, bot durdu (sebebiyle; sen durdurursan mesaj gelmez). Aynı mesaj dakikada en fazla bir kez gelir.
+Kurulum: Telegram'da @BotFather'a `/newbot` yaz, verdiği anahtarı **Bot anahtarı**na yapıştır; kendi botuna "merhaba" yaz ve **Sohbeti bul**'a bas; **Deneme mesajı** ile dene; kutucuğu işaretle. Anahtar yalnızca bu bilgisayarda (`profile.json`) saklanır, yalnızca api.telegram.org'a bağlanılır.
+
 ## Kalabalığa git
 
 **Kalabalığa git** işaretliyken (varsayılan) bot, yanında mob yoksa ekrandaki en iyi mob grubuna yürür (moblar bellekten): birbirine yakın en az 3 mob (`CrowdMinMobs`) bir grup sayılır; yakın ve kalabalık grup kazanır, uzaktaki grubun çok daha büyük olması gerekir. Grubun ortasına varınca Space ile saldırır. Yanındaki mobu bitirmeden gruba koşmaz, neredeyse ulaştığı tek mobu önce alır ve seçtiği gruptan kolay kolay vazgeçmez (zikzak yapmaz). Kapalıyken her zaman en yakın moba gider.
 
 ## Beceriler (otomatik)
 
-**Becerileri otomatik kullan** (İksir & Beceri sekmesi, varsayılan açık): Bot hızlı slotlardaki (1–5 ve F1–F5) becerilerini ve oyunun onlar hakkında söylediklerini bellekten okur: ad, tür, seviye, mana, bekleme süresi, etki süresi. Sekmede hangi tuşta hangi becerinin olduğu ve ne işe yaradığı yazar.
+**Becerileri otomatik kullan** (İksir / Beceri sekmesi, varsayılan açık): Bot hızlı slotlardaki (1–5 ve F1–F5) becerilerini ve oyunun onlar hakkında söylediklerini bellekten okur: ad, tür, seviye, mana, bekleme süresi, etki süresi. Sekmede hangi tuşta hangi becerinin olduğu ve ne işe yaradığı yazar.
 - **Güçlendirmeler** (ör. Güçlü beden): süresi bitmeden ~5 sn önce yenilenir.
 - **Alan saldırıları** (ör. Güçlü vuruş, Kılıç darbesi): etrafta en az 3 mob varken (`AreaSkillMinMobs`).
 - **Tek hedef saldırıları** (ör. Şiddetli vuruş): yanında mob varken.

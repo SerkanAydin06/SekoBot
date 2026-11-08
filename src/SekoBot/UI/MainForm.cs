@@ -137,13 +137,13 @@ internal sealed class MainForm : Form
         // ── Settings tabs ────────────────────────────────────────
         var settings = new Card { Bounds = new Rectangle(12, 544, 760, 204) };
         Controls.Add(settings);
-        string[] tabNames = ["Saldırı", "Hedef", "İksir & Beceri", "Alan", "Tuşlar", "Gelişmiş"];
+        string[] tabNames = ["Saldırı", "Hedef", "İksir / Beceri", "Alan", "Bildirim", "Tuşlar", "Gelişmiş"];
         _tabButtons = new Button[tabNames.Length];
         _tabPages = new Panel[tabNames.Length];
         for (int i = 0; i < tabNames.Length; i++)
         {
             int index = i;
-            _tabButtons[i] = Theme.Button(settings, tabNames[i], new Rectangle(12 + i * 124, 10, 118, 30), Theme.Secondary, Theme.SecondaryHover);
+            _tabButtons[i] = Theme.Button(settings, tabNames[i], new Rectangle(12 + i * 106, 10, 102, 30), Theme.Secondary, Theme.SecondaryHover);
             _tabButtons[i].Click += (_, _) => SelectTab(index);
             _tabPages[i] = new Panel { Bounds = new Rectangle(12, 50, 736, 146), BackColor = Theme.Surface, Visible = false };
             settings.Controls.Add(_tabPages[i]);
@@ -214,7 +214,32 @@ internal sealed class MainForm : Form
         _positionState = Theme.Label(area, "", new Rectangle(0, 74, 736, 32), 9f, Theme.Muted);
 
         // Tuşlar
-        var keys = _tabPages[4];
+        // Bildirim: messages to the user's own Telegram bot.
+        var notify = _tabPages[4];
+        Check(notify, "Telegram'a bildirim gönder (GM, ölüm, seviye, iksir bitti, bot durdu)", 0, 0, 600,
+            _profile.TelegramEnabled, v => _profile.TelegramEnabled = v);
+        var token = TextRow(notify, "Bot anahtarı", 0, 34, _profile.TelegramToken, v => _profile.TelegramToken = v.Trim(), 420);
+        var chat = TextRow(notify, "Sohbet no", 0, 68, _profile.TelegramChatId, v => _profile.TelegramChatId = v.Trim(), 160);
+        var findChat = Theme.Button(notify, "Sohbeti bul", new Rectangle(310, 68, 120, 26), Theme.Secondary, Theme.SecondaryHover);
+        findChat.Click += async (_, _) =>
+        {
+            var (id, error) = await TelegramNotifier.FindChatAsync(_profile.TelegramToken);
+            if (id != null)
+            {
+                chat.Text = id;
+                WriteLog("Telegram sohbeti bulundu ✓");
+            }
+            else
+                WriteLog(error ?? "");
+        };
+        var test = Theme.Button(notify, "Deneme mesajı", new Rectangle(440, 68, 130, 26), Theme.Secondary, Theme.SecondaryHover);
+        test.Click += async (_, _) =>
+            WriteLog(await TelegramNotifier.SendAsync(_profile.TelegramToken, _profile.TelegramChatId, "SekoBot: deneme mesajı ✓")
+                     ?? "Telegram deneme mesajı gönderildi ✓");
+        Hint(notify, "Kurulum: Telegram'da @BotFather'a /newbot yaz, verdiği anahtarı buraya yapıştır. Sonra kendi botuna " +
+            "\"merhaba\" yaz ve 'Sohbeti bul'a bas. Anahtar yalnızca bu bilgisayarda saklanır.", 102);
+
+        var keys = _tabPages[5];
         var k = _profile.Keys;
         (string, Func<Keys>, Action<Keys>)[] bindings =
         [
@@ -242,7 +267,7 @@ internal sealed class MainForm : Form
         Theme.Label(keys, "Değiştirmek için tuşa tıkla, sonra yeni tuşa bas.", new Rectangle(0, 122, 736, 22), 8.5f, Theme.Muted);
 
         // Gelişmiş
-        var advanced = _tabPages[5];
+        var advanced = _tabPages[6];
         _dryRun = new CheckBox
         {
             Text = "Kuru çalışma (tuş göndermez)",
@@ -370,12 +395,12 @@ internal sealed class MainForm : Form
         parent.Controls.Add(box);
     }
 
-    private void TextRow(Control parent, string caption, int x, int y, string value, Action<string> apply)
+    private TextBox TextRow(Control parent, string caption, int x, int y, string value, Action<string> apply, int width = 220)
     {
         Theme.Label(parent, caption, new Rectangle(x, y, 130, 26), 9f, Theme.Muted);
         var box = new TextBox
         {
-            Bounds = new Rectangle(x + 134, y, 220, 26),
+            Bounds = new Rectangle(x + 134, y, width, 26),
             Text = value,
             BackColor = Theme.Inset,
             ForeColor = Theme.Text,
@@ -384,6 +409,7 @@ internal sealed class MainForm : Form
         };
         box.TextChanged += (_, _) => { apply(box.Text); SaveProfile(); };
         parent.Controls.Add(box);
+        return box;
     }
 
     private static void Hint(Control parent, string text, int y) =>
