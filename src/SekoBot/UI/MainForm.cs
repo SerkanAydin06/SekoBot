@@ -3,6 +3,7 @@ using SekoBot.Bot;
 using SekoBot.Capture;
 using SekoBot.Config;
 using SekoBot.Input;
+using SekoBot.Memory;
 using SekoBot.Native;
 using SekoBot.Recording;
 using SekoBot.Update;
@@ -25,7 +26,7 @@ internal sealed class MainForm : Form
     private readonly PreviewControl _preview;
     private readonly Label _connection, _status, _calibrationHint, _calibrationState, _technical;
     private readonly Label _statTime, _statMobs, _statRate, _statDeaths, _statPotions, _statExp, _statExpRate, _statLevel, _statYang;
-    private readonly Label _positionState;
+    private readonly Label _positionState, _skillList;
     private readonly Button _scanMobs;
     private readonly Meter _hpMeter, _mpMeter, _targetMeter;
     private readonly Button[] _tabButtons;
@@ -136,7 +137,7 @@ internal sealed class MainForm : Form
         // ── Settings tabs ────────────────────────────────────────
         var settings = new Card { Bounds = new Rectangle(12, 544, 760, 204) };
         Controls.Add(settings);
-        string[] tabNames = ["Saldırı", "Hedef", "İksir & Buff", "Alan", "Tuşlar", "Gelişmiş"];
+        string[] tabNames = ["Saldırı", "Hedef", "İksir & Beceri", "Alan", "Tuşlar", "Gelişmiş"];
         _tabButtons = new Button[tabNames.Length];
         _tabPages = new Panel[tabNames.Length];
         for (int i = 0; i < tabNames.Length; i++)
@@ -193,16 +194,12 @@ internal sealed class MainForm : Form
         NumberRow(potions, "MP iksiri (% altında)", 0, 34, 0, 95, Math.Round(_profile.PotionMpBelow * 100), 0, 1,
             v => _profile.PotionMpBelow = v / 100);
         Check(potions, "Ölünce yeniden başla", 0, 68, 300, _profile.ReviveOnDeath, v => _profile.ReviveOnDeath = v);
-        Theme.Label(potions, "Buff: kaç saniyede bir basılsın (0 = kapalı)", new Rectangle(370, 0, 360, 26), 9f, Theme.Muted);
-        for (int i = 0; i < BotProfile.SkillSlots; i++)
-        {
-            int slot = i;
-            int x = 370 + (i % 3) * 120, y = 34 + (i / 3) * 34;
-            string key = i < _profile.Keys.Skills.Length ? KeyPicker.Name(_profile.Keys.Skills[i]) : "F" + (i + 1);
-            Theme.Label(potions, key, new Rectangle(x, y, 34, 26), 9.5f, Theme.Text, FontStyle.Bold);
-            var number = Theme.Number(potions, new Rectangle(x + 36, y, 70, 26), 0, 3600, Math.Clamp(_profile.SkillEverySec[i], 0, 3600));
-            number.ValueChanged += (_, _) => { _profile.SkillEverySec[slot] = (int)number.Value; SaveProfile(); };
-        }
+        NumberRow(potions, "Kaç HP iksiri kalınca kaç", 0, 102, 0, 200, _profile.RetreatAtPotions, 0, 1,
+            v => _profile.RetreatAtPotions = (int)v);
+        Check(potions, "Becerileri otomatik kullan (bellekten)", 370, 0, 360, _profile.AutoSkills, v => _profile.AutoSkills = v);
+        NumberRow(potions, "Alan becerisi: en az mob", 370, 34, 1, 15, _profile.AreaSkillMinMobs, 0, 1,
+            v => _profile.AreaSkillMinMobs = (int)v);
+        _skillList = Theme.Label(potions, "", new Rectangle(370, 68, 366, 72), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
 
         // Alan
         var area = _tabPages[3];
@@ -714,6 +711,14 @@ internal sealed class MainForm : Form
         var state = _engine.State;
         _technical.Text = $"{_engine.StatsSource} · {s.CaptureFps:0} FPS";
         var world = _engine.World;
+        _skillList.Text = state?.Skills is { Count: > 0 } skills
+            ? string.Join("   ", skills.Select(sk => $"{KeyPicker.Name(sk.Key)} {sk.Name} ({sk.Kind switch
+              {
+                  SkillKind.Buff => "güçlendirme",
+                  SkillKind.Area => "alan",
+                  _ => "tek hedef",
+              }})"))
+            : "Hızlı slotlardaki beceriler oyuna bağlanınca bellekten okunur.";
         _positionState.Text = world != null
             ? $"📍 Konum bellekten ✓  X={world.Player.X:0}, Y={world.Player.Y:0}  (harita {world.MapName}, {world.Mobs.Count} mob, {world.OtherPlayers} oyuncu" +
               (_engine.FreeInventorySlots is int free ? $", envanterde {free} boş yer)" : ")")

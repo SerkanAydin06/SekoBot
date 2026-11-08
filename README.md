@@ -66,9 +66,19 @@ Bot oyunun kendi pencerelerinin (Esc menüsü, envanter, karakter, beceriler, ay
 
 **Kalabalığa git** işaretliyken (varsayılan) bot, yanında mob yoksa ekrandaki en iyi mob grubuna yürür (moblar bellekten): birbirine yakın en az 3 mob (`CrowdMinMobs`) bir grup sayılır; yakın ve kalabalık grup kazanır, uzaktaki grubun çok daha büyük olması gerekir. Grubun ortasına varınca Space ile saldırır. Yanındaki mobu bitirmeden gruba koşmaz, neredeyse ulaştığı tek mobu önce alır ve seçtiği gruptan kolay kolay vazgeçmez (zikzak yapmaz). Kapalıyken her zaman en yakın moba gider.
 
-## Buff becerileri (F1–F5)
+## Beceriler (otomatik)
 
-Bot kartında F1–F5 için "kaç saniyede bir" yazılır (0 = kapalı; varsayılan F1 ve F2 her 60 sn). Bot bunlara döngü halinde, aralarında en az 1,5 sn olacak şekilde basar; basarken W/A/S/D ve Space'i bırakıp 1 sn durur ki beceri kesilmesin, sonra devam eder.
+**Becerileri otomatik kullan** (İksir & Beceri sekmesi, varsayılan açık): Bot hızlı slotlardaki (1–5 ve F1–F5) becerilerini ve oyunun onlar hakkında söylediklerini bellekten okur: ad, tür, seviye, mana, bekleme süresi, etki süresi. Sekmede hangi tuşta hangi becerinin olduğu ve ne işe yaradığı yazar.
+- **Güçlendirmeler** (ör. Güçlü beden): süresi bitmeden ~5 sn önce yenilenir.
+- **Alan saldırıları** (ör. Güçlü vuruş, Kılıç darbesi): etrafta en az 3 mob varken (`AreaSkillMinMobs`).
+- **Tek hedef saldırıları** (ör. Şiddetli vuruş): yanında mob varken.
+- Hepsi bekleme süresi dolunca ve MP yetiyorsa basılır; basarken bot 1 sn durur ki beceri kesilmesin, iki beceri arasında en az 1,5 sn olur.
+
+Kapalıyken eski usul F1–F5 "kaç saniyede bir" ayarları (`SkillEverySec`) kullanılır.
+
+## İksir azalınca kaç
+
+**Kaç HP iksiri kalınca kaç** (varsayılan 5, 0 = kapalı): HP iksiri bu sayıya düşünce bot saldırmayı bırakır ve moblardan uzaklaşır (yakındakilerden ters yöne, sana saldıranlar iki kat sayılır). Yakında mob kalmayıp 3 sn boyunca kimse vurmayınca orada durur. Bot başladığında iksir zaten bu kadar azsa yalnızca uyarır.
 
 ## Arka planda çalışma
 

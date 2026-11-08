@@ -152,6 +152,10 @@ internal sealed partial class BotEngine : IDisposable
                             MobCandidates = mobs,
                             PriorityMobs = view?.Priority ?? [],
                             Drops = view?.Drops ?? [],
+                            Attackers = view?.Attackers ?? [],
+                            Skills = SkillKeys(world, profile),
+                            MpPoints = world?.Stats?.Mp,
+                            HpPotionsLeft = world is null ? null : PotionsLeft().Hp,
                             AnalysisMs = watch.Elapsed.TotalMilliseconds,
                         };
                         Volatile.Write(ref _state, state);
