@@ -153,6 +153,8 @@ internal sealed partial class BotEngine : IDisposable
                             PriorityMobs = view?.Priority ?? [],
                             Drops = view?.Drops ?? [],
                             Attackers = view?.Attackers ?? [],
+                            Targets = view?.Targets ?? [],
+                            AttackPower = world?.AttackPower ?? 0,
                             Skills = SkillKeys(world, profile),
                             MpPoints = world?.Stats?.Mp,
                             HpPotionsLeft = world is null ? null : PotionsLeft().Hp,

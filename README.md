@@ -62,6 +62,14 @@ Bot oyunun kendi pencerelerinin (Esc menüsü, envanter, karakter, beceriler, ay
 - **Güvenli bölgede dur** (Alan sekmesi, varsayılan açık): Karakter şehre/güvenli bölgeye düşerse (ör. ölüp şehirde dirilirse) bot durur; güvenli bölgedeyken başlamaz.
 - **Envanter dolunca dur** (Alan sekmesi, varsayılan açık): Envanterde boş yer kalmayınca bot uyarı sesiyle durur, toplanan eşyalar kaybolmaz. 5 boş yer kalınca günlüğe uyarı yazar. Boş yer Alan sekmesinde de görünür. Yalnızca açık (paralı olmayan) sayfalar sayılır; kılıç, yay, çift el silah ve zırh alt alta 2 yuva kaplar, emin olunmayan eşyalar 1 yuva sayılır (böylece bot boşuna durmaz).
 
+## Akıllı hedef seçimi
+
+Bot her mobun oyundaki bilgisini bellekten okur: verdiği EXP, canı, en sert vuruşu, gövde büyüklüğü; karakterin saldırı menzili (130) ve saldırı gücü.
+- **Değerli mob önce:** Her moba puan verir: EXP ÷ (yürüme süresi + öldürme süresi + 1 sn). Örneğin Siyah Ayı (624 can, 384 EXP), Aç Ayı'dan (305 can, 103 EXP) biraz uzakta olsa da önce seçilir. Canı azalmış mob daha çabuk öleceği için öne geçer. Canın %40'ın altındaysa sert vuran moblar daha az puan alır.
+- **Yarım mobu bitir:** Dövüştüğü mob yaralı ve yakındaysa, daha değerli bir mob görünse de önce onu bitirir; başka moba geçmek için onun açıkça (1,3 kat) daha iyi olması gerekir (zikzak yapmaz).
+- **Gerçek mesafe:** Saldırıya başlama mesafesi ekran yüzdesiyle değil, oyunun menziliyle (merkezden merkeze 120 birime kadar yaklaşır, dövüşürken 180'e kadar vurmaya devam eder) hesaplanır; büyük gövdeli moblarda (metin taşı) bu mesafe gövdeye göre büyür. Oyunda ölçüldü: vuruşlar 70–145 birimden geliyor. Kamera yakınlaşsa/uzaklaşsa da kaymaz.
+- Sana saldıran moblar ve "önce" seçili metin taşları yine öncelikli; puan bunların kendi aralarında kullanılır.
+
 ## Kalabalığa git
 
 **Kalabalığa git** işaretliyken (varsayılan) bot, yanında mob yoksa ekrandaki en iyi mob grubuna yürür (moblar bellekten): birbirine yakın en az 3 mob (`CrowdMinMobs`) bir grup sayılır; yakın ve kalabalık grup kazanır, uzaktaki grubun çok daha büyük olması gerekir. Grubun ortasına varınca Space ile saldırır. Yanındaki mobu bitirmeden gruba koşmaz, neredeyse ulaştığı tek mobu önce alır ve seçtiği gruptan kolay kolay vazgeçmez (zikzak yapmaz). Kapalıyken her zaman en yakın moba gider.

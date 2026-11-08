@@ -18,8 +18,11 @@ internal readonly record struct CharacterStats(int Hp, int Mp, int MaxHp, int Ma
 /// <summary>A mob that can be attacked.</summary>
 /// <param name="AttacksMe">The mob is after our character.</param>
 /// <param name="IsMetin">A Metin stone (doesn't move or fight back, has a lot of HP).</param>
+/// <param name="Exp">Experience it gives when killed (the game's mob table).</param>
+/// <param name="DamageMax">Its strongest hit.</param>
+/// <param name="Radius">Its body size (capsule radius, world units).</param>
 internal sealed record WorldMob(int Id, int Vnum, string Name, int Level, int Hp, int MaxHp, Vec3 Position,
-    bool AttacksMe = false, bool IsMetin = false);
+    bool AttacksMe = false, bool IsMetin = false, int Exp = 0, int DamageMax = 0, double Radius = 40);
 
 /// <summary>What a skill does.</summary>
 internal enum SkillKind
@@ -155,7 +158,7 @@ internal sealed record WorldSnapshot(Vec3 Player, CameraView? Camera, IReadOnlyL
     WorldMob? Target = null, CharacterStats? Stats = null, bool Dead = false, int Level = 0,
     IReadOnlyList<DeadMob>? DeadMobs = null, CharacterProgress? Progress = null, IReadOnlyList<OtherPlayer>? Players = null,
     IReadOnlyList<GroundItem>? Drops = null, bool InSafeZone = false, IReadOnlyList<string>? OpenWindows = null,
-    double? ReviveIn = null, IReadOnlyList<SkillInfo>? Skills = null)
+    double? ReviveIn = null, IReadOnlyList<SkillInfo>? Skills = null, double AttackDistance = 0, int AttackPower = 0)
 {
     /// <summary>Dead, and "Burada yeniden başla" can be clicked.</summary>
     public bool ReviveReady => Dead && ReviveIn is <= 0;
@@ -244,6 +247,11 @@ internal sealed class GameWorldReader : IDisposable
         ("NPC", "isGM", 0x6B5),
         ("NPC", "targetActorMe", 0x860),
         ("NPC", "thismob.Type", 0x348 + 0x28),
+        ("NPC", "thismob.Exp", 0x348 + 0xC8),
+        ("NPC", "thismob.damge_max", 0x348 + 0xB0),
+        ("CapsuleComponent", "CapsuleRadius", 0x47C),
+        ("playerMove", "attackDistance", 0x75C),
+        ("loader", "charData.attack", 0x770 + 0xA8),
         ("PlayerCameraManager", "CameraCachePrivate", 0x1AF0),
     ];
 
@@ -398,10 +406,15 @@ internal sealed class GameWorldReader : IDisposable
             _skillsReadAt = DateTime.UtcNow;
         }
         bool dead = false, safe = false;
+        double attackDistance = 0;
+        int attackPower = MemoryReads.IsPointer(loader)
+            ? Int32(loader + Offset(Pointer(loader + ObjClass), "loader", "charData.attack")) ?? 0
+            : 0;
         long pawn = _pawn;
         if (MemoryReads.IsPointer(pawn))
         {
             long pawnClass = Pointer(pawn + ObjClass);
+            attackDistance = Float(pawn + Offset(pawnClass, "playerMove", "attackDistance")) is double reach and > 0 and < 2000 ? reach : 0;
             dead = Byte(pawn + Offset(pawnClass, "playerMove", "dead")) is byte b && b != 0;
             safe = Byte(pawn + Offset(pawnClass, "playerMove", "isInSafe")) is byte s && s != 0;
         }
@@ -416,7 +429,7 @@ internal sealed class GameWorldReader : IDisposable
         var windows = _windows;
         double? reviveIn = dead ? ReviveIn(Pointer(instance + Offset(instanceClass, "m2data_C", "uiMain"))) : null;
         return new WorldSnapshot(player, camera, mobs, players.Count, mapName, target, stats, dead, characterLevel, deadMobs, progress, players,
-            drops, safe, windows, reviveIn, _skills);
+            drops, safe, windows, reviveIn, _skills, attackDistance, attackPower);
     }
 
     private (CharacterStats? Stats, int Level) ReadStats(long loader)
@@ -674,7 +687,9 @@ internal sealed class GameWorldReader : IDisposable
             _metins[vnum] = metin = vnum is >= 8000 and < 9000 || ReadFString(actor + Offset(cls, "NPC", "thismob.Type"), 8) == "2";
         long after = BitConverter.ToInt64(data, Offset(cls, "NPC", "targetActorMe"));
         bool attacksMe = _pawn != 0 && after == _pawn;
-        return new WorldMob(Int("ID"), vnum, name, Int("thismob.Level"), hp, maxHp, position, attacksMe, metin);
+        double radius = Float(root + Offset(Pointer(root + ObjClass), "CapsuleComponent", "CapsuleRadius")) is double r and > 0 and < 2000 ? r : 40;
+        return new WorldMob(Int("ID"), vnum, name, Int("thismob.Level"), hp, maxHp, position, attacksMe, metin,
+            Int("thismob.Exp"), Int("thismob.damge_max"), radius);
     }
 
     private CameraView? ReadCamera(long pov)

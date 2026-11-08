@@ -42,6 +42,7 @@ internal sealed partial class Brain
         _exploreKeys = [];
         _exploreStep = 0;
         _crowdTarget = _lastCrowd = null;
+        _targetId = 0;
         _dropId = 0;
         _dropSince = _lastDropTap = Never;
         _ignoredDrops.Clear();
@@ -133,15 +134,28 @@ internal sealed partial class Brain
         double best = double.MaxValue;
         // Mobs attacking us (or Metin stones, when preferred) come first.
         bool priority = state.PriorityMobs.Count > 0;
-        foreach (var m in priority ? state.PriorityMobs : state.MobCandidates)
+        // With the mobs from memory: the one worth most per second, and real distances.
+        var chosen = state.Targets.Count > 0 ? ChooseTarget(state) : null;
+        if (chosen != null)
         {
-            double d = Math.Sqrt(Math.Pow(m.X - cx, 2) + Math.Pow(m.Y - cy, 2));
-            if (d < best) { best = d; target = m; }
+            target = chosen.Spot;
+            best = Math.Sqrt(Math.Pow(chosen.Spot.X - cx, 2) + Math.Pow(chosen.Spot.Y - cy, 2));
+            priority = chosen.Priority;
+        }
+        else
+        {
+            foreach (var m in priority ? state.PriorityMobs : state.MobCandidates)
+            {
+                double d = Math.Sqrt(Math.Pow(m.X - cx, 2) + Math.Pow(m.Y - cy, 2));
+                if (d < best) { best = d; target = m; }
+            }
         }
         double radius = p.AttackRadius * state.Height;
+        bool nextToUs = chosen != null ? chosen.Distance <= chosen.Reach : best <= radius;
+        bool closeBy = chosen != null ? chosen.Distance <= chosen.Reach * 2 : best <= radius * 2;
 
         // Stay in the area we started in (position from memory): walking back when too far.
-        if (LeashTick(state, p, actions, refresh, mobNextToUs: best <= radius))
+        if (LeashTick(state, p, actions, refresh, mobNextToUs: nextToUs))
             return;
 
         if (target is not Point t)
@@ -179,7 +193,10 @@ internal sealed partial class Brain
         _exploreUntil = Never;
         double dx = t.X - cx, dy = t.Y - cy;
         // Once attacking, keep at it a bit further out so it doesn't flip between walk and attack.
-        bool inRange = best <= radius || (Phase == BotPhase.Fighting && best <= radius * 1.4);
+        // From memory: walk in to a little inside the reach, keep hitting up to 1.4 × the reach.
+        bool inRange = chosen != null
+            ? chosen.Distance <= chosen.Reach - 10 || (Phase == BotPhase.Fighting && chosen.Distance <= chosen.Reach * 1.4)
+            : best <= radius || (Phase == BotPhase.Fighting && best <= radius * 1.4);
         if (inRange)
         {
             // Next to the character: attack, and keep steering onto the mob, because every
@@ -206,7 +223,7 @@ internal sealed partial class Brain
 
         // Head for the crowd if there is one worth it, else the nearest.
         _crowdTarget = null;
-        if (!priority && p.PreferCrowds && best > radius * 2 && PickCrowd(state, p, cx, cy) is Point crowd)
+        if (!priority && p.PreferCrowds && !closeBy && PickCrowd(state, p, cx, cy) is Point crowd)
         {
             _crowdTarget = crowd;
             dx = crowd.X - cx;
@@ -222,7 +239,7 @@ internal sealed partial class Brain
             Enter(BotPhase.Moving, now);
             _movingSince = now;
         }
-        if (CheckBlocked(state, p, actions, mobClose: best <= radius * 2))
+        if (CheckBlocked(state, p, actions, mobClose: closeBy))
             return;
         if (_movingSince != Never && now - _movingSince >= Ms(p.MoveStuckMs))
         {
@@ -234,6 +251,39 @@ internal sealed partial class Brain
             _movingSince = Never;
             Enter(BotPhase.Searching, now);
         }
+    }
+
+    private int _targetId;
+
+    /// <summary>
+    /// Picks the mob worth most per second: the experience it gives ÷ (time to walk there + time
+    /// to kill it + 1 s). A damaged mob dies sooner, so it scores higher; the one being fought is
+    /// finished first when it's hurt and close; another one has to be clearly better (×1.3) to
+    /// switch to. With low HP, mobs that hit hard count less. Mobs attacking us (or preferred
+    /// Metin stones) are chosen among themselves first.
+    /// </summary>
+    private TargetInfo ChooseTarget(GameState state)
+    {
+        var pool = state.Targets.Any(t => t.Priority) ? state.Targets.Where(t => t.Priority).ToList() : state.Targets.ToList();
+        double dps = Math.Max(50, state.AttackPower); // roughly: the attack value per second
+        double Score(TargetInfo t)
+        {
+            double walk = Math.Max(0, t.Distance - t.Reach) / 350; // walking speed ~350 units/s (measured)
+            double kill = t.Hp / dps;
+            double exp = t.Exp > 0 ? t.Exp : t.MaxHp * 0.3;
+            double score = exp / (walk + kill + 1);
+            if (state.Hp is < 0.4 && t.DamageMax > 0)
+                score /= 1 + t.DamageMax / 100.0;
+            return score;
+        }
+        var current = pool.FirstOrDefault(t => t.Id == _targetId);
+        if (current != null && current.Hp < current.MaxHp && current.Distance <= current.Reach * 2.5)
+            return current; // finish what we started
+        var best = pool.MaxBy(Score)!;
+        if (current != null && Score(best) < Score(current) * 1.3)
+            best = current;
+        _targetId = best.Id;
+        return best;
     }
 
     private long _dropId;

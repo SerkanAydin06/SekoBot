@@ -13,7 +13,7 @@ internal sealed partial class BotEngine
 {
     /// <summary>What the bot sees on screen from memory: the mobs it may go for (nearest to us
     /// first), the ones to go for first, and the items close by. Null when the camera can't be read.</summary>
-    internal static (List<Point> Mobs, List<Point> Priority, List<GroundSpot> Drops, List<Point> Attackers)? MemoryView(
+    internal static (List<Point> Mobs, List<Point> Priority, List<GroundSpot> Drops, List<Point> Attackers, List<TargetInfo> Targets)? MemoryView(
         WorldSnapshot? world, BotProfile profile, int width, int height)
     {
         if (world?.Camera is not CameraView camera)
@@ -21,12 +21,14 @@ internal sealed partial class BotEngine
         var mobs = new List<Point>();
         var attackers = new List<Point>();
         var metins = new List<Point>();
+        var found = new List<(WorldMob Mob, Point Spot)>();
         foreach (var mob in world.ByDistance)
         {
             if (!Wanted(mob, profile) || camera.ToScreen(mob.Position, width, height) is not PointF p || !OnPlayfield(p, width, height))
                 continue;
             var spot = Point.Round(p);
             mobs.Add(spot);
+            found.Add((mob, spot));
             if (mob.AttacksMe)
                 attackers.Add(spot);
             if (mob.IsMetin && profile.Metins == MetinMode.Prefer)
@@ -40,7 +42,15 @@ internal sealed partial class BotEngine
                     drops.Add(new GroundSpot(item.Id, Point.Round(p)));
         // Metin stones set to "first" come before everything, also before mobs attacking us
         // (those stand around the stone and get hit too).
-        return (mobs, metins.Count > 0 ? metins : profile.AttackersFirst ? attackers : [], drops, attackers);
+        var priority = metins.Count > 0 ? metins : profile.AttackersFirst ? attackers : [];
+        // The character hits from AttackDistance between the centres (measured in the game: hits at
+        // 70–145 with a reach of 130); a bigger body (a Metin stone) can be hit from further away.
+        double attackDistance = world.AttackDistance > 0 ? world.AttackDistance : 130;
+        var targets = found.Select(f => new TargetInfo(f.Mob.Id, f.Spot, f.Mob.Position.DistanceXY(world.Player),
+                attackDistance + Math.Max(0, f.Mob.Radius - 40), f.Mob.Exp, f.Mob.Hp, f.Mob.MaxHp, f.Mob.DamageMax,
+                priority.Contains(f.Spot)))
+            .ToList();
+        return (mobs, priority, drops, attackers, targets);
     }
 
     /// <summary>

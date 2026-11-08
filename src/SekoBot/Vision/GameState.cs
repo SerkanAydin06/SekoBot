@@ -5,6 +5,13 @@ namespace SekoBot.Vision;
 /// <summary>A skill on a quick slot key, with what the game says about it.</summary>
 internal sealed record SkillSlot(Keys Key, string Name, SkillKind Kind, int Mana, int CooldownSec, int DurationSec);
 
+/// <summary>A mob the bot may go for: where it is on screen, how far (world units), from how far
+/// it can be hit, and what killing it is worth.</summary>
+/// <param name="Reach">Centre-to-centre distance from which the character hits it.</param>
+/// <param name="Priority">A mob to go for first (attacking us, or a preferred Metin stone).</param>
+internal sealed record TargetInfo(int Id, Point Spot, double Distance, double Reach, int Exp, int Hp, int MaxHp,
+    int DamageMax, bool Priority);
+
 /// <summary>An item on the ground and where it is on screen.</summary>
 internal readonly record struct GroundSpot(long Id, Point Spot);
 
@@ -27,6 +34,12 @@ internal sealed record GameState(
 
     /// <summary>Mobs to go for before the others (attacking us, or Metin stones when preferred).</summary>
     public IReadOnlyList<Point> PriorityMobs { get; init; } = [];
+
+    /// <summary>The mobs with their distance, reach and value (from memory); empty without memory.</summary>
+    public IReadOnlyList<TargetInfo> Targets { get; init; } = [];
+
+    /// <summary>The character's attack value (to guess how long a mob takes to kill).</summary>
+    public int AttackPower { get; init; }
 
     /// <summary>Mobs attacking the character (on screen).</summary>
     public IReadOnlyList<Point> Attackers { get; init; } = [];
