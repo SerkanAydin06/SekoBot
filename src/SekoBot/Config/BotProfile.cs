@@ -45,6 +45,14 @@ internal sealed class BotProfile
 
     /// <summary>How often each skill key (F1–F5) is pressed again, in seconds; 0 = never.</summary>
     public int[] SkillEverySec { get; set; } = [60, 60, 0, 0, 0];
+    /// <summary>Use the skills on the quick slots by what the game says they do (buffs kept up,
+    /// area attacks on groups, single attacks while fighting). Off: F1–F5 every N seconds.</summary>
+    public bool AutoSkills { get; set; } = true;
+    /// <summary>An area skill is used when at least this many mobs are around.</summary>
+    public int AreaSkillMinMobs { get; set; } = 3;
+    /// <summary>With this many HP potions left (or fewer), get away from the mobs and stop in a quiet
+    /// spot, so the character isn't killed without potions (0 = off).</summary>
+    public int RetreatAtPotions { get; set; } = 5;
     /// <summary>At least this long between two skill presses.</summary>
     public int SkillGapMs { get; set; } = 1500;
     /// <summary>Stand still this long while a skill is cast.</summary>

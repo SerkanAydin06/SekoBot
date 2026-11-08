@@ -21,6 +21,22 @@ internal readonly record struct CharacterStats(int Hp, int Mp, int MaxHp, int Ma
 internal sealed record WorldMob(int Id, int Vnum, string Name, int Level, int Hp, int MaxHp, Vec3 Position,
     bool AttacksMe = false, bool IsMetin = false);
 
+/// <summary>What a skill does.</summary>
+internal enum SkillKind
+{
+    /// <summary>Hits the enemy in front.</summary>
+    Single,
+    /// <summary>Hits several enemies around ("Alan etkisi").</summary>
+    Area,
+    /// <summary>Strengthens the character for a while (e.g. "Güçlü beden").</summary>
+    Buff,
+}
+
+/// <summary>One of the character's skills, as the game describes it.</summary>
+/// <param name="CooldownSec">Seconds before it can be used again ("sure").</param>
+/// <param name="DurationSec">How long a buff lasts (0 for attacks).</param>
+internal sealed record SkillInfo(int Id, string Name, int Level, SkillKind Kind, int Mana, int CooldownSec, int DurationSec, int Distance);
+
 /// <summary>An item lying on the ground.</summary>
 internal readonly record struct GroundItem(long Id, Vec3 Position);
 
@@ -139,7 +155,7 @@ internal sealed record WorldSnapshot(Vec3 Player, CameraView? Camera, IReadOnlyL
     WorldMob? Target = null, CharacterStats? Stats = null, bool Dead = false, int Level = 0,
     IReadOnlyList<DeadMob>? DeadMobs = null, CharacterProgress? Progress = null, IReadOnlyList<OtherPlayer>? Players = null,
     IReadOnlyList<GroundItem>? Drops = null, bool InSafeZone = false, IReadOnlyList<string>? OpenWindows = null,
-    double? ReviveIn = null)
+    double? ReviveIn = null, IReadOnlyList<SkillInfo>? Skills = null)
 {
     /// <summary>Dead, and "Burada yeniden başla" can be clicked.</summary>
     public bool ReviveReady => Dead && ReviveIn is <= 0;
@@ -201,6 +217,7 @@ internal sealed class GameWorldReader : IDisposable
         ("loader", "charData.invitems", 0x770 + 0xD8),
         ("loader", "qSlots", 0x278),
         ("loader", "charData.invCount", 0x770 + 0xC8),
+        ("loader", "playerSkills", 0x288),
         ("gameManager", "playerPos", 0xA10),
         ("gameManager", "mapname", 0x958),
         ("gameManager", "Player", 0x380),
@@ -374,6 +391,12 @@ internal sealed class GameWorldReader : IDisposable
         long loader = Pointer(instance + Offset(instanceClass, "m2data_C", "loader"));
         var (stats, characterLevel) = ReadStats(loader);
         var progress = ReadProgress(loader);
+        // Skills change only when one is learned or levelled: every few seconds is plenty.
+        if (DateTime.UtcNow - _skillsReadAt >= TimeSpan.FromSeconds(3))
+        {
+            _skills = ReadSkills(loader);
+            _skillsReadAt = DateTime.UtcNow;
+        }
         bool dead = false, safe = false;
         long pawn = _pawn;
         if (MemoryReads.IsPointer(pawn))
@@ -393,7 +416,7 @@ internal sealed class GameWorldReader : IDisposable
         var windows = _windows;
         double? reviveIn = dead ? ReviveIn(Pointer(instance + Offset(instanceClass, "m2data_C", "uiMain"))) : null;
         return new WorldSnapshot(player, camera, mobs, players.Count, mapName, target, stats, dead, characterLevel, deadMobs, progress, players,
-            drops, safe, windows, reviveIn);
+            drops, safe, windows, reviveIn, _skills);
     }
 
     private (CharacterStats? Stats, int Level) ReadStats(long loader)
@@ -412,6 +435,8 @@ internal sealed class GameWorldReader : IDisposable
     private readonly Dictionary<long, List<(string Name, int Offset)>> _widgetFields = [];
     private readonly Dictionary<long, bool> _isWidget = [];
     private List<string> _windows = [];
+    private List<SkillInfo> _skills = [];
+    private DateTime _skillsReadAt = DateTime.MinValue;
     private DateTime _windowsReadAt = DateTime.MinValue;
 
     /// <summary>
@@ -511,6 +536,59 @@ internal sealed class GameWorldReader : IDisposable
         }
         int end = Int32(loader + Offset(cls, "loader", "charData.invCount")) ?? 0;
         return new CharacterProgress(exp, need, yang, inventory, quick, end is > 0 and < 1000 ? end : 0);
+    }
+
+    // TMap<int, skill> element: key (int, padded to 8), the skill struct (0xA8), the hash links (8).
+    private const int SkillStride = 0xB8, SkillValue = 0x8;
+
+    /// <summary>The character's skills (loader.playerSkills): names per grade, type, level, mana,
+    /// cooldown ("sure"), duration and the description that says what it does.</summary>
+    private List<SkillInfo> ReadSkills(long loader)
+    {
+        var skills = new List<SkillInfo>();
+        if (!MemoryReads.IsPointer(loader))
+            return skills;
+        long map = loader + Offset(Pointer(loader + ObjClass), "loader", "playerSkills");
+        long data = Pointer(map);
+        int count = Int32(map + 8) ?? 0;
+        if (!MemoryReads.IsPointer(data) || count <= 0 || count > 200)
+            return skills;
+        int maxBits = Int32(map + 0x2C) ?? 0;
+        var bits = new byte[(Math.Max(count, 128) + 7) / 8];
+        long bitsAt = maxBits > 128 ? Pointer(map + 0x20) : map + 0x10;
+        if (!MemoryReads.IsPointer(bitsAt) || !_memory.Read(bitsAt, bits, (count + 7) / 8))
+            return skills;
+        var elements = new byte[count * SkillStride];
+        if (!_memory.Read(data, elements, elements.Length))
+            return skills;
+        for (int i = 0; i < count; i++)
+        {
+            if ((bits[i / 8] & (1 << (i % 8))) == 0)
+                continue;
+            int at = i * SkillStride + SkillValue;
+            long value = data + at;
+            int id = BitConverter.ToInt32(elements, at);
+            int level = BitConverter.ToInt32(elements, at + 0x68);
+            if (id <= 0 || level <= 0)
+                continue; // not learned
+            // Names per grade: normal (1–19), master (20–29), grand master (30+).
+            var names = new List<string>();
+            long namesAt = BitConverter.ToInt64(elements, at + 0x8);
+            int nameCount = BitConverter.ToInt32(elements, at + 0x10);
+            for (int n = 0; n < Math.Min(nameCount, 4) && MemoryReads.IsPointer(namesAt); n++)
+                names.Add(ReadFString(namesAt + n * 0x10, 64));
+            string name = names.Count == 0 ? $"Beceri {id}" : names[Math.Min(names.Count - 1, level >= 30 ? 2 : level >= 20 ? 1 : 0)];
+            string type = ReadFString(value + 0x58, 32);
+            string properties = ReadFString(value + 0x28, 400);
+            string description = ReadFString(value + 0x18, 400);
+            int duration = BitConverter.ToInt32(elements, at + 0x78);
+            var kind = type != "HP" || description.Contains("Pozitif", StringComparison.OrdinalIgnoreCase) ? SkillKind.Buff
+                : properties.Contains("Alan etkisi", StringComparison.OrdinalIgnoreCase) ? SkillKind.Area
+                : SkillKind.Single;
+            skills.Add(new SkillInfo(id, name, level, kind, BitConverter.ToInt32(elements, at + 0x70),
+                BitConverter.ToInt32(elements, at + 0x74), duration, BitConverter.ToInt32(elements, at + 0x6C)));
+        }
+        return skills;
     }
 
     /// <summary>The inventory map (TMap: a sparse array of slot → item, with a bit per used element).</summary>

@@ -2,6 +2,9 @@ using SekoBot.Memory;
 
 namespace SekoBot.Vision;
 
+/// <summary>A skill on a quick slot key, with what the game says about it.</summary>
+internal sealed record SkillSlot(Keys Key, string Name, SkillKind Kind, int Mana, int CooldownSec, int DurationSec);
+
 /// <summary>An item on the ground and where it is on screen.</summary>
 internal readonly record struct GroundSpot(long Id, Point Spot);
 
@@ -24,6 +27,18 @@ internal sealed record GameState(
 
     /// <summary>Mobs to go for before the others (attacking us, or Metin stones when preferred).</summary>
     public IReadOnlyList<Point> PriorityMobs { get; init; } = [];
+
+    /// <summary>Mobs attacking the character (on screen).</summary>
+    public IReadOnlyList<Point> Attackers { get; init; } = [];
+
+    /// <summary>The character's skills on quick slot keys (from memory).</summary>
+    public IReadOnlyList<SkillSlot> Skills { get; init; } = [];
+
+    /// <summary>MP in points (for skill costs), when known.</summary>
+    public int? MpPoints { get; init; }
+
+    /// <summary>HP potions left in the inventory, when known.</summary>
+    public int? HpPotionsLeft { get; init; }
 
     /// <summary>Items on the ground close to the character (on screen).</summary>
     public IReadOnlyList<GroundSpot> Drops { get; init; } = [];

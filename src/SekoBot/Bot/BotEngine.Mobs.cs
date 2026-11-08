@@ -13,7 +13,7 @@ internal sealed partial class BotEngine
 {
     /// <summary>What the bot sees on screen from memory: the mobs it may go for (nearest to us
     /// first), the ones to go for first, and the items close by. Null when the camera can't be read.</summary>
-    internal static (List<Point> Mobs, List<Point> Priority, List<GroundSpot> Drops)? MemoryView(
+    internal static (List<Point> Mobs, List<Point> Priority, List<GroundSpot> Drops, List<Point> Attackers)? MemoryView(
         WorldSnapshot? world, BotProfile profile, int width, int height)
     {
         if (world?.Camera is not CameraView camera)
@@ -27,7 +27,7 @@ internal sealed partial class BotEngine
                 continue;
             var spot = Point.Round(p);
             mobs.Add(spot);
-            if (mob.AttacksMe && profile.AttackersFirst)
+            if (mob.AttacksMe)
                 attackers.Add(spot);
             if (mob.IsMetin && profile.Metins == MetinMode.Prefer)
                 metins.Add(spot);
@@ -40,7 +40,28 @@ internal sealed partial class BotEngine
                     drops.Add(new GroundSpot(item.Id, Point.Round(p)));
         // Metin stones set to "first" come before everything, also before mobs attacking us
         // (those stand around the stone and get hit too).
-        return (mobs, metins.Count > 0 ? metins : attackers, drops);
+        return (mobs, metins.Count > 0 ? metins : profile.AttackersFirst ? attackers : [], drops, attackers);
+    }
+
+    /// <summary>
+    /// The character's skills that sit on a quick slot, with the key that uses them. Quick slots
+    /// 1–5 are the number keys 1–5, slots 6–10 the skill keys (F1–F5); a skill on a slot is stored
+    /// as −(100 + skill number).
+    /// </summary>
+    internal static List<SkillSlot> SkillKeys(WorldSnapshot? world, BotProfile profile)
+    {
+        var slots = new List<SkillSlot>();
+        if (world?.Progress is not { } progress || world.Skills is not { Count: > 0 } skills)
+            return slots;
+        for (int i = 0; i < progress.QuickSlots.Count && i < 10; i++)
+        {
+            if (progress.QuickSlots[i] is not (< -100 and var value) || skills.FirstOrDefault(s => s.Id == -value - 100) is not { } skill)
+                continue;
+            Keys? key = i < 5 ? Keys.D1 + i : i - 5 < profile.Keys.Skills.Length ? profile.Keys.Skills[i - 5] : null;
+            if (key is Keys k)
+                slots.Add(new SkillSlot(k, skill.Name, skill.Kind, skill.Mana, skill.CooldownSec, skill.DurationSec));
+        }
+        return slots;
     }
 
     /// <summary>Whether the bot should go for this mob, by the profile's choices. A mob that is

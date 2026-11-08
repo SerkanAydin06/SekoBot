@@ -46,6 +46,7 @@ internal sealed partial class Brain
         _lastAttackDown = Never;
         _hpLowSince = _mpLowSince = _lastEsc = Never;
         ResetSkills();
+        ResetRetreat();
         _failedSearches = 0;
         _blindFight = false;
         if (_profile().NavigateMode)
@@ -120,6 +121,10 @@ internal sealed partial class Brain
             }
             return actions;
         }
+
+        // Few HP potions left: get away from the mobs and stop somewhere quiet.
+        if (RetreatTick(state, p, actions))
+            return actions;
 
         CastSkills(state, p, actions);
 
