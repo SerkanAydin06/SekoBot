@@ -254,6 +254,24 @@ public class GameWorldTests
 
         game.Memory.Write(pawn + 0x778, 1);
         Assert.True(reader.Read()!.Dead);
+        Assert.False(reader.Read()!.ReviveReady); // no death window yet
+
+        // The death window: "Timer" counts down from 12; at 0 "Burada yeniden başla" works.
+        long widget = game.Class("Widget", ("Visibility", 0xCB));
+        long windowClass = game.Class("reSpawn_C", ("Timer", 0x2A8), ("wait", 0x2AC));
+        game.Memory.WriteLong(windowClass + GameWorldReader.StructSuper, widget);
+        long window = game.Object(windowClass, 0x300);
+        game.Memory.Write(window + 0xCB, 4);
+        game.Memory.WriteFloat(window + 0x2A8, 7.5f);
+        game.Memory.WriteFloat(window + 0x2AC, -5f);
+        long ui = game.Object(game.Class("UI_C", ("reSpawn", 0x818)), 0x900);
+        game.Memory.WriteLong(ui + 0x818, window);
+        game.Memory.WriteLong(gameData + 0x1210, ui);
+        var dying = reader.Read()!;
+        Assert.Equal(7.5, dying.ReviveIn!.Value, 3);
+        Assert.False(dying.ReviveReady);
+        game.Memory.WriteFloat(window + 0x2A8, -0.2f);
+        Assert.True(reader.Read()!.ReviveReady);
     }
 
     [Fact]

@@ -26,7 +26,7 @@ Tuşlar arayüzdeki **Tuşlar** sekmesinden değişir; diğer ince ayarlar `%LOC
 
 ## Ölünce
 
-Karakterin öldüğünü bot bellekten görür: tuşları bırakır, **"Burada yeniden başla"** düğmesinin yazısı griden beyaza dönüp tıklanabilir olunca ona tıklar. Dirilince HP %90'a gelene kadar (en fazla 30 sn) 1 tuşuyla iksir içer, kamerayı yeniden ayarlar ve avlanmaya devam eder. Bot düşük HP'de hiç durmaz (durmak, saldıran mobların karakteri öldürmesine yol açardı); iksir içmeye devam eder. Ayarlar: `ReviveHealTo` (0.90), `ReviveHealMaxMs` (30000).
+Karakterin öldüğünü bot bellekten görür: tuşları bırakır, ölüm penceresinin 12 sn'lik geri sayımını da bellekten izler ve **"Burada yeniden başla"** tıklanabilir olunca ona tıklar. Dirilince HP %90'a gelene kadar (en fazla 30 sn) 1 tuşuyla iksir içer, kamerayı yeniden ayarlar ve avlanmaya devam eder. Bot düşük HP'de hiç durmaz (durmak, saldıran mobların karakteri öldürmesine yol açardı); iksir içmeye devam eder. Ayarlar: `ReviveHealTo` (0.90), `ReviveHealMaxMs` (30000).
 
 ## Açılır pencereler
 
@@ -84,7 +84,7 @@ Böylece yeni bir ayarı oyunda denemeden önce eski bir oturumun üzerinde test
 ## Nasıl çalışır
 
 - **Yakalama:** Windows Graphics Capture (GPU); oyunun üstü örtülse de çalışır. Desteklenmezse GDI'ya düşer. Küçültülmüş pencere Windows tarafından çizilmez, görüntü alınamaz.
-- **Algılama:** Oyunla ilgili her şey bellekten salt okunur. Ekrandan yalnızca bir şeye bakılır: ölünce "Burada yeniden başla" düğmesinin tıklanabilir olması.
+- **Algılama:** Oyunla ilgili her şey bellekten salt okunur; ekran görüntüsü yalnızca canlı önizleme ve kayıt için alınır, karar vermek için kullanılmaz.
 - **Karar:** Saldır → topla → dön döngüsü, iksir bekleme süreleri, kritik HP'de durma.
 - **Girdi:** Tarama kodlu `SendInput`; oyun odakta değilse hiçbir şey gönderilmez ve basılı tuşlar bırakılır.
 
