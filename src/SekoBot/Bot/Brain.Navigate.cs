@@ -301,8 +301,19 @@ internal sealed partial class Brain
             return score;
         }
         var current = pool.FirstOrDefault(t => t.Id == _targetId);
-        if (current != null && current.Hp < current.MaxHp && current.Distance <= current.Reach * 2.5)
-            return current; // finish what we started
+        // Finish what we started — but a hurt mob knocked back out of reach (area skills push
+        // mobs away; seen in the game) isn't walked after while another one can be hit right here:
+        // it comes back by itself.
+        bool otherInReach = pool.Any(t => t.Id != _targetId && t.Distance <= t.Reach);
+        if (current != null && current.Hp < current.MaxHp &&
+            (current.Distance <= current.Reach * 1.4 || current.Distance <= current.Reach * 2.5 && !otherInReach))
+            return current;
+        if (current != null && current.Distance > current.Reach * 1.4 && otherInReach)
+        {
+            var near = pool.Where(t => t.Distance <= t.Reach).MaxBy(Score)!;
+            _targetId = near.Id;
+            return near;
+        }
         var best = pool.MaxBy(Score)!;
         if (current != null && Score(best) < Score(current) * 1.3)
             best = current;

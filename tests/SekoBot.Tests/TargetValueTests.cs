@@ -74,6 +74,26 @@ public class TargetValueTests
     }
 
     [Fact]
+    public void A_hurt_mob_knocked_out_of_reach_waits_while_one_next_to_us_is_hit()
+    {
+        var (brain, p) = Ready();
+        var hurt = CheapBear(new Point(Center.X + 30, Center.Y), 90);
+        Run(brain, 4000, 4500, _ => [hurt]);
+        // Knocked back to 220 (right), while another bear stands right next to us (left).
+        var pushed = CheapBear(new Point(Center.X + 200, Center.Y), 220, hp: 150);
+        var other = new TargetInfo(3, new Point(Center.X - 30, Center.Y), 80, 130, 103, 305, 305, 56, false);
+        var actions = Run(brain, 4500, 5500, _ => [pushed, other]);
+        Assert.Equal(BotPhase.Fighting, brain.Phase);
+        Assert.DoesNotContain(actions, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
+
+        // Nobody else in reach: go after the hurt one again.
+        var (brain2, _) = Ready();
+        Run(brain2, 4000, 4500, _ => [hurt]);
+        var chase = Run(brain2, 4500, 5500, _ => [pushed]);
+        Assert.Contains(chase, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
+    }
+
+    [Fact]
     public void Attacks_by_the_real_distance_not_by_how_far_it_looks_on_screen()
     {
         var (brain, p) = Ready();

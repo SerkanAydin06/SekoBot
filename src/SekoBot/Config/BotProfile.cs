@@ -38,7 +38,7 @@ internal sealed class KeyBindings
 internal sealed class BotProfile
 {
     /// <summary>Current profile format; older files are upgraded once by <see cref="ProfileStore"/>.</summary>
-    public const int CurrentVersion = 4;
+    public const int CurrentVersion = 5;
 
     /// <summary>Number of skill keys (F1–F5).</summary>
     public const int SkillSlots = 5;
@@ -64,7 +64,8 @@ internal sealed class BotProfile
     /// <summary>Title of the game window; the bot connects to it on its own.</summary>
     public string GameWindowTitle { get; set; } = "Mobile2 Global";
 
-    public int PerceptionFps { get; set; } = 10;
+    /// <summary>Decisions per second (everything comes from memory, so this is cheap).</summary>
+    public int PerceptionFps { get; set; } = 20;
 
     public double PotionHpBelow { get; set; } = 0.55;
     public double PotionMpBelow { get; set; } = 0.25;
@@ -247,6 +248,9 @@ internal static class ProfileStore
     {
         if (profile.Version >= BotProfile.CurrentVersion)
             return false;
+        // v5: memory reading is fast enough for 20 decisions a second (was 10).
+        if (profile.Version < 5 && profile.PerceptionFps == 10)
+            profile.PerceptionFps = 20;
         // v4: at 5 % the character often touched the mob without attacking ("stuck" next to it).
         if (Math.Abs(profile.AttackRadius - 0.05) < 0.0001)
             profile.AttackRadius = 0.10;
