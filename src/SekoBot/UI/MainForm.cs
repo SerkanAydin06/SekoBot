@@ -252,13 +252,12 @@ internal sealed class MainForm : Form
         _replay.Click += async (_, _) => await ReplayAsync();
         var openFolder = Theme.Button(advanced, "📁  Ayar klasörü", new Rectangle(300, 100, 142, 30), Theme.Secondary, Theme.SecondaryHover);
         openFolder.Click += (_, _) => OpenProfileFolder();
-        // First step towards reading mobs from memory: match memory positions to the names on screen.
-        _scanMobs = Theme.Button(advanced, "🔍  Mob tara (deneme)", new Rectangle(450, 100, 180, 30), Theme.Secondary, Theme.SecondaryHover);
+        // The mobs the bot sees in memory, listed in the log.
+        _scanMobs = Theme.Button(advanced, "🔍  Mobları göster", new Rectangle(450, 100, 180, 30), Theme.Secondary, Theme.SecondaryHover);
         _scanMobs.Click += (_, _) =>
         {
             if (_engine == null) { WriteLog("Önce oyun açık olmalı."); return; }
-            if (!_engine.StartMobScan(out string error)) WriteLog(error);
-            UpdateControls();
+            WriteLog(_engine.DescribeMobs());
         };
 
         // ── Log ──────────────────────────────────────────────────
@@ -484,7 +483,6 @@ internal sealed class MainForm : Form
             });
             engine.BotStopped += reason => PostUi(() => { _stopReason = reason; UpdateControls(); UpdateStats(); });
             engine.CoordinatesFinished += _ => PostUi(() => { SaveProfile(); UpdateControls(); UpdateStats(); });
-            engine.MobScanFinished += _ => PostUi(UpdateControls);
             _engine = engine;
             engine.Start(previewFps: 30);
             _frameSequence = 0;
@@ -789,9 +787,7 @@ internal sealed class MainForm : Form
         }
         else
         {
-            if (_engine.ScanningMobs)
-                SetLine("🔍 Mob taranıyor… Mobların yanında dur, oyuna dokunma.", Theme.Yellow);
-            else if (_engine.FindingCoordinates)
+            if (_engine.FindingCoordinates)
                 SetLine("📍 Koordinat aranıyor… Karakter kendi yürüyor, oyuna dokunma.", Theme.Yellow);
             else
                 SetLine(_stopReason is string reason
@@ -815,11 +811,9 @@ internal sealed class MainForm : Form
         bool running = _engine?.BotRunning == true;
         _gameButton.Text = connected ? "Bağlantı  ▾" : "Oyunu seç  ▾";
         bool finding = _engine?.FindingCoordinates == true;
-        _startBot.Enabled = connected && !finding && _engine?.ScanningMobs != true;
-        bool scanning = _engine?.ScanningMobs == true;
-        _findPosition.Enabled = connected && !running && !scanning;
-        _scanMobs.Enabled = connected && !running && !finding && !scanning;
-        _scanMobs.Text = scanning ? "Mob taranıyor…" : "🔍  Mob tara (deneme)";
+        _startBot.Enabled = connected && !finding;
+        _findPosition.Enabled = connected && !running;
+        _scanMobs.Enabled = connected;
         _findPosition.Text = finding ? "■  Aramayı durdur" : "📍  Koordinat bul";
         _startBot.Text = running ? "❚❚  DURAKLAT   F10" : "▶  BAŞLAT   F10";
         _stopBot.Enabled = running;

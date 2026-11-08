@@ -5,70 +5,122 @@ using SekoBot.Memory;
 namespace SekoBot.Bot;
 
 /// <summary>
-/// "Koordinat bul": walks the character around, reads the arrow on the big map after each walk
-/// and looks for the memory values that follow it (see <see cref="CoordinateSearch"/>). Once
-/// found, the position is read from memory every tick, so the bot no longer has to open the map
-/// to stay in its area.
+/// The character's position: read every tick from the game's memory (world units, see
+/// <see cref="GameWorldReader"/>) and turned into a big-map position with a formula learned from
+/// the yellow arrow on the big map. The formula is learned by "Koordinat bul" (a few short walks)
+/// or by itself whenever the big map is open, and saved per game map.
 /// </summary>
 internal sealed partial class BotEngine
 {
-    private const int FinderWalkMs = 3500;
+    private const int FinderWalkMs = 2500;
 
-    private readonly object _positionGate = new();
-    private PositionReader? _position;
-    private bool _positionTried;
+    private readonly object _worldGate = new();
+    private GameWorldReader? _world;
+    private TimeSpan _worldRetryAt = TimeSpan.FromDays(-1);
+    private WorldSnapshot? _snapshot;
+    private readonly MapCalibration _calibration = new();
+    private string _calibrationMap = "";
     private int _positionMismatches;
     private Task? _finderTask;
     private CancellationTokenSource? _finderCts;
     private volatile bool _finderWantsMap;
-    private volatile string _positionStatus = "Koordinat bilinmiyor (haritaya bakılıyor)";
+    private volatile string _positionStatus = "Koordinat bilinmiyor";
 
     public bool FindingCoordinates => _finderTask is { IsCompleted: false };
 
     /// <summary>Whether the position comes from memory, for the UI.</summary>
     public string PositionStatus => _positionStatus;
 
-    /// <summary>Raised from a worker thread when "Koordinat bul" ended (with the message for the log).</summary>
+    /// <summary>The last look at the game world from memory (null when it can't be read).</summary>
+    public WorldSnapshot? World => Volatile.Read(ref _snapshot);
+
+    /// <summary>Raised from a worker thread when "Koordinat bul" ended or the map formula changed
+    /// (with the message for the log); the profile should be saved.</summary>
     public event Action<string>? CoordinatesFinished;
 
-    private PointF? ReadLivePosition()
+    private WorldSnapshot? ReadWorld(TimeSpan now)
     {
-        lock (_positionGate)
+        lock (_worldGate)
         {
-            if (_position == null && !_positionTried)
+            if (_world == null)
             {
-                _positionTried = true;
-                _position = PositionReader.Create(_window.ProcessId, Profile.Position, out string status);
-                _positionStatus = status;
+                if (now < _worldRetryAt)
+                    return null;
+                _worldRetryAt = now + TimeSpan.FromSeconds(3);
+                _world = GameWorldReader.Open(_window.ProcessId, out string error);
+                if (_world == null)
+                {
+                    _positionStatus = "Bellek okunamıyor: " + error;
+                    Volatile.Write(ref _snapshot, null);
+                    return null;
+                }
             }
-            return _position?.Read();
+            var snapshot = _world.Read();
+            Volatile.Write(ref _snapshot, snapshot);
+            return snapshot;
         }
     }
 
-    /// <summary>
-    /// Whenever the map is open anyway, the arrow must agree with the memory position. If it
-    /// doesn't, the found address is wrong: stop using it (the bot falls back to the map).
-    /// </summary>
-    private void CheckPosition(Vision.GameState state)
+    /// <summary>Our big-map position, when the world is readable and the map formula is known.</summary>
+    private PointF? LivePosition(WorldSnapshot? world)
     {
-        if (state.LivePosition is not PointF live || !state.MapOpen || state.MapPosition is not PointF arrow)
-            return;
-        double distance = Math.Sqrt(Math.Pow(live.X - arrow.X, 2) + Math.Pow(live.Y - arrow.Y, 2));
-        if (distance <= 0.03)
+        if (world == null)
         {
+            if (_world != null)
+                _positionStatus = _world.Status;
+            return null;
+        }
+        if (!HasMapFormula(world, out var spec))
+        {
+            _positionStatus = "Konum bellekten ✓ — harita ayarı yok: 'Koordinat bul'a bas (ya da bir kez M ile haritayı aç)";
+            return null;
+        }
+        _positionStatus = "Koordinat: bellekten ✓";
+        return spec.ToMap(world.Player);
+    }
+
+    private bool HasMapFormula(WorldSnapshot world, out PositionSpec spec)
+    {
+        spec = Profile.Position!;
+        return spec is { Version: >= PositionSpec.CurrentVersion } && spec.MapName == world.MapName;
+    }
+
+    /// <summary>
+    /// Whenever the big map is open anyway: without a formula, learn it from the arrow; with
+    /// one, the arrow must agree, else the formula is dropped and learned again.
+    /// </summary>
+    private void LearnMap(Vision.GameState state, WorldSnapshot? world)
+    {
+        if (world == null || !state.MapOpen || state.MapPosition is not PointF arrow)
+            return;
+        if (HasMapFormula(world, out var spec))
+        {
+            var predicted = spec.ToMap(world.Player);
+            if (Distance(predicted, arrow) <= 0.03)
+            {
+                _positionMismatches = 0;
+                return;
+            }
+            if (++_positionMismatches < 5)
+                return;
             _positionMismatches = 0;
+            Profile.Position = null;
+            _log("Bellekteki konum haritadaki okla uyuşmuyor; harita ayarı yeniden öğrenilecek.");
+            CoordinatesFinished?.Invoke("");
             return;
         }
-        if (++_positionMismatches < 5)
-            return;
-        _positionMismatches = 0;
-        lock (_positionGate)
+        if (_calibrationMap != world.MapName)
         {
-            _position?.Dispose();
-            _position = null;
+            _calibration.Clear();
+            _calibrationMap = world.MapName;
         }
-        _positionStatus = "Koordinat haritayla uyuşmuyor: 'Koordinat bul' ile yeniden bul";
-        _log("Bellekteki koordinat haritadaki okla uyuşmuyor; artık haritaya bakılacak. 'Koordinat bul' ile yeniden bulabilirsin.");
+        if (_calibration.Add(world.Player, arrow) && _calibration.Fit(world.MapName) is { } fit)
+        {
+            Profile.Position = fit;
+            _calibration.Clear();
+            _log($"Harita ayarı öğrenildi ✓ (harita {world.MapName}). Bot artık alanını haritayı açmadan takip eder.");
+            CoordinatesFinished?.Invoke("");
+        }
     }
 
     public bool StartCoordinateFinder(out string error)
@@ -106,136 +158,56 @@ internal sealed partial class BotEngine
 
     public void StopCoordinateFinder() => _finderCts?.Cancel();
 
+    /// <summary>A few short walks; after each, the arrow on the big map and the world position
+    /// from memory make one pair for <see cref="MapCalibration"/>.</summary>
     private async Task<string> FindCoordinatesAsync(CancellationToken token)
     {
-        using var memory = ProcessMemory.Open(_window.ProcessId, out string openError);
-        if (memory == null)
-            return "Koordinat bulunamadı: " + openError + ".";
+        await Task.Delay(300, token);
+        if (World is not { } start)
+            return "Koordinat bulunamadı: oyunun belleği okunamıyor (" + _positionStatus + "). " +
+                   "SekoBot'u yönetici olarak aç; oyun güncellendiyse yeni sürüm gerekebilir.";
         using var input = new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
         var keys = Profile.Keys;
-        var search = new CoordinateSearch();
-        _log("Koordinat aranıyor: karakter birkaç kez yürüyecek, büyük harita açılıp kapanacak. " +
-             "Yaklaşık 1–2 dakika sürer; bu sırada oyuna dokunma. Açık, düz bir yerde dur.");
-
-        if (await ReadArrowAsync(input, keys.Map, token) is not PointF start)
-            return "Koordinat bulunamadı: büyük harita (M) açılmadı ya da üzerindeki sarı ok okunamadı.";
-        _log("Bellek fotoğrafı çekiliyor…");
-        string? error = await Task.Run(() => search.Begin(memory, start), token);
-        if (error != null)
-            return "Koordinat bulunamadı: " + error + ".";
-
-        // First walk diagonally, so that both coordinates change; other ways if blocked.
-        Keys[][] firstWalks =
-        [
-            [keys.MoveForward, keys.MoveRight], [keys.MoveBack, keys.MoveLeft],
-            [keys.MoveForward, keys.MoveLeft], [keys.MoveBack, keys.MoveRight],
-        ];
-        bool moved = false;
-        foreach (var walk in firstWalks)
-        {
-            await WalkAsync(input, walk, FinderWalkMs, token);
-            if (await ReadArrowAsync(input, keys.Map, token) is PointF arrow && Distance(arrow, start) >= 0.004)
-            {
-                _log("Değişen değerler aranıyor…");
-                error = await Task.Run(() => search.FirstMove(memory, arrow), token);
-                if (error != null)
-                    return "Koordinat bulunamadı: " + error + ".";
-                moved = true;
-                break;
-            }
-        }
-        if (!moved)
-            return "Koordinat bulunamadı: haritadaki ok yerinden oynamadı (karakter yürümedi ya da bir yere takıldı). Açık bir yerde tekrar dene.";
-        _log($"Yürürken değişen {search.Count:N0} değer var; eleniyor…");
-        await StandStillAsync(memory, search, token);
+        var calibration = new MapCalibration();
+        _log($"Konum bellekten okunuyor ✓ (X={start.Player.X:0.#}, Y={start.Player.Y:0.#}). Şimdi büyük haritayla eşleniyor: " +
+             "karakter birkaç kez kısa yürüyecek, harita açılıp kapanacak (yaklaşık 30 sn). Oyuna dokunma, açık bir yerde dur.");
 
         Keys[][] walks =
         [
-            [keys.MoveForward], [keys.MoveRight], [keys.MoveRight], [keys.MoveBack],
-            [keys.MoveLeft], [keys.MoveBack], [keys.MoveForward, keys.MoveRight],
+            [], [keys.MoveForward, keys.MoveRight], [keys.MoveBack, keys.MoveRight], [keys.MoveBack, keys.MoveLeft],
+            [keys.MoveForward, keys.MoveLeft], [keys.MoveForward], [keys.MoveRight],
         ];
+        PositionSpec? fit = null;
         for (int i = 0; i < walks.Length; i++)
         {
-            await WalkAsync(input, walks[i], FinderWalkMs, token,
-                () => Task.Run(() => search.MidWalk(memory), token));
-            if (await ReadArrowAsync(input, keys.Map, token) is PointF arrow)
-                await Task.Run(() => search.Move(memory, arrow), token);
-            if (i % 2 == 1)
-                await StandStillAsync(memory, search, token);
-            _log($"Koordinat aranıyor… {i + 1}/{walks.Length} (kalan aday {search.Count:N0})");
-        }
-
-        var matches = search.Results(10);
-        if (matches.Count == 0)
-            return "Koordinat bulunamadı: haritadaki okla birlikte değişen bir değer çıkmadı. Daha açık bir alanda tekrar dene.";
-
-        // Check: one more walk, and the found values must put us where the arrow is.
-        _log($"{matches.Count} olası koordinat var; son bir yürüyüşle doğrulanıyor…");
-        await WalkAsync(input, [keys.MoveBack, keys.MoveLeft], FinderWalkMs, token);
-        if (await ReadArrowAsync(input, keys.Map, token) is not PointF check)
-            return "Koordinat doğrulanamadı: harita okunamadı. Tekrar dene.";
-        CoordinateMatch? match = null;
-        foreach (var candidate in matches)
-        {
-            if (CoordinateSearch.Predict(memory, candidate) is PointF predicted && Distance(predicted, check) <= 0.015)
+            if (walks[i].Length > 0)
+                await WalkAsync(input, walks[i], FinderWalkMs, token);
+            if (await ReadArrowAsync(input, keys.Map, token) is PointF arrow && World is { } world)
             {
-                match = candidate;
-                break;
+                calibration.Add(world.Player, arrow);
+                fit = calibration.Fit(world.MapName);
+                if (fit != null && calibration.Count >= 4)
+                    break;
             }
+            _log($"Harita eşleniyor… {i + 1}/{walks.Length}");
         }
-        if (match == null)
-            return "Koordinat bulunamadı: bulunan değerler son yürüyüşte haritadaki okla uyuşmadı. Açık bir yerde tekrar dene.";
-        if (memory.TryReadNumber(match.MapXAddress, match.Size, out double foundX) &&
-            memory.TryReadNumber(match.MapYAddress, match.Size, out double foundY))
-            _log($"Bulunan değerler: X={foundX:0.##}, Y={foundY:0.##} (harita genişliği ≈ {1 / Math.Abs(match.Ax):N0} birim).");
-
-        var spec = new PositionSpec
-        {
-            Version = PositionSpec.CurrentVersion,
-            Size = match.Size,
-            Ax = match.Ax, Bx = match.Bx, Ay = match.Ay, By = match.By,
-            XAddress = match.MapXAddress, YAddress = match.MapYAddress,
-            ProcessId = _window.ProcessId, ProcessStartTicks = memory.StartTicks,
-        };
-        // A path from the character's objects survives a game restart; plain addresses don't.
-        if (PointerSearch.HpNodes(memory, memory.ModuleBase) is { } nodes &&
-            PointerSearch.Find(memory, nodes, match.MapXAddress, match.MapYAddress) is { } path)
-        {
-            spec.Node = path.Node;
-            spec.Offsets = path.Offsets;
-            spec.XOffset = path.XOffset;
-            spec.YOffset = path.YOffset;
-        }
-        Profile.Position = spec;
-        lock (_positionGate)
-        {
-            _position?.Dispose();
-            _position = PositionReader.Create(_window.ProcessId, spec, out string status);
-            _positionTried = true;
-            _positionStatus = status;
-        }
-        string kind = match.Size == 8 ? "double" : "float";
-        string where = spec.Node >= 0
-            ? "Kalıcı yol da bulundu; oyunu kapatıp açınca da çalışır."
-            : "Kalıcı yol bulunamadı; oyunu yeniden açınca 'Koordinat bul'a tekrar bas.";
-        return $"Koordinat bulundu ✓ ({kind}, uyum %{match.R2X * 100:0}/%{match.R2Y * 100:0}). {where} " +
-               "Bot artık alanını haritayı açmadan takip eder.";
+        if (fit == null)
+            return calibration.Count < 2
+                ? "Koordinat bulunamadı: büyük harita (M) açılmadı ya da üzerindeki sarı ok okunamadı."
+                : "Koordinat bulunamadı: karakter yeterince yürümedi ya da haritadaki ok tutarsız okundu. Açık bir yerde tekrar dene.";
+        Profile.Position = fit;
+        return $"Koordinat hazır ✓ (harita {fit.MapName}, uyum %{fit.Fit * 100:0}). Bot artık alanını haritayı açmadan takip eder.";
     }
 
     private static double Distance(PointF a, PointF b) => Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(a.Y - b.Y, 2));
 
-    /// <param name="midway">Runs halfway through the walk (while still walking, map closed).</param>
-    private static async Task WalkAsync(InputExecutor input, Keys[] keys, int ms, CancellationToken token,
-        Func<Task>? midway = null)
+    private static async Task WalkAsync(InputExecutor input, Keys[] keys, int ms, CancellationToken token)
     {
         foreach (var key in keys)
             input.Enqueue(new KeyDownAction(key));
         try
         {
-            await Task.Delay(ms / 2, token);
-            if (midway != null)
-                await midway();
-            await Task.Delay(ms - ms / 2, token);
+            await Task.Delay(ms, token);
         }
         finally
         {
@@ -243,12 +215,6 @@ internal sealed partial class BotEngine
                 input.Enqueue(new KeyUpAction(key));
         }
         await Task.Delay(900, token); // come to a stop
-    }
-
-    private static async Task StandStillAsync(ProcessMemory memory, CoordinateSearch search, CancellationToken token)
-    {
-        await Task.Delay(1500, token);
-        await Task.Run(() => search.Still(memory), token);
     }
 
     /// <summary>Opens the big map, averages a few readings of the arrow, closes the map again.</summary>
