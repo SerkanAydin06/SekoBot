@@ -93,16 +93,21 @@ public class GameWorldTests
         }
     }
 
-    private static (FakeGame Game, long Level, List<long> Actors, long NpcClass) World(string map = "c2")
+    private static (FakeGame Game, long Level, List<long> Actors, long NpcClass) World(string map = "c2") => World(out _, map);
+
+    /// <param name="gameData">The game data object ("m2data_C", the step before gameManager).</param>
+    private static (FakeGame Game, long Level, List<long> Actors, long NpcClass) World(out long gameData, string map = "c2")
     {
         var game = new FakeGame();
-        // HP pointer root → … → gameManager
+        // HP pointer root → … → game data → gameManager
         long cursor = Module + CharacterStatsReader.HpBaseOffset;
+        gameData = 0;
         foreach (long offset in GameWorldReader.GameManagerPath)
         {
             long next = game.Alloc(0x400);
             game.Memory.WriteLong(cursor, next);
             cursor = next + offset;
+            gameData = next;
         }
         long gm = game.Object(game.Class("gameManager"), 0xE00);
         game.Memory.WriteLong(cursor, gm);
@@ -178,6 +183,29 @@ public class GameWorldTests
         Assert.NotNull(world.Camera);
         Assert.Equal(90, world.Camera.Fov, 3);
         Assert.Equal(-81.5, world.Camera.Pitch, 3);
+    }
+
+    [Fact]
+    public void Reads_the_selected_mob_and_its_health()
+    {
+        var (game, level, actors, npc) = World(out long gameData);
+        long bear = Npc(game, npc, "Aç Ayı", 8, 61, 305, 19700, 18000);
+        actors.Add(bear);
+        SetActors(game, level, actors);
+        using var reader = new GameWorldReader(game.Memory, Module);
+
+        Assert.Null(reader.Read()!.Target);
+        Assert.Equal(0, reader.Read()!.TargetHp);
+
+        game.Memory.WriteLong(gameData + 0x1C0, bear); // selectedActor
+        var world = reader.Read()!;
+        Assert.Equal("Aç Ayı", world.Target!.Name);
+        Assert.Equal(0.2, world.TargetHp, 3);
+
+        game.Memory.Write(bear + 0x50C, 1); // it died: still the target, with no health
+        world = reader.Read()!;
+        Assert.Equal(0, world.TargetHp);
+        Assert.Empty(world.Mobs);
     }
 
     [Fact]

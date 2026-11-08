@@ -113,7 +113,7 @@ internal sealed class PreviewControl : Control
 
         int w = Image.Width, h = Image.Height;
         using var small = new Font("Segoe UI", 8f, FontStyle.Bold);
-        if (Profile is { } p)
+        if (Profile is { } p && State is not { TargetFromMemory: true })
         {
             DrawBar(g, p.TargetBar, w, h, Theme.Red, "HEDEF", small);
         }

@@ -743,7 +743,8 @@ internal sealed class MainForm : Form
 
     private void UpdateStats()
     {
-        _calibrationState.Text = $"HP/MP: bellek   Hedef {Mark(_profile.TargetBar)}";
+        bool targetFromMemory = _engine?.State?.TargetFromMemory == true;
+        _calibrationState.Text = targetFromMemory ? "HP/MP: bellek   Hedef: bellek" : $"HP/MP: bellek   Hedef {Mark(_profile.TargetBar)}";
 
         if (_engine == null)
         {
@@ -831,6 +832,8 @@ internal sealed class MainForm : Form
             ? "HP/MP bellekten okunur. Hedef barını işaretlemek için oyuna bağlan."
             : hasSelection
                 ? "Hedef HP barını seçtiysen düğmesine bas."
+                : _engine?.State?.TargetFromMemory == true
+                    ? "HP/MP ve hedefin canı bellekten okunuyor; hedef barı gerekmez."
                 : _profile.TargetBar == null
                     ? "Hedef barı otomatik aranıyor; gerekirse canlı görüntüden seç."
                     : "HP/MP bellekten; hedef barı görüntüden okunuyor.";
