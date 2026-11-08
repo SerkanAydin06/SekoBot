@@ -86,6 +86,11 @@ internal sealed class BotProfile
     /// <summary>Stop healing after this long even if HP isn't there yet.</summary>
     public int ReviveHealMaxMs { get; set; } = 30000;
 
+    /// <summary>Stop the bot when a game master (GM) shows up nearby.</summary>
+    public bool StopNearGm { get; set; } = true;
+    /// <summary>Stop the bot when the inventory has no free slot left (loot would be lost).</summary>
+    public bool StopWhenInventoryFull { get; set; } = true;
+
     /// <summary>Close windows that pop up over the game (Esc once, again after 3 s if still open).</summary>
     public bool ClosePopups { get; set; } = true;
     /// <summary>While attacking, press the pickup key this often.</summary>

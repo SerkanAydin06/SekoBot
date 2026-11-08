@@ -186,6 +186,8 @@ internal sealed class MainForm : Form
         Theme.Label(area, "Bot başladığı yeri hatırlar ve bu sınırın dışına çıkınca geri yürür. Yerini oyunun " +
             "belleğinden okur; harita açmaz, ayar gerekmez. 0 = sınır yok.",
             new Rectangle(370, 0, 360, 68), 9f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+        Check(area, "GM görünce dur", 0, 34, 180, _profile.StopNearGm, v => _profile.StopNearGm = v);
+        Check(area, "Envanter dolunca dur", 190, 34, 175, _profile.StopWhenInventoryFull, v => _profile.StopWhenInventoryFull = v);
         _positionState = Theme.Label(area, "", new Rectangle(0, 74, 736, 32), 9f, Theme.Muted);
 
         // Tuşlar
@@ -671,7 +673,8 @@ internal sealed class MainForm : Form
         _technical.Text = $"{_engine.StatsSource} · {s.CaptureFps:0} FPS";
         var world = _engine.World;
         _positionState.Text = world != null
-            ? $"📍 Konum bellekten ✓  X={world.Player.X:0}, Y={world.Player.Y:0}  (harita {world.MapName}, {world.Mobs.Count} mob)"
+            ? $"📍 Konum bellekten ✓  X={world.Player.X:0}, Y={world.Player.Y:0}  (harita {world.MapName}, {world.Mobs.Count} mob, {world.OtherPlayers} oyuncu" +
+              (_engine.FreeInventorySlots is int free ? $", envanterde {free} boş yer)" : ")")
             : "📍 " + _engine.MemoryStatus;
         _positionState.ForeColor = world != null ? Theme.Green : Theme.Muted;
         _hpMeter.Value = state?.Hp;
