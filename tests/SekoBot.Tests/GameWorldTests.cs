@@ -132,6 +132,8 @@ public class GameWorldTests
         game.Memory.Write(npc + 0x628, (byte)(player ? 1 : 0));
         game.Memory.Write(npc + 0x798, (byte)(attackable ? 1 : 0));
         game.Memory.Write(npc + 0x7A2, (byte)(owned ? 1 : 0));
+        if (player)
+            game.FString(npc + 0x640, name);
         return npc;
     }
 
@@ -151,7 +153,10 @@ public class GameWorldTests
         actors.Add(game.Object(game.Class("StaticMeshActor"), 0x200));
         actors.Add(Npc(game, npc, "Aç Mavi Kurt", 6, 120, 180, 19700, 18000));
         actors.Add(Npc(game, npc, "Ölü Kurt", 6, 0, 180, 19800, 18000, dead: true));
-        actors.Add(Npc(game, npc, "", 0, 1, 1, 19900, 18000, player: true, attackable: false));
+        actors.Add(Npc(game, npc, "Receoplex", 0, 1, 1, 19900, 18000, player: true, attackable: false));
+        long gm = Npc(game, npc, "Ayaz", 0, 1, 1, 19950, 18000, player: true, attackable: false);
+        game.Memory.Write(gm + 0x6B5, 1); // isGM
+        actors.Add(gm);
         actors.Add(Npc(game, npc, "Satıcı", 1, 100, 100, 19600, 18000, attackable: false));
         actors.Add(Npc(game, npc, "Evcil", 1, 100, 100, 19600, 18100, owned: true));
         long camera = game.Object(game.Class("PlayerCameraManager"), 0x2200);
@@ -174,7 +179,9 @@ public class GameWorldTests
         Assert.Equal(120, mob.Hp);
         Assert.Equal(180, mob.MaxHp);
         Assert.Equal(19700, mob.Position.X, 1);
-        Assert.Equal(1, world.OtherPlayers);
+        Assert.Equal(2, world.OtherPlayers);
+        Assert.Equal(["Receoplex", "Ayaz"], world.Players!.Select(p => p.Name));
+        Assert.Equal([false, true], world.Players!.Select(p => p.LooksLikeGm));
         Assert.NotNull(world.Camera);
         Assert.Equal(90, world.Camera.Fov, 3);
         Assert.Equal(-81.5, world.Camera.Pitch, 3);

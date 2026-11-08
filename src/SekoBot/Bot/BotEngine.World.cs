@@ -1,3 +1,4 @@
+using SekoBot.Config;
 using SekoBot.Memory;
 
 namespace SekoBot.Bot;
@@ -71,6 +72,60 @@ internal sealed partial class BotEngine
             return null; // not enough history yet
         return world.Player.DistanceXY(past.Position) > 15;
     }
+
+    private int _inventoryWarnedAt = int.MaxValue;
+    private string? _gmSeen;
+
+    /// <summary>
+    /// Stops the bot when a game master shows up, or when the inventory is full (the loot would
+    /// be lost). Warns a little before the inventory is full.
+    /// </summary>
+    private void CheckSafety(WorldSnapshot world, BotProfile profile)
+    {
+        var gm = world.Players?.FirstOrDefault(p => p.LooksLikeGm);
+        if (gm == null)
+            _gmSeen = null;
+        else if (_gmSeen != gm.Name)
+        {
+            _gmSeen = gm.Name;
+            double metres = gm.Position.DistanceXY(world.Player) / 100;
+            _log($"⚠ GM görüldü: {gm.Name} ({metres:0} m uzakta).");
+            Alert();
+            if (profile.StopNearGm)
+                StopFor($"GM görüldü ({gm.Name})");
+        }
+
+        if (world.Progress?.FreeSlots() is not int free)
+            return;
+        if (free <= 0 && profile.StopWhenInventoryFull)
+        {
+            _log("⚠ Envanter doldu; toplanan eşyalar kaybolmasın diye bot durduruluyor.");
+            Alert();
+            StopFor("envanter dolu");
+            return;
+        }
+        if (free <= 5 && free < _inventoryWarnedAt)
+        {
+            _inventoryWarnedAt = free;
+            _log($"Envanterde {free} boş yer kaldı.");
+        }
+        else if (free > 10)
+            _inventoryWarnedAt = int.MaxValue;
+    }
+
+    private void StopFor(string reason)
+    {
+        StopBot(reason);
+        BotStopped?.Invoke(reason);
+    }
+
+    private static void Alert()
+    {
+        try { System.Media.SystemSounds.Exclamation.Play(); } catch { }
+    }
+
+    /// <summary>Free bag slots, when known.</summary>
+    public int? FreeInventorySlots => World?.Progress?.FreeSlots();
 
     /// <summary>HP and MP potions left in the inventory (the items on the potion keys), when known.</summary>
     public (int? Hp, int? Mp) PotionsLeft()

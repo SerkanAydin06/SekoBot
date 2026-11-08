@@ -48,6 +48,11 @@ Level atlayınca çıkan reklam penceresi ve yanlışlıkla açılan Esc menüs�
 - **İksir:** HP/MP iksir tuşunun (1, 2) hızlı slotundaki eşyanın envanterdeki toplam adedi; azaldıkça "içildi" sayılır. İksir bitince günlüğe uyarı yazılır, kutu 20'nin (MP 10'un) altında kırmızı olur.
 - **Yang:** Oturumda kazanılan yang.
 
+## Güvenlik: GM ve envanter
+
+- **GM görünce dur** (Alan sekmesi, varsayılan açık): Yakında oyunun GM olarak işaretlediği (ya da adında [GM]/[GA]/[SA] olan) bir oyuncu görünürse bot uyarı sesi çıkarır, günlüğe adını ve uzaklığını yazar ve durur. Kapalıyken yalnızca uyarır.
+- **Envanter dolunca dur** (Alan sekmesi, varsayılan açık): Envanterde boş yer kalmayınca bot uyarı sesiyle durur, toplanan eşyalar kaybolmaz. 5 boş yer kalınca günlüğe uyarı yazar. Boş yer Alan sekmesinde de görünür. Yalnızca açık (paralı olmayan) sayfalar sayılır; kılıç, yay, çift el silah ve zırh alt alta 2 yuva kaplar, emin olunmayan eşyalar 1 yuva sayılır (böylece bot boşuna durmaz).
+
 ## Kalabalığa git
 
 **Kalabalığa git** işaretliyken (varsayılan) bot, yanında mob yoksa ekrandaki en iyi mob grubuna yürür (moblar bellekten): birbirine yakın en az 3 mob (`CrowdMinMobs`) bir grup sayılır; yakın ve kalabalık grup kazanır, uzaktaki grubun çok daha büyük olması gerekir. Grubun ortasına varınca Space ile saldırır. Yanındaki mobu bitirmeden gruba koşmaz, neredeyse ulaştığı tek mobu önce alır ve seçtiği gruptan kolay kolay vazgeçmez (zikzak yapmaz). Kapalıyken her zaman en yakın moba gider.

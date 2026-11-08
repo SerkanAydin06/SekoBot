@@ -153,7 +153,10 @@ internal sealed partial class BotEngine : IDisposable
                         if (TrackMemory(world != null, now))
                         {
                             if (world != null && BotRunning)
+                            {
                                 _session.Update(world, now, PotionVnum(world, profile.Keys.HpPotion), PotionVnum(world, profile.Keys.MpPotion));
+                                CheckSafety(world, profile);
+                            }
                             var (phase, actions) = TickBot(state);
                             Volatile.Read(ref _recorder)?.Record(frame, state, phase, actions, IsImportant(actions, profile));
                         }

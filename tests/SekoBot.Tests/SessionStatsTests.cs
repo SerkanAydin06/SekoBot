@@ -89,6 +89,30 @@ public class SessionStatsTests
     }
 
     [Fact]
+    public void Free_inventory_slots_count_tall_items_twice()
+    {
+        // Two pages: slots 11–106. Equipment (slots 1–10) doesn't count.
+        var items = new List<InventoryItem> { new(1, 3014, 1), new(2, 11214, 1) };
+        for (int slot = 11; slot <= 106; slot++)
+            items.Add(new InventoryItem(slot, 27003, 200));
+        Assert.Equal(0, new CharacterProgress(0, 1, 0, items, [], 106).FreeSlots());
+
+        // As found in the game: a bow, an armour and a dagger.
+        var some = new CharacterProgress(0, 1, 0,
+            [new(59, 2030, 1), new(61, 11800, 1), new(91, 1020, 1), new(85, 39006, 1), new(200, 27003, 1)], [], 106);
+        Assert.Equal(96 - 2 * 2 - 2, some.FreeSlots()); // slot 200 is on a locked page
+        Assert.Null(new CharacterProgress(0, 1, 0, [], [], 0).FreeSlots());
+    }
+
+    [Theory]
+    [InlineData("Receoplex", false, false)]
+    [InlineData("Receoplex", true, true)]
+    [InlineData("[GM]Ayaz", false, true)]
+    [InlineData("[sa]Mod", false, true)]
+    public void Game_masters_are_recognised(string name, bool flag, bool gm) =>
+        Assert.Equal(gm, new OtherPlayer(name, flag, Me).LooksLikeGm);
+
+    [Fact]
     public void Quick_slots_point_at_inventory_items()
     {
         var progress = new CharacterProgress(0, 1, 0,
