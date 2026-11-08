@@ -14,7 +14,7 @@ namespace SekoBot.Bot;
 internal sealed record EngineStats(
     string CaptureName, double CaptureFps, double AnalysisMs, BotPhase Phase,
     bool BotRunning, bool DryRun, int Cycles, int Potions, TimeSpan BotUptime,
-    int Deaths, string Area);
+    int Deaths, string Area, SessionReport? Session);
 
 /// <summary>
 /// Pipeline: capture → (latest frame only) → memory + perception → brain → input.
@@ -43,6 +43,8 @@ internal sealed partial class BotEngine : IDisposable
     private ChannelWriter<Frame>? _writer;
     private SessionRecorder? _recorder;
     private bool _disposed;
+    private readonly SessionStats _session = new();
+    private bool _sessionStarted;
     private bool _statsOk = true, _statsWarned;
     private TimeSpan _statsFailSince = TimeSpan.FromDays(-1);
 
@@ -52,6 +54,7 @@ internal sealed partial class BotEngine : IDisposable
         Profile = profile;
         _log = log;
         _brain = new Brain(() => Profile);
+        _session.PotionsRanOut += kind => _log($"⚠ {kind} iksiri bitti! Envanterde kalmadı.");
     }
 
     public WindowInfo Window => _window;
@@ -149,6 +152,8 @@ internal sealed partial class BotEngine : IDisposable
                         // No memory (loading screen): the bot waits.
                         if (TrackMemory(world != null, now))
                         {
+                            if (world != null && BotRunning)
+                                _session.Update(world, now, PotionVnum(world, profile.Keys.HpPotion), PotionVnum(world, profile.Keys.MpPotion));
                             var (phase, actions) = TickBot(state);
                             Volatile.Read(ref _recorder)?.Record(frame, state, phase, actions, IsImportant(actions, profile));
                         }
@@ -266,6 +271,8 @@ internal sealed partial class BotEngine : IDisposable
                 background);
             _botStarted = _clock.Elapsed;
             _brain.Start(_clock.Elapsed);
+            _session.Reset(_clock.Elapsed);
+            _sessionStarted = true;
         }
         _log(dryRun ? "Bot kuru çalışmada başladı (girdi gönderilmez)."
             : background ? "Bot başladı (oyun arka planda kalabilir). Acil durdurma: F11"
@@ -303,7 +310,8 @@ internal sealed partial class BotEngine : IDisposable
                     _brain.Phase, _input != null, _input?.DryRun ?? true,
                     _brain.Cycles, _brain.Potions,
                     _input != null ? _clock.Elapsed - _botStarted : TimeSpan.Zero,
-                    _brain.Deaths, _brain.AreaStatus);
+                    _brain.Deaths, _brain.AreaStatus,
+                    _sessionStarted ? _session.Report(World, _clock.Elapsed) : null);
             }
         }
     }

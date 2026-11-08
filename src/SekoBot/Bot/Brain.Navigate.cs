@@ -17,6 +17,7 @@ internal sealed partial class Brain
     /// <summary>Keys pressed for a while next to everything else (camera G/F, turning E).</summary>
     private readonly List<TimedKey> _timed = [];
     private bool _attackHeld, _wasFighting;
+    private TimeSpan _tickTime;
     private TimeSpan _pauseUntil = Never, _lastSeen = Never, _lastLootTap = Never, _lastKeyRefresh = Never;
     private TimeSpan _movingSince = Never, _lastCameraSetup = Never, _exploreUntil = Never;
     private HashSet<Keys> _exploreKeys = [];
@@ -41,7 +42,7 @@ internal sealed partial class Brain
         _exploreKeys = [];
         _exploreStep = 0;
         _crowdTarget = _lastCrowd = null;
-        _sidestepUntil = _notMovingSince = Never;
+        _sidestepUntil = _notMovingSince = _walkStartedAt = _blockCheckedAt = _attackReleasedAt = Never;
         _sidestepKeys = [];
         _sidesteps = 0;
         ResetLeash();
@@ -91,6 +92,7 @@ internal sealed partial class Brain
     private void Navigate(GameState state, BotProfile p, List<BotAction> actions)
     {
         var now = state.Time;
+        _tickTime = now;
         // Re-send held keys every second: restores them if the game lost focus meanwhile.
         bool refresh = now - _lastKeyRefresh >= Ms(1000);
         if (refresh)
@@ -202,7 +204,7 @@ internal sealed partial class Brain
             Enter(BotPhase.Moving, now);
             _movingSince = now;
         }
-        if (CheckBlocked(state, p, actions))
+        if (CheckBlocked(state, p, actions, mobClose: best <= radius * 2))
             return;
         if (_movingSince != Never && now - _movingSince >= Ms(p.MoveStuckMs))
         {
@@ -295,6 +297,7 @@ internal sealed partial class Brain
         {
             actions.Add(new KeyUpAction(p.Keys.Attack));
             _attackHeld = false;
+            _attackReleasedAt = _tickTime;
         }
     }
 }

@@ -12,14 +12,14 @@ Metin2 için tek dosyalı Windows farm botu. Kurulum gerekmez, açılışta kend
 2. **Her şey oyunun belleğinden okunur:** HP/MP, karakterin konumu, kamera, etraftaki moblar (isim, seviye, can), seçili hedef ve canı, öldün mü. Kalibrasyon, bar işaretleme ya da "Koordinat bul" gerekmez; oyunu kapatıp açınca da hiçbir şey yeniden bulunmaz.
 3. **▶ BAŞLAT (F10)** ile başlat, **■ DURDUR (F11)** her zaman acil durdurur. (F12'yi Windows ayırdığı için kısayol F11'dir.) Üstteki satır botun ne yaptığını gösterir (ör. "Saldırıyor · Alanın içinde").
 
-**Arayüz:** Ortada canlı görüntü (sarı halka = bulunan mob), sağda **OTURUM** (süre, öldürülen mob, saatte mob, ölüm, iksir, alan durumu). Altta ayar sekmeleri, her değişiklik hemen kaydedilir:
+**Arayüz:** Ortada canlı görüntü (sarı halka = bulunan mob), sağda **OTURUM**: süre, öldürülen mob, saatte mob, kazanılan EXP, saatte EXP, seviye (yüzde ve seviye atlamaya kalan tahmini süre), kazanılan yang, iksir (1 ve 2 tuşundaki iksirden envanterde kalan adet, içilen sayısı), ölüm. Altta ayar sekmeleri, her değişiklik hemen kaydedilir:
 - **Saldırı:** saldırı mesafesi, eşya toplama sıklığı, Kalabalığa git, kalabalık için en az mob.
 - **İksir & Buff:** HP/MP iksiri eşiği, ölünce yeniden başla, F1–F5 buff süreleri.
 - **Alan:** alan sınırı (metre) ve bellekten okunan konum.
 - **Tuşlar:** tüm tuşlar; tuşa tıkla, yeni tuşa bas.
 - **Gelişmiş:** kuru çalışma (tuş göndermeden dener), kayıt / kaydı oynat, ayar klasörü, **Mobları göster**.
 
-**Yürüme modu (varsayılan):** Bot başlarken **G**'ye basılı tutup kamerayı tepeden bakışa alır, **F** ile uzaklaştırır. Sonra bellekteki moblardan karaktere en yakın olanı seçer (kamerayla ekrandaki yerini hesaplar), **W/A/S/D** ile ona doğru yürür (çapraz için iki tuş), mob yanına gelince **Space**'e basılı tutar, saldırırken de mobu ortada tutmak için **W/A/S/D** ile yönlendirmeye devam eder **Z**'ye her zaman (yürürken de) 1,5 sn'de bir basarak eşya toplar. Kamera kaymasın diye 30 sn'de bir **G** ve **F**'ye tekrar basar; bunu yürümeyi ya da saldırıyı durdurmadan, aynı anda yapar. Yakında mob kalmayınca eşyayı toplayıp en yakın moba gider; ekranda hiç mob yoksa biraz yürüyüp kamerayı çevirerek bakar. 8 sn'de ulaşamadığı mobu bırakır. Ayarlar `profile.json` içinde: `CameraSetupHoldMs`, `CameraRefreshMs` (30000), `AttackRadius` (ekran yüksekliğinin oranı, 0.05; arayüzde "Saldırı mesafesi (%)"), `LootEveryMs`, `ExploreWalkMs`, `MoveStuckMs`; tuşlar `MoveLeft`/`MoveBack`/`MoveRight`/`CameraTop`/`ZoomOut`. Eski tıklama modu için `"NavigateMode": false`.
+**Yürüme modu (varsayılan):** Bot başlarken **G**'ye basılı tutup kamerayı tepeden bakışa alır, **F** ile uzaklaştırır. Sonra bellekteki moblardan karaktere en yakın olanı seçer (kamerayla ekrandaki yerini hesaplar), **W/A/S/D** ile ona doğru yürür (çapraz için iki tuş), mob yanına gelince **Space**'e basılı tutar, saldırırken de mobu ortada tutmak için **W/A/S/D** ile yönlendirmeye devam eder **Z**'ye her zaman (yürürken de) 1,5 sn'de bir basarak eşya toplar. Kamera kaymasın diye 30 sn'de bir **G** ve **F**'ye tekrar basar; bunu yürümeyi ya da saldırıyı durdurmadan, aynı anda yapar. Yakında mob kalmayınca eşyayı toplayıp en yakın moba gider; ekranda hiç mob yoksa biraz yürüyüp kamerayı çevirerek bakar. 8 sn'de ulaşamadığı mobu bırakır. Ayarlar `profile.json` içinde: `CameraSetupHoldMs`, `CameraRefreshMs` (30000), `AttackRadius` (ekran yüksekliğinin oranı, 0.10; arayüzde "Saldırı mesafesi (%)"), `LootEveryMs`, `ExploreWalkMs`, `MoveStuckMs`; tuşlar `MoveLeft`/`MoveBack`/`MoveRight`/`CameraTop`/`ZoomOut`. Eski tıklama modu için `"NavigateMode": false`.
 
 Tuşlar arayüzdeki **Tuşlar** sekmesinden değişir; diğer ince ayarlar `%LOCALAPPDATA%\SekoBot\profile.json` içinde (**Gelişmiş → Ayar klasörü**).
 
@@ -39,7 +39,14 @@ Level atlayınca çıkan reklam penceresi ve yanlışlıkla açılan Esc menüs�
 
 **Mobları göster (Gelişmiş sekmesi):** Botun bellekte gördüğü mobları (isim, seviye, HP, uzaklık), seçili hedefi, karakterin HP/MP'sini ve etraftaki oyuncu sayısını günlüğe yazar. Bir şey ters giderse bu listeyi geliştiriciye gönder.
 
-**Takılma:** W/A/S/D basılıyken karakterin konumu 0,7 sn değişmiyorsa karakter bir ağaca/kayaya takılmıştır; bot yana kayarak dolanır (her seferinde diğer yana), sonra yoluna devam eder.
+**Takılma:** W/A/S/D basılıyken karakterin konumu 0,7 sn değişmiyorsa karakter bir ağaca/kayaya takılmıştır (yürümeye başladıktan sonraki ilk 1 sn — vurma hareketinin bitmesi — ve mobun dibindeyken sayılmaz); bot yana kayarak dolanır (her seferinde diğer yana), sonra yoluna devam eder.
+
+## Oturum istatistikleri
+
+- **Öldürülen mob:** Karakterin 8 m yakınında canlı görülen bir mob ölür (ya da dünyadan kalkar) **ve** birkaç saniye içinde EXP'in artarsa sayılır. Başkasının kestiği mob (EXP gelmez) ve uzaktaki moblar sayılmaz.
+- **EXP:** Oturumda kazanılan EXP (seviye atlayınca eski seviyenin kalanı + yeni seviyedeki EXP), saatte EXP, seviye yüzdesi ve bu hızla seviye atlamaya kalan süre.
+- **İksir:** HP/MP iksir tuşunun (1, 2) hızlı slotundaki eşyanın envanterdeki toplam adedi; azaldıkça "içildi" sayılır. İksir bitince günlüğe uyarı yazılır, kutu 20'nin (MP 10'un) altında kırmızı olur.
+- **Yang:** Oturumda kazanılan yang.
 
 ## Kalabalığa git
 

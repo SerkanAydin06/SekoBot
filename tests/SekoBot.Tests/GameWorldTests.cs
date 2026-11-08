@@ -230,6 +230,50 @@ public class GameWorldTests
     }
 
     [Fact]
+    public void Reads_experience_money_inventory_and_quick_slots()
+    {
+        var (game, level, actors, _) = World(out long gameData);
+        SetActors(game, level, actors);
+        long loader = game.Object(game.Class("loader"), 0x900);
+        game.Memory.WriteLong(gameData + 0x1188, loader);
+        long data = loader + 0x770;
+        game.Memory.WriteLong(data + 0x70, 10538);  // Exp
+        game.Memory.WriteLong(data + 0x78, 123442); // needexp (left to the next level)
+        game.FString(data + 0x48, "90716");         // yang
+        // Inventory: TMap slot → item, 3 elements of which the middle one is free.
+        long map = data + 0xD8;
+        long elements = game.Alloc(3 * 0x98);
+        (int Slot, int Vnum, int Count)[] stacks = [(12, 27201, 181), (13, 99999, 5), (15, 27204, 182)];
+        for (int i = 0; i < stacks.Length; i++)
+        {
+            game.Int(elements + i * 0x98, stacks[i].Slot);
+            game.Int(elements + i * 0x98 + 8, stacks[i].Vnum);
+            game.Int(elements + i * 0x98 + 8 + 0x3C, stacks[i].Count);
+        }
+        game.Memory.WriteLong(map, elements);
+        game.Int(map + 8, 3);
+        game.Int(map + 0x10, 0b101);  // allocation bits (inline)
+        game.Int(map + 0x2C, 128);    // max bits: inline
+        long quick = game.Alloc(16);
+        game.Int(quick, 12);
+        game.Int(quick + 4, 15);
+        game.Int(quick + 8, -104);
+        game.Memory.WriteLong(loader + 0x278, quick);
+        game.Int(loader + 0x278 + 8, 3);
+        using var reader = new GameWorldReader(game.Memory, Module);
+
+        var progress = reader.Read()!.Progress!;
+
+        Assert.Equal(10538, progress.Exp);
+        Assert.Equal(123442, progress.NeedExp);
+        Assert.Equal(90716, progress.Yang);
+        Assert.Equal(2, progress.Inventory.Count);
+        Assert.Equal(27201, progress.QuickSlotVnum(1));
+        Assert.Equal(182, progress.Count(27204));
+        Assert.Equal(0, progress.Count(99999)); // the free element is not an item
+    }
+
+    [Fact]
     public void Finds_the_fixed_places_again_after_a_game_update()
     {
         var (game, level, actors, npc) = World();

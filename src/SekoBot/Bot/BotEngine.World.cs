@@ -72,6 +72,28 @@ internal sealed partial class BotEngine
         return world.Player.DistanceXY(past.Position) > 15;
     }
 
+    /// <summary>HP and MP potions left in the inventory (the items on the potion keys), when known.</summary>
+    public (int? Hp, int? Mp) PotionsLeft()
+    {
+        if (World is not { Progress: { } progress } world)
+            return (null, null);
+        int? Left(Keys key) => PotionVnum(world, key) is int vnum ? progress.Count(vnum) : 0;
+        return (Left(Profile.Keys.HpPotion), Left(Profile.Keys.MpPotion));
+    }
+
+    /// <summary>The item on the quick slot of a number key (1–9, 0 = 10), e.g. the HP potion.</summary>
+    private static int? PotionVnum(WorldSnapshot world, Keys key)
+    {
+        int number = key switch
+        {
+            >= Keys.D1 and <= Keys.D9 => key - Keys.D0,
+            Keys.D0 => 10,
+            >= Keys.NumPad1 and <= Keys.NumPad9 => key - Keys.NumPad0,
+            _ => 0,
+        };
+        return number == 0 ? null : world.Progress?.QuickSlotVnum(number);
+    }
+
     /// <summary>A click on this spot didn't select a mob a moment ago: don't try it again right away.</summary>
     private void MarkMiss(Point spot)
     {

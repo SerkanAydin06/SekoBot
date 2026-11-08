@@ -18,6 +18,30 @@ internal readonly record struct CharacterStats(int Hp, int Mp, int MaxHp, int Ma
 /// <summary>A mob that can be attacked.</summary>
 internal sealed record WorldMob(int Id, int Vnum, string Name, int Level, int Hp, int MaxHp, Vec3 Position);
 
+/// <summary>A mob that just died (it stays in the world for a moment).</summary>
+internal readonly record struct DeadMob(int Id, Vec3 Position);
+
+/// <summary>A stack in the inventory: the item number (vnum) and how many.</summary>
+internal readonly record struct InventoryItem(int Slot, int Vnum, int Count);
+
+/// <summary>The character's progress: experience, money and inventory.</summary>
+/// <param name="QuickSlots">What the quick slot keys 1, 2, … point at: an inventory slot
+/// (0 or more), or a skill (negative).</param>
+internal sealed record CharacterProgress(long Exp, long NeedExp, long Yang,
+    IReadOnlyList<InventoryItem> Inventory, IReadOnlyList<int> QuickSlots)
+{
+    /// <summary>How many of an item are in the whole inventory.</summary>
+    public int Count(int vnum) => Inventory.Where(i => i.Vnum == vnum).Sum(i => i.Count);
+
+    /// <summary>The item on quick slot key <paramref name="number"/> (1 = key "1"), or null.</summary>
+    public int? QuickSlotVnum(int number)
+    {
+        if (number < 1 || number > QuickSlots.Count || QuickSlots[number - 1] is not (>= 0 and var slot))
+            return null;
+        return Inventory.FirstOrDefault(i => i.Slot == slot) is { Count: > 0 } item ? item.Vnum : null;
+    }
+}
+
 /// <summary>Where the game camera is and where it looks (Unreal's FMinimalViewInfo).</summary>
 internal sealed record CameraView(Vec3 Location, double Pitch, double Yaw, double Roll, double Fov)
 {
@@ -55,8 +79,11 @@ internal sealed record CameraView(Vec3 Location, double Pitch, double Yaw, doubl
 /// <param name="Target">The mob selected in the game (its bar shows at the top), or null.</param>
 /// <param name="Stats">The character's HP/MP, when they look valid.</param>
 /// <param name="Dead">The character is dead.</param>
+/// <param name="DeadMobs">Mobs that just died.</param>
+/// <param name="Progress">Experience, money and inventory, when they could be read.</param>
 internal sealed record WorldSnapshot(Vec3 Player, CameraView? Camera, IReadOnlyList<WorldMob> Mobs, int OtherPlayers, string MapName,
-    WorldMob? Target = null, CharacterStats? Stats = null, bool Dead = false, int Level = 0)
+    WorldMob? Target = null, CharacterStats? Stats = null, bool Dead = false, int Level = 0,
+    IReadOnlyList<DeadMob>? DeadMobs = null, CharacterProgress? Progress = null)
 {
     /// <summary>The selected mob's health (0..1); 0 when nothing (alive) is selected.</summary>
     public double TargetHp => Target is { MaxHp: > 0 } t ? Math.Clamp((double)t.Hp / t.MaxHp, 0, 1) : 0;
@@ -93,6 +120,9 @@ internal sealed class GameWorldReader : IDisposable
     // FCameraCacheEntry: POV (FMinimalViewInfo: Location, Rotation, FOV)
     internal const int CameraCachePov = 0x10;
     private const int MaxActors = 50_000;
+    // TMap<int, invItem> element: key (int, padded to 8), the invItem (0x88 bytes: ItemId at 0,
+    // Count at 0x3C), then the set's hash links (8).
+    private const int InventoryStride = 0x98, InventoryValue = 0x8, ItemVnum = 0x0, ItemCount = 0x3C;
 
     /// <summary>The game fields the reader uses ("a.b" = field b of struct field a), with where
     /// they were in the tested build (used only when the type information doesn't know them).</summary>
@@ -106,6 +136,11 @@ internal sealed class GameWorldReader : IDisposable
         ("loader", "charData.fullHP", 0x770 + 0x68),
         ("loader", "charData.fullSp", 0x770 + 0x88),
         ("loader", "charData.Level", 0x770 + 0x90),
+        ("loader", "charData.Exp", 0x770 + 0x70),
+        ("loader", "charData.needexp", 0x770 + 0x78),
+        ("loader", "charData.yang", 0x770 + 0x48),
+        ("loader", "charData.invitems", 0x770 + 0xD8),
+        ("loader", "qSlots", 0x278),
         ("gameManager", "playerPos", 0xA10),
         ("gameManager", "mapname", 0x958),
         ("gameManager", "Player", 0x380),
@@ -219,6 +254,7 @@ internal sealed class GameWorldReader : IDisposable
 
         CameraView? camera = null;
         var mobs = new List<WorldMob>();
+        var deadMobs = new List<DeadMob>();
         int players = 0;
         if (DateTime.UtcNow - _otherActorsSince > TimeSpan.FromSeconds(10))
         {
@@ -239,6 +275,7 @@ internal sealed class GameWorldReader : IDisposable
                 switch (ReadNpc(actor, cls))
                 {
                     case WorldMob mob: mobs.Add(mob); break;
+                    case DeadMob died: deadMobs.Add(died); break;
                     case true: players++; break;
                 }
             }
@@ -253,14 +290,16 @@ internal sealed class GameWorldReader : IDisposable
         if (MemoryReads.IsPointer(selected) && Pointer(selected + ObjClass) is long selectedClass && ClassName(selectedClass) == "NPC")
             target = ReadNpc(selected, selectedClass, selected: true) as WorldMob;
 
-        var (stats, characterLevel) = ReadStats(Pointer(instance + Offset(instanceClass, "m2data_C", "loader")));
+        long loader = Pointer(instance + Offset(instanceClass, "m2data_C", "loader"));
+        var (stats, characterLevel) = ReadStats(loader);
+        var progress = ReadProgress(loader);
         bool dead = false;
         long pawn = Pointer(gm + Offset(gmClass, "gameManager", "Player"));
         if (MemoryReads.IsPointer(pawn))
             dead = Byte(pawn + Offset(Pointer(pawn + ObjClass), "playerMove", "dead")) is byte b && b != 0;
 
         Status = Searched ? $"Bellekten: {mobs.Count} mob (adresler yeniden bulundu)" : $"Bellekten: {mobs.Count} mob";
-        return new WorldSnapshot(player, camera, mobs, players, mapName, target, stats, dead, characterLevel);
+        return new WorldSnapshot(player, camera, mobs, players, mapName, target, stats, dead, characterLevel, deadMobs, progress);
     }
 
     private (CharacterStats? Stats, int Level) ReadStats(long loader)
@@ -276,7 +315,62 @@ internal sealed class GameWorldReader : IDisposable
         return (new CharacterStats(hp, mp, maxHp, maxMp), level);
     }
 
-    /// <returns>A <see cref="WorldMob"/>, true for another player, or null for anything else.</returns>
+    private CharacterProgress? ReadProgress(long loader)
+    {
+        if (!MemoryReads.IsPointer(loader))
+            return null;
+        long cls = Pointer(loader + ObjClass);
+        long Long(string field) => _memory.TryReadInt64(loader + Offset(cls, "loader", field), out long v) ? v : -1;
+        long exp = Long("charData.Exp"), need = Long("charData.needexp");
+        if (exp < 0 || need <= 0)
+            return null;
+        long.TryParse(ReadFString(loader + Offset(cls, "loader", "charData.yang"), 32), out long yang);
+        var inventory = ReadInventory(loader + Offset(cls, "loader", "charData.invitems"));
+        var quick = new List<int>();
+        long slots = Pointer(loader + Offset(cls, "loader", "qSlots"));
+        int count = Int32(loader + Offset(cls, "loader", "qSlots") + 8) ?? 0;
+        if (MemoryReads.IsPointer(slots) && count is > 0 and <= 32)
+        {
+            var bytes = new byte[count * 4];
+            if (_memory.Read(slots, bytes, bytes.Length))
+                for (int i = 0; i < count; i++)
+                    quick.Add(BitConverter.ToInt32(bytes, i * 4));
+        }
+        return new CharacterProgress(exp, need, yang, inventory, quick);
+    }
+
+    /// <summary>The inventory map (TMap: a sparse array of slot → item, with a bit per used element).</summary>
+    private List<InventoryItem> ReadInventory(long map)
+    {
+        var items = new List<InventoryItem>();
+        long data = Pointer(map);
+        int count = Int32(map + 8) ?? 0;
+        if (!MemoryReads.IsPointer(data) || count <= 0 || count > 2000)
+            return items;
+        // Allocation bits: 128 inline bits, or a separate block when there are more.
+        int maxBits = Int32(map + 0x2C) ?? 0;
+        var bits = new byte[(Math.Max(count, 128) + 7) / 8];
+        long bitsAt = maxBits > 128 ? Pointer(map + 0x20) : map + 0x10;
+        if (!MemoryReads.IsPointer(bitsAt) || !_memory.Read(bitsAt, bits, (count + 7) / 8))
+            return items;
+        var elements = new byte[count * InventoryStride];
+        if (!_memory.Read(data, elements, elements.Length))
+            return items;
+        for (int i = 0; i < count; i++)
+        {
+            if ((bits[i / 8] & (1 << (i % 8))) == 0)
+                continue;
+            int at = i * InventoryStride;
+            int slot = BitConverter.ToInt32(elements, at);
+            int vnum = BitConverter.ToInt32(elements, at + InventoryValue + ItemVnum);
+            int amount = BitConverter.ToInt32(elements, at + InventoryValue + ItemCount);
+            if (vnum > 0 && amount > 0 && slot >= 0)
+                items.Add(new InventoryItem(slot, vnum, amount));
+        }
+        return items;
+    }
+
+    /// <returns>A <see cref="WorldMob"/>, a <see cref="DeadMob"/>, true for another player, or null for anything else.</returns>
     /// <param name="selected">The selected mob: also when it just died (HP 0), so the bot sees it die.</param>
     private object? ReadNpc(long actor, long cls, bool selected = false)
     {
@@ -296,16 +390,22 @@ internal sealed class GameWorldReader : IDisposable
 
         if (Flag("isplayer"))
             return true;
-        if (!Flag("attackable") || Flag("isOwnedMob") || !selected && (Flag("dead") || Flag("Remove") || !Flag("spawned")))
-            return null;
-        int hp = Int("HP"), maxHp = Int("maxHP");
-        if (selected && (Flag("dead") || Flag("Remove")))
-            hp = 0;
-        if (maxHp <= 0 || hp > maxHp || hp < 0 || !selected && hp == 0)
+        if (!Flag("attackable") || Flag("isOwnedMob"))
             return null;
         long root = BitConverter.ToInt64(data, ActorRoot);
         if (!MemoryReads.IsPointer(root) || !TryVec3(root + ComponentWorldLocation, out var position))
             return null;
+        if (!selected && (Flag("dead") || Flag("Remove")))
+            return new DeadMob(Int("ID"), position);
+        if (!selected && !Flag("spawned"))
+            return null;
+        int hp = Int("HP"), maxHp = Int("maxHP");
+        if (selected && (Flag("dead") || Flag("Remove")))
+            hp = 0;
+        if (maxHp <= 0 || hp > maxHp || hp < 0)
+            return null;
+        if (!selected && hp == 0)
+            return new DeadMob(Int("ID"), position);
         int vnum = Int("thismob.vnum");
         int nameAt = Offset(cls, "NPC", "thismob.Name");
         long text = BitConverter.ToInt64(data, nameAt);

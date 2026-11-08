@@ -27,7 +27,7 @@ internal sealed class KeyBindings
 internal sealed class BotProfile
 {
     /// <summary>Current profile format; older files are upgraded once by <see cref="ProfileStore"/>.</summary>
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 4;
 
     /// <summary>Number of skill keys (F1–F5).</summary>
     public const int SkillSlots = 5;
@@ -78,7 +78,7 @@ internal sealed class BotProfile
     /// <summary>Press G and F again this often, in case the camera moved (0 = only at start).</summary>
     public int CameraRefreshMs { get; set; } = 30000;
     /// <summary>A mob counts as "next to the character" within this part of the screen height.</summary>
-    public double AttackRadius { get; set; } = 0.05;
+    public double AttackRadius { get; set; } = 0.10;
     /// <summary>After dying: wait until "Burada yeniden başla" can be clicked, click it, drink HP
     /// potions up to <see cref="ReviveHealTo"/>, then carry on. While on, low HP doesn't stop the bot.</summary>
     public bool ReviveOnDeath { get; set; } = true;
@@ -188,9 +188,9 @@ internal static class ProfileStore
     {
         if (profile.Version >= BotProfile.CurrentVersion)
             return false;
-        // v2: attacking at 10 % of the screen height started too far from the mob.
-        if (Math.Abs(profile.AttackRadius - 0.10) < 0.0001)
-            profile.AttackRadius = 0.05;
+        // v4: at 5 % the character often touched the mob without attacking ("stuck" next to it).
+        if (Math.Abs(profile.AttackRadius - 0.05) < 0.0001)
+            profile.AttackRadius = 0.10;
         // v3: everything from memory; the area limit is in metres now (the old one was a share of the big map).
         if (profile.Version < 3 && profile.LeashMeters <= 0)
             profile.LeashMeters = 40;
