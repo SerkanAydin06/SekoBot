@@ -24,15 +24,25 @@ internal sealed partial class BotEngine
         var found = new List<(WorldMob Mob, Point Spot)>();
         foreach (var mob in world.ByDistance)
         {
-            if (!Wanted(mob, profile) || camera.ToScreen(mob.Position, width, height) is not PointF p || !OnPlayfield(p, width, height))
+            if (!Wanted(mob, profile))
                 continue;
-            var spot = Point.Round(p);
-            mobs.Add(spot);
-            found.Add((mob, spot));
-            if (mob.AttacksMe)
-                attackers.Add(spot);
-            if (mob.IsMetin && profile.Metins == MetinMode.Prefer)
-                metins.Add(spot);
+            var onScreen = camera.ToScreen(mob.Position, width, height) is PointF p && OnPlayfield(p, width, height) ? p : (PointF?)null;
+            if (onScreen is PointF seen)
+            {
+                var spot = Point.Round(seen);
+                mobs.Add(spot);
+                if (mob.AttacksMe)
+                    attackers.Add(spot);
+                if (mob.IsMetin && profile.Metins == MetinMode.Prefer)
+                    metins.Add(spot);
+                found.Add((mob, spot));
+            }
+            else if (mob.Position.DistanceXY(world.Player) <= OffScreenRange)
+            {
+                // Known from memory but off the screen (the camera shows only ~10 m around):
+                // still a target, walked to in its direction.
+                found.Add((mob, OffScreenSpot(camera, world.Player, mob.Position, width, height)));
+            }
         }
         var drops = new List<GroundSpot>();
         if (profile.PickUpDrops)
@@ -46,11 +56,24 @@ internal sealed partial class BotEngine
         // The character hits from AttackDistance between the centres (measured in the game: hits at
         // 70–145 with a reach of 130); a bigger body (a Metin stone) can be hit from further away.
         double attackDistance = world.AttackDistance > 0 ? world.AttackDistance : 130;
+        bool preferMetins = profile.Metins == MetinMode.Prefer && found.Any(f => f.Mob.IsMetin);
         var targets = found.Select(f => new TargetInfo(f.Mob.Id, f.Spot, f.Mob.Position.DistanceXY(world.Player),
                 attackDistance + Math.Max(0, f.Mob.Radius - 40), f.Mob.Exp, f.Mob.Hp, f.Mob.MaxHp, f.Mob.DamageMax,
-                priority.Contains(f.Spot)))
+                preferMetins ? f.Mob.IsMetin : profile.AttackersFirst && f.Mob.AttacksMe))
             .ToList();
         return (mobs, priority, drops, attackers, targets);
+    }
+
+    /// <summary>Mobs this close (world units) are targets even when they're off the screen.</summary>
+    internal const double OffScreenRange = 2500;
+
+    /// <summary>A point in the direction of an off-screen mob (from the screen centre), for walking to it.</summary>
+    private static Point OffScreenSpot(CameraView camera, Vec3 player, Vec3 mob, int width, int height)
+    {
+        var (right, up) = camera.ToScreenDirection(mob.X - player.X, mob.Y - player.Y);
+        double length = Math.Max(1e-6, Math.Sqrt(right * right + up * up));
+        double reach = Math.Max(width, height); // well outside the screen
+        return new Point((int)(width / 2.0 + right / length * reach), (int)(height / 2.0 - up / length * reach));
     }
 
     /// <summary>

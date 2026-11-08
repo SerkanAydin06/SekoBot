@@ -84,6 +84,34 @@ public class TargetChoiceTests
     }
 
     [Fact]
+    public void Mobs_off_the_screen_but_known_from_memory_are_targets_too()
+    {
+        var me = new Vec3(20000, 18000, 900);
+        // Looking straight down from close by: only a few metres show on screen; +X is up.
+        var camera = new CameraView(me with { Z = me.Z + 600 }, -90, 0, 0, 90);
+        WorldMob At(int id, double dx, double dy) => new(id, 101, "Kurt", 5, 100, 100, me with { X = me.X + dx, Y = me.Y + dy });
+        var world = new WorldSnapshot(me, camera, [At(1, 1500, 0), At(2, 0, 4000)], 0, "c2");
+
+        var view = BotEngine.MemoryView(world, new BotProfile(), W, H)!.Value;
+        Assert.Empty(view.Mobs);                    // neither is on screen
+        var target = Assert.Single(view.Targets);   // the one 15 m away is a target; 40 m is too far
+        Assert.Equal(1, target.Id);
+        Assert.True(target.Spot.Y < 0);             // +X is "up": the walking direction points up
+        Assert.Equal(W / 2, target.Spot.X);
+
+        // The brain walks there (W) although nothing is on screen.
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], PickUpDrops = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        var actions = new List<BotAction>();
+        for (double t = 0; t < 4500; t += 100)
+            actions.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), W, H, 1, 1, 0, 1)
+                { Targets = view.Targets, Walking = true, AttackPower = 189 }));
+        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.MoveForward);
+        Assert.Equal(BotPhase.Moving, brain.Phase);
+    }
+
+    [Fact]
     public void Goes_for_the_mob_attacking_us_before_a_nearer_one()
     {
         var (brain, p) = Ready();
