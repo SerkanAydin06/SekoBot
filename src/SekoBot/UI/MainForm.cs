@@ -159,8 +159,8 @@ internal sealed class MainForm : Form
             v => _profile.PreferCrowds = v);
         NumberRow(attack, "Kalabalık: en az mob", 370, 34, 2, 10, _profile.CrowdMinMobs, 0, 1,
             v => _profile.CrowdMinMobs = (int)v);
-        Hint(attack, "Saldırı mesafesi: mob karaktere bu kadar yaklaşınca saldırır (ekran yüksekliğinin %'si). " +
-            "Küçük sayı = daha yakından saldırır.", 76);
+        Hint(attack, "Saldırı mesafesi oyunun belleğinden okunan gerçek menzille hesaplanır (kamera yakınlaşsa da kaymaz). " +
+            "Buradaki % yalnızca bellek okunamazsa kullanılır.", 76);
 
         // İksir & Buff
         // Hedef: which mobs to go for, and loot.
