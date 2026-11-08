@@ -36,6 +36,9 @@ internal sealed record GameState(
     /// <summary>A window covers the game (e.g. the advert after a level-up).</summary>
     public bool PopupOpen { get; init; }
 
+    /// <summary><see cref="TargetHp"/> comes from the game's memory (the selected mob), not the bar on screen.</summary>
+    public bool TargetFromMemory { get; init; }
+
     /// <summary>Where the selected mob is believed to be on screen (client pixels), if known.</summary>
     public Point? TargetSpot { get; init; }
 }

@@ -137,14 +137,18 @@ internal sealed partial class BotEngine : IDisposable
                     lastAnalysis = now;
                     try
                     {
-                        SearchBars(frame, profile, now);
+                        var world = ReadWorld(now);
+                        // With the selected mob from memory, the target bar on screen isn't needed.
+                        if (world == null)
+                            SearchBars(frame, profile, now);
                         var state = Perception.Analyze(frame, profile, now);
+                        if (world != null)
+                            state = state with { TargetHp = world.TargetHp, TargetFromMemory = true };
                         // Memory stats override visual bars only when all four values are valid.
                         // Target HP and all other perception remain visual.
                         if (_statsReader.TryRead(out var stats))
                             state = state with { Hp = stats.HpFraction, Mp = stats.MpFraction };
                         TrackStats(state.Hp != null, now);
-                        var world = ReadWorld(now);
                         if (LivePosition(world) is PointF live)
                             state = state with { LivePosition = live };
                         if (profile.ReviveOnDeath && BotRunning)
@@ -178,6 +182,8 @@ internal sealed partial class BotEngine : IDisposable
                                 .Where(m => !_motion.RecentlyMissed(m, now)).ToList();
                             state = state with { MobCandidates = mobs, TargetSpot = TrackTarget(state, mobs, now) };
                         }
+                        if (MemoryTargetSpot(world, frame.Width, frame.Height) is Point targetSpot)
+                            state = state with { TargetSpot = targetSpot };
                         if ((_brain.WantsMap || _finderWantsMap) && MapReader.Read(frame) is { } map)
                             state = state with { MapOpen = true, MapPosition = map.Arrow };
                         LearnMap(state, world);
@@ -252,7 +258,7 @@ internal sealed partial class BotEngine : IDisposable
     /// </summary>
     private void CheckTargetBar(GameState state, BotProfile profile, Frame frame, TimeSpan now)
     {
-        if (profile.TargetBar is not { Auto: true } bar || !BotRunning || !state.HasTarget)
+        if (profile.TargetBar is not { Auto: true } bar || !BotRunning || !state.HasTarget || state.TargetFromMemory)
         {
             _targetConstSince = TimeSpan.FromDays(-1);
             return;
@@ -375,7 +381,7 @@ internal sealed partial class BotEngine : IDisposable
             if (_input != null)
                 return true;
             _input = new InputExecutor(_window, dryRun, _log,
-                () => Profile.TargetBar == null ? null : State?.HasTarget == true,
+                () => State is { TargetFromMemory: true } s ? s.HasTarget : Profile.TargetBar == null ? null : State?.HasTarget == true,
                 () => State?.TargetHp,
                 spot => _motion.MarkMiss(spot, _clock.Elapsed),
                 spot => { lock (_spotGate) { _targetSpot = spot; _targetSpotAt = _clock.Elapsed; } },

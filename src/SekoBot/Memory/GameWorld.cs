@@ -36,8 +36,13 @@ internal sealed record CameraView(Vec3 Location, double Pitch, double Yaw, doubl
 
 /// <summary>One look at the game world.</summary>
 /// <param name="OtherPlayers">Other players around (not mobs).</param>
-internal sealed record WorldSnapshot(Vec3 Player, CameraView? Camera, IReadOnlyList<WorldMob> Mobs, int OtherPlayers, string MapName)
+/// <param name="Target">The mob selected in the game (its bar shows at the top), or null.</param>
+internal sealed record WorldSnapshot(Vec3 Player, CameraView? Camera, IReadOnlyList<WorldMob> Mobs, int OtherPlayers, string MapName,
+    WorldMob? Target = null)
 {
+    /// <summary>The selected mob's health (0..1); 0 when nothing (alive) is selected.</summary>
+    public double TargetHp => Target is { MaxHp: > 0 } t ? Math.Clamp((double)t.Hp / t.MaxHp, 0, 1) : 0;
+
     /// <summary>Mobs nearest first.</summary>
     public IEnumerable<WorldMob> ByDistance => Mobs.OrderBy(m => m.Position.DistanceXY(Player));
 }
@@ -52,7 +57,8 @@ internal sealed record WorldSnapshot(Vec3 Player, CameraView? Camera, IReadOnlyL
 internal sealed class GameWorldReader : IDisposable
 {
     // ── Fixed places in this game build (Unreal Engine 4.27) ──
-    /// <summary>Same root as the HP pointer; the first five steps of its path lead to "gameManager".</summary>
+    /// <summary>Same root as the HP pointer; the first four steps of its path lead to the game data
+    /// ("m2data_C", which knows the selected mob), the fifth to "gameManager".</summary>
     internal static readonly long[] GameManagerPath = [0x18, 0x8, 0x80, 0xC8, 0x1F8];
     /// <summary>FNamePool (all object and field names); its block pointers start at +0x10.</summary>
     internal const long NamePoolOffset = 0x04D8AFC0;
@@ -86,6 +92,7 @@ internal sealed class GameWorldReader : IDisposable
         ("NPC", "attackable", 0x798),
         ("NPC", "isOwnedMob", 0x7A2),
         ("PlayerCameraManager", "CameraCachePrivate", 0x1AF0),
+        ("m2data_C", "selectedActor", 0x1C0),
     ];
     // In the "mob" struct (thismob): vnum, Name (FString), Level
     private const int MobVnum = 0x0, MobName = 0x8, MobLevel = 0x3C;
@@ -135,7 +142,7 @@ internal sealed class GameWorldReader : IDisposable
 
     private WorldSnapshot? ReadCore()
     {
-        if (GameManager() is not long gm)
+        if (GameManager(out long gameData) is not long gm)
         {
             Status = "Oyun dünyası bulunamadı (yükleme ekranı ya da oyun güncellendi)";
             return null;
@@ -186,12 +193,18 @@ internal sealed class GameWorldReader : IDisposable
             else
                 _otherActors.Add(actor);
         }
+        WorldMob? target = null;
+        long dataClass = Pointer(gameData + ObjClass);
+        long selected = Pointer(gameData + Offset(dataClass, "m2data_C", "selectedActor"));
+        if (MemoryReads.IsPointer(selected) && Pointer(selected + ObjClass) is long selectedClass && ClassName(selectedClass) == "NPC")
+            target = ReadNpc(selected, selectedClass, selected: true) as WorldMob;
         Status = $"Bellekten: {mobs.Count} mob";
-        return new WorldSnapshot(player, camera, mobs, players, mapName);
+        return new WorldSnapshot(player, camera, mobs, players, mapName, target);
     }
 
     /// <returns>A <see cref="WorldMob"/>, true for another player, or null for anything else.</returns>
-    private object? ReadNpc(long actor, long cls)
+    /// <param name="selected">The selected mob: also when it just died (HP 0), so the bot sees it die.</param>
+    private object? ReadNpc(long actor, long cls, bool selected = false)
     {
         // All fields in one read (much faster than one read per field).
         int span = 0;
@@ -209,10 +222,12 @@ internal sealed class GameWorldReader : IDisposable
 
         if (Flag("isplayer"))
             return true;
-        if (!Flag("attackable") || Flag("dead") || Flag("Remove") || !Flag("spawned") || Flag("isOwnedMob"))
+        if (!Flag("attackable") || Flag("isOwnedMob") || !selected && (Flag("dead") || Flag("Remove") || !Flag("spawned")))
             return null;
         int hp = Int("HP"), maxHp = Int("maxHP");
-        if (hp <= 0 || maxHp <= 0 || hp > maxHp)
+        if (selected && (Flag("dead") || Flag("Remove")))
+            hp = 0;
+        if (maxHp <= 0 || hp > maxHp || hp < 0 || !selected && hp == 0)
             return null;
         long root = BitConverter.ToInt64(data, ActorRoot);
         if (!MemoryReads.IsPointer(root) || !TryVec3(root + ComponentWorldLocation, out var position))
@@ -234,13 +249,15 @@ internal sealed class GameWorldReader : IDisposable
         return new CameraView(location, pitch, yaw, roll, fov);
     }
 
-    private long? GameManager()
+    private long? GameManager(out long gameData)
     {
+        gameData = 0;
         long cursor = Pointer(_moduleBase + CharacterStatsReader.HpBaseOffset);
         foreach (long offset in GameManagerPath)
         {
             if (!MemoryReads.IsPointer(cursor))
                 return null;
+            gameData = cursor;
             cursor = Pointer(cursor + offset);
         }
         return MemoryReads.IsPointer(cursor) && ClassName(Pointer(cursor + ObjClass)) == "gameManager" ? cursor : null;

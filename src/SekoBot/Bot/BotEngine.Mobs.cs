@@ -22,6 +22,13 @@ internal sealed partial class BotEngine
         return points;
     }
 
+    /// <summary>Where the selected mob is on screen, from memory (null when unknown or off screen).</summary>
+    private static Point? MemoryTargetSpot(WorldSnapshot? world, int width, int height) =>
+        world is { Target: { Hp: > 0 } target, Camera: { } camera } &&
+        camera.ToScreen(target.Position, width, height) is PointF p && OnPlayfield(p, width, height)
+            ? Point.Round(p)
+            : null;
+
     /// <summary>On screen and not under the game's buttons (a click there would hit the button).</summary>
     internal static bool OnPlayfield(PointF p, int width, int height)
     {
@@ -44,6 +51,8 @@ internal sealed partial class BotEngine
         var text = new StringBuilder();
         text.Append($"Bellekten: {mobs.Count} mob, {world.OtherPlayers} başka oyuncu (harita {world.MapName}, " +
                     $"konum X={world.Player.X:0}, Y={world.Player.Y:0}).");
+        if (world.Target is { } target)
+            text.Append($" Seçili hedef: {target.Name} (Sv {target.Level}) HP {target.Hp}/{target.MaxHp}.");
         if (world.Camera == null)
             text.Append(" Kamera okunamadı: moblar ekrana yerleştirilemiyor, ekrandaki isimler kullanılacak.");
         foreach (var mob in mobs.Take(12))
