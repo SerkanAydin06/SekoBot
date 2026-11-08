@@ -42,6 +42,9 @@ internal sealed partial class Brain
         _exploreKeys = [];
         _exploreStep = 0;
         _crowdTarget = _lastCrowd = null;
+        _dropId = 0;
+        _dropSince = _lastDropTap = Never;
+        _ignoredDrops.Clear();
         _sidestepUntil = _notMovingSince = _walkStartedAt = _blockCheckedAt = _attackReleasedAt = Never;
         _sidestepKeys = [];
         _sidesteps = 0;
@@ -128,7 +131,9 @@ internal sealed partial class Brain
         double cx = state.Width / 2.0, cy = state.Height / 2.0;
         Point? target = null;
         double best = double.MaxValue;
-        foreach (var m in state.MobCandidates)
+        // Mobs attacking us (or Metin stones, when preferred) come first.
+        bool priority = state.PriorityMobs.Count > 0;
+        foreach (var m in priority ? state.PriorityMobs : state.MobCandidates)
         {
             double d = Math.Sqrt(Math.Pow(m.X - cx, 2) + Math.Pow(m.Y - cy, 2));
             if (d < best) { best = d; target = m; }
@@ -143,6 +148,8 @@ internal sealed partial class Brain
         {
             SetAttack(false, p, actions, refresh);
             FinishFight(p, actions, now);
+            if (GoForDrop(state, p, actions, refresh, radius))
+                return;
             // Names flicker for a moment while walking; only explore when they are really gone.
             if (now - _lastSeen < Ms(800))
             {
@@ -186,9 +193,20 @@ internal sealed partial class Brain
             return;
         }
 
-        // Not next to anything: head for the crowd if there is one worth it, else the nearest.
+        // Not next to anything: first the loot lying close by, then the next mob.
+        if (!priority)
+        {
+            SetAttack(false, p, actions, refresh);
+            if (GoForDrop(state, p, actions, refresh, radius))
+            {
+                FinishFight(p, actions, now);
+                return;
+            }
+        }
+
+        // Head for the crowd if there is one worth it, else the nearest.
         _crowdTarget = null;
-        if (p.PreferCrowds && best > radius * 2 && PickCrowd(state, p, cx, cy) is Point crowd)
+        if (!priority && p.PreferCrowds && best > radius * 2 && PickCrowd(state, p, cx, cy) is Point crowd)
         {
             _crowdTarget = crowd;
             dx = crowd.X - cx;
@@ -216,6 +234,57 @@ internal sealed partial class Brain
             _movingSince = Never;
             Enter(BotPhase.Searching, now);
         }
+    }
+
+    private long _dropId;
+    private TimeSpan _dropSince = Never, _lastDropTap = Never;
+    private readonly Dictionary<long, TimeSpan> _ignoredDrops = [];
+
+    /// <summary>
+    /// Walks to the nearest item on the ground and presses the pickup key on it. An item that
+    /// can't be picked up within 5 s (someone else's, or the inventory is full) is left alone
+    /// for a minute.
+    /// </summary>
+    /// <returns>True when this tick was spent on loot.</returns>
+    private bool GoForDrop(GameState state, BotProfile p, List<BotAction> actions, bool refresh, double radius)
+    {
+        var now = state.Time;
+        foreach (var (id, until) in _ignoredDrops.ToList())
+            if (now >= until)
+                _ignoredDrops.Remove(id);
+        var drop = state.Drops.FirstOrDefault(d => !_ignoredDrops.ContainsKey(d.Id));
+        if (!p.PickUpDrops || drop.Id == 0)
+            return false;
+        if (drop.Id != _dropId)
+        {
+            _dropId = drop.Id;
+            _dropSince = now;
+        }
+        else if (now - _dropSince > Ms(5000))
+        {
+            _ignoredDrops[drop.Id] = now + Ms(60000);
+            actions.Add(new NoteAction("Yerdeki eşya alınamadı (başkasının olabilir); bırakıldı."));
+            return false;
+        }
+        double dx = drop.Spot.X - state.Width / 2.0, dy = drop.Spot.Y - state.Height / 2.0;
+        double distance = Math.Sqrt(dx * dx + dy * dy);
+        if (distance <= radius * 0.5)
+        {
+            SetMoves([], p, actions, refresh);
+            if (now - _lastDropTap >= Ms(400))
+            {
+                actions.Add(new KeyTapAction(p.Keys.Pickup));
+                _lastDropTap = now;
+            }
+        }
+        else
+        {
+            SetMoves(Towards(dx, dy, radius * 0.25, p), p, actions, refresh);
+        }
+        if (Phase != BotPhase.Looting)
+            Enter(BotPhase.Looting, now);
+        _movingSince = Never;
+        return true;
     }
 
     /// <summary>

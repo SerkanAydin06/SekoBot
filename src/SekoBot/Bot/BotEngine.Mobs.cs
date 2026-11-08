@@ -1,5 +1,7 @@
 using System.Text;
+using SekoBot.Config;
 using SekoBot.Memory;
+using SekoBot.Vision;
 
 namespace SekoBot.Bot;
 
@@ -9,18 +11,57 @@ namespace SekoBot.Bot;
 /// </summary>
 internal sealed partial class BotEngine
 {
-    /// <summary>Where the mobs from memory are on screen (client pixels, nearest to us first),
-    /// or null when the camera can't be read.</summary>
-    private static List<Point>? MemoryMobs(WorldSnapshot? world, int width, int height)
+    /// <summary>What the bot sees on screen from memory: the mobs it may go for (nearest to us
+    /// first), the ones to go for first, and the items close by. Null when the camera can't be read.</summary>
+    internal static (List<Point> Mobs, List<Point> Priority, List<GroundSpot> Drops)? MemoryView(
+        WorldSnapshot? world, BotProfile profile, int width, int height)
     {
         if (world?.Camera is not CameraView camera)
             return null;
-        var points = new List<Point>();
+        var mobs = new List<Point>();
+        var attackers = new List<Point>();
+        var metins = new List<Point>();
         foreach (var mob in world.ByDistance)
-            if (camera.ToScreen(mob.Position, width, height) is PointF p && OnPlayfield(p, width, height))
-                points.Add(Point.Round(p));
-        return points;
+        {
+            if (!Wanted(mob, profile) || camera.ToScreen(mob.Position, width, height) is not PointF p || !OnPlayfield(p, width, height))
+                continue;
+            var spot = Point.Round(p);
+            mobs.Add(spot);
+            if (mob.AttacksMe && profile.AttackersFirst)
+                attackers.Add(spot);
+            if (mob.IsMetin && profile.Metins == MetinMode.Prefer)
+                metins.Add(spot);
+        }
+        var drops = new List<GroundSpot>();
+        if (profile.PickUpDrops)
+            foreach (var item in (world.Drops ?? []).OrderBy(d => d.Position.DistanceXY(world.Player)))
+                if (item.Position.DistanceXY(world.Player) <= profile.DropRangeMetres * 100 &&
+                    camera.ToScreen(item.Position, width, height) is PointF p && OnPlayfield(p, width, height))
+                    drops.Add(new GroundSpot(item.Id, Point.Round(p)));
+        return (mobs, attackers.Count > 0 ? attackers : metins, drops);
     }
+
+    /// <summary>Whether the bot should go for this mob, by the profile's choices. A mob that is
+    /// attacking us is always fought back (except a Metin stone set to "skip", which never attacks).</summary>
+    internal static bool Wanted(WorldMob mob, BotProfile profile)
+    {
+        if (mob.IsMetin && profile.Metins == MetinMode.Skip)
+            return false;
+        if (mob.AttacksMe)
+            return true;
+        if (profile.MaxMobLevel > 0 && mob.Level > profile.MaxMobLevel)
+            return false;
+        if (Names(profile.SkipMobs).Any(n => mob.Name.Contains(n, StringComparison.CurrentCultureIgnoreCase)))
+            return false;
+        var only = Names(profile.OnlyMobs);
+        if (only.Count > 0 && !(mob.IsMetin && profile.Metins == MetinMode.Prefer) &&
+            !only.Any(n => mob.Name.Contains(n, StringComparison.CurrentCultureIgnoreCase)))
+            return false;
+        return true;
+    }
+
+    private static List<string> Names(string list) =>
+        list.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
     /// <summary>Where the selected mob is on screen, from memory (null when unknown or off screen).</summary>
     private static Point? MemoryTargetSpot(WorldSnapshot? world, int width, int height) =>

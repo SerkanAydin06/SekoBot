@@ -281,6 +281,43 @@ public class GameWorldTests
     }
 
     [Fact]
+    public void Reads_attackers_metins_ground_items_and_the_safe_zone()
+    {
+        var (game, level, actors, npc) = World(out long gameData);
+        long gm = BitConverter.ToInt64(Read(game, gameData + 0x1F8, 8));
+        long pawn = game.Object(game.Class("playerMove"), 0x900);
+        game.Memory.WriteLong(gm + 0x380, pawn);
+        long wolf = Npc(game, npc, "Aç Alfa Kurt", 4, 145, 145, 19700, 18000);
+        game.Memory.WriteLong(wolf + 0x860, pawn); // targetActorMe: after us
+        actors.Add(wolf);
+        long stone = Npc(game, npc, "Savaş Metini", 15, 34050, 34050, 19800, 18000);
+        game.Int(stone + 0x348, 8003);
+        actors.Add(stone);
+        long itemClass = game.Class("droppedItem");
+        foreach (bool disabled in new[] { false, true })
+        {
+            long item = game.Object(itemClass, 0x300);
+            long root = game.Object(0, 0x200);
+            game.Memory.WriteLong(item + GameWorldReader.ActorRoot, root);
+            game.Vec(root + GameWorldReader.ComponentWorldLocation, 19660, 18060, 900);
+            game.Memory.Write(item + 0x234, (byte)(disabled ? 1 : 0)); // picked up already
+            actors.Add(item);
+        }
+        SetActors(game, level, actors);
+        using var reader = new GameWorldReader(game.Memory, Module);
+
+        var world = reader.Read()!;
+        Assert.True(world.Mobs.Single(m => m.Name == "Aç Alfa Kurt").AttacksMe);
+        Assert.True(world.Mobs.Single(m => m.Name == "Savaş Metini").IsMetin);
+        Assert.False(world.Mobs.Single(m => m.Name == "Aç Alfa Kurt").IsMetin);
+        Assert.Single(world.Drops!);
+        Assert.False(world.InSafeZone);
+
+        game.Memory.Write(pawn + 0x87C, 1); // isInSafe
+        Assert.True(reader.Read()!.InSafeZone);
+    }
+
+    [Fact]
     public void Finds_the_fixed_places_again_after_a_game_update()
     {
         var (game, level, actors, npc) = World();

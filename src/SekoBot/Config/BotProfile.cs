@@ -3,6 +3,17 @@ using System.Text.Json.Serialization;
 
 namespace SekoBot.Config;
 
+/// <summary>What to do with Metin stones.</summary>
+internal enum MetinMode
+{
+    /// <summary>Never go for them.</summary>
+    Skip,
+    /// <summary>Like any other mob.</summary>
+    Normal,
+    /// <summary>Go for them first (they give more experience and items).</summary>
+    Prefer,
+}
+
 internal sealed class KeyBindings
 {
     public Keys Attack { get; set; } = Keys.Space;
@@ -85,6 +96,22 @@ internal sealed class BotProfile
     public double ReviveHealTo { get; set; } = 0.90;
     /// <summary>Stop healing after this long even if HP isn't there yet.</summary>
     public int ReviveHealMaxMs { get; set; } = 30000;
+
+    /// <summary>Mobs that are after the character are fought first.</summary>
+    public bool AttackersFirst { get; set; } = true;
+    /// <summary>Leave mobs above this level alone (0 = no limit); ones that attack us are still fought.</summary>
+    public int MaxMobLevel { get; set; }
+    /// <summary>Only go for mobs whose name contains one of these (comma separated; empty = all).</summary>
+    public string OnlyMobs { get; set; } = "";
+    /// <summary>Never go for mobs whose name contains one of these (comma separated).</summary>
+    public string SkipMobs { get; set; } = "";
+    public MetinMode Metins { get; set; } = MetinMode.Normal;
+    /// <summary>Walk to items on the ground and pick them up (when no mob is next to the character).</summary>
+    public bool PickUpDrops { get; set; } = true;
+    /// <summary>Only items this close (metres) are walked to.</summary>
+    public double DropRangeMetres { get; set; } = 6;
+    /// <summary>Stop the bot when the character ends up in a safe zone (town).</summary>
+    public bool StopInSafeZone { get; set; } = true;
 
     /// <summary>Stop the bot when a game master (GM) shows up nearby.</summary>
     public bool StopNearGm { get; set; } = true;

@@ -2,6 +2,9 @@ using SekoBot.Memory;
 
 namespace SekoBot.Vision;
 
+/// <summary>An item on the ground and where it is on screen.</summary>
+internal readonly record struct GroundSpot(long Id, Point Spot);
+
 /// <summary>Everything the bot knows about one moment. The brain never sees pixels or memory.</summary>
 /// <param name="Hp">The character's HP (0..1), from memory; null when it can't be read.</param>
 /// <param name="TargetHp">The selected mob's HP (0..1; 0 = nothing selected), from memory; null when unknown.</param>
@@ -18,6 +21,12 @@ internal sealed record GameState(
 
     /// <summary>The mobs on screen (client pixels, nearest to the character first), from memory.</summary>
     public IReadOnlyList<Point> MobCandidates { get; init; } = [];
+
+    /// <summary>Mobs to go for before the others (attacking us, or Metin stones when preferred).</summary>
+    public IReadOnlyList<Point> PriorityMobs { get; init; } = [];
+
+    /// <summary>Items on the ground close to the character (on screen).</summary>
+    public IReadOnlyList<GroundSpot> Drops { get; init; } = [];
 
     /// <summary>The character is moving (its position changed a moment ago) — null when not known.</summary>
     public bool? Walking { get; init; }

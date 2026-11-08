@@ -14,8 +14,9 @@ Metin2 için tek dosyalı Windows farm botu. Kurulum gerekmez, açılışta kend
 
 **Arayüz:** Ortada canlı görüntü (sarı halka = bulunan mob), sağda **OTURUM**: süre, öldürülen mob, saatte mob, kazanılan EXP, saatte EXP, seviye (yüzde ve seviye atlamaya kalan tahmini süre), kazanılan yang, iksir (1 ve 2 tuşundaki iksirden envanterde kalan adet, içilen sayısı), ölüm. Altta ayar sekmeleri, her değişiklik hemen kaydedilir:
 - **Saldırı:** saldırı mesafesi, eşya toplama sıklığı, Kalabalığa git, kalabalık için en az mob.
+- **Hedef:** en yüksek mob seviyesi, sadece şu moblar / şu mobları atla, metin taşları (atla / normal / önce onlar), önce bana saldıranı kes, yerdeki eşyaları topla.
 - **İksir & Buff:** HP/MP iksiri eşiği, ölünce yeniden başla, F1–F5 buff süreleri.
-- **Alan:** alan sınırı (metre) ve bellekten okunan konum.
+- **Alan:** alan sınırı (metre), GM / envanter dolu / güvenli bölgede dur, bellekten okunan konum.
 - **Tuşlar:** tüm tuşlar; tuşa tıkla, yeni tuşa bas.
 - **Gelişmiş:** kuru çalışma (tuş göndermeden dener), kayıt / kaydı oynat, ayar klasörü, **Mobları göster**.
 
@@ -48,9 +49,17 @@ Level atlayınca çıkan reklam penceresi ve yanlışlıkla açılan Esc menüs�
 - **İksir:** HP/MP iksir tuşunun (1, 2) hızlı slotundaki eşyanın envanterdeki toplam adedi; azaldıkça "içildi" sayılır. İksir bitince günlüğe uyarı yazılır, kutu 20'nin (MP 10'un) altında kırmızı olur.
 - **Yang:** Oturumda kazanılan yang.
 
+## Hedef seçimi ve eşya toplama
+
+- **Önce bana saldıran mobu kes** (varsayılan açık): Bir mobun sana saldırdığını bot bellekten görür ve daha yakında başka mob olsa da önce onu keser.
+- **En yüksek mob seviyesi** (0 = sınırsız): Üstündeki mobları atlar. **Sadece bu moblar / Bu mobları atla:** mob adlarını virgülle yaz (ör. "Kurt, Domuz"), adın bir kısmı yeter. Sana saldıran mob bu ayarlardan bağımsız her zaman kesilir.
+- **Metin taşları:** *Atla* (hiç gitme), *Normal mob gibi* (varsayılan), *Önce onlara git*.
+- **Yerdeki eşyalara yürüyüp topla** (varsayılan açık): Yanında mob yokken 6 m içindeki eşyaya yürür ve toplama tuşuna basar. 5 sn'de alınamayan eşyayı (başkasının olabilir) bir dakika boyunca bırakır.
+
 ## Güvenlik: GM ve envanter
 
 - **GM görünce dur** (Alan sekmesi, varsayılan açık): Yakında oyunun GM olarak işaretlediği (ya da adında [GM]/[GA]/[SA] olan) bir oyuncu görünürse bot uyarı sesi çıkarır, günlüğe adını ve uzaklığını yazar ve durur. Kapalıyken yalnızca uyarır.
+- **Güvenli bölgede dur** (Alan sekmesi, varsayılan açık): Karakter şehre/güvenli bölgeye düşerse (ör. ölüp şehirde dirilirse) bot durur; güvenli bölgedeyken başlamaz.
 - **Envanter dolunca dur** (Alan sekmesi, varsayılan açık): Envanterde boş yer kalmayınca bot uyarı sesiyle durur, toplanan eşyalar kaybolmaz. 5 boş yer kalınca günlüğe uyarı yazar. Boş yer Alan sekmesinde de görünür. Yalnızca açık (paralı olmayan) sayfalar sayılır; kılıç, yay, çift el silah ve zırh alt alta 2 yuva kaplar, emin olunmayan eşyalar 1 yuva sayılır (böylece bot boşuna durmaz).
 
 ## Kalabalığa git
