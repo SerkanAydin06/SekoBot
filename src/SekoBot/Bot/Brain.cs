@@ -6,8 +6,7 @@ namespace SekoBot.Bot;
 /// <summary>
 /// Simple, robust farm loop. Pure logic: takes a <see cref="GameState"/>, returns actions.
 ///
-/// Fighting → attack key held for FightMs (longer while a target is still alive, if the
-///            target bar is calibrated)
+/// Fighting → attack key held for FightMs (longer while the selected mob is still alive)
 /// Looting  → pickup key pressed LootPresses times
 /// Turning  → every N cycles (or when no target is left) rotate the camera / walk forward
 /// Any time → HP/MP potions with cooldown, stop on critical HP. A low reading must last
@@ -26,8 +25,8 @@ internal sealed partial class Brain
     private TimeSpan _hpLowSince = Never, _mpLowSince = Never;
     private TimeSpan _targetGoneSince = Never, _searchSentAt = Never, _lastProgress = Never;
     private double _targetHpBest = 1;
-    /// <summary>A target bar value given up on (stuck mob or something that only looks like a
-    /// target bar); ignored until the bar disappears or its value changes.</summary>
+    /// <summary>A target HP given up on (stuck or unreachable mob); ignored until the target
+    /// changes or its HP does.</summary>
     private double? _ignoredTargetHp;
     private int _reclicks;
     private int _lootPresses, _failedSearches;
@@ -105,7 +104,7 @@ internal sealed partial class Brain
         // A window over the game (advert after a level-up): let go of everything and close it
         // with one Esc; only press again if it is still there 3 s later (a second Esc with
         // nothing open would open the game menu instead).
-        if (p.ClosePopups && state.PopupOpen && !WantsMap) // our own map isn't a popup to close
+        if (p.ClosePopups && state.PopupOpen)
         {
             if (p.NavigateMode)
             {
@@ -188,7 +187,7 @@ internal sealed partial class Brain
             {
                 if (_reclicks >= 3)
                 {
-                    // Unreachable/stuck, or not a real target bar: ignore it and look for mobs.
+                    // Unreachable/stuck: ignore it and look for mobs.
                     _ignoredTargetHp = state.TargetHp;
                     actions.Add(new NoteAction("Hedefin HP'si düşmüyor; bu hedef bırakıldı, başka mob aranıyor."));
                     EndFight(p, actions, now);
@@ -241,7 +240,7 @@ internal sealed partial class Brain
             return;
 
         Cycles++;
-        // With a calibrated target bar we know when the area around us is empty.
+        // Knowing the selected mob, we know when the area around us is empty.
         bool nothingAround = state.TargetHp != null && !state.HasTarget;
         // With mob search, turning happens when a search finds nothing.
         bool turn = !p.AutoTarget && (nothingAround || (p.RotateEveryCycles > 0 && Cycles % p.RotateEveryCycles == 0));
@@ -317,7 +316,7 @@ internal sealed partial class Brain
         return true;
     }
 
-    /// <summary>A target bar that is showing and not one we already gave up on.</summary>
+    /// <summary>A selected mob that is alive and not one we already gave up on.</summary>
     private bool RealTarget(GameState state) =>
         state.HasTarget && !(_ignoredTargetHp is double ignored && Math.Abs(state.TargetHp!.Value - ignored) < 0.02);
 
@@ -341,7 +340,7 @@ internal sealed partial class Brain
         // A click attempt takes up to ~1.5 s per candidate; allow fresh candidates after that.
         if (_searchSent && now - _searchSentAt >= Ms(2500))
             _searchSent = false;
-        // Give motion a moment to build up after the camera stopped.
+        // Give the camera a moment to settle after turning.
         if (!_searchSent && now - _phaseSince >= Ms(600) && state.MobCandidates.Count > 0)
         {
             actions.Add(new FindTargetAction(state.MobCandidates.Take(3).ToArray()));
@@ -352,8 +351,7 @@ internal sealed partial class Brain
         if (now - _phaseSince < Ms(p.SearchTimeoutMs))
             return;
 
-        // Target bar not known yet: nothing to verify a click with, so attack blindly once
-        // (that usually selects something and lets the bar finder see the target bar).
+        // Memory doesn't say whether something is selected: attack blindly once.
         if (state.TargetHp == null)
         {
             _blindFight = true;

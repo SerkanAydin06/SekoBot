@@ -18,7 +18,9 @@
 ## Sonra
 - [ ] Ölüm algılama ve yeniden doğma
 - [ ] Envanter dolu algılama
-- [ ] Mini harita ile rota / alan sınırı
-- [x] Konum, kamera ve mob listesi bellekten (Unreal Engine tip bilgisiyle, salt okuma)
+- [ ] Rota (birden fazla nokta arasında dolaşma)
+- [x] Her şey bellekten: HP/MP, konum, kamera, moblar, seçili hedef, ölüm (Unreal Engine tip bilgisiyle, salt okuma)
+- [x] Oyun güncellenince sabit adresleri kendiliğinden bulma
+- [x] Alan sınırı metre cinsinden, harita açmadan
 - [x] Mob bulma: ekrandaki hareketten aday, tıklayıp hedef barıyla doğrulama (imleç yöntemi bu istemcide çalışmadı)
 - [ ] İsteğe bağlı Metin taşı algılama

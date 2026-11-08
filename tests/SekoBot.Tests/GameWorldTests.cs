@@ -9,6 +9,8 @@ public class GameWorldTests
 {
     private const long Module = 0x1_4000_0000;
     private const long Heap = 0x2000_0000;
+    /// <summary>The readable part of the fake exe (around the two fixed places).</summary>
+    private const long ModuleStart = 0x4CE0000, ModuleSize = 0x4D90000;
 
     /// <summary>A tiny Unreal Engine 4.27 game in fake memory, laid out like Mobile2.</summary>
     private sealed class FakeGame
@@ -21,11 +23,12 @@ public class GameWorldTests
 
         public FakeGame()
         {
-            Memory.Add(Module + 0x4D35000, 0x60000);
+            Memory.Add(Module + ModuleStart, (int)(ModuleSize - ModuleStart));
             Memory.Add(Heap, 0x200000);
             _names = Alloc(0x4000);
             Memory.WriteLong(Module + GameWorldReader.NamePoolOffset + 0x10, _names);
             Name("None");
+            Name("ByteProperty"); // every Unreal name table starts with these two
         }
 
         public long Alloc(int size)
@@ -95,22 +98,14 @@ public class GameWorldTests
 
     private static (FakeGame Game, long Level, List<long> Actors, long NpcClass) World(string map = "c2") => World(out _, map);
 
-    /// <param name="gameData">The game data object ("m2data_C", the step before gameManager).</param>
+    /// <param name="gameData">The game instance ("m2data_C").</param>
     private static (FakeGame Game, long Level, List<long> Actors, long NpcClass) World(out long gameData, string map = "c2")
     {
         var game = new FakeGame();
-        // HP pointer root → … → game data → gameManager
-        long cursor = Module + CharacterStatsReader.HpBaseOffset;
-        gameData = 0;
-        foreach (long offset in GameWorldReader.GameManagerPath)
-        {
-            long next = game.Alloc(0x400);
-            game.Memory.WriteLong(cursor, next);
-            cursor = next + offset;
-            gameData = next;
-        }
+        gameData = game.Object(game.Class("m2data_C"), 0x1200);
+        game.Memory.WriteLong(Module + GameWorldReader.GameInstanceOffset, gameData);
         long gm = game.Object(game.Class("gameManager"), 0xE00);
-        game.Memory.WriteLong(cursor, gm);
+        game.Memory.WriteLong(gameData + 0x1F8, gm);
         game.Vec(gm + 0xA10, 19648.3f, 18054.3f, 963.1f);
         game.FString(gm + 0x958, map);
         long level = game.Object(game.Class("Level"), 0x200);
@@ -209,12 +204,75 @@ public class GameWorldTests
     }
 
     [Fact]
-    public void No_world_without_the_game_manager()
+    public void Reads_hp_mp_level_and_death()
+    {
+        var (game, level, actors, _) = World(out long gameData);
+        SetActors(game, level, actors);
+        long loader = game.Object(game.Class("loader"), 0x900);
+        game.Memory.WriteLong(gameData + 0x1188, loader);
+        game.Int(loader + 0x770 + 0x34, 801);  // HP
+        game.Int(loader + 0x770 + 0x3C, 390);  // SP (MP)
+        game.Int(loader + 0x770 + 0x68, 1236); // fullHP
+        game.Int(loader + 0x770 + 0x88, 480);  // fullSp
+        game.Int(loader + 0x770 + 0x90, 11);   // Level
+        long gm = BitConverter.ToInt64(Read(game, gameData + 0x1F8, 8));
+        long pawn = game.Object(game.Class("playerMove"), 0x900);
+        game.Memory.WriteLong(gm + 0x380, pawn);
+        using var reader = new GameWorldReader(game.Memory, Module);
+
+        var world = reader.Read()!;
+        Assert.Equal(new CharacterStats(801, 390, 1236, 480), world.Stats);
+        Assert.Equal(11, world.Level);
+        Assert.False(world.Dead);
+
+        game.Memory.Write(pawn + 0x778, 1);
+        Assert.True(reader.Read()!.Dead);
+    }
+
+    [Fact]
+    public void Finds_the_fixed_places_again_after_a_game_update()
+    {
+        var (game, level, actors, npc) = World();
+        actors.Add(Npc(game, npc, "Kurt", 3, 162, 162, 19700, 18000));
+        SetActors(game, level, actors);
+        using var reader = new GameWorldReader(game.Memory, Module, ModuleSize);
+        reader.UseOffsets(ModuleStart + 0x100, ModuleStart + 0x200); // where they were "before the update"
+
+        var world = reader.Read();
+
+        Assert.NotNull(world);
+        Assert.True(reader.Searched);
+        Assert.Equal("Kurt", Assert.Single(world.Mobs).Name);
+    }
+
+    [Fact]
+    public void No_world_without_the_game()
     {
         var memory = new FakeMemory();
-        memory.Add(Module + 0x4D35000, 0x60000);
-        using var reader = new GameWorldReader(memory, Module);
+        memory.Add(Module + ModuleStart, (int)(ModuleSize - ModuleStart));
+        using var reader = new GameWorldReader(memory, Module, ModuleSize);
         Assert.Null(reader.Read());
+        Assert.False(reader.Searched);
+    }
+
+    private static byte[] Read(FakeGame game, long address, int count)
+    {
+        var bytes = new byte[count];
+        Assert.True(game.Memory.Read(address, bytes, count));
+        return bytes;
+    }
+
+    [Fact]
+    public void Camera_direction_tells_which_way_is_screen_up()
+    {
+        // Looking along world +Y (yaw 90): +Y is "up" on screen, +X is "left".
+        var camera = new CameraView(new Vec3(0, 0, 1000), -80, 90, 0, 90);
+        var (right, up) = camera.ToScreenDirection(0, 100);
+        Assert.Equal(0, right, 3);
+        Assert.Equal(100, up, 3);
+        (right, up) = camera.ToScreenDirection(100, 0);
+        Assert.Equal(-100, right, 3);
+        Assert.Equal(0, up, 3);
     }
 
     [Fact]
@@ -241,40 +299,4 @@ public class GameWorldTests
     [InlineData(60, 600, true)]
     public void Only_clicks_on_the_playfield(float x, float y, bool expected) =>
         Assert.Equal(expected, BotEngine.OnPlayfield(new PointF(x, y), 1204, 688));
-}
-
-public class MapCalibrationTests
-{
-    [Fact]
-    public void Learns_the_big_map_from_a_few_walks()
-    {
-        // The map's x follows world Y, its y follows world X (turned map), with a little arrow noise.
-        PointF Map(double wx, double wy, double noise) =>
-            new((float)(0.00002 * wy + 0.1 + noise), (float)(-0.00002 * wx + 0.9 - noise));
-        var calibration = new MapCalibration();
-        (double X, double Y)[] walk = [(19600, 18000), (20000, 18400), (20300, 18100), (19900, 17700), (19500, 17900)];
-        for (int i = 0; i < walk.Length; i++)
-            calibration.Add(new Vec3(walk[i].X, walk[i].Y, 900), Map(walk[i].X, walk[i].Y, (i % 2 == 0 ? 1 : -1) * 0.0003));
-
-        var spec = calibration.Fit("c2");
-
-        Assert.NotNull(spec);
-        Assert.True(spec.Swapped);
-        Assert.Equal("c2", spec.MapName);
-        var predicted = spec.ToMap(new Vec3(19800, 18200, 0));
-        var expected = Map(19800, 18200, 0);
-        Assert.Equal(expected.X, predicted.X, 2);
-        Assert.Equal(expected.Y, predicted.Y, 2);
-    }
-
-    [Fact]
-    public void Needs_pairs_from_different_places()
-    {
-        var calibration = new MapCalibration();
-        Assert.True(calibration.Add(new Vec3(1000, 1000, 0), new PointF(0.5f, 0.5f)));
-        Assert.False(calibration.Add(new Vec3(1010, 1005, 0), new PointF(0.5f, 0.5f))); // same place
-        Assert.True(calibration.Add(new Vec3(1100, 1000, 0), new PointF(0.502f, 0.5f)));
-        Assert.True(calibration.Add(new Vec3(1200, 1000, 0), new PointF(0.504f, 0.5f)));
-        Assert.Null(calibration.Fit("c2")); // walked along one axis only
-    }
 }

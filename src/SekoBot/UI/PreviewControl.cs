@@ -113,10 +113,6 @@ internal sealed class PreviewControl : Control
 
         int w = Image.Width, h = Image.Height;
         using var small = new Font("Segoe UI", 8f, FontStyle.Bold);
-        if (Profile is { } p && State is not { TargetFromMemory: true })
-        {
-            DrawBar(g, p.TargetBar, w, h, Theme.Red, "HEDEF", small);
-        }
         if (State is { MobCandidates.Count: > 0 } st)
         {
             // What the bot thinks are mobs: yellow rings, the nearest one thicker.
@@ -142,17 +138,6 @@ internal sealed class PreviewControl : Control
             using var text = new SolidBrush(Theme.Text);
             g.DrawString(Overlay, font, text, 14, 11);
         }
-    }
-
-    private void DrawBar(Graphics g, BarSpec? bar, int w, int h, Color color, string name, Font font)
-    {
-        if (bar == null)
-            return;
-        var r = ToControl(bar.Area.ToPixels(w, h));
-        using var pen = new Pen(color, 1.5f);
-        using var brush = new SolidBrush(color);
-        g.DrawRectangle(pen, Rect(r));
-        g.DrawString(name, font, brush, r.X, r.Bottom + 1);
     }
 
     private static Rectangle Rect(RectangleF r) => Rectangle.Round(r);

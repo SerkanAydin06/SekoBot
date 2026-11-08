@@ -32,8 +32,7 @@ internal sealed class InputExecutor : IDisposable
     private readonly bool _background;
     private readonly Task? _repeater;
 
-    /// <param name="hasTarget">Whether a target bar is showing; null when it can't be told
-    /// (target bar not known yet).</param>
+    /// <param name="hasTarget">Whether a mob is selected (from memory); null when it can't be told.</param>
     /// <param name="missed">Called with a candidate that was clicked but selected nothing.</param>
     /// <param name="selected">Called with the spot whose click selected a mob.</param>
     /// <param name="background">Post messages to the game window instead of SendInput (experimental).</param>
@@ -133,7 +132,7 @@ internal sealed class InputExecutor : IDisposable
     }
 
     /// <summary>
-    /// Clicks probable mobs (nearest first) and waits for a target bar after each click.
+    /// Clicks mobs (nearest first) and waits until memory shows one selected after each click.
     /// Stops at the first one that gets selected. A miss usually makes the character walk,
     /// which moves the camera and makes the other candidates stale, so give up after two.
     /// </summary>
@@ -149,7 +148,7 @@ internal sealed class InputExecutor : IDisposable
             double? before = _targetHp();
             await ClickAsync(spot, 40, 70, token);
 
-            // Until the target bar has been found once, give the bar finder time to spot it.
+            // When it can't be told whether something got selected, wait a bit longer.
             int wait = _hasTarget() == null ? 1500 : 800;
             for (int waited = 0; waited < wait; waited += 50)
             {
@@ -167,7 +166,7 @@ internal sealed class InputExecutor : IDisposable
                 }
                 await Task.Delay(50, token);
             }
-            // Only a click that left no target bar at all hit empty ground.
+            // Only a click that left nothing selected at all hit empty ground.
             if (_hasTarget() == false)
                 _missed(spot);
             misses++;

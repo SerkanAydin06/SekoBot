@@ -103,7 +103,7 @@ internal static class Replayer
             {
                 if (frame != null)
                 {
-                    state = Perception.Analyze(frame, profile, tick.Time) with { Hp = tick.Hp, Mp = tick.Mp };
+                    state = new GameState(tick.Time, frame.Width, frame.Height, tick.Hp, tick.Mp, tick.Target, 0);
                     fromFrame = true;
                 }
                 else

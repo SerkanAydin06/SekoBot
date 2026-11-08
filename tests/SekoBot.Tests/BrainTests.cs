@@ -56,7 +56,7 @@ public class BrainTests
     [Fact]
     public void Keeps_fighting_while_target_alive_and_turns_when_nothing_is_left()
     {
-        var (brain, p) = Started(x => { x.TargetBar = new BarSpec(); x.RotateEveryCycles = 0; });
+        var (brain, p) = Started(x => x.RotateEveryCycles = 0);
         Run(brain, 0, p.FightMs + 3000, t => State(t, target: 0.6));
         Assert.Equal(BotPhase.Fighting, brain.Phase);
         Assert.Equal(0, brain.Cycles);
@@ -69,7 +69,7 @@ public class BrainTests
     [Fact]
     public void Gives_up_on_target_after_max_fight_time()
     {
-        var (brain, p) = Started(x => x.TargetBar = new BarSpec());
+        var (brain, p) = Started();
         Run(brain, 0, p.FightMaxMs + 200, t => State(t, target: 0.9));
         Assert.Equal(BotPhase.Looting, brain.Phase);
     }

@@ -5,12 +5,12 @@ namespace SekoBot.Bot;
 
 /// <summary>
 /// Mobs from memory: every living, attackable mob of the game world (see <see cref="GameWorldReader"/>),
-/// put on the screen with the game camera, so the bot sees mobs even without a red name on screen.
+/// put on the screen with the game camera, so the bot sees every mob, also those without a name shown.
 /// </summary>
 internal sealed partial class BotEngine
 {
     /// <summary>Where the mobs from memory are on screen (client pixels, nearest to us first),
-    /// or null when memory can't be used (then the bot looks for red names on screen).</summary>
+    /// or null when the camera can't be read.</summary>
     private static List<Point>? MemoryMobs(WorldSnapshot? world, int width, int height)
     {
         if (world?.Camera is not CameraView camera)
@@ -46,15 +46,17 @@ internal sealed partial class BotEngine
     public string DescribeMobs()
     {
         if (World is not { } world)
-            return "Mob listesi okunamadı: " + _positionStatus + ". SekoBot'u yönetici olarak açtığından emin ol.";
+            return "Mob listesi okunamadı: " + _memoryStatus + ". SekoBot'u yönetici olarak açtığından emin ol.";
         var mobs = world.ByDistance.ToList();
         var text = new StringBuilder();
         text.Append($"Bellekten: {mobs.Count} mob, {world.OtherPlayers} başka oyuncu (harita {world.MapName}, " +
                     $"konum X={world.Player.X:0}, Y={world.Player.Y:0}).");
         if (world.Target is { } target)
             text.Append($" Seçili hedef: {target.Name} (Sv {target.Level}) HP {target.Hp}/{target.MaxHp}.");
+        if (world.Stats is { } stats)
+            text.Append($" Karakter: Sv {world.Level}, HP {stats.Hp}/{stats.MaxHp}, MP {stats.Mp}/{stats.MaxMp}{(world.Dead ? ", ÖLÜ" : "")}.");
         if (world.Camera == null)
-            text.Append(" Kamera okunamadı: moblar ekrana yerleştirilemiyor, ekrandaki isimler kullanılacak.");
+            text.Append(" Kamera okunamadı: moblar ekrana yerleştirilemiyor.");
         foreach (var mob in mobs.Take(12))
             text.Append($"\n  • {mob.Name} (Sv {mob.Level})  HP {mob.Hp}/{mob.MaxHp}  {mob.Position.DistanceXY(world.Player) / 100:0.0} m");
         if (mobs.Count > 12)

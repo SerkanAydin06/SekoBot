@@ -5,8 +5,8 @@ namespace SekoBot.Bot;
 
 /// <summary>
 /// Walk mode: the camera looks straight down (G) and is zoomed out (F), so the character is
-/// always in the middle of the screen and every mob shows its red name right on top of it.
-/// The bot walks with W/A/S/D towards the nearest name and holds Space once it is next to
+/// always in the middle of the screen; the mobs come from memory, placed on screen with the camera.
+/// The bot walks with W/A/S/D towards the nearest mob and holds Space once it is next to
 /// the character, still steering with W/A/S/D while attacking; when nothing is left nearby
 /// it picks up loot and walks to the next one. Z is tapped all the time, and G/F are held
 /// again every half minute — all next to walking and attacking, nothing ever waits.
@@ -133,7 +133,7 @@ internal sealed partial class Brain
         }
         double radius = p.AttackRadius * state.Height;
 
-        // Stay in the area we started in (big map, M): checks, and walking back when too far.
+        // Stay in the area we started in (position from memory): walking back when too far.
         if (LeashTick(state, p, actions, refresh, mobNextToUs: best <= radius))
             return;
 

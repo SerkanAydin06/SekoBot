@@ -23,11 +23,10 @@ internal sealed class MainForm : Form
     private readonly ContextMenuStrip _gameMenu = new();
     private readonly CheckBox _dryRun;
     private readonly PreviewControl _preview;
-    private readonly Button[] _calibrationButtons;
     private readonly Label _connection, _status, _calibrationHint, _calibrationState, _technical;
     private readonly Label _statTime, _statMobs, _statRate, _statDeaths, _statPotions, _statArea;
     private readonly Label _positionState;
-    private readonly Button _findPosition, _scanMobs;
+    private readonly Button _scanMobs;
     private readonly Meter _hpMeter, _mpMeter, _targetMeter;
     private readonly Button[] _tabButtons;
     private readonly Panel[] _tabPages;
@@ -178,19 +177,12 @@ internal sealed class MainForm : Form
 
         // Alan
         var area = _tabPages[2];
-        NumberRow(area, "Alan sınırı (harita %)", 0, 0, 0, 30, Math.Round(_profile.LeashRadius * 100, 1), 1, 0.5m,
-            v => _profile.LeashRadius = v / 100);
-        NumberRow(area, "Haritaya bakma (sn)", 0, 34, 5, 120, _profile.LeashCheckMs / 1000.0, 0, 5,
-            v => _profile.LeashCheckMs = (int)(v * 1000));
-        Theme.Label(area, "Bot başladığı yeri hatırlar ve bu sınırın dışına çıkınca geri yürür. Koordinat " +
-            "bulunduysa yerini bellekten okur; yoksa arada bir büyük haritayı (M) açıp bakar. 0 = sınır yok.",
+        NumberRow(area, "Alan sınırı (metre)", 0, 0, 0, 500, Math.Round(_profile.LeashMeters), 0, 5,
+            v => _profile.LeashMeters = v);
+        Theme.Label(area, "Bot başladığı yeri hatırlar ve bu sınırın dışına çıkınca geri yürür. Yerini oyunun " +
+            "belleğinden okur; harita açmaz, ayar gerekmez. 0 = sınır yok.",
             new Rectangle(370, 0, 360, 68), 9f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
-        // Finds the character's position in memory by walking and watching the map arrow.
-        _findPosition = Theme.Button(area, "📍  Koordinat bul", new Rectangle(0, 74, 180, 32), Theme.Primary, Theme.PrimaryHover);
-        _findPosition.Click += (_, _) => ToggleCoordinateFinder();
-        _positionState = Theme.Label(area, "", new Rectangle(190, 74, 546, 32), 9f, Theme.Muted);
-        Theme.Label(area, "Açık, düz bir yerde dur ve bas: karakter 1–2 dakika birkaç yöne yürür, harita açılıp kapanır.",
-            new Rectangle(0, 112, 736, 26), 8.5f, Theme.Muted);
+        _positionState = Theme.Label(area, "", new Rectangle(0, 74, 736, 32), 9f, Theme.Muted);
 
         // Tuşlar
         var keys = _tabPages[3];
@@ -207,7 +199,6 @@ internal sealed class MainForm : Form
             ("Sağ", () => k.MoveRight, v => k.MoveRight = v),
             ("Kamera yukarı", () => k.CameraTop, v => k.CameraTop = v),
             ("Uzaklaştır", () => k.ZoomOut, v => k.ZoomOut = v),
-            ("Büyük harita", () => k.Map, v => k.Map = v),
             ("Pencere kapat", () => k.CloseWindow, v => k.CloseWindow = v),
         ];
         for (int i = 0; i < bindings.Length; i++)
@@ -236,16 +227,6 @@ internal sealed class MainForm : Form
         _calibrationState = Theme.Label(advanced, "", new Rectangle(240, 0, 230, 26), 9f, Theme.Muted);
         _technical = Theme.Label(advanced, "", new Rectangle(476, 0, 260, 26), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.MiddleRight);
         _calibrationHint = Theme.Label(advanced, "", new Rectangle(0, 30, 736, 22), 8.5f, Theme.Muted);
-        string[] names = ["Hedef HP barı", "Hedef barını sıfırla"];
-        _calibrationButtons = new Button[names.Length];
-        for (int i = 0; i < names.Length; i++)
-        {
-            int index = i;
-            var button = Theme.Button(advanced, names[i], new Rectangle(i * 150, 56, 142, 30),
-                i == 1 ? Theme.Danger : Theme.Secondary, i == 1 ? Theme.DangerHover : Theme.SecondaryHover);
-            button.Click += (_, _) => Calibrate(index);
-            _calibrationButtons[i] = button;
-        }
         _record = Theme.Button(advanced, "⏺  Kaydet", new Rectangle(0, 100, 142, 30), Theme.Secondary, Theme.SecondaryHover);
         _record.Click += (_, _) => ToggleRecording();
         _replay = Theme.Button(advanced, "▶  Kaydı oynat", new Rectangle(150, 100, 142, 30), Theme.Secondary, Theme.SecondaryHover);
@@ -474,15 +455,7 @@ internal sealed class MainForm : Form
                     _autoAttached = false;
                 Disconnect(message);
             });
-            engine.BarsChanged += message => PostUi(() =>
-            {
-                SaveProfile();
-                if (message.Length > 0) WriteLog(message);
-                _preview.Invalidate();
-                UpdateControls();
-            });
             engine.BotStopped += reason => PostUi(() => { _stopReason = reason; UpdateControls(); UpdateStats(); });
-            engine.CoordinatesFinished += _ => PostUi(() => { SaveProfile(); UpdateControls(); UpdateStats(); });
             _engine = engine;
             engine.Start(previewFps: 30);
             _frameSequence = 0;
@@ -561,26 +534,6 @@ internal sealed class MainForm : Form
             _ = ApplyUpdateAsync(pending);
     }
 
-    // ── Coordinates ──────────────────────────────────────────────
-
-    private void ToggleCoordinateFinder()
-    {
-        if (_engine == null)
-        {
-            WriteLog("Önce oyun açık olmalı.");
-            return;
-        }
-        if (_engine.FindingCoordinates)
-        {
-            _engine.StopCoordinateFinder();
-            return;
-        }
-        if (!_engine.StartCoordinateFinder(out string error))
-            WriteLog(error);
-        UpdateControls();
-        UpdateStats();
-    }
-
     // ── Recording / replay ───────────────────────────────────────
 
     private void ToggleRecording()
@@ -642,53 +595,6 @@ internal sealed class MainForm : Form
         }
     }
 
-    // ── Calibration ──────────────────────────────────────────────
-
-    private void Calibrate(int kind)
-    {
-        if (kind == 1)
-        {
-            ResetCalibration();
-            return;
-        }
-        if (_engine == null || _preview.Selection is not Rectangle selection)
-            return;
-        try
-        {
-            string message = _engine.WithLatestFrame(frame =>
-            {
-                _profile.TargetBar = BarReader.Calibrate(frame, selection);
-                return "Hedef HP barı kaydedildi" + ColorText(_profile.TargetBar);
-            }) ?? "Henüz görüntü yok.";
-            SaveProfile();
-            WriteLog(message);
-            _preview.ClearSelection();
-        }
-        catch (Exception ex)
-        {
-            WriteLog("Kalibrasyon hatası: " + ex.Message);
-        }
-        UpdateControls();
-    }
-
-    private static string ColorText(BarSpec? bar) => bar == null ? "." : $" (renk {bar.R},{bar.G},{bar.B}).";
-
-    /// <summary>Resets only target HP calibration. Character stats always come from memory.</summary>
-    private void ResetCalibration()
-    {
-        var answer = MessageBox.Show(this, "Hedef HP barı silinip yeniden bulunsun mu?",
-            "SekoBot", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-        if (answer != DialogResult.Yes)
-            return;
-        StopBot("kalibrasyon sıfırlandı");
-        _profile.TargetBar = null;
-        SaveProfile();
-        _preview.State = null;
-        _preview.ClearSelection();
-        WriteLog("Hedef barı sıfırlandı; otomatik olarak yeniden aranıyor…");
-        UpdateControls();
-    }
-
     private void SaveProfile()
     {
         try { ProfileStore.Save(_profile); }
@@ -743,8 +649,8 @@ internal sealed class MainForm : Form
 
     private void UpdateStats()
     {
-        bool targetFromMemory = _engine?.State?.TargetFromMemory == true;
-        _calibrationState.Text = targetFromMemory ? "HP/MP: bellek   Hedef: bellek" : $"HP/MP: bellek   Hedef {Mark(_profile.TargetBar)}";
+        _calibrationState.Text = _engine?.World != null ? "Her şey bellekten ✓" : "Bellek bekleniyor";
+        _calibrationState.ForeColor = _engine?.World != null ? Theme.Green : Theme.Muted;
 
         if (_engine == null)
         {
@@ -759,13 +665,11 @@ internal sealed class MainForm : Form
         var s = _engine.Stats;
         var state = _engine.State;
         _technical.Text = $"{_engine.StatsSource} · {s.CaptureFps:0} FPS";
-        bool finding = _engine.FindingCoordinates;
-        _positionState.Text = finding
-            ? "Aranıyor… ilerleyişi günlükte görebilirsin."
-            : _engine.PositionStatus + (state?.LivePosition is PointF live ? $"   (harita {live.X:0.000}, {live.Y:0.000})" : "");
-        _positionState.ForeColor = state?.LivePosition != null ? Theme.Green : Theme.Muted;
-        if (_findPosition.Text != (finding ? "■  Aramayı durdur" : "📍  Koordinat bul"))
-            UpdateControls();
+        var world = _engine.World;
+        _positionState.Text = world != null
+            ? $"📍 Konum bellekten ✓  X={world.Player.X:0}, Y={world.Player.Y:0}  (harita {world.MapName}, {world.Mobs.Count} mob)"
+            : "📍 " + _engine.MemoryStatus;
+        _positionState.ForeColor = world != null ? Theme.Green : Theme.Muted;
         _hpMeter.Value = state?.Hp;
         _mpMeter.Value = state?.Mp;
         _targetMeter.Value = state?.TargetHp;
@@ -788,10 +692,7 @@ internal sealed class MainForm : Form
         }
         else
         {
-            if (_engine.FindingCoordinates)
-                SetLine("📍 Koordinat aranıyor… Karakter kendi yürüyor, oyuna dokunma.", Theme.Yellow);
-            else
-                SetLine(_stopReason is string reason
+            SetLine(_stopReason is string reason
                         ? $"Durdu ({reason}). Devam etmek için BAŞLAT ya da F10."
                         : "Hazır. Başlatmak için BAŞLAT ya da F10.",
                     _stopReason != null ? Theme.Yellow : Theme.Text);
@@ -804,18 +705,13 @@ internal sealed class MainForm : Form
         _status.ForeColor = color;
     }
 
-    private static string Mark(BarSpec? bar) => bar == null ? "✗" : "✓";
-
     private void UpdateControls()
     {
         bool connected = _engine != null;
         bool running = _engine?.BotRunning == true;
         _gameButton.Text = connected ? "Bağlantı  ▾" : "Oyunu seç  ▾";
-        bool finding = _engine?.FindingCoordinates == true;
-        _startBot.Enabled = connected && !finding;
-        _findPosition.Enabled = connected && !running;
+        _startBot.Enabled = connected;
         _scanMobs.Enabled = connected;
-        _findPosition.Text = finding ? "■  Aramayı durdur" : "📍  Koordinat bul";
         _startBot.Text = running ? "❚❚  DURAKLAT   F10" : "▶  BAŞLAT   F10";
         _stopBot.Enabled = running;
         bool recording = _engine?.IsRecording == true;
@@ -825,18 +721,9 @@ internal sealed class MainForm : Form
         _record.FlatAppearance.MouseOverBackColor = recording ? Theme.DangerHover : Theme.SecondaryHover;
         _replay.Enabled = !_replaying;
         _dryRun.Enabled = !running;
-        bool hasSelection = connected && _preview.Selection != null;
-        for (int i = 0; i < 1; i++)
-            _calibrationButtons[i].Enabled = hasSelection;
         _calibrationHint.Text = !connected
-            ? "HP/MP bellekten okunur. Hedef barını işaretlemek için oyuna bağlan."
-            : hasSelection
-                ? "Hedef HP barını seçtiysen düğmesine bas."
-                : _engine?.State?.TargetFromMemory == true
-                    ? "HP/MP ve hedefin canı bellekten okunuyor; hedef barı gerekmez."
-                : _profile.TargetBar == null
-                    ? "Hedef barı otomatik aranıyor; gerekirse canlı görüntüden seç."
-                    : "HP/MP bellekten; hedef barı görüntüden okunuyor.";
+            ? "HP/MP, konum, moblar ve hedef oyunun belleğinden okunur (SekoBot'u yönetici olarak aç)."
+            : _engine!.MemoryStatus;
     }
 
     // ── Update ───────────────────────────────────────────────────

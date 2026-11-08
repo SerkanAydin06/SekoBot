@@ -55,7 +55,7 @@ public sealed class RecordingTests : IDisposable
         for (double ms = 0; ms < seconds * 1000; ms += 100)
         {
             using var frame = HpFrame(hpAt(ms), ++seq);
-            var state = Perception.Analyze(frame, profile, TimeSpan.FromMilliseconds(ms)) with { Hp = hpAt(ms) };
+            var state = new GameState(TimeSpan.FromMilliseconds(ms), frame.Width, frame.Height, hpAt(ms), null, null, 0);
             var actions = brain.Tick(state);
             recorder.Record(frame, state, brain.Phase, actions, important: false);
             // The real engine runs at 10 Hz; give the writer time like it would have.
@@ -89,7 +89,6 @@ public sealed class RecordingTests : IDisposable
         var recording = SessionRecording.Load(_dir);
         Assert.Equal(20, recording.Ticks.Count);
         Assert.Equal(0, recording.BadLines);
-        Assert.Null(recording.Profile.TargetBar);
         Assert.All(recording.Ticks, t => Assert.InRange(t.Hp!.Value, 0.75, 0.85));
         var withFrame = recording.Ticks.Where(t => t.Frame != null).ToList();
         Assert.NotEmpty(withFrame);

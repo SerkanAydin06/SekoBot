@@ -48,6 +48,7 @@ internal static class MemoryReads
 /// <summary>Read-only access to the game process. Never writes or injects anything.</summary>
 internal sealed class ProcessMemory : IMemorySource, IDisposable
 {
+    internal const string GameModule = "mobilemmo-Win64-Shipping.exe";
     private const uint ProcessVmRead = 0x0010;
     private const uint ProcessQueryInformation = 0x0400;
     private const uint MemCommit = 0x1000;
@@ -57,15 +58,19 @@ internal sealed class ProcessMemory : IMemorySource, IDisposable
 
     private nint _handle;
 
-    private ProcessMemory(nint handle, long moduleBase, long startTicks)
+    private ProcessMemory(nint handle, long moduleBase, long moduleSize, long startTicks)
     {
         _handle = handle;
         ModuleBase = moduleBase;
+        ModuleSize = moduleSize;
         StartTicks = startTicks;
     }
 
     /// <summary>Where the game's exe is loaded.</summary>
     public long ModuleBase { get; }
+
+    /// <summary>Size of the game's exe in memory.</summary>
+    public long ModuleSize { get; }
 
     /// <summary>When the game process started (UTC ticks), to tell one game session from the next.</summary>
     public long StartTicks { get; }
@@ -77,7 +82,7 @@ internal sealed class ProcessMemory : IMemorySource, IDisposable
         {
             using var process = Process.GetProcessById((int)processId);
             var module = process.MainModule;
-            if (module == null || !string.Equals(module.ModuleName, CharacterStatsReader.GameModule, StringComparison.OrdinalIgnoreCase))
+            if (module == null || !string.Equals(module.ModuleName, GameModule, StringComparison.OrdinalIgnoreCase))
             {
                 error = "oyun işlemi tanınmadı";
                 return null;
@@ -90,7 +95,7 @@ internal sealed class ProcessMemory : IMemorySource, IDisposable
                 error = "bellek erişimi reddedildi (SekoBot'u yönetici olarak aç)";
                 return null;
             }
-            return new ProcessMemory(handle, module.BaseAddress.ToInt64(), start);
+            return new ProcessMemory(handle, module.BaseAddress.ToInt64(), module.ModuleMemorySize, start);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException)
         {

@@ -30,7 +30,7 @@ public class NavigateTests
     /// <param name="log">Collects the setup actions, to know which keys are held afterwards.</param>
     private static (Brain Brain, BotProfile Profile) Ready(List<BotAction> log)
     {
-        var profile = new BotProfile { LeashRadius = 0, SkillEverySec = new int[5] };
+        var profile = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5] };
         Assert.True(profile.NavigateMode); // the default
         var brain = new Brain(() => profile);
         brain.Start(TimeSpan.Zero);
@@ -221,12 +221,12 @@ public class NavigateTests
     [Fact]
     public void Old_profile_moves_to_the_closer_attack_distance_but_keeps_user_choices()
     {
-        var old = new BotProfile { LeashRadius = 0, SkillEverySec = new int[5], Version = 0, AttackRadius = 0.10 };
+        var old = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], Version = 0, AttackRadius = 0.10 };
         Assert.True(ProfileStore.Upgrade(old));
         Assert.Equal(0.05, old.AttackRadius);
         Assert.Equal(BotProfile.CurrentVersion, old.Version);
 
-        var picked = new BotProfile { LeashRadius = 0, SkillEverySec = new int[5], Version = 0, AttackRadius = 0.07 };
+        var picked = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], Version = 0, AttackRadius = 0.07 };
         ProfileStore.Upgrade(picked);
         Assert.Equal(0.07, picked.AttackRadius);
 
