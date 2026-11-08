@@ -13,7 +13,7 @@ internal sealed partial class BotEngine
 {
     /// <summary>What the bot sees on screen from memory: the mobs it may go for (nearest to us
     /// first), the ones to go for first, and the items close by. Null when the camera can't be read.</summary>
-    internal static (List<Point> Mobs, List<Point> Priority, List<GroundSpot> Drops, bool Metins)? MemoryView(
+    internal static (List<Point> Mobs, List<Point> Priority, List<GroundSpot> Drops)? MemoryView(
         WorldSnapshot? world, BotProfile profile, int width, int height)
     {
         if (world?.Camera is not CameraView camera)
@@ -40,7 +40,7 @@ internal sealed partial class BotEngine
                     drops.Add(new GroundSpot(item.Id, Point.Round(p)));
         // Metin stones set to "first" come before everything, also before mobs attacking us
         // (those stand around the stone and get hit too).
-        return (mobs, metins.Count > 0 ? metins : attackers, drops, metins.Count > 0);
+        return (mobs, metins.Count > 0 ? metins : attackers, drops);
     }
 
     /// <summary>Whether the bot should go for this mob, by the profile's choices. A mob that is
