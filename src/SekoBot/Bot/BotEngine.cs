@@ -144,7 +144,8 @@ internal sealed partial class BotEngine : IDisposable
                         if (_statsReader.TryRead(out var stats))
                             state = state with { Hp = stats.HpFraction, Mp = stats.MpFraction };
                         TrackStats(state.Hp != null, now);
-                        if (ReadLivePosition() is PointF live)
+                        var world = ReadWorld(now);
+                        if (LivePosition(world) is PointF live)
                             state = state with { LivePosition = live };
                         if (profile.ReviveOnDeath && BotRunning)
                         {
@@ -155,11 +156,12 @@ internal sealed partial class BotEngine : IDisposable
                             state = state with { PopupOpen = PopupDetector.IsOpen(frame) };
                         if (profile.NavigateMode)
                         {
-                            // Top-down camera: the name sits right on the mob.
+                            // Mobs from memory; without memory the red names (top-down camera: the name sits right on the mob).
                             int down = (int)(frame.Height * 0.02);
-                            var mobs = NameFinder.Find(frame, profile.RequireLevelTag)
-                                .Select(n => new Point(n.X + n.Width / 2, n.Y + n.Height / 2 + down))
-                                .ToList();
+                            var mobs = MemoryMobs(world, frame.Width, frame.Height) ??
+                                       NameFinder.Find(frame, profile.RequireLevelTag)
+                                           .Select(n => new Point(n.X + n.Width / 2, n.Y + n.Height / 2 + down))
+                                           .ToList();
                             _motion.Update(frame, now); // only to tell whether the picture moves (walking vs stuck)
                             state = state with
                             {
@@ -170,14 +172,15 @@ internal sealed partial class BotEngine : IDisposable
                         else if (profile.AutoTarget)
                         {
                             var moving = _motion.Update(frame, now);
-                            var mobs = MobLocator.Combine(NameFinder.Find(frame), moving, frame.Width, frame.Height,
-                                    name => MobLocator.BodyBelow(frame, name))
+                            var mobs = (MemoryMobs(world, frame.Width, frame.Height) ??
+                                        MobLocator.Combine(NameFinder.Find(frame), moving, frame.Width, frame.Height,
+                                            name => MobLocator.BodyBelow(frame, name)))
                                 .Where(m => !_motion.RecentlyMissed(m, now)).ToList();
                             state = state with { MobCandidates = mobs, TargetSpot = TrackTarget(state, mobs, now) };
                         }
                         if ((_brain.WantsMap || _finderWantsMap) && MapReader.Read(frame) is { } map)
                             state = state with { MapOpen = true, MapPosition = map.Arrow };
-                        CheckPosition(state);
+                        LearnMap(state, world);
                         Volatile.Write(ref _state, state);
                         CheckTargetBar(state, profile, frame, now);
                         var (phase, actions) = TickBot(state);
@@ -501,10 +504,10 @@ internal sealed partial class BotEngine : IDisposable
             _latest = null;
         }
         _statsReader.Dispose();
-        lock (_positionGate)
+        lock (_worldGate)
         {
-            _position?.Dispose();
-            _position = null;
+            _world?.Dispose();
+            _world = null;
         }
         _cts.Dispose();
     }

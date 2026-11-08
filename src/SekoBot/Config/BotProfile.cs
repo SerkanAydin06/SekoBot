@@ -31,31 +31,32 @@ internal sealed class BarSpec
 }
 
 /// <summary>
-/// Where the character's position is in the game's memory (found with "Koordinat bul"), and how
-/// it converts to the big map (0..1 of its width).
+/// How the character's world position (read from memory) converts to the big map (0..1 of its
+/// width). Learned with "Koordinat bul" or whenever the big map is open.
 /// </summary>
 internal sealed class PositionSpec
 {
-    /// <summary>Searches before v2 could pick the map arrow's place on screen instead of the
-    /// real position; such results are not used.</summary>
-    public const int CurrentVersion = 2;
+    /// <summary>v3: the position comes from the game's own player object; older searches
+    /// found the wrong values and are not used.</summary>
+    public const int CurrentVersion = 3;
     public int Version { get; set; }
-    /// <summary>4 = float, 8 = double.</summary>
-    public int Size { get; set; } = 4;
+    /// <summary>The game map this was learned on (each map has its own big map).</summary>
+    public string MapName { get; set; } = "";
+    /// <summary>The big map's x follows the world's Y (and its y the world's X).</summary>
+    public bool Swapped { get; set; }
     public double Ax { get; set; }
     public double Bx { get; set; }
     public double Ay { get; set; }
     public double By { get; set; }
-    /// <summary>Lasting path: object index on the HP pointer path (-1 = none), then pointer offsets.</summary>
-    public int Node { get; set; } = -1;
-    public long[] Offsets { get; set; } = [];
-    public long XOffset { get; set; }
-    public long YOffset { get; set; }
-    /// <summary>Plain addresses: only valid in the game session they were found in.</summary>
-    public long XAddress { get; set; }
-    public long YAddress { get; set; }
-    public uint ProcessId { get; set; }
-    public long ProcessStartTicks { get; set; }
+    /// <summary>How well the pairs fitted when learned (1 = perfectly).</summary>
+    public double Fit { get; set; }
+
+    /// <summary>Position on the big map (0..1 of its width) of a world position.</summary>
+    public PointF ToMap(Memory.Vec3 world)
+    {
+        double u = Swapped ? world.Y : world.X, v = Swapped ? world.X : world.Y;
+        return new PointF((float)(Ax * u + Bx), (float)(Ay * v + By));
+    }
 }
 
 internal sealed class KeyBindings

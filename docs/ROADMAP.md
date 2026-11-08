@@ -19,5 +19,6 @@
 - [ ] Ölüm algılama ve yeniden doğma
 - [ ] Envanter dolu algılama
 - [ ] Mini harita ile rota / alan sınırı
+- [x] Konum, kamera ve mob listesi bellekten (Unreal Engine tip bilgisiyle, salt okuma)
 - [x] Mob bulma: ekrandaki hareketten aday, tıklayıp hedef barıyla doğrulama (imleç yöntemi bu istemcide çalışmadı)
 - [ ] İsteğe bağlı Metin taşı algılama
