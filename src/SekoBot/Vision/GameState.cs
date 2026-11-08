@@ -38,6 +38,9 @@ internal sealed record GameState(
     /// <summary>The mobs with their distance, reach and value (from memory); empty without memory.</summary>
     public IReadOnlyList<TargetInfo> Targets { get; init; } = [];
 
+    /// <summary>Where the mobs were seen most (world), to walk to when none is on screen.</summary>
+    public Vec3? Hotspot { get; init; }
+
     /// <summary>The character's attack value (to guess how long a mob takes to kill).</summary>
     public int AttackPower { get; init; }
 

@@ -1,4 +1,5 @@
 using SekoBot.Config;
+using SekoBot.Memory;
 using SekoBot.Vision;
 
 namespace SekoBot.Bot;
@@ -43,6 +44,7 @@ internal sealed partial class Brain
         _exploreStep = 0;
         _crowdTarget = _lastCrowd = null;
         _targetId = 0;
+        _toHotspot = false;
         _dropId = 0;
         _dropSince = _lastDropTap = Never;
         _ignoredDrops.Clear();
@@ -170,6 +172,24 @@ internal sealed partial class Brain
                 SetMoves([], p, actions, refresh);
                 return;
             }
+            // Where the mobs were seen most (from memory): go there instead of zigzagging.
+            if (state.Hotspot is Vec3 spot && state.Position is Vec3 me && state.Camera is CameraView camera)
+            {
+                var (right, up) = camera.ToScreenDirection(spot.X - me.X, spot.Y - me.Y);
+                double length = Math.Sqrt(right * right + up * up);
+                if (length > 0)
+                {
+                    if (!_toHotspot)
+                        actions.Add(new NoteAction("Etrafta mob yok; mobların çok olduğu yere gidiliyor."));
+                    _toHotspot = true;
+                    SetMoves(Towards(right / length * 100, -up / length * 100, 38, p), p, actions, refresh);
+                    CheckBlocked(state, p, actions);
+                    if (Phase != BotPhase.Searching)
+                        Enter(BotPhase.Searching, now);
+                    return;
+                }
+            }
+            _toHotspot = false;
             if (now >= _exploreUntil)
             {
                 // Zigzag forward (W, D, W, A, ...) to look around; names that show up meanwhile
@@ -189,6 +209,7 @@ internal sealed partial class Brain
         }
 
         _lastSeen = now;
+        _toHotspot = false;
         _exploreStep = 0;
         _exploreUntil = Never;
         double dx = t.X - cx, dy = t.Y - cy;
@@ -254,6 +275,7 @@ internal sealed partial class Brain
     }
 
     private int _targetId;
+    private bool _toHotspot;
 
     /// <summary>
     /// Picks the mob worth most per second: the experience it gives ÷ (time to walk there + time

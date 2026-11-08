@@ -107,6 +107,24 @@ internal sealed partial class BotEngine
         return open.Count > 0;
     }
 
+    private readonly HotspotMap _hotspots = new();
+    private string _hotspotMap = "";
+    private Vec3? _botHome;
+
+    /// <summary>Learns where the mobs are and says where to go when none is on screen.</summary>
+    private Vec3? Hotspot(WorldSnapshot? world, BotProfile profile, TimeSpan now)
+    {
+        if (world == null)
+            return null;
+        if (world.MapName != _hotspotMap)
+        {
+            _hotspots.Clear(); // another map
+            _hotspotMap = world.MapName;
+        }
+        _hotspots.Observe(world.Player, world.Mobs.Where(m => Wanted(m, profile)), now);
+        return BotRunning ? _hotspots.Best(world.Player, now, _botHome, profile.LeashMeters * 100) : null;
+    }
+
     private int _inventoryWarnedAt = int.MaxValue;
     private string? _gmSeen;
 
@@ -124,6 +142,7 @@ internal sealed partial class BotEngine
             _gmSeen = gm.Name;
             double metres = gm.Position.DistanceXY(world.Player) / 100;
             _log($"⚠ GM görüldü: {gm.Name} ({metres:0} m uzakta).");
+            Notify($"⚠ GM görüldü: {gm.Name} ({metres:0} m uzakta)" + (profile.StopNearGm ? "; bot durduruluyor." : "."));
             Alert();
             if (profile.StopNearGm)
                 StopFor($"GM görüldü ({gm.Name})");
@@ -159,6 +178,52 @@ internal sealed partial class BotEngine
     {
         StopBot(reason);
         BotStopped?.Invoke(reason);
+        Notify("⏹ Bot durdu: " + reason);
+    }
+
+    private readonly Dictionary<string, TimeSpan> _notified = [];
+    private bool _telegramFailed;
+    private bool _wasDead;
+    private int _lastLevel;
+
+    /// <summary>A message to the user's Telegram, when switched on. The same message is sent at
+    /// most once a minute; failures are logged once.</summary>
+    public void Notify(string text)
+    {
+        var p = Profile;
+        if (!p.TelegramEnabled || string.IsNullOrWhiteSpace(p.TelegramToken) || string.IsNullOrWhiteSpace(p.TelegramChatId))
+            return;
+        var now = _clock.Elapsed;
+        lock (_notified)
+        {
+            if (_notified.TryGetValue(text, out var sent) && now - sent < TimeSpan.FromMinutes(1))
+                return;
+            _notified[text] = now;
+        }
+        string message = $"SekoBot · {_window.Title}\n{text}";
+        _ = Task.Run(async () =>
+        {
+            string? error = await Update.TelegramNotifier.SendAsync(p.TelegramToken, p.TelegramChatId, message);
+            if (error != null && !_telegramFailed)
+            {
+                _telegramFailed = true;
+                _log(error);
+            }
+            else if (error == null)
+                _telegramFailed = false;
+        });
+    }
+
+    /// <summary>Death and level-up messages while the bot runs.</summary>
+    private void NotifyEvents(WorldSnapshot world)
+    {
+        if (world.Dead && !_wasDead)
+            Notify("☠ Karakter öldü" + (Profile.ReviveOnDeath ? "; yeniden başlatılıyor." : "."));
+        _wasDead = world.Dead;
+        if (_lastLevel > 0 && world.Level > _lastLevel)
+            Notify($"⭐ Seviye atladın: Sv {world.Level}");
+        if (world.Level > 0)
+            _lastLevel = world.Level;
     }
 
     private static void Alert()

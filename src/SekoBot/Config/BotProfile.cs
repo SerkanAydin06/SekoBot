@@ -121,6 +121,13 @@ internal sealed class BotProfile
     /// <summary>Stop the bot when the character ends up in a safe zone (town).</summary>
     public bool StopInSafeZone { get; set; } = true;
 
+    /// <summary>Send messages to the user's Telegram (GM, death, level up, potions out, bot stopped).</summary>
+    public bool TelegramEnabled { get; set; }
+    /// <summary>The token of the user's own Telegram bot (from @BotFather).</summary>
+    public string TelegramToken { get; set; } = "";
+    /// <summary>The user's chat with that bot (found with "Sohbeti bul").</summary>
+    public string TelegramChatId { get; set; } = "";
+
     /// <summary>Stop the bot when a game master (GM) shows up nearby.</summary>
     public bool StopNearGm { get; set; } = true;
     /// <summary>Stop the bot when the inventory has no free slot left (loot would be lost).</summary>
