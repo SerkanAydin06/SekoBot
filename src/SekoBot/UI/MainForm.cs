@@ -24,7 +24,7 @@ internal sealed class MainForm : Form
     private readonly CheckBox _dryRun;
     private readonly PreviewControl _preview;
     private readonly Label _connection, _status, _calibrationHint, _calibrationState, _technical;
-    private readonly Label _statTime, _statMobs, _statRate, _statDeaths, _statPotions, _statArea;
+    private readonly Label _statTime, _statMobs, _statRate, _statDeaths, _statPotions, _statExp, _statExpRate, _statLevel, _statYang;
     private readonly Label _positionState;
     private readonly Button _scanMobs;
     private readonly Meter _hpMeter, _mpMeter, _targetMeter;
@@ -118,12 +118,16 @@ internal sealed class MainForm : Form
         var statsCard = new Card { Bounds = new Rectangle(822, 136, 346, 400) };
         Controls.Add(statsCard);
         Theme.Label(statsCard, "OTURUM", new Rectangle(16, 8, 200, 20), 8f, Theme.Accent, FontStyle.Bold);
-        _statTime = Tile(statsCard, "SÜRE", 16, 36);
-        _statMobs = Tile(statsCard, "ÖLDÜRÜLEN MOB", 180, 36);
-        _statRate = Tile(statsCard, "SAATTE MOB", 16, 104);
-        _statDeaths = Tile(statsCard, "ÖLÜM", 180, 104);
-        _statPotions = Tile(statsCard, "İKSİR", 16, 172);
-        _statArea = Tile(statsCard, "ALAN", 180, 172, small: true);
+        // Three columns: time and kills, experience, level/money/potions/deaths.
+        _statTime = Tile(statsCard, "SÜRE", 16, 32);
+        _statMobs = Tile(statsCard, "ÖLDÜRÜLEN", 122, 32);
+        _statRate = Tile(statsCard, "SAATTE MOB", 228, 32);
+        _statExp = Tile(statsCard, "KAZANILAN EXP", 16, 98);
+        _statExpRate = Tile(statsCard, "SAATTE EXP", 122, 98);
+        _statLevel = Tile(statsCard, "SEVİYE", 228, 98, small: true);
+        _statYang = Tile(statsCard, "YANG", 16, 164);
+        _statPotions = Tile(statsCard, "İKSİR (HP·MP)", 122, 164, small: true);
+        _statDeaths = Tile(statsCard, "ÖLÜM", 228, 164);
         Theme.Label(statsCard, "KARAKTER", new Rectangle(16, 244, 200, 18), 8f, Theme.Accent, FontStyle.Bold);
         _hpMeter = AddMeter(statsCard, "HP", Theme.Red, 268);
         _mpMeter = AddMeter(statsCard, "MP", Theme.Accent, 304);
@@ -304,10 +308,10 @@ internal sealed class MainForm : Form
 
     private static Label Tile(Control parent, string caption, int x, int y, bool small = false)
     {
-        var tile = new Panel { Bounds = new Rectangle(x, y, 150, 60), BackColor = Theme.Inset };
+        var tile = new Panel { Bounds = new Rectangle(x, y, 100, 60), BackColor = Theme.Inset };
         parent.Controls.Add(tile);
-        Theme.Label(tile, caption, new Rectangle(10, 6, 136, 16), 7.5f, Theme.Muted, FontStyle.Bold);
-        return Theme.Label(tile, "—", new Rectangle(10, 24, 136, 30), small ? 8.5f : 15f, Theme.Text, FontStyle.Bold);
+        Theme.Label(tile, caption, new Rectangle(8, 6, 90, 16), 7f, Theme.Muted, FontStyle.Bold);
+        return Theme.Label(tile, "—", new Rectangle(8, 22, 90, 34), small ? 8.5f : 13f, Theme.Text, FontStyle.Bold);
     }
 
     private static Meter AddMeter(Control parent, string caption, Color fill, int y)
@@ -654,7 +658,7 @@ internal sealed class MainForm : Form
 
         if (_engine == null)
         {
-            foreach (var l in new[] { _statTime, _statMobs, _statRate, _statDeaths, _statPotions, _statArea })
+            foreach (var l in new[] { _statTime, _statMobs, _statRate, _statDeaths, _statPotions, _statExp, _statExpRate, _statLevel, _statYang })
                 l.Text = "—";
             _hpMeter.Value = _mpMeter.Value = _targetMeter.Value = null;
             _technical.Text = "";
@@ -674,15 +678,33 @@ internal sealed class MainForm : Form
         _mpMeter.Value = state?.Mp;
         _targetMeter.Value = state?.TargetHp;
 
+        // Level and potions are shown also while the bot doesn't run.
+        if (world is { Progress: { } progress })
+        {
+            double percent = 100.0 * progress.Exp / Math.Max(1, progress.Exp + progress.NeedExp);
+            string eta = s.Session?.ToLevel is TimeSpan t ? "\n~" + Duration(t) : "";
+            _statLevel.Text = $"Sv {world.Level} · %{percent:0.0}{eta}";
+        }
+        var (hpLeft, mpLeft) = _engine.PotionsLeft();
+        string used = s.Session is { } u && u.HpPotionsUsed + u.MpPotionsUsed > 0 ? $"\n{u.HpPotionsUsed + u.MpPotionsUsed} içildi" : "";
+        _statPotions.Text = $"{Count(hpLeft)} · {Count(mpLeft)}{used}";
+        _statPotions.ForeColor = hpLeft is < 20 || mpLeft is < 10 ? Theme.Red : Theme.Text;
+
+        if (s.Session is { } session)
+        {
+            double hours = s.BotUptime.TotalHours;
+            _statMobs.Text = session.Kills.ToString("N0");
+            _statRate.Text = s.BotUptime.TotalMinutes >= 1 ? (session.Kills / hours).ToString("N0") : "—";
+            _statExp.Text = Short(session.Exp) + (session.LevelsGained > 0 ? $" (+{session.LevelsGained} sv)" : "");
+            _statExpRate.Text = s.BotUptime.TotalMinutes >= 1 ? Short((long)(session.Exp / hours)) : "—";
+            _statYang.Text = Short(session.Yang);
+        }
+
         if (s.BotRunning)
         {
             _statTime.Text = s.BotUptime.ToString(@"hh\:mm\:ss");
-            _statMobs.Text = s.Cycles.ToString("N0");
-            _statRate.Text = s.BotUptime.TotalMinutes >= 1 ? (s.Cycles / s.BotUptime.TotalHours).ToString("N0") : "—";
             _statDeaths.Text = s.Deaths.ToString("N0");
             _statDeaths.ForeColor = s.Deaths > 0 ? Theme.Red : Theme.Text;
-            _statPotions.Text = s.Potions.ToString("N0");
-            _statArea.Text = s.Area;
             string line = (s.DryRun ? "KURU ÇALIŞMA · " : "") + s.Phase.ToTurkish() + "  ·  " + s.Area;
             if (!_engine.StatsOk)
                 // Without HP/MP the bot can't drink potions: make that impossible to miss.
@@ -698,6 +720,19 @@ internal sealed class MainForm : Form
                     _stopReason != null ? Theme.Yellow : Theme.Text);
         }
     }
+
+    /// <summary>Big numbers short: 1.234 · 12,3 B · 1,23 Mn.</summary>
+    private static string Short(long value) => Math.Abs(value) switch
+    {
+        < 100_000 => value.ToString("N0"),
+        < 10_000_000 => (value / 1000.0).ToString("0.#") + " B",
+        _ => (value / 1_000_000.0).ToString("0.##") + " Mn",
+    };
+
+    private static string Count(int? value) => value?.ToString("N0") ?? "?";
+
+    private static string Duration(TimeSpan t) =>
+        t.TotalHours >= 1 ? $"{(int)t.TotalHours} sa {t.Minutes} dk" : $"{Math.Max(1, t.Minutes)} dk";
 
     private void SetLine(string text, Color color)
     {

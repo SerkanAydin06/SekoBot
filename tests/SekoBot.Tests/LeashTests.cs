@@ -134,12 +134,21 @@ public class StuckTests
     public void Steps_aside_when_the_character_does_not_move_while_walking()
     {
         var (brain, p) = Ready();
-        var actions = Walk(brain, 4000, 5500, moving: false);
+        var actions = Walk(brain, 4000, 6500, moving: false);
         Assert.Contains(actions, a => a is NoteAction n && n.Text.Contains("takıldı"));
         Assert.Contains(actions, a => a is KeyDownAction d && (d.Key == p.Keys.MoveForward || d.Key == p.Keys.MoveBack));
         // After the side step it heads for the mob again.
-        var later = Walk(brain, 5500, 6000, moving: true);
+        var later = Walk(brain, 6500, 7000, moving: true);
         Assert.Contains(later, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
+    }
+
+    [Fact]
+    public void Not_stuck_while_getting_going_or_when_the_mob_is_right_there()
+    {
+        var (brain, p) = Ready();
+        // The first second after starting to walk (finishing a swing) doesn't count.
+        var start = Walk(brain, 4000, 4900, moving: false);
+        Assert.DoesNotContain(start, a => a is NoteAction n && n.Text.Contains("takıldı"));
     }
 
     [Fact]

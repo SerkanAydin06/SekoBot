@@ -152,6 +152,7 @@ public class NavigateTests
     public void Keeps_steering_with_wasd_while_attacking()
     {
         var (brain, p) = Ready();
+        p.AttackRadius = 0.05; // distances below are in pixels for a 5 % radius
         Run(brain, 4000, 4500, _ => [new Point(Center.X, Center.Y + 20)]); // attacking, centred
         // The mob drifts up-left but is still in range: attack AND steer.
         var drift = Run(brain, 4500, 5000, _ => [new Point(Center.X - 35, Center.Y - 35)]);
@@ -208,9 +209,9 @@ public class NavigateTests
     public void Attack_starts_only_when_the_mob_is_close()
     {
         var (brain, p) = Ready();
-        Assert.Equal(0.05, p.AttackRadius);
-        // ~8 % of the screen height away: still walking, no Space.
-        var near = Run(brain, 4000, 4500, _ => [new Point(Center.X + 85, Center.Y)]);
+        Assert.Equal(0.10, p.AttackRadius);
+        // ~15 % of the screen height away: still walking, no Space.
+        var near = Run(brain, 4000, 4500, _ => [new Point(Center.X + (int)(H * 0.15), Center.Y)]);
         Assert.Equal(BotPhase.Moving, brain.Phase);
         Assert.DoesNotContain(near, a => a is KeyDownAction d && d.Key == p.Keys.Attack);
         // Right next to it: attack.
@@ -219,11 +220,11 @@ public class NavigateTests
     }
 
     [Fact]
-    public void Old_profile_moves_to_the_closer_attack_distance_but_keeps_user_choices()
+    public void Old_profile_moves_to_the_wider_attack_distance_but_keeps_user_choices()
     {
-        var old = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], Version = 0, AttackRadius = 0.10 };
+        var old = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], Version = 3, AttackRadius = 0.05 };
         Assert.True(ProfileStore.Upgrade(old));
-        Assert.Equal(0.05, old.AttackRadius);
+        Assert.Equal(0.10, old.AttackRadius);
         Assert.Equal(BotProfile.CurrentVersion, old.Version);
 
         var picked = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], Version = 0, AttackRadius = 0.07 };
@@ -243,6 +244,7 @@ public class NavigateTests
     public void Walks_into_the_crowd_rather_than_to_a_lone_mob_nearby()
     {
         var (brain, p) = Ready();
+        p.AttackRadius = 0.05; // distances below are in pixels for a 5 % radius
         var lone = new Point(Center.X + 200, Center.Y); // nearest, but alone
         var mobs = Crowd(-350, 0).Append(lone).ToArray(); // four wolves to the left
         var walk = Run(brain, 4000, 4500, _ => mobs);

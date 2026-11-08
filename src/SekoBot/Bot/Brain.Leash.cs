@@ -23,6 +23,9 @@ internal sealed partial class Brain
     private bool _returning;
 
     private TimeSpan _sidestepUntil = Never, _notMovingSince = Never, _movingOkSince = Never;
+    /// <summary>When walking (re)started and when the attack key was let go: the character needs
+    /// a moment to get going (it finishes its swing first), that's not being stuck.</summary>
+    private TimeSpan _walkStartedAt = Never, _blockCheckedAt = Never, _attackReleasedAt = Never;
     private HashSet<Keys> _sidestepKeys = [];
     private int _sidesteps;
 
@@ -49,11 +52,16 @@ internal sealed partial class Brain
     /// Call right after setting the walking keys. When the character hasn't moved for BlockedMs
     /// although we walk, step sideways for SidestepMs.
     /// </summary>
+    /// <param name="mobClose">A mob is right in front of us: walking into it isn't being stuck.</param>
     /// <returns>True when a side step was started.</returns>
-    private bool CheckBlocked(GameState state, BotProfile p, List<BotAction> actions)
+    private bool CheckBlocked(GameState state, BotProfile p, List<BotAction> actions, bool mobClose = false)
     {
         var now = state.Time;
-        if (state.Walking is not bool moving || _heldMoves.Count == 0)
+        if (_blockCheckedAt == Never || now - _blockCheckedAt > Ms(300))
+            _walkStartedAt = now; // not walking a moment ago: just started
+        _blockCheckedAt = now;
+        bool settling = now - _walkStartedAt < Ms(1000) || now - _attackReleasedAt < Ms(1200);
+        if (state.Walking is not bool moving || _heldMoves.Count == 0 || mobClose || settling)
         {
             _notMovingSince = Never;
             return false;
