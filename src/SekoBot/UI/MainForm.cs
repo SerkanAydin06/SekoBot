@@ -185,8 +185,13 @@ internal sealed class MainForm : Form
         Check(targets, "Yerdeki eşyalara yürüyüp topla", 370, 34, 360, _profile.PickUpDrops, v => _profile.PickUpDrops = v);
         TextRow(targets, "Sadece bu moblar", 0, 68, _profile.OnlyMobs, v => _profile.OnlyMobs = v);
         TextRow(targets, "Bu mobları atla", 370, 68, _profile.SkipMobs, v => _profile.SkipMobs = v);
-        Hint(targets, "Mob adlarını virgülle yaz (ör. \"Kurt, Domuz\"); adın bir kısmı yeter. Boş = hepsi. " +
-            "Seviye 0 = sınırsız. Sana saldıran mob her zaman kesilir.", 102);
+        Theme.Label(targets, "Yürüyüp topla:", new Rectangle(0, 104, 120, 26), 9f, Theme.Muted);
+        Check(targets, "Yang", 124, 104, 70, _profile.LootYang, v => _profile.LootYang = v);
+        Check(targets, "İksir", 198, 104, 70, _profile.LootPotions, v => _profile.LootPotions = v);
+        Check(targets, "Silah / zırh", 272, 104, 110, _profile.LootEquipment, v => _profile.LootEquipment = v);
+        Check(targets, "Diğer (malzeme, kitap…)", 386, 104, 200, _profile.LootOther, v => _profile.LootOther = v);
+        Theme.Label(targets, "Mob adları virgülle, adın bir kısmı yeter; boş = hepsi. Seviye 0 = sınırsız.",
+            new Rectangle(0, 130, 736, 16), 8f, Theme.Muted);
 
         var potions = _tabPages[2];
         NumberRow(potions, "HP iksiri (% altında)", 0, 0, 5, 95, Math.Round(_profile.PotionHpBelow * 100), 0, 1,
@@ -211,6 +216,7 @@ internal sealed class MainForm : Form
         Check(area, "GM görünce dur", 0, 34, 180, _profile.StopNearGm, v => _profile.StopNearGm = v);
         Check(area, "Envanter dolunca dur", 190, 34, 175, _profile.StopWhenInventoryFull, v => _profile.StopWhenInventoryFull = v);
         Check(area, "Güvenli bölgede (şehirde) dur", 0, 110, 300, _profile.StopInSafeZone, v => _profile.StopInSafeZone = v);
+        Check(area, "Ara sıra kısa mola ver (insan gibi)", 310, 110, 300, _profile.Breaks, v => _profile.Breaks = v);
         _positionState = Theme.Label(area, "", new Rectangle(0, 74, 736, 32), 9f, Theme.Muted);
 
         // Tuşlar
@@ -285,6 +291,17 @@ internal sealed class MainForm : Form
         _record.Click += (_, _) => ToggleRecording();
         _replay = Theme.Button(advanced, "▶  Kaydı oynat", new Rectangle(150, 100, 142, 30), Theme.Secondary, Theme.SecondaryHover);
         _replay.Click += async (_, _) => await ReplayAsync();
+        var reports = Theme.Button(advanced, "📊  Oturum raporları", new Rectangle(0, 60, 180, 30), Theme.Secondary, Theme.SecondaryHover);
+        reports.Click += (_, _) =>
+        {
+            if (!File.Exists(SessionLog.FilePath))
+            {
+                WriteLog("Henüz oturum raporu yok: bot en az 1 dakika çalışıp durunca ilk satır yazılır.");
+                return;
+            }
+            try { Process.Start(new ProcessStartInfo(SessionLog.FilePath) { UseShellExecute = true }); }
+            catch (Exception ex) { WriteLog("Rapor açılamadı: " + ex.Message); }
+        };
         var openFolder = Theme.Button(advanced, "📁  Ayar klasörü", new Rectangle(300, 100, 142, 30), Theme.Secondary, Theme.SecondaryHover);
         openFolder.Click += (_, _) => OpenProfileFolder();
         // The mobs the bot sees in memory, listed in the log.

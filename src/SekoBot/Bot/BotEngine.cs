@@ -45,6 +45,9 @@ internal sealed partial class BotEngine : IDisposable
     private bool _disposed;
     private readonly SessionStats _session = new();
     private bool _sessionStarted;
+    private DateTime _sessionStartedAt;
+    /// <summary>The summary of the last run (for the stop message), or null.</summary>
+    private string? _lastSummary;
     private bool _statsOk = true, _statsWarned;
     private TimeSpan _statsFailSince = TimeSpan.FromDays(-1);
 
@@ -230,7 +233,7 @@ internal sealed partial class BotEngine : IDisposable
         {
             StopBot(stopReason);
             BotStopped?.Invoke(stopReason);
-            Notify("⏹ Bot durdu: " + stopReason);
+            Notify("⏹ Bot durdu: " + stopReason + (_lastSummary is { } s1 ? "\n" + s1 : ""));
         }
         return (phase, actions);
     }
@@ -299,6 +302,7 @@ internal sealed partial class BotEngine : IDisposable
             _botStarted = _clock.Elapsed;
             _brain.Start(_clock.Elapsed);
             _session.Reset(_clock.Elapsed);
+            _sessionStartedAt = DateTime.Now;
             _botHome = World?.Player;
             // Windows already showing when the bot starts (chat, minimap, …) belong to the screen.
             _windowsAtStart = [.. World?.OpenWindows ?? []];
@@ -324,6 +328,27 @@ internal sealed partial class BotEngine : IDisposable
             return;
         input.Dispose();
         _log("Bot durdu: " + reason);
+        WriteSessionReport(reason);
+    }
+
+    /// <summary>Runs over a minute go into oturumlar.csv; the summary goes to the log.</summary>
+    private void WriteSessionReport(string reason)
+    {
+        _lastSummary = null;
+        var duration = DateTime.Now - _sessionStartedAt;
+        if (!_sessionStarted || duration < TimeSpan.FromMinutes(1))
+            return;
+        var report = _session.Report(World, _clock.Elapsed);
+        _lastSummary = SessionLog.Summary(duration, report, _brain.Deaths);
+        _log("Oturum: " + _lastSummary);
+        try
+        {
+            SessionLog.Append(SessionLog.Line(_sessionStartedAt, DateTime.Now, World?.MapName ?? "", report, _brain.Deaths, reason));
+        }
+        catch (IOException ex)
+        {
+            _log("Oturum raporu yazılamadı: " + ex.Message);
+        }
     }
 
     public bool BotRunning
@@ -413,7 +438,7 @@ internal sealed partial class BotEngine : IDisposable
             const string reason = "oyunun belleği okunamıyor";
             StopBot(reason);
             BotStopped?.Invoke(reason);
-            Notify("⏹ Bot durdu: " + reason);
+            Notify("⏹ Bot durdu: " + reason + (_lastSummary is { } s2 ? "\n" + s2 : ""));
         }
         return false;
     }

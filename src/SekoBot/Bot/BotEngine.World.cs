@@ -178,7 +178,7 @@ internal sealed partial class BotEngine
     {
         StopBot(reason);
         BotStopped?.Invoke(reason);
-        Notify("⏹ Bot durdu: " + reason);
+        Notify("⏹ Bot durdu: " + reason + (_lastSummary is { } summary ? "\n" + summary : ""));
     }
 
     private readonly Dictionary<string, TimeSpan> _notified = [];

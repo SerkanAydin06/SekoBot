@@ -116,6 +116,11 @@ internal sealed class BotProfile
     public MetinMode Metins { get; set; } = MetinMode.Normal;
     /// <summary>Walk to items on the ground and pick them up (when no mob is next to the character).</summary>
     public bool PickUpDrops { get; set; } = true;
+    /// <summary>Which items to walk to (the pickup key still picks up everything within reach).</summary>
+    public bool LootYang { get; set; } = true;
+    public bool LootPotions { get; set; } = true;
+    public bool LootEquipment { get; set; }
+    public bool LootOther { get; set; } = true;
     /// <summary>Only items this close (metres) are walked to.</summary>
     public double DropRangeMetres { get; set; } = 6;
     /// <summary>Stop the bot when the character ends up in a safe zone (town).</summary>
@@ -127,6 +132,13 @@ internal sealed class BotProfile
     public string TelegramToken { get; set; } = "";
     /// <summary>The user's chat with that bot (found with "Sohbeti bul").</summary>
     public string TelegramChatId { get; set; } = "";
+
+    /// <summary>Short breaks now and then (when nothing is fought), to act more like a person.</summary>
+    public bool Breaks { get; set; } = true;
+    /// <summary>About this many minutes between breaks (±20 %).</summary>
+    public int BreakEveryMin { get; set; } = 30;
+    /// <summary>About this long a break lasts (±25 %).</summary>
+    public int BreakSeconds { get; set; } = 40;
 
     /// <summary>Stop the bot when a game master (GM) shows up nearby.</summary>
     public bool StopNearGm { get; set; } = true;

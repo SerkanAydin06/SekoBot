@@ -54,6 +54,7 @@ Bot oyunun kendi pencerelerinin (Esc menüsü, envanter, karakter, beceriler, ay
 - **Önce bana saldıran mobu kes** (varsayılan açık): Bir mobun sana saldırdığını bot bellekten görür ve daha yakında başka mob olsa da önce onu keser.
 - **En yüksek mob seviyesi** (0 = sınırsız): Üstündeki mobları atlar. **Sadece bu moblar / Bu mobları atla:** mob adlarını virgülle yaz (ör. "Kurt, Domuz"), adın bir kısmı yeter. Sana saldıran mob bu ayarlardan bağımsız her zaman kesilir.
 - **Metin taşları:** *Atla* (hiç gitme), *Normal mob gibi* (varsayılan), *Önce onlara git* (taş her şeyden önce gelir, sana saldıran moblardan da; seviye ve isim filtreleri taşı atlamaz).
+- **Yürüyüp topla: Yang / İksir / Silah-zırh / Diğer** (Hedef sekmesi): yerdeki eşyanın ne olduğu bellekten okunur (eşya numarası ve adedi; yang = 1); bot yalnızca işaretli türlere yürür. Varsayılan: yang, iksir, diğer (malzeme, kitap…) açık; silah/zırh kapalı (bu seviyede çoğu işe yaramaz ve envanteri doldurur). Z tuşu yakındaki her şeyi yine toplar.
 - **Yerdeki eşyalara yürüyüp topla** (varsayılan açık): Yanında mob yokken 6 m içindeki eşyaya (yerdeki eşyalar bellekte görünür, alınınca kaybolur) yürür ve toplama tuşuna basar. 5 sn'de alınamayan eşyayı (başkasının olabilir) bir dakika boyunca bırakır.
 
 ## Güvenlik: GM ve envanter
@@ -73,6 +74,11 @@ Bot her mobun oyundaki bilgisini bellekten okur: verdiği EXP, canı, en sert vu
 ## Yoğun bölge hafızası
 
 Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü hatırlar (etrafını gördükçe tazeler; boşalan kare düşer, görülmeyen kareler yavaşça unutulur). Metin taşı olan kareler 5 mob sayılır. Ekranda mob kalmayınca rastgele dolaşmak yerine en çok mobun olduğu yakın kareye yürür ("Etrafta mob yok; mobların çok olduğu yere gidiliyor"). Alan sınırı açıksa sınırın dışındaki kareler seçilmez. Başka haritaya geçince hafıza sıfırlanır.
+
+## Molalar ve oturum raporu
+
+- **Ara sıra kısa mola ver** (Alan sekmesi, varsayılan açık): yaklaşık 30 dakikada bir (±%20), dövüş yokken ve kimse saldırmıyorken bot ~40 sn (±%25) durur; bir mob saldırırsa mola hemen biter. Toplama tuşu aralıkları da her seferinde biraz değişir. Ayarlar: `BreakEveryMin`, `BreakSeconds`.
+- **Oturum raporu:** bot 1 dakikadan uzun çalışıp durduğunda özet günlüğe yazılır ve `%LOCALAPPDATA%\SekoBot\oturumlar.csv` dosyasına bir satır eklenir (başlangıç, bitiş, süre, harita, öldürülen, saatte mob, EXP, saatte EXP, seviye, yang, iksir, ölüm, durma sebebi). Excel'de açılır; **Gelişmiş → 📊 Oturum raporları**. Bot kendiliğinden durduysa özet Telegram mesajına da eklenir.
 
 ## Telegram bildirimi
 

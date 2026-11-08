@@ -19,6 +19,7 @@ internal sealed partial class Brain
     private readonly List<TimedKey> _timed = [];
     private bool _attackHeld, _wasFighting;
     private TimeSpan _tickTime;
+    private double _lootJitter = 1;
     private TimeSpan _pauseUntil = Never, _lastSeen = Never, _lastLootTap = Never, _lastKeyRefresh = Never;
     private TimeSpan _movingSince = Never, _lastCameraSetup = Never, _exploreUntil = Never;
     private HashSet<Keys> _exploreKeys = [];
@@ -115,10 +116,11 @@ internal sealed partial class Brain
             ScheduleCamera(p, now); // the camera can drift (a stray key, a cutscene)
         }
         RunTimedKeys(now, actions, refresh);
-        if (now - _lastLootTap >= Ms(p.LootEveryMs))
+        if (now - _lastLootTap >= Ms(p.LootEveryMs * _lootJitter))
         {
             actions.Add(new KeyTapAction(p.Keys.Pickup));
             _lastLootTap = now;
+            _lootJitter = 0.8 + 0.4 * _random.NextDouble(); // not like clockwork
         }
         if (now < _pauseUntil)
             return; // casting a skill: stand still a moment
