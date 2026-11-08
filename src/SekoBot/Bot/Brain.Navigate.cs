@@ -178,8 +178,10 @@ internal sealed partial class Brain
         _exploreStep = 0;
         _exploreUntil = Never;
         double dx = t.X - cx, dy = t.Y - cy;
+        // A Metin stone is big: the character stops further from its middle.
+        double reach = priority && state.PriorityAreMetins ? radius * 1.8 : radius;
         // Once attacking, keep at it a bit further out so it doesn't flip between walk and attack.
-        bool inRange = best <= radius || (Phase == BotPhase.Fighting && best <= radius * 1.4);
+        bool inRange = best <= reach || (Phase == BotPhase.Fighting && best <= reach * 1.4);
         if (inRange)
         {
             // Next to the character: attack, and keep steering onto the mob, because every
@@ -222,7 +224,7 @@ internal sealed partial class Brain
             Enter(BotPhase.Moving, now);
             _movingSince = now;
         }
-        if (CheckBlocked(state, p, actions, mobClose: best <= radius * 2))
+        if (CheckBlocked(state, p, actions, mobClose: best <= reach * 2))
             return;
         if (_movingSince != Never && now - _movingSince >= Ms(p.MoveStuckMs))
         {

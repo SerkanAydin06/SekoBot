@@ -30,6 +30,10 @@ public class TargetChoiceTests
 
         Assert.False(BotEngine.Wanted(Mob("Savaş Metini", 15, metin: true), new BotProfile { Metins = MetinMode.Skip }));
         Assert.True(BotEngine.Wanted(Mob("Savaş Metini", 15, metin: true), new BotProfile { Metins = MetinMode.Prefer, OnlyMobs = "Kurt" }));
+        // "First": the level limit is for mobs, not for the stone.
+        Assert.True(BotEngine.Wanted(Mob("Savaş Metini", 15, metin: true), new BotProfile { Metins = MetinMode.Prefer, MaxMobLevel = 10 }));
+        // "Normal": like any mob.
+        Assert.False(BotEngine.Wanted(Mob("Savaş Metini", 15, metin: true), new BotProfile { Metins = MetinMode.Normal, MaxMobLevel = 10 }));
     }
 
     private static (Brain Brain, BotProfile Profile) Ready()
@@ -57,6 +61,37 @@ public class TargetChoiceTests
         for (double t = from; t < to; t += 100)
             actions.AddRange(brain.Tick(state(t)));
         return actions;
+    }
+
+    [Fact]
+    public void A_preferred_metin_comes_before_mobs_attacking_us()
+    {
+        var me = new Vec3(20000, 18000, 900);
+        var camera = new CameraView(me with { Z = me.Z + 1000 }, -90, 0, 0, 90);
+        WorldMob At(string name, double dx, bool attacks = false, bool metin = false) =>
+            new(name.Length, 101, name, 5, 100, 100, me with { X = me.X + dx }, attacks, metin);
+        var world = new WorldSnapshot(me, camera,
+            [At("Kurt", 150, attacks: true), At("Savaş Metini", 400, metin: true), At("Domuz", 250)], 0, "c2");
+
+        var view = BotEngine.MemoryView(world, new BotProfile { Metins = MetinMode.Prefer }, W, H)!.Value;
+        var stone = Assert.Single(view.Priority);
+        Assert.True(stone.Y < view.Priority.Concat(view.Mobs).Max(p => p.Y)); // furthest up = the stone (+X is up)
+        Assert.Equal(3, view.Mobs.Count);
+
+        var normal = BotEngine.MemoryView(world, new BotProfile { Metins = MetinMode.Normal }, W, H)!.Value;
+        Assert.Single(normal.Priority); // the attacking wolf
+        Assert.NotEqual(stone, normal.Priority[0]);
+    }
+
+    [Fact]
+    public void Attacks_a_metin_stone_from_further_away()
+    {
+        var (brain, p) = Ready();
+        // 1.5 × the attack distance away: too far for a mob, close enough for the big stone.
+        var stone = new Point(Center.X + (int)(H * p.AttackRadius * 1.5), Center.Y);
+        var actions = Run(brain, 4000, 4500, t => State(t, [stone], [stone]) with { PriorityAreMetins = true });
+        Assert.Equal(BotPhase.Fighting, brain.Phase);
+        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.Attack);
     }
 
     [Fact]
