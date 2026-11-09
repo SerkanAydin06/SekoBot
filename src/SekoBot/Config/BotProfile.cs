@@ -158,6 +158,12 @@ internal sealed class BotProfile
 
     /// <summary>Stop the bot when a game master (GM) shows up nearby.</summary>
     public bool StopNearGm { get; set; } = true;
+    /// <summary>Another player staying this many minutes within 30 m while the experience drops: find another place (0 = off).</summary>
+    public double AvoidPlayerMinutes { get; set; } = 3;
+    /// <summary>How much the experience a minute has to drop (percent) against before the player came.</summary>
+    public double AvoidPlayerExpDrop { get; set; } = 40;
+    /// <summary>Answer "durum", "dur", "başla" written to the Telegram bot.</summary>
+    public bool TelegramCommands { get; set; } = true;
     /// <summary>Stop the bot when the inventory has no free slot left (loot would be lost).</summary>
     public bool StopWhenInventoryFull { get; set; } = true;
 

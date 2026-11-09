@@ -32,6 +32,49 @@ internal static class TelegramNotifier
         }
     }
 
+    private static readonly HttpClient LongHttp = new() { Timeout = TimeSpan.FromSeconds(45) };
+
+    /// <summary>
+    /// Messages written to the bot since <paramref name="offset"/>, waiting up to
+    /// <paramref name="waitSeconds"/> for one (Telegram's long polling).
+    /// </summary>
+    public static async Task<(List<(long Id, string Chat, string Text)> Messages, string? Error)> ReadAsync(
+        string token, long offset, int waitSeconds, CancellationToken cancel)
+    {
+        var messages = new List<(long, string, string)>();
+        try
+        {
+            using var response = await LongHttp.GetAsync(Url(token, $"getUpdates?offset={offset}&timeout={waitSeconds}"), cancel);
+            if (!response.IsSuccessStatusCode)
+                return (messages, $"Telegram komutları okunamadı ({(int)response.StatusCode}).");
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancel));
+            foreach (var update in json.RootElement.GetProperty("result").EnumerateArray())
+            {
+                long id = update.GetProperty("update_id").GetInt64();
+                string chat = "", text = "";
+                if (update.TryGetProperty("message", out var message))
+                {
+                    if (message.TryGetProperty("chat", out var c) && c.TryGetProperty("id", out var chatId))
+                        chat = chatId.GetRawText();
+                    if (message.TryGetProperty("text", out var t))
+                        text = t.GetString() ?? "";
+                }
+                messages.Add((id, chat, text));
+            }
+            return (messages, null);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or KeyNotFoundException or InvalidOperationException
+                                       || ex is TaskCanceledException && !cancel.IsCancellationRequested)
+        {
+            return (messages, "Telegram'a ulaşılamadı: " + ex.Message);
+        }
+    }
+
+    /// <summary>A command written to the bot, cleaned up: "/Durum " is "durum", "başla" is "basla".</summary>
+    public static string Command(string text) =>
+        text.Trim().TrimStart('/').Split(' ', '@')[0].Replace("İ", "i").Replace("I", "ı").ToLowerInvariant()
+            .Replace('ş', 's').Replace('ı', 'i').Replace('ğ', 'g').Replace('ü', 'u').Replace('ö', 'o').Replace('ç', 'c');
+
     /// <summary>The chat of the last message sent to the bot (the user writes to it once).</summary>
     public static async Task<(string? ChatId, string? Error)> FindChatAsync(string token)
     {

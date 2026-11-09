@@ -299,6 +299,15 @@ internal sealed partial class Brain
         }
     }
 
+    /// <summary>The farm spot was moved (another player took the old one): walk to the new one.</summary>
+    internal void NewFarmSpot()
+    {
+        _atFarmSpot = _travelNoted = false;
+        _travelSince = Never;
+        ResetLeash();
+        ResetPull();
+    }
+
     private int _targetId;
     private bool _toHotspot;
     private bool _atFarmSpot, _travelNoted;
