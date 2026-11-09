@@ -27,7 +27,7 @@ public class BagCleanerTests
     {
         var p = new BotProfile();
         var cleaner = new BagCleaner();
-        int[] toThrow = [Junk];
+        Func<BagSlotView, bool> toThrow = i => i.Vnum == Junk;
         cleaner.Start(S(0));
         var junkClosed = Item(104, Junk, 1, false);
 
@@ -58,7 +58,7 @@ public class BagCleanerTests
     {
         var p = new BotProfile();
         var cleaner = new BagCleaner();
-        int[] toThrow = [Junk];
+        Func<BagSlotView, bool> toThrow = i => i.Vnum == Junk;
         var bag = Bag(true, 0, [Item(20, Junk, 0, true)]);
         cleaner.Start(S(0));
         var actions = new List<BotAction>();
@@ -77,7 +77,7 @@ public class BagCleanerTests
         var p = new BotProfile();
         var cleaner = new BagCleaner();
         cleaner.Start(S(0));
-        var actions = cleaner.Tick(S(0), Bag(true, 0, [Item(20, Junk, 0, true)], new Point(531, 389)), [Junk], p, Client);
+        var actions = cleaner.Tick(S(0), Bag(true, 0, [Item(20, Junk, 0, true)], new Point(531, 389)), i => i.Vnum == Junk, p, Client);
         Assert.Equal([new KeyTapAction(p.Keys.CloseWindow)], actions);
     }
 
@@ -160,25 +160,30 @@ public class CleanSpotTests
 public class ThrowCheapEquipmentTests
 {
     [Fact]
-    public void Weapons_and_armour_under_the_price_are_thrown_when_only_dear_ones_are_wanted()
+    public void Cheap_weapons_and_armour_the_bot_picked_up_are_thrown_the_users_own_stay()
     {
         ItemBook.Learn(new ItemInfo(96001, "Kılıç+0", "ITEM_WEAPON", "WEAPON_SWORD", 120));
         ItemBook.Learn(new ItemInfo(96002, "Tahta Kolye+0", "ITEM_ARMOR", "ARMOR_NECK", 300));
         ItemBook.Learn(new ItemInfo(96003, "Altın Kolye+0", "ITEM_ARMOR", "ARMOR_NECK", 900));
         ItemBook.Learn(new ItemInfo(96004, "Ayı Safrası", "ITEM_MATERIAL", "MATERIAL_LEATHER", 10));
         ItemBook.Learn(new ItemInfo(96005, "Olay Kılıcı", "ITEM_WEAPON", "WEAPON_SWORD", 0));
+        // In the bag when the bot started: a cheap sword of the user's (slot 12).
+        HashSet<(int, int)> atStart = [(4, 96001), (12, 96001)];
         InventoryItem[] bag =
         [
-            new(4, 96001, 1),   // worn: never
+            new(4, 96001, 1),   // worn
+            new(12, 96001, 1),  // the user's own
             new(20, 96001, 1), new(21, 96002, 1), new(22, 96003, 1), new(23, 96004, 1), new(24, 96005, 1),
         ];
         var p = new BotProfile { LootEquipment = false, LootEquipmentMinGold = 500 };
-        Assert.Equal([96001, 96002], BotEngine.Throwables(bag, p).Order());
+        int[] Thrown(IReadOnlySet<(int, int)>? start) => [.. bag.Where(i => BotEngine.ShouldThrow(i, p, start)).Select(i => i.Slot)];
+        Assert.Equal([20, 21], Thrown(atStart));
+        Assert.Empty(Thrown(null));                 // not known what was there: none thrown this way
         p.LootPick = [96002];                       // ticked "Topla": kept
-        Assert.Equal([96001], BotEngine.Throwables(bag, p));
+        Assert.Equal([20], Thrown(atStart));
         p.LootEquipment = true;                     // all equipment wanted: nothing thrown
-        Assert.Empty(BotEngine.Throwables(bag, p));
+        Assert.Empty(Thrown(atStart));
         p.LootThrow = [96004];                      // "At" still counts
-        Assert.Equal([96004], BotEngine.Throwables(bag, p));
+        Assert.Equal([23], Thrown(atStart));
     }
 }
