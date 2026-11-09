@@ -249,6 +249,7 @@ internal sealed class GameWorldReader : IDisposable
         ("m2data_C", "uiMain", 0x1210),
         ("Widget", "Visibility", 0xCB),
         ("UI_C", "reSpawn", 0x818),
+        ("UI_C", "canvasAdds", 0x7E8),
         ("reSpawn_C", "Timer", 0x2A8),
         ("reSpawn_C", "wait", 0x2AC),
         ("NPC", "thismob.vnum", 0x348),
@@ -498,6 +499,21 @@ internal sealed class GameWorldReader : IDisposable
             if (Byte(widget + Offset(cls, "Widget", "Visibility")) is byte visibility and not (1 or 2))
                 open.Add(name);
         }
+        // Windows put on the screen later (seen in the game: the advert after a level-up is a
+        // "popup_C" in UI_C.canvasAdds); named by their class.
+        long adds = ui + Offset(uiClass, "UI_C", "canvasAdds");
+        long data = Pointer(adds);
+        int count = Int32(adds + 8) ?? 0;
+        if (MemoryReads.IsPointer(data) && count is > 0 and <= 64)
+            for (int i = 0; i < count; i++)
+            {
+                long widget = Pointer(data + i * 8L);
+                long cls = Pointer(widget + ObjClass);
+                if (!MemoryReads.IsPointer(widget) || !IsWidget(cls))
+                    continue;
+                if (Byte(widget + Offset(cls, "Widget", "Visibility")) is byte visibility and not (1 or 2))
+                    open.Add(ClassName(cls));
+            }
         return open;
     }
 

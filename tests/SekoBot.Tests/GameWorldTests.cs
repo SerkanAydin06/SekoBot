@@ -370,7 +370,7 @@ public class GameWorldTests
         long invClass = game.Class("inventory_C");
         game.Memory.WriteLong(invClass + GameWorldReader.StructSuper, userWidget);
         long uiClass = game.ObjectClass("UI_C", userWidget, ("EscMenu", 0x300), ("inventory", 0x308), ("Canvas", 0x310));
-        long ui = game.Object(uiClass, 0x400);
+        long ui = game.Object(uiClass, 0x900);
         long esc = game.Object(escClass, 0x200);
         long inventory = game.Object(invClass, 0x200);
         game.Memory.WriteLong(ui + 0x300, esc);
@@ -384,6 +384,18 @@ public class GameWorldTests
         game.Memory.Write(esc + 0xCB, 4);
         using var later = new GameWorldReader(game.Memory, Module); // windows are read twice a second
         Assert.Equal(["EscMenu", "inventory"], later.Read()!.OpenWindows);
+
+        // The advert after a level-up: a popup_C added to UI_C.canvasAdds (seen in the game).
+        long popupClass = game.Class("popup_C");
+        game.Memory.WriteLong(popupClass + GameWorldReader.StructSuper, userWidget);
+        long popup = game.Object(popupClass, 0x200);
+        game.Memory.Write(popup + 0xCB, 4);
+        long adds = game.Alloc(16);
+        game.Memory.WriteLong(adds, popup);
+        game.Memory.WriteLong(ui + 0x7E8, adds);
+        game.Int(ui + 0x7E8 + 8, 1);
+        using var advert = new GameWorldReader(game.Memory, Module);
+        Assert.Equal(["EscMenu", "inventory", "popup_C"], advert.Read()!.OpenWindows);
     }
 
     [Fact]
