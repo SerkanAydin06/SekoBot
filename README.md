@@ -105,6 +105,8 @@ Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü h
 - **Dağıtılmamış statü / beceri puanı** arttığında.
 - **Etkinlik:** oyunun saatlik düşme etkinlikleri (ör. 22:00–23:00 Nadir Ekipman Sandığı) sol menünün altında görünür; seviyen yeten bir etkinlik başlayınca bildirilir ve **eşyası otomatik "Topla" gibi alınır** ("Etkinlik eşyasını otomatik topla").
 
+**Kapanmayan pencere:** bot başladıktan sonra açılan bilinmeyen bir pencere Esc ile 7 saniyede kapanmazsa yok sayılır ve bot devam eder (sohbet geçmişi penceresi açık kalınca bot her Esc'de oyun menüsünü açıp kapatıyor ve duruyordu).
+
 **Sersemleme:** karakter sersemleyince (bellekte "stuned") bot bekler; o anı takılma ya da ulaşılamayan grup saymaz.
 
 **Komutlar** (Bildirim sekmesinde **Komutlar (durum/dur/başla)**, varsayılan açık): kendi botuna Telegram'dan yaz, SekoBot cevap verir:

@@ -119,3 +119,26 @@ public class StunTests
         Assert.DoesNotContain(actions, a => a is KeyDownAction or KeyTapAction or MouseDragAction or ClickAction);
     }
 }
+
+public class PopupWatchTests
+{
+    private static TimeSpan S(double s) => TimeSpan.FromSeconds(s);
+
+    [Fact]
+    public void A_window_esc_does_not_close_is_let_be_after_a_few_seconds()
+    {
+        var watch = new PopupWatch();
+        watch.Start(["chatBox", "miniMap"]);
+        Assert.Empty(watch.Update(["chatBox", "miniMap"], S(0)));
+        Assert.Equal(["someWindow_C"], watch.Update(["chatBox", "someWindow_C"], S(1)));
+        Assert.Equal(["someWindow_C", "EscMenu"], watch.Update(["someWindow_C", "EscMenu"], S(4)));   // Esc opened the menu
+        var givenUp = new List<string>();
+        Assert.Equal(["EscMenu"], watch.Update(["someWindow_C", "EscMenu"], S(8.5), givenUp));       // let be; the menu still closed
+        Assert.Equal(["someWindow_C"], givenUp);
+        Assert.Empty(watch.Update(["someWindow_C"], S(30)));
+        // The chat history never counts; known windows always do.
+        Assert.Empty(watch.Update(["chatHistoryWindow_C"], S(31)));
+        Assert.Equal(["popup_C"], watch.Update(["popup_C"], S(60)));
+        Assert.Equal(["popup_C"], watch.Update(["popup_C"], S(90)));
+    }
+}

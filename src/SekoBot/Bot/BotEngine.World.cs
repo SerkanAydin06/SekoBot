@@ -81,13 +81,14 @@ internal sealed partial class BotEngine
         "popup_C", // the advert after a level-up (seen in the game, in UI_C.canvasAdds)
     ];
     /// <summary>Parts of the screen that come and go on their own (not windows to close).</summary>
-    private static readonly HashSet<string> NotWindows =
+    internal static readonly HashSet<string> NotWindows =
     [
         "targetDetail", "dmNotifyer", "w_view", "w_viewSmall", "ustData", "data", "UIhandler", "taskbar",
         "miniMap", "chatBox", "dmBox", "happyHourBox", "closeCinematic", "WBP_QuestingInfoPanel",
         "reSpawn", // the death window stays "visible" after reviving (seen in the game); death is read on its own
+        "chatHistoryWindow_C", // the chat history: Esc doesn't close it (seen: Esc opened the game menu instead)
     ];
-    private HashSet<string> _windowsAtStart = [];
+    private readonly PopupWatch _popups = new();
     private string _windowsSeen = "";
 
     /// <summary>
@@ -96,9 +97,10 @@ internal sealed partial class BotEngine
     /// </summary>
     private bool PopupOpen(WorldSnapshot? world)
     {
-        var open = (world?.OpenWindows ?? [])
-            .Where(w => KnownWindows.Contains(w) || !_windowsAtStart.Contains(w) && !NotWindows.Contains(w))
-            .ToList();
+        var givenUp = new List<string>();
+        var open = _popups.Update(world?.OpenWindows ?? [], _clock.Elapsed, givenUp);
+        foreach (string window in givenUp)
+            _log($"'{window}' penceresi Esc ile kapanmıyor; yok sayıldı, bot devam ediyor.");
         string seen = string.Join(", ", open);
         if (seen != _windowsSeen)
         {
