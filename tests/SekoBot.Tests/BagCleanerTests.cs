@@ -187,3 +187,23 @@ public class ThrowCheapEquipmentTests
         Assert.Equal([23], Thrown(atStart));
     }
 }
+
+public class TallSpaceTests
+{
+    private static CharacterProgress Bag(params InventoryItem[] items) => new(0, 0, 0, items, [], InventoryEnd: 58);
+
+    [Fact]
+    public void Room_for_armour_needs_two_free_slots_one_under_the_other()
+    {
+        // Page 1 (slots 11–58): everything taken except slot 20 and the slot under it, 26.
+        var full = Enumerable.Range(11, 48).Where(s => s is not (20 or 26)).Select(s => new InventoryItem(s, 27002, 1)).ToArray();
+        Assert.True(Bag(full).TallSpace());
+        // Only 20 and 21 free (side by side): 2 free slots, but no armour fits.
+        var sideBySide = Enumerable.Range(11, 48).Where(s => s is not (20 or 21)).Select(s => new InventoryItem(s, 27002, 1)).ToArray();
+        Assert.Equal(2, Bag(sideBySide).FreeSlots());
+        Assert.False(Bag(sideBySide).TallSpace());
+        // The last row of a page has nothing under it on that page.
+        var lastRow = Enumerable.Range(11, 48).Where(s => s is not (53 or 54)).Select(s => new InventoryItem(s, 27002, 1)).ToArray();
+        Assert.False(Bag(lastRow).TallSpace());
+    }
+}
