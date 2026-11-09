@@ -112,7 +112,7 @@ internal sealed partial class BotEngine
         var old = _farmSpot ?? world.Player;
         var spot = FarmSpotFinder.Best(_seenMobs.Values.Select(s => s.Mob).ToList(), profile, world.Player, world.MapName,
             world.AttackPower, respawn: RespawnSeconds,
-            allowed: v => v.DistanceXY(old) > 1500 && others.All(o => o.DistanceXY(v) > 2500));
+            allowed: v => v.DistanceXY(old) > 1500 && others.All(o => o.DistanceXY(v) > 2500), level: world.Level);
         if (spot == null)
         {
             _log($"👥 {reason}; ama yakında başka uygun alan görülmedi, burada devam ediliyor.");

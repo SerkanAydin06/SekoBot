@@ -107,3 +107,20 @@ public class NoteFilterTests
         Assert.True(filter.ShouldWrite("Gruplar toplanıyor (her üçlüden birine vurulup peşe takılıyor).", S(301)));  // after 5 minutes
     }
 }
+
+public class MetinLevelTests
+{
+    private static WorldMob Stone(int level) => new(1, 8003, "Savaş Metini", level, 34050, 34050, new Vec3(0, 0, 0), IsMetin: true);
+
+    [Fact]
+    public void Stones_far_below_our_level_are_left_alone()
+    {
+        var p = new BotProfile { Metins = MetinMode.Prefer };
+        Assert.False(BotEngine.Wanted(Stone(15), p, level: 21));   // 6 below
+        Assert.True(BotEngine.Wanted(Stone(15), p, level: 20));    // 5 below: still worth it
+        Assert.True(BotEngine.Wanted(Stone(25), p, level: 20));
+        Assert.True(BotEngine.Wanted(Stone(5), p));                 // level unknown: as before
+        p.Metins = MetinMode.Skip;
+        Assert.False(BotEngine.Wanted(Stone(25), p, level: 20));
+    }
+}

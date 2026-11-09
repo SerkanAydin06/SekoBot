@@ -46,9 +46,9 @@ internal static class FarmSpotFinder
     private const double WalkSpeed = 200;
 
     public static FarmSpot? Best(IReadOnlyCollection<WorldMob> mobs, BotProfile profile, Vec3 from, string map,
-        int attackPower, double maxDistance = 8000, Func<int, double?>? respawn = null, Func<Vec3, bool>? allowed = null)
+        int attackPower, double maxDistance = 8000, Func<int, double?>? respawn = null, Func<Vec3, bool>? allowed = null, int level = 0)
     {
-        var wanted = mobs.Where(m => BotEngine.Wanted(m, profile)).ToList();
+        var wanted = mobs.Where(m => BotEngine.Wanted(m, profile, level)).ToList();
         if (wanted.Count == 0)
             return null;
         double dps = Math.Max(50, attackPower);

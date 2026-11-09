@@ -24,7 +24,7 @@ internal sealed partial class BotEngine
         var found = new List<(WorldMob Mob, Point Spot)>();
         foreach (var mob in world.ByDistance)
         {
-            if (!Wanted(mob, profile))
+            if (!Wanted(mob, profile, world.Level))
                 continue;
             var onScreen = camera.ToScreen(mob.Position, width, height) is PointF p && OnPlayfield(p, width, height) ? p : (PointF?)null;
             if (onScreen is PointF seen)
@@ -174,13 +174,18 @@ internal sealed partial class BotEngine
             .Any(n => info.Name.Contains(n, StringComparison.CurrentCultureIgnoreCase));
     }
 
+    /// <summary>A Metin stone more than this many levels below the character is left alone: nothing
+    /// dropped from 5 level-15 stones at level 20, and a stone takes a minute for 2000 EXP.</summary>
+    internal const int MetinLevelGap = 5;
+
     /// <summary>Whether the bot should go for this mob, by the profile's choices. A mob that is
     /// attacking us is always fought back, and a Metin stone set to "first" is always gone for
-    /// (the level and name filters are for mobs).</summary>
-    internal static bool Wanted(WorldMob mob, BotProfile profile)
+    /// (the level and name filters are for mobs) — unless it is far below our level.</summary>
+    /// <param name="level">The character's level (0: unknown, no level check for stones).</param>
+    internal static bool Wanted(WorldMob mob, BotProfile profile, int level = 0)
     {
         if (mob.IsMetin)
-            return profile.Metins != MetinMode.Skip &&
+            return profile.Metins != MetinMode.Skip && (level <= 0 || mob.Level <= 0 || mob.Level >= level - MetinLevelGap) &&
                    (profile.Metins == MetinMode.Prefer || WantedByFilters(mob, profile));
         if (mob.AttacksMe)
             return true;
