@@ -24,6 +24,8 @@ internal static class ItemBook
 
     public static int Count => Items.Count;
 
+    public static IEnumerable<ItemInfo> All() => Items.Values;
+
     public static void Learn(ItemInfo info)
     {
         if (info.Vnum <= 1 || info.Name.Length == 0)

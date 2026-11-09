@@ -189,14 +189,14 @@ internal sealed class MainForm : Form
         metins.SelectedIndexChanged += (_, _) => { _profile.Metins = (MetinMode)metins.SelectedIndex; SaveProfile(); };
         targets.Controls.Add(metins);
         Check(targets, "Eşyalara yürüyüp topla", 370, 34, 160, _profile.PickUpDrops, v => _profile.PickUpDrops = v);
-        Theme.Label(targets, "Mutlaka topla", new Rectangle(534, 34, 80, 26), 8.5f, Theme.Muted);
-        var always = new TextBox
+        var itemList = Theme.Button(targets, "📋  Eşya listesi…", new Rectangle(540, 34, 196, 26), Theme.Secondary, Theme.SecondaryHover);
+        itemList.Click += (_, _) =>
         {
-            Bounds = new Rectangle(616, 34, 120, 26), Text = _profile.LootAlways, BackColor = Theme.Inset, ForeColor = Theme.Text,
-            BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 9f),
+            using var form = new ItemListForm(_profile);
+            form.ShowDialog(this);
+            SaveProfile();
+            WriteLog($"Eşya listesi: {_profile.LootPick.Count} eşya mutlaka toplanacak, {_profile.LootSkip.Count} eşya alınmayacak.");
         };
-        always.TextChanged += (_, _) => { _profile.LootAlways = always.Text.Trim(); SaveProfile(); };
-        targets.Controls.Add(always);
         TextRow(targets, "Sadece bu moblar", 0, 68, _profile.OnlyMobs, v => _profile.OnlyMobs = v);
         TextRow(targets, "Bu mobları atla", 370, 68, _profile.SkipMobs, v => _profile.SkipMobs = v);
         Theme.Label(targets, "Yürüyüp topla:", new Rectangle(0, 104, 120, 26), 9f, Theme.Muted);

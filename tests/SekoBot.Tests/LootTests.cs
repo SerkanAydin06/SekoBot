@@ -145,3 +145,25 @@ public class AlwaysLootTests
         Assert.False(BotEngine.WantedLoot(new GroundItem(1, new Vec3(0, 0, 0), 93006, 1), p));
     }
 }
+
+public class ItemListTests
+{
+    [Fact]
+    public void Ticked_items_are_always_picked_and_skipped_ones_never()
+    {
+        ItemBook.Learn(new ItemInfo(94001, "Tahta Bilezik+1", "ITEM_ARMOR", "ARMOR_WRIST", 800));
+        ItemBook.Learn(new ItemInfo(94002, "Kaplan Postu", "ITEM_MATERIAL", "MATERIAL_LEATHER", 300));
+        var p = new BotProfile { LootEquipment = false, LootOther = true, LootPick = [94001], LootSkip = [94002] };
+        Assert.True(BotEngine.WantedLoot(new GroundItem(1, new Vec3(0, 0, 0), 94001, 1), p));   // equipment off, but ticked
+        Assert.False(BotEngine.WantedLoot(new GroundItem(2, new Vec3(0, 0, 0), 94002, 1), p));  // "other" on, but "Alma"
+        Assert.True(BotEngine.WantedLoot(new GroundItem(3, new Vec3(0, 0, 0), 1, 40), p));      // yang as before
+    }
+
+    [Theory]
+    [InlineData("ITEM_USE", "USE_POTION", "İksir")]
+    [InlineData("ITEM_ARMOR", "ARMOR_EAR", "Takı")]
+    [InlineData("ITEM_MATERIAL", "MATERIAL_LEATHER", "Malzeme")]
+    [InlineData("ITEM_UNIQUE", "", "Özel")]
+    public void Item_types_read_in_turkish(string type, string sub, string name) =>
+        Assert.Equal(name, SekoBot.UI.ItemListForm.TypeName(new ItemInfo(1, "x", type, sub, 0)));
+}
