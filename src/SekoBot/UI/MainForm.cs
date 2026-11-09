@@ -155,12 +155,14 @@ internal sealed class MainForm : Form
             v => _profile.AttackRadius = v / 100);
         NumberRow(attack, "Eşya toplama (sn)", 0, 34, 0.5m, 10, _profile.LootEveryMs / 1000.0, 1, 0.5m,
             v => _profile.LootEveryMs = (int)(v * 1000));
-        Check(attack, "Kalabalığa git (mobların toplu olduğu yere)", 370, 0, 360, _profile.PreferCrowds,
-            v => _profile.PreferCrowds = v);
-        NumberRow(attack, "Kalabalık: en az mob", 370, 34, 2, 10, _profile.CrowdMinMobs, 0, 1,
-            v => _profile.CrowdMinMobs = (int)v);
-        Hint(attack, "Saldırı mesafesi oyunun belleğinden okunan gerçek menzille hesaplanır (kamera yakınlaşsa da kaymaz). " +
-            "Buradaki % yalnızca bellek okunamazsa kullanılır.", 76);
+        Check(attack, "Grupları topla (üçlüleri toplayıp birden kes)", 370, 0, 366, _profile.PullGroups,
+            v => _profile.PullGroups = v);
+        NumberRow(attack, "Toplanacak en fazla mob", 370, 34, 3, 30, _profile.PullMaxMobs, 0, 1,
+            v => _profile.PullMaxMobs = (int)v);
+        NumberRow(attack, "Toplarken can en az (%)", 370, 68, 10, 100, Math.Round(_profile.PullMinHp * 100), 0, 5,
+            v => _profile.PullMinHp = v / 100);
+        Hint(attack, "Saldırı mesafesi bellekteki gerçek menzille hesaplanır; % yalnızca yedek. Gruplar: bot yakındaki üçlülerin " +
+            "birer mobuna vurur, peşine takılanlar sınıra ulaşınca ya da can düşünce hepsini birden keser.", 102);
 
         // İksir & Buff
         // Hedef: which mobs to go for, and loot.

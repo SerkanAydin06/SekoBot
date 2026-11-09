@@ -244,6 +244,7 @@ public class NavigateTests
     public void Walks_into_the_crowd_rather_than_to_a_lone_mob_nearby()
     {
         var (brain, p) = Ready();
+        p.PreferCrowds = true; // off by default now (replaced by gathering groups)
         p.AttackRadius = 0.05; // distances below are in pixels for a 5 % radius
         var lone = new Point(Center.X + 200, Center.Y); // nearest, but alone
         var mobs = Crowd(-350, 0).Append(lone).ToArray(); // four wolves to the left
@@ -297,6 +298,7 @@ public class NavigateTests
     public void Sticks_to_the_chosen_crowd_instead_of_zigzagging()
     {
         var (brain, p) = Ready();
+        p.PreferCrowds = true; // off by default now (replaced by gathering groups)
         // Two similar crowds left and right; the left one slightly better at first.
         var left = Crowd(-300, 0);
         var right = Crowd(330, 0);

@@ -57,11 +57,40 @@ internal sealed partial class BotEngine
         // 70–145 with a reach of 130); a bigger body (a Metin stone) can be hit from further away.
         double attackDistance = world.AttackDistance > 0 ? world.AttackDistance : 130;
         bool preferMetins = profile.Metins == MetinMode.Prefer && found.Any(f => f.Mob.IsMetin);
+        var groups = SpawnGroups(found.Select(f => f.Mob).ToList());
         var targets = found.Select(f => new TargetInfo(f.Mob.Id, f.Spot, f.Mob.Position.DistanceXY(world.Player),
                 attackDistance + Math.Max(0, f.Mob.Radius - 40), f.Mob.Exp, f.Mob.Hp, f.Mob.MaxHp, f.Mob.DamageMax,
-                preferMetins ? f.Mob.IsMetin : profile.AttackersFirst && f.Mob.AttacksMe))
+                preferMetins ? f.Mob.IsMetin : profile.AttackersFirst && f.Mob.AttacksMe,
+                f.Mob.AttacksMe, groups.GetValueOrDefault(f.Mob.Id)))
             .ToList();
         return (mobs, priority, drops, attackers, targets);
+    }
+
+    /// <summary>
+    /// The spawn groups (the game spawns mobs in threes; hitting one brings the others). Seen in the
+    /// game: a group's mobs get numbers next to each other (1880, 1881, 1882) and stand together.
+    /// So mobs whose numbers differ by at most 2 and that stand within 10 m are one group (and the
+    /// groups of those, and so on). The group is named by its lowest number; Metin stones have none.
+    /// </summary>
+    internal static Dictionary<int, int> SpawnGroups(IReadOnlyList<WorldMob> mobs)
+    {
+        var parent = mobs.Where(m => !m.IsMetin).ToDictionary(m => m.Id, m => m.Id);
+        int Root(int id)
+        {
+            while (parent[id] != id)
+                id = parent[id] = parent[parent[id]];
+            return id;
+        }
+        var list = mobs.Where(m => !m.IsMetin).OrderBy(m => m.Id).ToList();
+        for (int i = 0; i < list.Count; i++)
+        for (int j = i + 1; j < list.Count && list[j].Id - list[i].Id <= 2; j++)
+            if (list[i].Position.DistanceXY(list[j].Position) <= 1000)
+            {
+                int a = Root(list[i].Id), b = Root(list[j].Id);
+                if (a != b)
+                    parent[Math.Max(a, b)] = Math.Min(a, b);
+            }
+        return parent.Keys.ToDictionary(id => id, Root);
     }
 
     /// <summary>Mobs this close (world units) are targets even when they're off the screen.</summary>

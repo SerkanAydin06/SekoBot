@@ -46,6 +46,7 @@ internal sealed partial class Brain
         _crowdTarget = _lastCrowd = null;
         _targetId = 0;
         _toHotspot = false;
+        ResetPull();
         _dropId = 0;
         _dropSince = _lastDropTap = Never;
         _ignoredDrops.Clear();
@@ -160,6 +161,10 @@ internal sealed partial class Brain
 
         // Stay in the area we started in (position from memory): walking back when too far.
         if (LeashTick(state, p, actions, refresh, mobNextToUs: nextToUs))
+            return;
+
+        // Gather the spawn groups around first, then fight them together.
+        if (PullTick(state, p, actions, refresh, radius))
             return;
 
         if (target is not Point t)
