@@ -142,6 +142,11 @@ internal sealed partial class Brain
         // Mobs attacking us (or Metin stones, when preferred) come first.
         bool priority = state.PriorityMobs.Count > 0;
         // With the mobs from memory: the one worth most per second, and real distances.
+        // Mobs outside the area aren't walked to at all (we'd only turn back halfway); those
+        // attacking us are still fought.
+        bool fromMemory = state.Targets.Count > 0;
+        if (fromMemory)
+            state = state with { Targets = state.Targets.Where(t => InArea(t, p)).ToList() };
         var chosen = state.Targets.Count > 0 ? ChooseTarget(state) : null;
         if (chosen != null)
         {
@@ -149,7 +154,7 @@ internal sealed partial class Brain
             best = Math.Sqrt(Math.Pow(chosen.Spot.X - cx, 2) + Math.Pow(chosen.Spot.Y - cy, 2));
             priority = chosen.Priority;
         }
-        else
+        else if (!fromMemory)
         {
             foreach (var m in priority ? state.PriorityMobs : state.MobCandidates)
             {

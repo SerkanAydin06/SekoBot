@@ -6,8 +6,8 @@ namespace SekoBot.Bot;
 
 /// <summary>
 /// Skills. Automatic (default): the skills on the quick slots are used by what the game says
-/// they do — buffs are kept up (cast again shortly before they run out), area attacks when at
-/// least AreaSkillMinMobs mobs are around, single attacks when a mob is in reach — each after
+/// they do — buffs are kept up (cast again shortly before they run out), area attacks while
+/// hitting with at least AreaSkillMinMobs mobs within 3 m, single attacks while hitting a mob — each after
 /// its cooldown and only with enough MP. Manual: F1–F5 pressed every N seconds.
 /// Casting is cut off by walking or attacking, so the bot lets go of W/A/S/D and Space and holds
 /// still for a moment while it casts; one skill at a time with a gap between them.
@@ -45,13 +45,25 @@ internal sealed partial class Brain
         return false;
     }
 
+    /// <summary>Mobs this close (world units, 3 m) are hit by an area skill.</summary>
+    internal const double AreaSkillRange = 300;
+
     private bool CastAutoSkill(GameState state, BotProfile p, List<BotAction> actions)
     {
         var now = state.Time;
         double cx = state.Width / 2.0, cy = state.Height / 2.0, radius = p.AttackRadius * state.Height;
         double Distance(Point m) => Math.Sqrt(Math.Pow(m.X - cx, 2) + Math.Pow(m.Y - cy, 2));
-        int around = state.MobCandidates.Count(m => Distance(m) <= radius * 2.5);
-        bool inReach = state.MobCandidates.Any(m => Distance(m) <= radius * 1.4);
+        // Attack skills only while really hitting (not while walking to a mob, gathering or with
+        // mobs still on their way: the skill would hit nothing). Mobs from memory: real distances.
+        bool hitting = !p.NavigateMode || _attackHeld && Phase == BotPhase.Fighting && !_pulling;
+        int around = state.Targets.Count > 0
+            ? state.Targets.Count(t => t.Distance <= AreaSkillRange)
+            : state.MobCandidates.Count(m => Distance(m) <= radius * 2.5);
+        bool inReach = state.Targets.Count > 0
+            ? state.Targets.Any(t => t.Distance <= t.Reach * 1.4)
+            : state.MobCandidates.Any(m => Distance(m) <= radius * 1.4);
+        around = hitting ? around : 0;
+        inReach &= hitting;
 
         foreach (var skill in state.Skills.OrderBy(s => s.Kind switch { SkillKind.Buff => 0, SkillKind.Area => 1, _ => 2 }))
         {

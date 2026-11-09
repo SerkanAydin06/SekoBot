@@ -38,7 +38,7 @@ internal sealed class KeyBindings
 internal sealed class BotProfile
 {
     /// <summary>Current profile format; older files are upgraded once by <see cref="ProfileStore"/>.</summary>
-    public const int CurrentVersion = 6;
+    public const int CurrentVersion = 7;
 
     /// <summary>Number of skill keys (F1–F5).</summary>
     public const int SkillSlots = 5;
@@ -49,7 +49,7 @@ internal sealed class BotProfile
     /// area attacks on groups, single attacks while fighting). Off: F1–F5 every N seconds.</summary>
     public bool AutoSkills { get; set; } = true;
     /// <summary>An area skill is used when at least this many mobs are around.</summary>
-    public int AreaSkillMinMobs { get; set; } = 3;
+    public int AreaSkillMinMobs { get; set; } = 5;
     /// <summary>With this many HP potions left (or fewer), get away from the mobs and stop in a quiet
     /// spot, so the character isn't killed without potions (0 = off).</summary>
     public int RetreatAtPotions { get; set; } = 5;
@@ -263,6 +263,9 @@ internal static class ProfileStore
     {
         if (profile.Version >= BotProfile.CurrentVersion)
             return false;
+        // v7: area skills were wasted on 3 mobs (and on mobs still on their way): 5 within 3 m now.
+        if (profile.Version < 7 && profile.AreaSkillMinMobs == 3)
+            profile.AreaSkillMinMobs = 5;
         // v6: "go to the crowd" is replaced by gathering spawn groups.
         if (profile.Version < 6)
             profile.PreferCrowds = false;

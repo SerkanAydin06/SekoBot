@@ -129,6 +129,32 @@ public class LeashTests
     }
 
     [Fact]
+    public void Does_not_walk_to_mobs_outside_the_area()
+    {
+        var p = Profile();                                       // 10 m limit
+        var world = new World(0);
+        var home = world.Pos;
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        // Camera yaw 0: +X (ahead) is up on screen (W), -X is down (S).
+        brain.Tick(world.State(0));                              // home taken
+        world.Pos = home with { X = home.X + 600 };              // 6 m ahead of home, still inside
+        TargetInfo At(int id, double ahead, double score) => new(id, new Point(960, 540 - (int)(ahead / 5)), Math.Abs(ahead), 130,
+            (int)score, 305, 305, 56, false, Position: world.Pos with { X = world.Pos.X + ahead });
+        // A rich mob 4 m further ahead (10 m from home: outside), a cheap one 6 m behind (at home).
+        TargetInfo[] mobs = [At(1, 400, 900), At(2, -600, 50)];
+        var all = new List<BotAction>();
+        for (double t = 100; t < 2000; t += 100)
+        {
+            var actions = brain.Tick(world.State(t) with { Targets = mobs, AttackPower = 189 });
+            all.AddRange(actions);
+            world.Apply(actions);
+        }
+        Assert.Contains(all, a => a is KeyDownAction d && d.Key == p.Keys.MoveBack);      // to the one inside
+        Assert.DoesNotContain(all, a => a is KeyDownAction d && d.Key == p.Keys.MoveForward);
+    }
+
+    [Fact]
     public void Area_limit_off_means_no_home()
     {
         var p = Profile();

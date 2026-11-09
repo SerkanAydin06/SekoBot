@@ -49,9 +49,46 @@ public class AutoSkillTests
         var one = new Point(Center.X + 40, Center.Y);
         Assert.Equal([Keys.F3], Taps(brain, 20_000, 30_000, t => State(t, 500, one)));
 
-        // Four around: the area attack.
-        Point[] group = [new(Center.X + 40, Center.Y), new(Center.X - 60, Center.Y), new(Center.X, Center.Y + 80), new(Center.X + 100, Center.Y + 50)];
+        // Five around: the area attack.
+        Point[] group = [new(Center.X + 40, Center.Y), new(Center.X - 60, Center.Y), new(Center.X, Center.Y + 80), new(Center.X + 100, Center.Y + 50), new(Center.X - 50, Center.Y - 60)];
         Assert.Contains(Keys.F2, Taps(brain, 30_000, 33_000, t => State(t, 500, group)));
+    }
+
+    private static TargetInfo Mob(int id, double distance, bool attacks = true) =>
+        new(id, new Point(Center.X + (int)(distance / 5), Center.Y), distance, 130, 103, 305, 305, 56, attacks, attacks);
+
+    [Fact]
+    public void Area_attack_only_while_hitting_with_five_mobs_close()
+    {
+        var (brain, p) = Ready();
+        p.PullGroups = false;
+        GameState S(double t, TargetInfo[] mobs) => State(t, 500) with { Targets = mobs, AttackPower = 189 };
+        Taps(brain, 0, 2_000, t => S(t, []));                          // the buff first
+        // One mob being hit, four more chasing us but still 6 m away: no area attack (it would hit one).
+        TargetInfo[] coming = [Mob(1, 80), Mob(2, 600), Mob(3, 620), Mob(4, 640), Mob(5, 660)];
+        Assert.DoesNotContain(Keys.F2, Taps(brain, 2_000, 6_000, t => S(t, coming)));
+        // Four of them close and one at 2.5 m: five within 3 m → the area attack.
+        TargetInfo[] here = [Mob(1, 80), Mob(2, 100), Mob(3, 150), Mob(4, 200), Mob(5, 250)];
+        Assert.Contains(Keys.F2, Taps(brain, 6_000, 9_000, t => S(t, here)));
+        // Four within 3 m only: not enough.
+        var (brain2, p2) = Ready();
+        p2.PullGroups = false;
+        Taps(brain2, 0, 2_000, t => S(t, []));
+        TargetInfo[] four = [Mob(1, 80), Mob(2, 100), Mob(3, 150), Mob(4, 200), Mob(5, 900)];
+        Assert.DoesNotContain(Keys.F2, Taps(brain2, 2_000, 6_000, t => S(t, four)));
+    }
+
+    [Fact]
+    public void No_attack_skill_while_walking_to_a_mob()
+    {
+        var (brain, p) = Ready();
+        p.PullGroups = false;
+        Taps(brain, 0, 2_000, t => State(t, 500));                    // the buff first
+        // Five mobs together but 6 m away: walking there, nothing cast on the way.
+        TargetInfo[] far = [Mob(1, 600, false), Mob(2, 610, false), Mob(3, 620, false), Mob(4, 630, false), Mob(5, 640, false)];
+        var keys = Taps(brain, 2_000, 5_000, t => State(t, 500, far.Select(m => m.Spot).ToArray()) with { Targets = far, AttackPower = 189 });
+        Assert.DoesNotContain(Keys.F2, keys);
+        Assert.DoesNotContain(Keys.F3, keys);
     }
 
     [Fact]

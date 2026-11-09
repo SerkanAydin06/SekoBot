@@ -97,6 +97,12 @@ internal sealed partial class Brain
         return true;
     }
 
+    /// <summary>A mob inside the area (a little margin, so the fight doesn't end right at the edge),
+    /// or one attacking us. True when the area limit is off or not known yet.</summary>
+    private bool InArea(TargetInfo t, BotProfile p) =>
+        p.LeashMeters <= 0 || _home is not Vec3 home || t.Position is not Vec3 at || t.AttacksMe
+        || at.DistanceXY(home) <= p.LeashMeters * 100 * 0.9;
+
     /// <returns>True when the area logic drove this tick (walking home).</returns>
     private bool LeashTick(GameState state, BotProfile p, List<BotAction> actions, bool refresh, bool mobNextToUs)
     {
