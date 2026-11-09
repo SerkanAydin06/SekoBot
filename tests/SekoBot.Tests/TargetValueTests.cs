@@ -57,6 +57,23 @@ public class TargetValueTests
     }
 
     [Fact]
+    public void A_mob_close_by_comes_before_a_better_one_across_the_field()
+    {
+        var (brain, p) = Ready();
+        var cheap = CheapBear(new Point(Center.X + 200, Center.Y), 500);   // 5 m, right
+        var black = BlackBear(new Point(Center.X - 900, Center.Y), 2000);  // 20 m, left
+        // (up to 5.1 s: held keys are sent again every second, D may be held from exploring already)
+        var actions = Run(brain, 4000, 5100, _ => [cheap, black]);
+        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
+        Assert.DoesNotContain(actions, a => a is KeyDownAction d && d.Key == p.Keys.MoveLeft);
+
+        // Nothing near: then the far one.
+        var (brain2, _) = Ready();
+        var far = Run(brain2, 4000, 4500, _ => [black]);
+        Assert.Contains(far, a => a is KeyDownAction d && d.Key == p.Keys.MoveLeft);
+    }
+
+    [Fact]
     public void Finishes_the_hurt_mob_it_is_fighting_before_a_better_one()
     {
         var (brain, p) = Ready();
