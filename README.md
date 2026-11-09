@@ -34,7 +34,7 @@ Bot oyunun kendi pencerelerinin (Esc menüsü, envanter, karakter, beceriler, ay
 
 ## Alan sınırı ve takılma
 
-**Alan sınırı (metre)** (varsayılan 40, 0 = kapalı): Bot başladığı yeri bellekten okuyup kaydeder. Başlangıçtan bu mesafeden fazla uzaklaşınca geri yürür (yanındaki mobla ve 5 m içinde ona vuran moblarla önce savaşır — onlar zaten peşinden gelip yolda vururdu), yarı mesafeye gelince avlanmaya devam eder. Hangi tuşun geri götürdüğünü kameranın baktığı yönden (yine bellekten) hesaplar; harita açmaz.
+**Alan sınırı (metre)** (varsayılan 40, 0 = kapalı): Bot başladığı yeri bellekten okuyup kaydeder. Başlangıçtan bu mesafeden fazla uzaklaşınca geri yürür (yanındaki mobla ve 5 m içinde ona vuran moblarla önce savaşır — onlar zaten peşinden gelip yolda vururdu). Alanın dışında duran moblar hedef olarak **hiç seçilmez** (yürüyüp yarı yoldan dönmesin); bize saldıranlar yine kesilir, yarı mesafeye gelince avlanmaya devam eder. Hangi tuşun geri götürdüğünü kameranın baktığı yönden (yine bellekten) hesaplar; harita açmaz.
 
 **Bellekten okuma:** Oyun Unreal Engine 4.27 ile yapılmış. Bot oyunun ana nesnesine exe içindeki tek bir sabit noktadan ulaşır, gerisini (HP, ölü mü, moblar, seçili hedef…) oyunun kendi alan isimleriyle bulur. Oyun güncellenip sabit noktalar kayarsa bot onları kendisi arar ve bulur (bir kez, birkaç saniye sürer; günlüğe yazar). Bellek yalnızca okunur, oyuna hiçbir şey yazılmaz. Bellek uzun süre (15 sn) okunamazsa bot durur; yükleme ekranı gibi kısa kesintilerde bekler.
 
@@ -93,7 +93,7 @@ Kurulum: Telegram'da @BotFather'a `/newbot` yaz, verdiği anahtarı **Bot anahta
 
 ## Grupları topla
 
-**Grupları topla** (Saldırı sekmesi, varsayılan açık): oyun mobları üçlü gruplar halinde çıkarır ve birine vurunca grubun hepsi gelir. Grubu bellekten bulur (aynı gruptaki mobların numaraları ardışık — ör. 1880, 1881, 1882 — ve yan yanalar). Bot 15 m içindeki uyanmamış gruplardan **en değerlisiyle** başlar (EXP ÷ öldürme süresi, uzaklık az bir eksi), bir moba vurur; grup peşine takılınca yalnızca **ilk grubun çevresindeki** gruplara geçer (**Toplama alanı**, varsayılan 8 m) — böylece bir bölgede toplar, uzaklara sürüklenmez. Peşinde mob varken yeni toplama başlamaz, önce toplananlar kesilir; peşindeki mob sayısı **Toplanacak en fazla mob**'a (varsayılan 9) ulaşınca, yakında başka grup kalmayınca ya da can **Toplarken can en az %**'nin (varsayılan 70) altına düşünce durup hepsini birlikte keser (alan becerileri hepsine vurur). 3 sn vurulup uyanmayan grup bir dakika bırakılır. Öncelikli metin taşı varken toplama yapılmaz.
+**Grupları topla** (Saldırı sekmesi, varsayılan açık): oyun mobları üçlü gruplar halinde çıkarır ve birine vurunca grubun hepsi gelir. Grubu bellekten bulur (aynı gruptaki mobların numaraları ardışık — ör. 1880, 1881, 1882 — ve yan yanalar). Bot 15 m içindeki uyanmamış gruplardan **en değerlisiyle** başlar (EXP ÷ öldürme süresi, uzaklık az bir eksi), bir moba vurur; grup peşine takılınca yalnızca **ilk grubun çevresindeki** gruplara geçer (**Toplama alanı**, varsayılan 8 m) — böylece bir bölgede toplar, uzaklara sürüklenmez. Peşinde mob varken (ör. bir mob kendiliğinden gelip vurdu) yalnızca **çok yakındaki** gruplar toplanır (Toplama alanı içinde; o mob zaten peşinden gelir), uzaktaki gruplara gidilmez; peşindeki mob sayısı **Toplanacak en fazla mob**'a (varsayılan 9) ulaşınca, yakında başka grup kalmayınca ya da can **Toplarken can en az %**'nin (varsayılan 70) altına düşünce durup hepsini birlikte keser (alan becerileri hepsine vurur). 3 sn vurulup uyanmayan grup bir dakika bırakılır. Öncelikli metin taşı varken toplama yapılmaz.
 
 Eski **Kalabalığa git** seçeneği bunun yerine kapatıldı (`PreferCrowds`, varsayılan kapalı).
 
@@ -101,8 +101,8 @@ Eski **Kalabalığa git** seçeneği bunun yerine kapatıldı (`PreferCrowds`, v
 
 **Becerileri otomatik kullan** (İksir / Beceri sekmesi, varsayılan açık): Bot hızlı slotlardaki (1–5 ve F1–F5) becerilerini ve oyunun onlar hakkında söylediklerini bellekten okur: ad, tür, seviye, mana, bekleme süresi, etki süresi. Sekmede hangi tuşta hangi becerinin olduğu ve ne işe yaradığı yazar.
 - **Güçlendirmeler** (ör. Güçlü beden): süresi bitmeden ~5 sn önce yenilenir.
-- **Alan saldırıları** (ör. Güçlü vuruş, Kılıç darbesi): etrafta en az 3 mob varken (`AreaSkillMinMobs`).
-- **Tek hedef saldırıları** (ör. Şiddetli vuruş): yanında mob varken.
+- **Alan saldırıları** (ör. Güçlü vuruş, Kılıç darbesi): yalnızca bot **vururken** ve **3 m içinde en az 5 mob** varken (**Alan becerisi: en az mob**, varsayılan 5). Peşindeki moblar henüz gelmemişken, moba yürürken ya da grup toplarken kullanılmaz — boşa gitmesin.
+- **Tek hedef saldırıları** (ör. Şiddetli vuruş): yalnızca bot yanındaki moba vururken.
 - Hepsi bekleme süresi dolunca ve MP yetiyorsa basılır; basarken bot 1 sn durur ki beceri kesilmesin, iki beceri arasında en az 1,5 sn olur.
 
 Kapalıyken eski usul F1–F5 "kaç saniyede bir" ayarları (`SkillEverySec`) kullanılır.

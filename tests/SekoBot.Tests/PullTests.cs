@@ -108,6 +108,26 @@ public class PullTests
     }
 
     [Fact]
+    public void Gathers_the_groups_close_by_even_with_a_mob_already_on_us()
+    {
+        var (brain, p) = Ready(max: 9);
+        // One mob walked into us and hits; a fresh group 5 m to the left, another 12 m to the right.
+        TargetInfo[] onUs = [At(1, 1, 60, 0, attacks: true)];
+        TargetInfo[] left = [At(20, 20, -500, 0), At(21, 20, -520, 50), At(22, 20, -540, -50)];
+        TargetInfo[] farRight = [At(30, 30, 1200, 0), At(31, 30, 1220, 50), At(32, 30, 1240, -50)];
+        var actions = Run(brain, 0, 1000, [.. onUs, .. left, .. farRight]);
+        Assert.Contains(actions, x => x is NoteAction n && n.Text.Contains("toplanıyor"));
+        Assert.Contains(actions, x => x is KeyDownAction d && d.Key == p.Keys.MoveLeft);   // to the close group
+        Assert.DoesNotContain(actions, x => x is KeyDownAction d && d.Key == p.Keys.MoveRight);
+
+        // Only far groups: the mob on us is fought, no gathering.
+        var (brain2, p2) = Ready(max: 9);
+        var fight = Run(brain2, 0, 1000, [.. onUs, .. farRight]);
+        Assert.DoesNotContain(fight, x => x is NoteAction n && n.Text.Contains("toplanıyor"));
+        Assert.Contains(fight, x => x is KeyDownAction d && d.Key == p2.Keys.Attack);
+    }
+
+    [Fact]
     public void Stops_gathering_when_hp_is_low()
     {
         var (brain, _) = Ready(max: 9);

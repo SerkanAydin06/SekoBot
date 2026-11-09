@@ -53,9 +53,9 @@ internal sealed partial class Brain
             return EndPull(actions, $"Can azaldı; toplanan {chasing} mob kesiliyor.");
         if (chasing >= p.PullMaxMobs)
             return EndPull(actions, $"{chasing} mob toplandı; hepsi birden kesiliyor.");
-        // A new gathering only starts when nothing is after us: first fight what came.
-        if (!_pulling && chasing > 0)
-            return EndPull(actions, null);
+        // Mobs already after us (one walked into us): a new gathering only takes groups right
+        // around us — they follow us there anyway; far groups would leave them hitting our back.
+        bool startingWithChasers = !_pulling && chasing > 0;
 
         foreach (var (pulledGroup, when) in _pulled.ToList())
             if (now - when > Ms(60_000))
@@ -76,7 +76,7 @@ internal sealed partial class Brain
             .Where(g => g.All(t => !t.AttacksMe && t.Hp >= t.MaxHp))
             // The first group within 15 m; the next ones only around the first.
             .Where(g => _pullAnchor is not Memory.Vec3 anchor
-                ? g.Min(t => t.Distance) <= PullRange
+                ? g.Min(t => t.Distance) <= (startingWithChasers ? area : PullRange)
                 : Centre(g) is Memory.Vec3 c ? c.DistanceXY(anchor) <= area : g.Min(t => t.Distance) <= area)
             .ToList();
         if (fresh.Count == 0)
