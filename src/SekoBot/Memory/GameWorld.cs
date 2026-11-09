@@ -119,6 +119,20 @@ internal sealed record CharacterProgress(long Exp, long NeedExp, long Yang,
     /// <summary>How many of an item are in the whole inventory.</summary>
     public int Count(int vnum) => Inventory.Where(i => i.Vnum == vnum).Sum(i => i.Count);
 
+    /// <summary>
+    /// A potion key: the item on its quick slot and how many of it are in the bag (all stacks).
+    /// When the stack on the key is used up the game empties the quick slot (seen: key 1 empty,
+    /// 600 of the same potion in two other stacks) and the key drinks nothing any more; the item
+    /// seen there before (<paramref name="known"/>) is still counted, with OnKey false.
+    /// </summary>
+    public PotionKey Potion(int number, int? known)
+    {
+        int? vnum = QuickSlotVnum(number);
+        if (vnum is int onKey)
+            return new PotionKey(onKey, Count(onKey), true);
+        return known is int k ? new PotionKey(k, Count(k), false) : new PotionKey(null, 0, false);
+    }
+
     /// <summary>The item on quick slot key <paramref name="number"/> (1 = key "1"), or null.</summary>
     public int? QuickSlotVnum(int number)
     {
@@ -126,6 +140,13 @@ internal sealed record CharacterProgress(long Exp, long NeedExp, long Yang,
             return null;
         return Inventory.FirstOrDefault(i => i.Slot == slot) is { Count: > 0 } item ? item.Vnum : null;
     }
+}
+
+/// <summary>The potion on a key: its item, how many are in the bag, and whether the key still holds it.</summary>
+internal sealed record PotionKey(int? Vnum, int InBag, bool OnKey)
+{
+    /// <summary>What pressing the key can still drink: nothing once the game emptied the slot.</summary>
+    public int Drinkable => OnKey ? InBag : 0;
 }
 
 /// <summary>Where the game camera is and where it looks (Unreal's FMinimalViewInfo).</summary>
