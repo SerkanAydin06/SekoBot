@@ -157,7 +157,7 @@ internal sealed class MainForm : Form
         _statExpRate = Tile(statsCard, "SAATTE EXP", 126, 98);
         _statLevel = Tile(statsCard, "SEVİYE", 236, 98, small: true);
         _statYang = Tile(statsCard, "YANG", 16, 164);
-        _statPotions = Tile(statsCard, "İKSİR (HP·MP)", 126, 164, small: true);
+        _statPotions = Tile(statsCard, "İKSİR KALAN · İÇİLEN", 126, 164, small: true);
         _statDeaths = Tile(statsCard, "ÖLÜM", 236, 164);
         Theme.Label(statsCard, "KARAKTER", new Rectangle(16, 244, 200, 18), 8f, Theme.Accent, FontStyle.Bold);
         _hpMeter = AddMeter(statsCard, "HP", Theme.Red, 268);
@@ -935,8 +935,8 @@ internal sealed class MainForm : Form
             _statLevel.Text = $"Sv {world.Level} · %{percent:0.0}{eta}";
         }
         var (hpLeft, mpLeft) = _engine.PotionsLeft();
-        string used = s.Session is { } u && u.HpPotionsUsed + u.MpPotionsUsed > 0 ? $"\n{u.HpPotionsUsed + u.MpPotionsUsed} içildi" : "";
-        _statPotions.Text = $"{Count(hpLeft)} · {Count(mpLeft)}{used}";
+        int hpUsed = s.Session?.HpPotionsUsed ?? 0, mpUsed = s.Session?.MpPotionsUsed ?? 0;
+        _statPotions.Text = $"HP {Count(hpLeft)} · {hpUsed}\nMP {Count(mpLeft)} · {mpUsed}";
         _statPotions.ForeColor = hpLeft is < 20 || mpLeft is < 10 ? Theme.Red : Theme.Text;
 
         if (s.Session is { } session)

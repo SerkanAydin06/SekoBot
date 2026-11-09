@@ -112,6 +112,8 @@ internal sealed partial class Brain
         if (refresh)
             _lastKeyRefresh = now;
 
+        LearnPullSize(state, p, actions);
+
         // Nothing here ever stops the bot: camera keys, turning and loot run alongside.
         if (Phase == BotPhase.Setup)
         {
