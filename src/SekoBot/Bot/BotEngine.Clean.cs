@@ -54,6 +54,17 @@ internal sealed partial class BotEngine
                ItemBook.Get(item.Vnum) is { Gold: > 0 } info && info.Gold < profile.LootEquipmentMinGold;
     }
 
+    /// <summary>One line for the window: free slots, room for a tall item, how many items would be thrown.</summary>
+    public string BagSummary()
+    {
+        var progress = World?.Progress;
+        if (progress?.FreeSlots() is not int free)
+            return "Çanta okunamadı (oyun bağlı değil ya da yükleniyor).";
+        int toThrow = progress.Inventory.Count(i => ShouldThrow(i, Profile, BotRunning ? _bagAtStart : null));
+        return $"Çanta: {free} boş yer  ·  zırh / uzun silah {(progress.TallSpace() == false ? "SIĞMIYOR" : "sığar")}  ·  atılacak {toThrow} eşya" +
+               (_cleaner.Active || _brain.WantsClean ? "  ·  şimdi atılıyor" : "");
+    }
+
     /// <summary>"🗑 Şimdi at": throw the items ticked "At" now, without waiting for the bag to fill.</summary>
     public string CleanNow()
     {
