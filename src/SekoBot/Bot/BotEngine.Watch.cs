@@ -54,6 +54,17 @@ internal sealed partial class BotEngine
             }
         }
 
+        // A special item on the ground ("always pick up"): tell the user, once per item.
+        foreach (var drop in world.Drops ?? [])
+            if (AlwaysLoot(drop.Vnum, profile) && _announcedDrops.Add(drop.Id))
+            {
+                string found = $"🎁 Yere düştü: {ItemBook.NameOf(drop.Vnum)} ({drop.Position.DistanceXY(world.Player) / 100:0} m) — alınıyor.";
+                _log(found);
+                Notify(found);
+            }
+        if (_announcedDrops.Count > 500)
+            _announcedDrops.Clear();
+
         foreach (var mob in world.Mobs)
             _seenMobs[mob.Id] = (mob, now);
         foreach (var (id, (_, seen)) in _seenMobs.ToList())
@@ -89,4 +100,5 @@ internal sealed partial class BotEngine
     }
 
     private bool _respawnHooked;
+    private readonly HashSet<long> _announcedDrops = [];
 }

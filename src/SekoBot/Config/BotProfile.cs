@@ -161,6 +161,9 @@ internal sealed class BotProfile
     /// <summary>Also pick up weapons and armour a shop pays at least this much for (0 = off;
     /// the price is known once the item has been in the bag).</summary>
     public int LootEquipmentMinGold { get; set; }
+    /// <summary>Items always picked up, whatever the other loot choices (names, comma separated,
+    /// part of the name is enough), e.g. "Cesaret Pelerini". A message is sent when one drops.</summary>
+    public string LootAlways { get; set; } = "";
     /// <summary>Another player staying this many minutes within 30 m while the experience drops: find another place (0 = off).</summary>
     public double AvoidPlayerMinutes { get; set; } = 3;
     /// <summary>How much the experience a minute has to drop (percent) against before the player came.</summary>

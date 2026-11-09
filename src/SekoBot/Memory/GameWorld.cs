@@ -462,6 +462,12 @@ internal sealed class GameWorldReader : IDisposable
         long loader = Pointer(instance + Offset(instanceClass, "m2data_C", "loader"));
         var (stats, characterLevel) = ReadStats(loader);
         var progress = ReadProgress(loader);
+        // The game's list of every item (names, types, prices): read once, then every item is known.
+        if (!_itemTableRead && DateTime.UtcNow - _itemTableTriedAt > TimeSpan.FromMinutes(1))
+        {
+            _itemTableTriedAt = DateTime.UtcNow;
+            _itemTableRead = ReadItemTable(instance) > 0;
+        }
         // Counts from the inventory window: the list in charData keeps the amount an item had when
         // it arrived (seen: 200 while the stack on key 1 was down to 101); the window's slots are
         // kept up to date. Read once a second (192 slots).
@@ -564,6 +570,53 @@ internal sealed class GameWorldReader : IDisposable
                     open.Add(ClassName(cls));
             }
         return open;
+    }
+
+    private bool _itemTableRead;
+    private DateTime _itemTableTriedAt = DateTime.MinValue;
+
+    /// <summary>Where the game keeps its item list in m2data (a map of item number → iitem; found in
+    /// the game: 10 387 items at +0x500, its name isn't in the class' field list).</summary>
+    internal const int ItemTableOffset = 0x500;
+    private const int ItemTableStride = 0x160;   // key (8) + iitem (0x150) + hash (8)
+
+    /// <summary>
+    /// Reads the game's item list into <see cref="ItemBook"/>: for every item its name, type,
+    /// sub-type and price (seen: 39006 "Cesaret Pelerini", ITEM_USE / USE_SPECIAL). Each element is
+    /// checked (its key is the item's own number), so a wrong place reads nothing.
+    /// </summary>
+    /// <returns>How many items were read.</returns>
+    private int ReadItemTable(long instance)
+    {
+        long map = instance + ItemTableOffset;
+        long data = Pointer(map);
+        int count = Int32(map + 8) ?? 0;
+        if (!MemoryReads.IsPointer(data) || count is < 100 or > 200_000)
+            return 0;
+        var chunk = new byte[256 * ItemTableStride];
+        int read = 0;
+        for (int first = 0; first < count; first += 256)
+        {
+            int n = Math.Min(256, count - first);
+            if (!_memory.Read(data + (long)first * ItemTableStride, chunk, n * ItemTableStride))
+                continue;
+            for (int i = 0; i < n; i++)
+            {
+                int at = i * ItemTableStride;
+                int key = BitConverter.ToInt32(chunk, at), id = BitConverter.ToInt32(chunk, at + 8);
+                if (key <= 1 || key != id)
+                    continue;
+                long item = data + (long)(first + i) * ItemTableStride + 8;
+                string name = ReadFString(item + 0x8, 96);
+                if (name.Length == 0)
+                    continue;
+                ItemBook.Learn(new ItemInfo(key, name, ReadFString(item + 0x18, 40), ReadFString(item + 0x28, 40),
+                    BitConverter.ToInt32(chunk, at + 8 + 0x80)));
+                read++;
+            }
+        }
+        // A handful only means this isn't the list (moved by a game update): try again later.
+        return read >= 100 ? read : 0;
     }
 
     private List<InventoryItem> _bag = [];
