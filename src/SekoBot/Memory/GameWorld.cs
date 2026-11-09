@@ -352,6 +352,17 @@ internal sealed class GameWorldReader : IDisposable
         ("loader", "eventDatas", 0x620),
         ("m2data_C", "uiMain", 0x1210),
         ("m2data_C", "dropWindow", 0x1440),
+        ("UI_C", "dmBox", 0x328),
+        ("dmBox_C", "IsOpen", 0x368),
+        ("dmBox_C", "boxData", 0x288),
+        ("dmBox_C", "textbox", 0x340),
+        ("dmBox_C", "c_Button", 0x2B0),
+        ("dmBox_C", "messages", 0x310),
+        ("dmBox_C", "dmDatass", 0x370),
+        ("dmPlayerBox_C", "nameText", 0x2D8),
+        ("dmText_C", "Name", 0x2A8),
+        ("dmText_C", "message", 0x2B8),
+        ("dmText_C", "isme", 0x2D8),
         ("msgbox_C", "evet", 0x288),
         ("Widget", "Visibility", 0xCB),
         ("UI_C", "reSpawn", 0x818),
@@ -886,6 +897,18 @@ internal sealed class GameWorldReader : IDisposable
                 threads.Add(new WhisperThread(with, count, last));
             }
 
+            // The DM window keeps the conversations (the list above is only where new ones pass through).
+            long uiMain = Pointer(instance + Offset(instanceClass, "m2data_C", "uiMain"));
+            if (MemoryReads.IsPointer(uiMain))
+                foreach (var thread in ReadDmThreads(uiMain))
+                {
+                    int known = threads.FindIndex(t => string.Equals(t.With, thread.With, StringComparison.OrdinalIgnoreCase));
+                    if (known < 0)
+                        threads.Add(thread);
+                    else if (thread.Count > threads[known].Count)
+                        threads[known] = threads[known] with { Count = thread.Count, Level = thread.Level };
+                }
+
             var requests = new List<PlayerRequest>();
             foreach (var (field, kind) in new[] { ("tradeDatas", RequestKind.Trade), ("groupWant", RequestKind.Party), ("friendRequests", RequestKind.Friend) })
             {
@@ -944,6 +967,111 @@ internal sealed class GameWorldReader : IDisposable
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             return null;
+        }
+    }
+
+    // ── The private message (DM) window, for answering from Telegram ──
+
+    /// <summary>The conversations of the DM window (dmBox.dmDatass, a blueprint struct of 0x50:
+    /// messages count +0x10, name +0x18, level +0x28 — seen in the game).</summary>
+    private List<WhisperThread> ReadDmThreads(long ui)
+    {
+        var threads = new List<WhisperThread>();
+        long box = Pointer(ui + Offset(Pointer(ui + ObjClass), "UI_C", "dmBox"));
+        long cls = Pointer(box + ObjClass);
+        if (!MemoryReads.IsPointer(box) || ClassName(cls) != "dmBox_C")
+            return threads;
+        long at = box + Offset(cls, "dmBox_C", "dmDatass");
+        long data = Pointer(at);
+        int count = Int32(at + 8) ?? 0;
+        if (!MemoryReads.IsPointer(data) || count is <= 0 or > 200)
+            return threads;
+        for (int i = 0; i < count; i++)
+        {
+            long thread = data + i * 0x50L;
+            string name = ReadFString(thread + 0x18, 64);
+            int messages = Int32(thread + 0x10) ?? 0;
+            if (name.Length > 0 && messages is >= 0 and < 100_000)
+                threads.Add(new WhisperThread(name, messages, [], Int32(thread + 0x28) ?? 0));
+        }
+        return threads;
+    }
+
+    /// <summary>The DM window as drawn now (read on demand, while sending a message).</summary>
+    public DmLayout? ReadDmWindow()
+    {
+        try
+        {
+            if (!_located)
+                return null;
+            long instance = Pointer(_moduleBase + _gameInstance);
+            long instanceClass = Pointer(instance + ObjClass);
+            if (ClassName(instanceClass) != "m2data_C")
+                return null;
+            long ui = Pointer(instance + Offset(instanceClass, "m2data_C", "uiMain"));
+            long uiClass = Pointer(ui + ObjClass);
+            long box = Pointer(ui + Offset(uiClass, "UI_C", "dmBox"));
+            long cls = Pointer(box + ObjClass);
+            if (!MemoryReads.IsPointer(box) || ClassName(cls) != "dmBox_C")
+                return null;
+            bool open = Byte(box + Offset(cls, "dmBox_C", "IsOpen")) is byte o && o != 0;
+
+            // The "Mesaj" button: the middle one of the three buttons on the left (Görevler, Mesaj, Etkinlik).
+            if (!_widgetFields.TryGetValue(uiClass, out var uiFields))
+                _widgetFields[uiClass] = uiFields = ObjectFields(uiClass);
+            var left = uiFields.Where(f => f.Name == "gorevButton").Select(f => DrawnAt(Pointer(ui + f.Offset)))
+                .OfType<Rectangle>().OrderBy(r => r.Y).ToList();
+            Point? opener = left.Count == 3 ? new Point(left[1].X + left[1].Width / 2, left[1].Y + left[1].Height / 2) : null;
+
+            var people = new List<DmPerson>();
+            var shown = new List<DmShown>();
+            var textBox = Rectangle.Empty;
+            var send = Rectangle.Empty;
+            if (open)
+            {
+                foreach (long widget in Children(Pointer(box + Offset(cls, "dmBox_C", "boxData"))))
+                {
+                    long c = Pointer(widget + ObjClass);
+                    if (ClassName(c) == "dmPlayerBox_C" && DrawnAt(widget) is { } r)
+                        people.Add(new DmPerson(ReadFString(widget + Offset(c, "dmPlayerBox_C", "nameText"), 64), r));
+                }
+                foreach (long widget in Children(Pointer(box + Offset(cls, "dmBox_C", "messages"))))
+                {
+                    long c = Pointer(widget + ObjClass);
+                    if (ClassName(c) == "dmText_C")
+                        shown.Add(new DmShown(ReadFString(widget + Offset(c, "dmText_C", "Name"), 64),
+                            ReadFString(widget + Offset(c, "dmText_C", "message"), 600),
+                            Byte(widget + Offset(c, "dmText_C", "isme")) is byte me && me != 0));
+                }
+                textBox = DrawnAt(Pointer(box + Offset(cls, "dmBox_C", "textbox"))) ?? Rectangle.Empty;
+                send = DrawnAt(Pointer(box + Offset(cls, "dmBox_C", "c_Button"))) ?? Rectangle.Empty;
+            }
+            return new DmLayout(open, opener, people, textBox, send, shown);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The widgets inside a panel (its slots' content).</summary>
+    private IEnumerable<long> Children(long panel)
+    {
+        if (!MemoryReads.IsPointer(panel))
+            yield break;
+        long slots = panel + Offset(Pointer(panel + ObjClass), "PanelWidget", "Slots");
+        long data = Pointer(slots);
+        int count = Int32(slots + 8) ?? 0;
+        if (!MemoryReads.IsPointer(data) || count is <= 0 or > 500)
+            yield break;
+        for (int i = 0; i < count; i++)
+        {
+            long slot = Pointer(data + i * 8L);
+            if (!MemoryReads.IsPointer(slot))
+                continue;
+            long content = Pointer(slot + Offset(Pointer(slot + ObjClass), "PanelSlot", "Content"));
+            if (MemoryReads.IsPointer(content))
+                yield return content;
         }
     }
 

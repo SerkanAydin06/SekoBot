@@ -114,6 +114,9 @@ internal sealed class InputExecutor : IDisposable
             case MouseDragAction drag:
                 await DragAsync(drag.From, drag.To, token);
                 break;
+            case TypeTextAction type:
+                await TypeAsync(type.Text, token);
+                break;
             case KeyTapAction tap:
                 SendKey(tap.Key, down: true);
                 await Task.Delay(_random.Next(40, 90), token);
@@ -273,6 +276,41 @@ internal sealed class InputExecutor : IDisposable
             if (down)
                 SendMouse(Win32.MOUSEEVENTF_LEFTUP);
             Win32.SetCursorPos(previous.X, previous.Y);
+            if (before != _window.Handle && before != 0)
+                Win32.SetForegroundWindow(before);
+        }
+    }
+
+    /// <summary>
+    /// Types text the way a keyboard does, one letter at a time (Unicode input, so Turkish letters
+    /// work), with the game in front. The window that was in front is put back afterwards.
+    /// </summary>
+    private async Task TypeAsync(string text, CancellationToken token)
+    {
+        nint before = Win32.GetForegroundWindow();
+        bool front = before == _window.Handle || BringGameToFront();
+        if (!front)
+        {
+            _log("Oyun penceresi öne getirilemedi; mesaj yazılamadı.");
+            return;
+        }
+        if (before != _window.Handle)
+            await Task.Delay(300, token);
+        try
+        {
+            foreach (char c in text)
+            {
+                var down = new Win32.INPUT { type = Win32.INPUT_KEYBOARD };
+                down.u.ki.wScan = c;
+                down.u.ki.dwFlags = Win32.KEYEVENTF_UNICODE;
+                var up = down;
+                up.u.ki.dwFlags = Win32.KEYEVENTF_UNICODE | Win32.KEYEVENTF_KEYUP;
+                Win32.SendInput(2, [down, up], Marshal.SizeOf<Win32.INPUT>());
+                await Task.Delay(_random.Next(35, 70), token);
+            }
+        }
+        finally
+        {
             if (before != _window.Handle && before != 0)
                 Win32.SetForegroundWindow(before);
         }

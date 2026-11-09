@@ -121,6 +121,10 @@ Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü h
 
 **Kapanmayan pencere:** bot başladıktan sonra açılan bilinmeyen bir pencere Esc ile 7 saniyede kapanmazsa yok sayılır ve bot devam eder (sohbet geçmişi penceresi açık kalınca bot her Esc'de oyun menüsünü açıp kapatıyor ve duruyordu).
 
+**Telegram'dan fısıltıya cevap:** Telegram'daki "💬 Fısıltı — İsim …" bildirimine **Yanıtla** ile yazdığın metni bot oyunda o kişiye gönderir; ya da botuna `yaz İsim mesaj` yaz. Bot dövüş bitince (en geç 30 sn) tutulan tuşları bırakır, soldaki **Mesaj** simgesiyle mesaj penceresini açar, kişinin konuşmasını seçer, yazı kutusuna yazıp **Gönder**'e basar, mesajın gittiğini denetler ve pencereyi kapatır; sonucu Telegram'a yazar. Yalnızca sana daha önce yazmış (konuşması pencerede olan) birine yazılabilir.
+
+Fısıltı bildirimi artık mesaj penceresinin konuşma listesinden de okunur; mesaj metni okunamazsa "yeni mesaj yazdı" diye bildirilir.
+
 **Sersemleme:** karakter sersemleyince (bellekte "stuned") bot bekler; o anı takılma ya da ulaşılamayan grup saymaz.
 
 **Komutlar** (Bildirim sekmesinde **Komutlar (durum/dur/başla)**, varsayılan açık): kendi botuna Telegram'dan yaz, SekoBot cevap verir:
