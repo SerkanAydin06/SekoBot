@@ -35,6 +35,22 @@ public class FarmSpotTests
         Assert.InRange(near.X, 18500, 21500);
     }
 
+    // As read in the game: Aç Yaban Domuzu 198 HP / 61 EXP.
+    private static WorldMob Boar(double x, double y) => new(++_id, 101, "Aç Yaban Domuzu", 7, 198, 198, new Vec3(x, y, 900), Exp: 61);
+
+    [Fact]
+    public void A_few_strong_mobs_beat_a_crowd_of_weak_ones()
+    {
+        // 15 boars right here (old score: 15 × 32 = 480), 4 black bears 40 m east (4 × 99 = 396).
+        var mobs = new List<WorldMob>();
+        for (int i = 0; i < 15; i++)
+            mobs.Add(Boar(20000 + (i % 5) * 300 - 600, 18000 + (i / 5) * 300 - 300));
+        mobs.AddRange([Black(24000, 18000), Black(24200, 18100), Black(23900, 17800), Black(24100, 18300)]);
+        var spot = FarmSpotFinder.Best(mobs, new BotProfile(), Start, "c2", attackPower: 189)!;
+        Assert.InRange(spot.X, 23000, 25000);       // the black bears: ~3 × the EXP an hour
+        Assert.Contains("Siyah Ayı", spot.Names);
+    }
+
     [Fact]
     public void Nothing_wanted_means_no_spot()
     {
