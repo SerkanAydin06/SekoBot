@@ -166,7 +166,7 @@ internal sealed partial class BotEngine
     /// <summary>An item ticked in the item list, or on the "always pick up" names (part of a name is enough).</summary>
     internal static bool AlwaysLoot(int vnum, BotProfile profile)
     {
-        if (vnum > 1 && profile.LootPick.Contains(vnum))
+        if (vnum > 1 && (profile.LootPick.Contains(vnum) || profile.EventLoot && Array.IndexOf(Loot.EventItems, vnum) >= 0))
             return true;
         if (profile.LootAlways.Length == 0 || vnum <= 1 || ItemBook.Get(vnum) is not { } info)
             return false;

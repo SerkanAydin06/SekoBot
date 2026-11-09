@@ -35,7 +35,7 @@ internal sealed class MainForm : Form
     private readonly Button _dashButton;
     private readonly Panel _dashboard;
     private readonly Card _settingsCard;
-    private readonly Label _pageTitle, _pageInfo, _bagState;
+    private readonly Label _pageTitle, _pageInfo, _bagState, _events;
     private static readonly string[] PageInfo =
     [
         "Mobların nasıl kesileceği: menzil ve grupları toplayıp birden kesme.",
@@ -130,6 +130,8 @@ internal sealed class MainForm : Form
                              "🔔   Bildirim", "⌨   Tuşlar", "⚙   Gelişmiş"];
         _tabButtons = new Button[tabNames.Length];
         _tabPages = new Panel[tabNames.Length];
+        Theme.Label(side, "ETKİNLİK", new Rectangle(16, 440, 150, 18), 8f, Theme.Accent, FontStyle.Bold);
+        _events = Theme.Label(side, "Bot çalışınca görünür.", new Rectangle(16, 460, 152, 140), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
 
         // ── Dashboard: live preview + session stats ──────────────
         _dashboard = new Panel { Bounds = new Rectangle(202, 136, 966, 400), BackColor = Theme.Background };
@@ -316,7 +318,15 @@ internal sealed class MainForm : Form
         Check(notify, "Komutlar (durum/dur/başla)", 580, 68, 156, _profile.TelegramCommands,
             v => _profile.TelegramCommands = v);
         Hint(notify, "Kurulum: Telegram'da @BotFather'a /newbot yaz, verdiği anahtarı buraya yapıştır. Sonra kendi botuna " +
-            "\"merhaba\" yaz ve 'Sohbeti bul'a bas. Botuna \"durum\", \"dur\", \"başla\" yazınca cevap verir (yalnız bu sohbete).", 102);
+            "\"merhaba\" yaz ve 'Sohbeti bul'a bas. Botuna \"durum\", \"dur\", \"başla\" yazınca cevap verir (yalnız bu sohbete). " +
+            "Fısıltı, istek, adının geçmesi ve GM yazması uyarı sesiyle de bildirilir; hepsi günlüğe de yazılır.", 190);
+        Theme.Label(notify, "NELER BİLDİRİLSİN", new Rectangle(0, 108, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
+        Check(notify, "Fısıltı (özel mesaj)", 0, 128, 170, _profile.NotifyWhispers, v => _profile.NotifyWhispers = v);
+        Check(notify, "Takas / grup / arkadaş isteği", 176, 128, 220, _profile.NotifyRequests, v => _profile.NotifyRequests = v);
+        Check(notify, "Sohbette adım ya da GM", 402, 128, 190, _profile.NotifyMentions, v => _profile.NotifyMentions = v);
+        Check(notify, "Dağıtılmamış puan", 598, 128, 160, _profile.NotifyPoints, v => _profile.NotifyPoints = v);
+        Check(notify, "Etkinlik başlayınca", 0, 156, 170, _profile.NotifyEvents, v => _profile.NotifyEvents = v);
+        Check(notify, "Etkinlik eşyasını otomatik topla (seviyem yetiyorsa)", 176, 156, 380, _profile.EventLoot, v => _profile.EventLoot = v);
 
         var keys = _tabPages[6];
         var k = _profile.Keys;
@@ -860,6 +870,8 @@ internal sealed class MainForm : Form
     {
         _calibrationState.Text = _engine?.World != null ? "Her şey bellekten ✓" : "Bellek bekleniyor";
         _calibrationState.ForeColor = _engine?.World != null ? Theme.Green : Theme.Muted;
+        _events.Text = _engine?.EventsSummary() ?? "Bot çalışınca görünür.";
+        _events.ForeColor = _events.Text.StartsWith('▶') ? Theme.Green : Theme.Muted;
         if (_bagState.Visible)
         {
             _bagState.Text = _engine?.BagSummary() ?? "Çanta: oyun bağlı değil.";
