@@ -115,6 +115,8 @@ Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü h
 
 **Günlük dosyası:** günlük `%LOCALAPPDATA%\SekoBot\gunluk.txt` dosyasına da yazılır (2 MB'ı geçince `gunluk-eski.txt` olur).
 
+**Dolu çantada boşuna yürümez:** çantaya girmeyecek eşyaya gidilmez. Çanta doluyken yalnızca yang ve çantadaki dolmamış bir yığına eklenecek eşyalar (ör. aynı iksir) toplanır; zırh / uzun silah için alt alta 2 boş yer yoksa onlara da gidilmez.
+
 **Düşük seviye Metin taşları atlanır:** seviyesi karakterden 5'ten fazla düşük Metin taşına gidilmez (Sv 20'de 5 Savaş Metini'nden (Sv 15) hiçbir şey düşmedi; bir taş 1 dakikadan uzun sürüp 2000 EXP veriyor). Karakter seviye atladıkça sınır kendiliğinden yükselir.
 
 **Kapanmayan pencere:** bot başladıktan sonra açılan bilinmeyen bir pencere Esc ile 7 saniyede kapanmazsa yok sayılır ve bot devam eder (sohbet geçmişi penceresi açık kalınca bot her Esc'de oyun menüsünü açıp kapatıyor ve duruyordu).
