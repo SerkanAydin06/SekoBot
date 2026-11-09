@@ -68,27 +68,38 @@ internal sealed partial class BotEngine
 
     /// <summary>
     /// The spawn groups (the game spawns mobs in threes; hitting one brings the others). Seen in the
-    /// game: a group's mobs get numbers next to each other (1880, 1881, 1882) and stand together.
-    /// So mobs whose numbers differ by at most 2 and that stand within 10 m are one group (and the
-    /// groups of those, and so on). The group is named by its lowest number; Metin stones have none.
+    /// game: a group's mobs get numbers next to each other and stand together, and the numbers are
+    /// handed out in threes that all start at the same place (1877–79, 1880–82, 1883–85, … — the
+    /// lowest of each three leaves the same remainder divided by 3). Two threes standing side by side
+    /// (1886–88 next to 1889–91) are two groups, not one. So: mobs in the same three of numbers that
+    /// stand within 10 m are one group, named by the lowest number; Metin stones have none. Where the
+    /// threes start is worked out from the mobs themselves (the start that keeps most neighbours together).
     /// </summary>
     internal static Dictionary<int, int> SpawnGroups(IReadOnlyList<WorldMob> mobs)
     {
-        var parent = mobs.Where(m => !m.IsMetin).ToDictionary(m => m.Id, m => m.Id);
+        var list = mobs.Where(m => !m.IsMetin).OrderBy(m => m.Id).ToList();
+        // Neighbours: numbers at most 2 apart, standing within 10 m.
+        var pairs = new List<(WorldMob A, WorldMob B)>();
+        for (int i = 0; i < list.Count; i++)
+        for (int j = i + 1; j < list.Count && list[j].Id - list[i].Id <= 2; j++)
+            if (list[i].Position.DistanceXY(list[j].Position) <= 1000)
+                pairs.Add((list[i], list[j]));
+        static int Three(int id, int start) => (int)Math.Floor((id - start) / 3.0);
+        int start = Enumerable.Range(0, 3).MaxBy(r => pairs.Sum(pair => Three(pair.A.Id, r) == Three(pair.B.Id, r) ? 1 : -1));
+
+        var parent = list.ToDictionary(m => m.Id, m => m.Id);
         int Root(int id)
         {
             while (parent[id] != id)
                 id = parent[id] = parent[parent[id]];
             return id;
         }
-        var list = mobs.Where(m => !m.IsMetin).OrderBy(m => m.Id).ToList();
-        for (int i = 0; i < list.Count; i++)
-        for (int j = i + 1; j < list.Count && list[j].Id - list[i].Id <= 2; j++)
-            if (list[i].Position.DistanceXY(list[j].Position) <= 1000)
+        foreach (var (a, b) in pairs)
+            if (Three(a.Id, start) == Three(b.Id, start))
             {
-                int a = Root(list[i].Id), b = Root(list[j].Id);
-                if (a != b)
-                    parent[Math.Max(a, b)] = Math.Min(a, b);
+                int ra = Root(a.Id), rb = Root(b.Id);
+                if (ra != rb)
+                    parent[Math.Max(ra, rb)] = Math.Min(ra, rb);
             }
         return parent.Keys.ToDictionary(id => id, Root);
     }
