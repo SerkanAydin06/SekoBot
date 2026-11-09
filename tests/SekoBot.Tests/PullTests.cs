@@ -31,6 +31,44 @@ public class SpawnGroupTests
     }
 }
 
+public class SpawnThreeTests
+{
+    private static WorldMob Mob(int id, double x, double y) => new(id, 101, "Ayı", 5, 100, 100, new Vec3(x, y, 0));
+
+    [Fact]
+    public void Two_threes_side_by_side_are_two_groups()
+    {
+        // As read in the game: Alfa Gri Kurt 1886–88 right next to Siyah Ayı 1889–91 (1888 and 1889 3 m apart).
+        var groups = BotEngine.SpawnGroups(
+        [
+            Mob(1886, 15035, 9452), Mob(1887, 14479, 9650), Mob(1888, 14183, 9511),
+            Mob(1889, 14023, 9208), Mob(1890, 13945, 8976), Mob(1891, 13801, 9171),
+            Mob(1880, 13121, 9065), Mob(1881, 12794, 9024), Mob(1882, 13526, 8786),
+        ]);
+        Assert.Equal(1886, groups[1888]);
+        Assert.Equal(1889, groups[1890]);
+        Assert.Equal(1889, groups[1891]);
+        Assert.NotEqual(groups[1888], groups[1889]);
+        Assert.Equal(1880, groups[1882]);
+    }
+
+    [Fact]
+    public void Works_out_where_the_threes_start()
+    {
+        // Threes starting one number later (1881–83, 1884–86), the first one's lowest already killed.
+        var groups = BotEngine.SpawnGroups(
+        [
+            Mob(1882, 1000, 1000), Mob(1883, 1100, 1000),
+            Mob(1884, 1300, 1000), Mob(1885, 1400, 1050), Mob(1886, 1350, 900),
+            Mob(1887, 5000, 5000), Mob(1888, 5100, 5000), Mob(1889, 5000, 5100),
+        ]);
+        Assert.Equal(1882, groups[1883]);
+        Assert.Equal(1884, groups[1886]);
+        Assert.NotEqual(groups[1883], groups[1884]);
+        Assert.Equal(1887, groups[1889]);
+    }
+}
+
 public class PullTests
 {
     private const int W = 1920, H = 1080;
