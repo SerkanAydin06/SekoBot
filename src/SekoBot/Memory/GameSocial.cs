@@ -5,7 +5,7 @@ internal readonly record struct Whisper(string From, int Level, string Message);
 
 /// <summary>A conversation in the private messages window: the other player and the messages so far
 /// (<paramref name="Count"/> all of them, <paramref name="Last"/> the newest few).</summary>
-internal sealed record WhisperThread(string With, int Count, IReadOnlyList<Whisper> Last);
+internal sealed record WhisperThread(string With, int Count, IReadOnlyList<Whisper> Last, int Level = 0);
 
 /// <summary>Someone asking for something: a trade, a party, a friendship.</summary>
 internal enum RequestKind { Trade, Party, Friend }

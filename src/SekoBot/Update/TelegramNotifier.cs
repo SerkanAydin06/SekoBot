@@ -38,10 +38,11 @@ internal static class TelegramNotifier
     /// Messages written to the bot since <paramref name="offset"/>, waiting up to
     /// <paramref name="waitSeconds"/> for one (Telegram's long polling).
     /// </summary>
-    public static async Task<(List<(long Id, string Chat, string Text)> Messages, string? Error)> ReadAsync(
+    /// <returns>Each message with the text of the message it answers ("Yanıtla" in Telegram), if any.</returns>
+    public static async Task<(List<(long Id, string Chat, string Text, string ReplyTo)> Messages, string? Error)> ReadAsync(
         string token, long offset, int waitSeconds, CancellationToken cancel)
     {
-        var messages = new List<(long, string, string)>();
+        var messages = new List<(long, string, string, string)>();
         try
         {
             using var response = await LongHttp.GetAsync(Url(token, $"getUpdates?offset={offset}&timeout={waitSeconds}"), cancel);
@@ -51,15 +52,17 @@ internal static class TelegramNotifier
             foreach (var update in json.RootElement.GetProperty("result").EnumerateArray())
             {
                 long id = update.GetProperty("update_id").GetInt64();
-                string chat = "", text = "";
+                string chat = "", text = "", replyTo = "";
                 if (update.TryGetProperty("message", out var message))
                 {
                     if (message.TryGetProperty("chat", out var c) && c.TryGetProperty("id", out var chatId))
                         chat = chatId.GetRawText();
                     if (message.TryGetProperty("text", out var t))
                         text = t.GetString() ?? "";
+                    if (message.TryGetProperty("reply_to_message", out var r) && r.TryGetProperty("text", out var rt))
+                        replyTo = rt.GetString() ?? "";
                 }
-                messages.Add((id, chat, text));
+                messages.Add((id, chat, text, replyTo));
             }
             return (messages, null);
         }

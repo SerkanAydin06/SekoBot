@@ -17,6 +17,13 @@ internal sealed record MouseDragAction(Point From, Point To) : BotAction
     public override string ToString() => $"Sürükle ({From.X}, {From.Y}) → ({To.X}, {To.Y})";
 }
 
+/// <summary>Types text into the game (the box that has the focus), letter by letter; the game is
+/// brought to the front for it.</summary>
+internal sealed record TypeTextAction(string Text) : BotAction
+{
+    public override string ToString() => $"Yaz \"{Text}\"";
+}
+
 internal sealed record KeyTapAction(Keys Key) : BotAction
 {
     public override string ToString() => $"Tuş {Key}";

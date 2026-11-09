@@ -20,6 +20,10 @@ internal sealed class SocialWatch
     private readonly HashSet<int> _events = [];
     private int _statPoints, _skillPoints;
     private bool _started;
+    /// <summary>Players we just wrote to (from Telegram): our own message isn't told back.</summary>
+    private readonly Dictionary<string, DateTime> _ownTo = new(StringComparer.OrdinalIgnoreCase);
+
+    public void ExpectOwn(string to, DateTime now) => _ownTo[to.Trim()] = now;
 
     /// <summary>The events going on now that the character's level allows (their items are picked up).</summary>
     public IReadOnlyList<GameEvent> ActiveEvents { get; private set; } = [];
@@ -34,6 +38,7 @@ internal sealed class SocialWatch
         _events.Clear();
         _statPoints = _skillPoints = 0;
         _started = false;
+        _ownTo.Clear();
     }
 
     public List<SocialNotice> Update(SocialSnapshot social, BotProfile p, int level, DateTime now)
@@ -50,9 +55,19 @@ internal sealed class SocialWatch
             _threads[thread.With] = thread.Count;
             if (thread.Count <= before || !p.NotifyWhispers)
                 continue;
-            foreach (var message in thread.Last.TakeLast(Math.Min(thread.Count - before, thread.Last.Count)))
-                if (message.Message.Length > 0 && !SameName(message.From, me))
+            var fresh = thread.Last.TakeLast(Math.Min(thread.Count - before, thread.Last.Count)).Where(m => m.Message.Length > 0).ToList();
+            foreach (var message in fresh)
+                if (!SameName(message.From, me))
                     notices.Add(new($"💬 Fısıltı — {Who(message.From.Length > 0 ? message.From : thread.With, message.Level)}: {message.Message}", true));
+            // The message itself isn't always readable (the DM window keeps only how many there are):
+            // still told — unless it was our own answer.
+            if (fresh.Count == 0)
+            {
+                if (_ownTo.TryGetValue(thread.With, out var sent) && now - sent < TimeSpan.FromMinutes(2))
+                    _ownTo.Remove(thread.With);
+                else
+                    notices.Add(new($"💬 Fısıltı — {Who(thread.With, thread.Level)}: yeni mesaj yazdı (oyunda mesaj penceresinde).", true));
+            }
         }
 
         // Requests: told when they show up; forgotten when they go, so a new one is told again.

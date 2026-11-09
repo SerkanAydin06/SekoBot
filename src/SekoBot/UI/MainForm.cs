@@ -1010,18 +1010,38 @@ internal sealed class MainForm : Form
                 lastError = null;
                 if (skipOld)
                     offset = 0;
-                foreach (var (id, from, text) in messages)
+                foreach (var (id, from, text, replyTo) in messages)
                 {
                     offset = Math.Max(offset, id + 1);
                     if (skipOld || from != chat || text.Length == 0)
                         continue;
-                    string reply = TelegramCommand(TelegramNotifier.Command(text));
+                    string reply = TelegramMessage(text, replyTo);
                     if (await TelegramNotifier.SendAsync(token, chat, reply) is string sendError)
                         WriteLog(sendError);
                 }
             }
         }
         catch (OperationCanceledException) { }
+    }
+
+    /// <summary>
+    /// An answer to a whisper notice ("Yanıtla" on "💬 Fısıltı — Ali …") is sent to that player in the
+    /// game; "yaz Ali merhaba" too. Anything else is a command (durum / dur / başla).
+    /// </summary>
+    private string TelegramMessage(string text, string replyTo)
+    {
+        if (WhisperSender.WhisperFrom(replyTo) is string player)
+            return _engine?.QueueWhisper(player, text.Trim()) ?? "Oyun bağlı değil.";
+        string command = TelegramNotifier.Command(text);
+        if (command is "yaz" or "cevap")
+        {
+            string rest = text.Trim().TrimStart('/');
+            rest = rest[(rest.IndexOf(' ') is int space and > 0 ? space + 1 : rest.Length)..];
+            return WhisperSender.Parse(rest) is (string to, string message)
+                ? _engine?.QueueWhisper(to, message) ?? "Oyun bağlı değil."
+                : "Kullanım: yaz İsim mesaj  (ya da fısıltı bildirimine \"Yanıtla\" ile cevap yaz)";
+        }
+        return TelegramCommand(command);
     }
 
     private string TelegramCommand(string command)
@@ -1047,7 +1067,7 @@ internal sealed class MainForm : Form
                 }
                 return "Başlatılamadı: " + (_stopReason ?? (_engine == null ? "oyun açık değil" : "bilinmiyor"));
             default:
-                return "Komutlar: durum · dur · başla";
+                return "Komutlar: durum · dur · başla · yaz İsim mesaj\nFısıltıya cevap: bildirime \"Yanıtla\" ile yaz.";
         }
     }
 

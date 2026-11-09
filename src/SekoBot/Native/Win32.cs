@@ -73,6 +73,7 @@ internal static class Win32
     internal const uint INPUT_KEYBOARD = 1;
     internal const uint KEYEVENTF_KEYUP = 0x0002;
     internal const uint KEYEVENTF_SCANCODE = 0x0008;
+    internal const uint KEYEVENTF_UNICODE = 0x0004;
     internal const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
     internal const uint MOUSEEVENTF_MOVE = 0x0001;
     internal const uint MOUSEEVENTF_VIRTUALDESK = 0x4000;

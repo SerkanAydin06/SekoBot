@@ -189,6 +189,7 @@ internal sealed partial class BotEngine : IDisposable
                                 NotifyEvents(world);
                             }
                             ReadBagForCleaning();
+                            ReadDmForWhisper();
                             var (phase, actions) = TickBot(state);
                             Volatile.Read(ref _recorder)?.Record(frame, state, phase, actions, IsImportant(actions, profile));
                         }
@@ -223,7 +224,7 @@ internal sealed partial class BotEngine : IDisposable
         {
             if (_input == null)
                 return (BotPhase.Stopped, Array.Empty<BotAction>());
-            actions = CleanTick(state, Profile) ?? _brain.Tick(state);
+            actions = WhisperTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);
             phase = _brain.Phase;
             foreach (var action in actions)
             {
@@ -320,6 +321,8 @@ internal sealed partial class BotEngine : IDisposable
             _botStarted = _clock.Elapsed;
             _brain.Start(_clock.Elapsed);
             _cleaner.Abort(null, Profile, "");
+            _whisper.Abort("");
+            _pendingWhisper = null;
             _cleanTries = 0;
             _notes.Reset();
             RememberBagAtStart(World);
