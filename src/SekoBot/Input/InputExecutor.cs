@@ -111,6 +111,9 @@ internal sealed class InputExecutor : IDisposable
             case ClickAction click:
                 await ClickAsync(click.Client, 30, 60, token);
                 break;
+            case MouseDragAction drag:
+                await DragAsync(drag.From, drag.To, token);
+                break;
             case KeyTapAction tap:
                 SendKey(tap.Key, down: true);
                 await Task.Delay(_random.Next(40, 90), token);
@@ -220,6 +223,59 @@ internal sealed class InputExecutor : IDisposable
         }
         if (!front)
             _log("Oyun penceresi öne getirilemedi; tıklama arka plandan gönderildi.");
+    }
+
+    /// <summary>
+    /// Drags like a person: the game in front, the real cursor onto the item, a moment of hover,
+    /// press, move over in small steps (the game only starts a drag after the cursor moved a bit
+    /// with the button down), let go there. The cursor and the window in front are put back.
+    /// </summary>
+    private async Task DragAsync(Point from, Point to, CancellationToken token)
+    {
+        Win32.GetCursorPos(out var previous);
+        nint before = Win32.GetForegroundWindow();
+        bool front = before == _window.Handle || BringGameToFront();
+        if (!front)
+        {
+            _log("Oyun penceresi öne getirilemedi; eşya sürüklenemedi.");
+            return;
+        }
+        if (before != _window.Handle)
+            await Task.Delay(300, token);
+        var start = WindowService.ClientToScreen(_window, from);
+        var end = WindowService.ClientToScreen(_window, to);
+        bool down = false;
+        try
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                MoveMouse(new Point(start.X + 6 - i * 2, start.Y + 3 - i));
+                await Task.Delay(50, token);
+            }
+            MoveMouse(start);
+            await Task.Delay(250, token);
+            SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);
+            down = true;
+            await Task.Delay(200, token);
+            const int steps = 20;
+            for (int i = 1; i <= steps; i++)
+            {
+                MoveMouse(new Point(start.X + (end.X - start.X) * i / steps, start.Y + (end.Y - start.Y) * i / steps));
+                await Task.Delay(25, token);
+            }
+            await Task.Delay(250, token);
+            SendMouse(Win32.MOUSEEVENTF_LEFTUP);
+            down = false;
+            await Task.Delay(400, token);
+        }
+        finally
+        {
+            if (down)
+                SendMouse(Win32.MOUSEEVENTF_LEFTUP);
+            Win32.SetCursorPos(previous.X, previous.Y);
+            if (before != _window.Handle && before != 0)
+                Win32.SetForegroundWindow(before);
+        }
     }
 
     /// <summary>Puts the game window in front. Windows only lets a program do that right after

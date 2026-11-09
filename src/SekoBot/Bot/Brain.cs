@@ -128,6 +128,10 @@ internal sealed partial class Brain
         if (RetreatTick(state, p, actions))
             return actions;
 
+        // Bag full with items to throw away: get to a quiet spot (the engine then throws them).
+        if (CleanTick(state, p, actions))
+            return actions;
+
         // Now and then a short break, like a person would.
         if (BreakTick(state, p, actions))
             return actions;

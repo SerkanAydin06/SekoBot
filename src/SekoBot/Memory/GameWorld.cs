@@ -46,6 +46,18 @@ internal readonly record struct GroundItem(long Id, Vec3 Position, int Vnum = 0,
     public LootKind Kind => Loot.KindOf(Vnum);
 }
 
+/// <summary>An item in the bag with where its slot is drawn in the game window (client pixels);
+/// <paramref name="Rect"/> is empty for slots on a page that isn't showing.</summary>
+internal readonly record struct BagSlotView(int Slot, int Vnum, int Count, int Page, Rectangle Rect);
+
+/// <summary>
+/// The inventory window as drawn: whether it is open, where, which page (0-3) shows, where the page
+/// buttons are (left to right), the items, and the "Evet" button of the "throw this item away?"
+/// question when that is showing.
+/// </summary>
+internal sealed record BagLayout(bool Open, Rectangle Window, int Page, IReadOnlyList<Point> PageButtons,
+    IReadOnlyList<BagSlotView> Items, Point? Confirm);
+
 /// <summary>What kind of thing an item is, by its number (Metin2's item numbers).</summary>
 internal enum LootKind { Unknown, Yang, Potion, Equipment, Other }
 
@@ -279,6 +291,8 @@ internal sealed class GameWorldReader : IDisposable
         ("playerMove", "dead", 0x778),
         ("playerMove", "isInSafe", 0x87C),
         ("m2data_C", "uiMain", 0x1210),
+        ("m2data_C", "dropWindow", 0x1440),
+        ("msgbox_C", "evet", 0x288),
         ("Widget", "Visibility", 0xCB),
         ("UI_C", "reSpawn", 0x818),
         ("UI_C", "canvasAdds", 0x7E8),
@@ -756,6 +770,129 @@ internal sealed class GameWorldReader : IDisposable
                     fields.Add((Name(name), offset));
         }
         return fields;
+    }
+
+    // ── The inventory window, for throwing items away ──
+
+    /// <summary>UWidget → its Slate widget (TSharedPtr; not reflected, found in the game: 0xE0).</summary>
+    private const int SlateWidget = 0xE0;
+    /// <summary>The Slate widget's last geometry in the window: size (2 floats), scale, top-left (2 floats).</summary>
+    private const int SlateGeometry = 0xA8;
+    private const int SlotsPerPage = 48;
+
+    /// <summary>
+    /// Where a widget was last drawn, in the game window's client pixels (Unreal keeps this on its
+    /// Slate widget: seen matching the window exactly). Null when it can't be read or looks wrong.
+    /// </summary>
+    private Rectangle? DrawnAt(long widget)
+    {
+        long slate = Pointer(widget + SlateWidget);
+        if (!MemoryReads.IsPointer(slate))
+            return null;
+        var bytes = new byte[20];
+        if (!_memory.Read(slate + SlateGeometry, bytes, bytes.Length))
+            return null;
+        float w = BitConverter.ToSingle(bytes, 0), h = BitConverter.ToSingle(bytes, 4), scale = BitConverter.ToSingle(bytes, 8);
+        float x = BitConverter.ToSingle(bytes, 12), y = BitConverter.ToSingle(bytes, 16);
+        if (!(scale is > 0.05f and < 10) || !(w is > 1 and < 20000) || !(h is > 1 and < 20000) ||
+            !(x is > -100 and < 20000) || !(y is > -100 and < 20000))
+            return null;
+        return new Rectangle((int)Math.Round(x), (int)Math.Round(y), (int)Math.Round(w * scale), (int)Math.Round(h * scale));
+    }
+
+    private bool Showing(long widget) =>
+        MemoryReads.IsPointer(widget) && Byte(widget + Offset(Pointer(widget + ObjClass), "Widget", "Visibility")) is byte v && v is not (1 or 2);
+
+    /// <summary>
+    /// The inventory window as it is drawn now (read on demand, while throwing items away): the
+    /// page showing, the page buttons, each item with its slot, and the "Evet" of the drop question.
+    /// </summary>
+    public BagLayout? ReadBagLayout()
+    {
+        try
+        {
+            if (!_located)
+                return null;
+            long instance = Pointer(_moduleBase + _gameInstance);
+            long instanceClass = Pointer(instance + ObjClass);
+            if (ClassName(instanceClass) != "m2data_C")
+                return null;
+            long ui = Pointer(instance + Offset(instanceClass, "m2data_C", "uiMain"));
+            if (!MemoryReads.IsPointer(ui))
+                return null;
+            long inventory = Pointer(ui + Offset(Pointer(ui + ObjClass), "UI_C", "inventory"));
+            long inventoryClass = Pointer(inventory + ObjClass);
+            if (!MemoryReads.IsPointer(inventory) || ClassName(inventoryClass) != "inventory_C")
+                return null;
+
+            bool open = Showing(inventory);
+            var window = open ? DrawnAt(inventory) ?? Rectangle.Empty : Rectangle.Empty;
+            var items = new List<BagSlotView>();
+            int showing = -1;
+            for (int page = 0; page < 4; page++)
+            {
+                long box = Pointer(inventory + Offset(inventoryClass, "inventory_C", $"invitems{page + 1}"));
+                if (!MemoryReads.IsPointer(box))
+                    continue;
+                // A page that isn't showing keeps its old geometry (seen): only the showing page counts.
+                bool shown = open && Showing(box);
+                if (shown)
+                    showing = page;
+                long slots = box + Offset(Pointer(box + ObjClass), "PanelWidget", "Slots");
+                long data = Pointer(slots);
+                int count = Int32(slots + 8) ?? 0;
+                if (!MemoryReads.IsPointer(data) || count is <= 0 or > 256)
+                    continue;
+                for (int i = 0; i < count; i++)
+                {
+                    long panelSlot = Pointer(data + i * 8L);
+                    if (!MemoryReads.IsPointer(panelSlot))
+                        continue;
+                    long widget = Pointer(panelSlot + Offset(Pointer(panelSlot + ObjClass), "PanelSlot", "Content"));
+                    long cls = Pointer(widget + ObjClass);
+                    if (!MemoryReads.IsPointer(widget) || ClassName(cls) != "slot_C")
+                        continue;
+                    int slot = Int32(widget + Offset(cls, "slot_C", "slotid")) ?? 0;
+                    int itemAt = Offset(cls, "slot_C", "slotItem");
+                    int vnum = Int32(widget + itemAt) ?? 0, amount = Int32(widget + itemAt + 4) ?? 0;
+                    if (slot < CharacterProgress.FirstBagSlot || vnum <= 0 || amount <= 0)
+                        continue;
+                    var rect = shown ? DrawnAt(widget) ?? Rectangle.Empty : Rectangle.Empty;
+                    items.Add(new BagSlotView(slot, vnum, amount, (slot - CharacterProgress.FirstBagSlot) / SlotsPerPage, rect));
+                }
+            }
+
+            // The page buttons are four "invButton" fields; their order in memory isn't the order on
+            // screen (seen), so they are sorted left to right.
+            var buttons = new List<Point>();
+            if (!_widgetFields.TryGetValue(inventoryClass, out var inventoryFields))
+                _widgetFields[inventoryClass] = inventoryFields = ObjectFields(inventoryClass);
+            if (open)
+                foreach (var (name, offset) in inventoryFields)
+                {
+                    if (!name.StartsWith("invButton", StringComparison.Ordinal))
+                        continue;
+                    long button = Pointer(inventory + offset);
+                    if (Showing(button) && DrawnAt(button) is { } r)
+                        buttons.Add(new Point(r.X + r.Width / 2, r.Y + r.Height / 2));
+                }
+            buttons.Sort((a, b) => a.X.CompareTo(b.X));
+
+            // "Throw this item away?": m2data.dropWindow (a msgbox_C) with its "evet" button.
+            Point? confirm = null;
+            long question = Pointer(instance + Offset(instanceClass, "m2data_C", "dropWindow"));
+            if (Showing(question) && ClassName(Pointer(question + ObjClass)) == "msgbox_C")
+            {
+                long yes = Pointer(question + Offset(Pointer(question + ObjClass), "msgbox_C", "evet"));
+                if (Showing(yes) && DrawnAt(yes) is { } r)
+                    confirm = new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
+            }
+            return new BagLayout(open, window, showing, buttons, items, confirm);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return null;
+        }
     }
 
     private bool IsWidget(long cls)

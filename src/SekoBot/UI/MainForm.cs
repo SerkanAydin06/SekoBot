@@ -201,7 +201,8 @@ internal sealed class MainForm : Form
             using var form = new ItemListForm(_profile);
             form.ShowDialog(this);
             SaveProfile();
-            WriteLog($"Eşya listesi: {_profile.LootPick.Count} eşya mutlaka toplanacak, {_profile.LootSkip.Count} eşya alınmayacak.");
+            WriteLog($"Eşya listesi: {_profile.LootPick.Count} eşya mutlaka toplanacak, {_profile.LootSkip.Count} eşya alınmayacak, " +
+                $"{_profile.LootThrow.Count} eşya envanter dolunca atılacak.");
         };
         TextRow(targets, "Sadece bu moblar", 0, 68, _profile.OnlyMobs, v => _profile.OnlyMobs = v);
         TextRow(targets, "Bu mobları atla", 370, 68, _profile.SkipMobs, v => _profile.SkipMobs = v);
@@ -241,11 +242,14 @@ internal sealed class MainForm : Form
         _farmState = Theme.Label(area, "", new Rectangle(370, 32, 366, 40), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
         Check(area, "GM görünce dur", 0, 34, 180, _profile.StopNearGm, v => _profile.StopNearGm = v);
         Check(area, "Envanter dolunca dur", 190, 34, 175, _profile.StopWhenInventoryFull, v => _profile.StopWhenInventoryFull = v);
-        Check(area, "Şehirde dur", 0, 68, 110, _profile.StopInSafeZone, v => _profile.StopInSafeZone = v);
-        Check(area, "Ara sıra mola ver", 120, 68, 150, _profile.Breaks, v => _profile.Breaks = v);
+        Check(area, "Şehirde dur", 0, 68, 100, _profile.StopInSafeZone, v => _profile.StopInSafeZone = v);
+        Check(area, "Ara sıra mola ver", 102, 68, 134, _profile.Breaks, v => _profile.Breaks = v);
+        Check(area, "Dolunca 'At'ları at", 238, 68, 130, _profile.ThrowWhenInventoryFull, v => _profile.ThrowWhenInventoryFull = v);
         NumberRow(area, "Oyuncu kalınca yeni alan (dk)", 0, 100, 0, 30, _profile.AvoidPlayerMinutes, 0, 1,
             v => _profile.AvoidPlayerMinutes = v);
-        _respawnState = Theme.Label(area, "", new Rectangle(296, 100, 440, 26), 8.5f, Theme.Muted);
+        _respawnState = Theme.Label(area, "", new Rectangle(296, 100, 314, 26), 8.5f, Theme.Muted);
+        var throwNow = Theme.Button(area, "🗑 Şimdi at", new Rectangle(616, 100, 120, 26), Theme.Secondary, Theme.SecondaryHover);
+        throwNow.Click += (_, _) => WriteLog(_engine?.CleanNow() ?? "Önce oyunu bağla.");
         _positionState = Theme.Label(area, "", new Rectangle(0, 126, 736, 20), 8.5f, Theme.Muted);
 
         // Tuşlar
@@ -291,6 +295,7 @@ internal sealed class MainForm : Form
             ("Kamera yukarı", () => k.CameraTop, v => k.CameraTop = v),
             ("Uzaklaştır", () => k.ZoomOut, v => k.ZoomOut = v),
             ("Pencere kapat", () => k.CloseWindow, v => k.CloseWindow = v),
+            ("Envanter", () => k.Inventory, v => k.Inventory = v),
         ];
         for (int i = 0; i < bindings.Length; i++)
         {
