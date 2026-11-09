@@ -271,6 +271,15 @@ internal sealed class GameWorldReader : IDisposable
         ("Widget", "Visibility", 0xCB),
         ("UI_C", "reSpawn", 0x818),
         ("UI_C", "canvasAdds", 0x7E8),
+        ("UI_C", "inventory", 0x400),
+        ("inventory_C", "invitems1", 0x378),
+        ("inventory_C", "invitems2", 0x380),
+        ("inventory_C", "invitems3", 0x388),
+        ("inventory_C", "invitems4", 0x390),
+        ("PanelWidget", "Slots", 0x110),
+        ("PanelSlot", "Content", 0x38),
+        ("slot_C", "slotid", 0x2E0),
+        ("slot_C", "slotItem", 0x2E8),
         ("reSpawn_C", "Timer", 0x2A8),
         ("reSpawn_C", "wait", 0x2AC),
         ("NPC", "thismob.vnum", 0x348),
@@ -444,6 +453,16 @@ internal sealed class GameWorldReader : IDisposable
         long loader = Pointer(instance + Offset(instanceClass, "m2data_C", "loader"));
         var (stats, characterLevel) = ReadStats(loader);
         var progress = ReadProgress(loader);
+        // Counts from the inventory window: the list in charData keeps the amount an item had when
+        // it arrived (seen: 200 while the stack on key 1 was down to 101); the window's slots are
+        // kept up to date. Read once a second (192 slots).
+        if (progress != null && DateTime.UtcNow - _bagReadAt >= TimeSpan.FromSeconds(1))
+        {
+            _bag = ReadBagWindow(Pointer(instance + Offset(instanceClass, "m2data_C", "uiMain")));
+            _bagReadAt = DateTime.UtcNow;
+        }
+        if (progress != null && _bag.Count > 0)
+            progress = progress with { Inventory = [.. progress.Inventory.Where(i => i.Slot < CharacterProgress.FirstBagSlot), .. _bag] };
         // Skills change only when one is learned or levelled: every few seconds is plenty.
         if (DateTime.UtcNow - _skillsReadAt >= TimeSpan.FromSeconds(3))
         {
@@ -536,6 +555,61 @@ internal sealed class GameWorldReader : IDisposable
                     open.Add(ClassName(cls));
             }
         return open;
+    }
+
+    private List<InventoryItem> _bag = [];
+    private DateTime _bagReadAt = DateTime.MinValue;
+    private readonly byte[] _slotBytes = new byte[0x10];
+
+    /// <summary>
+    /// The items in the inventory window's four pages (UI_C.inventory → invitems1–4, each a
+    /// WrapBox of slot_C widgets: slotid, then slotItem with the item number and the amount).
+    /// Empty when the window can't be read.
+    /// </summary>
+    private List<InventoryItem> ReadBagWindow(long ui)
+    {
+        var items = new List<InventoryItem>();
+        if (!MemoryReads.IsPointer(ui))
+            return items;
+        long inventory = Pointer(ui + Offset(Pointer(ui + ObjClass), "UI_C", "inventory"));
+        if (!MemoryReads.IsPointer(inventory))
+            return items;
+        long inventoryClass = Pointer(inventory + ObjClass);
+        if (ClassName(inventoryClass) != "inventory_C")
+            return items;
+        foreach (string page in new[] { "invitems1", "invitems2", "invitems3", "invitems4" })
+        {
+            long box = Pointer(inventory + Offset(inventoryClass, "inventory_C", page));
+            if (!MemoryReads.IsPointer(box))
+                continue;
+            long slots = box + Offset(Pointer(box + ObjClass), "PanelWidget", "Slots");
+            long data = Pointer(slots);
+            int count = Int32(slots + 8) ?? 0;
+            if (!MemoryReads.IsPointer(data) || count is <= 0 or > 256)
+                continue;
+            var pointers = new byte[count * 8];
+            if (!_memory.Read(data, pointers, pointers.Length))
+                continue;
+            for (int i = 0; i < count; i++)
+            {
+                long panelSlot = BitConverter.ToInt64(pointers, i * 8);
+                if (!MemoryReads.IsPointer(panelSlot))
+                    continue;
+                long widget = Pointer(panelSlot + Offset(Pointer(panelSlot + ObjClass), "PanelSlot", "Content"));
+                long cls = Pointer(widget + ObjClass);
+                if (!MemoryReads.IsPointer(widget) || ClassName(cls) != "slot_C")
+                    continue;
+                int idAt = Offset(cls, "slot_C", "slotid"), itemAt = Offset(cls, "slot_C", "slotItem");
+                if (itemAt - idAt is < 4 or > 8 || !_memory.Read(widget + idAt, _slotBytes, _slotBytes.Length))
+                    continue;
+                int slot = BitConverter.ToInt32(_slotBytes, 0);
+                int vnum = BitConverter.ToInt32(_slotBytes, itemAt - idAt);
+                int amount = BitConverter.ToInt32(_slotBytes, itemAt - idAt + 4);
+                if (slot >= CharacterProgress.FirstBagSlot && vnum > 0 && amount > 0)
+                    items.Add(new InventoryItem(slot, vnum, amount));
+            }
+        }
+        return items;
     }
 
     /// <summary>The object fields of a class (own and inherited, up to the engine's widget classes).</summary>
