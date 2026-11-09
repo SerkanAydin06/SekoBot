@@ -185,6 +185,7 @@ internal sealed partial class BotEngine : IDisposable
                                 WatchTick(world, profile, now);
                                 NotifyEvents(world);
                             }
+                            ReadBagForCleaning();
                             var (phase, actions) = TickBot(state);
                             Volatile.Read(ref _recorder)?.Record(frame, state, phase, actions, IsImportant(actions, profile));
                         }
@@ -219,7 +220,7 @@ internal sealed partial class BotEngine : IDisposable
         {
             if (_input == null)
                 return (BotPhase.Stopped, Array.Empty<BotAction>());
-            actions = _brain.Tick(state);
+            actions = CleanTick(state, Profile) ?? _brain.Tick(state);
             phase = _brain.Phase;
             foreach (var action in actions)
             {
@@ -313,6 +314,8 @@ internal sealed partial class BotEngine : IDisposable
                 background);
             _botStarted = _clock.Elapsed;
             _brain.Start(_clock.Elapsed);
+            _cleaner.Abort(null, Profile, "");
+            _cleanTries = 0;
             _session.Reset(_clock.Elapsed);
             _players.Reset();
             _sessionStartedAt = DateTime.Now;

@@ -33,6 +33,8 @@ internal sealed class KeyBindings
     public Keys[] Skills { get; set; } = [Keys.F1, Keys.F2, Keys.F3, Keys.F4, Keys.F5];
     /// <summary>Closes a window opened over the game (shop advert after a level-up).</summary>
     public Keys CloseWindow { get; set; } = Keys.Escape;
+    /// <summary>Opens and closes the inventory (used when throwing items away).</summary>
+    public Keys Inventory { get; set; } = Keys.I;
 }
 
 internal sealed class BotProfile
@@ -168,6 +170,10 @@ internal sealed class BotProfile
     public List<int> LootPick { get; set; } = [];
     /// <summary>Items ticked "Alma" in the item list: never walked to (item numbers).</summary>
     public List<int> LootSkip { get; set; } = [];
+    /// <summary>Items ticked "At" in the item list: thrown away when the bag is full, never picked up (item numbers).</summary>
+    public List<int> LootThrow { get; set; } = [];
+    /// <summary>Bag full: step away from the mobs, throw the items ticked "At" and carry on (instead of stopping).</summary>
+    public bool ThrowWhenInventoryFull { get; set; } = true;
     /// <summary>Another player staying this many minutes within 30 m while the experience drops: find another place (0 = off).</summary>
     public double AvoidPlayerMinutes { get; set; } = 3;
     /// <summary>How much the experience a minute has to drop (percent) against before the player came.</summary>

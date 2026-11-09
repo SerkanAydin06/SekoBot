@@ -23,7 +23,7 @@ internal sealed class ItemListForm : Form
     public ItemListForm(BotProfile profile)
     {
         _profile = profile;
-        Text = "Eşya listesi — mutlaka topla / alma";
+        Text = "Eşya listesi — mutlaka topla / alma / at";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(820, 600);
         MinimumSize = new Size(640, 400);
@@ -36,15 +36,17 @@ internal sealed class ItemListForm : Form
 
         _table.Columns.Add("Topla", typeof(bool));
         _table.Columns.Add("Alma", typeof(bool));
+        _table.Columns.Add("At", typeof(bool));
         _table.Columns.Add("No", typeof(int));
         _table.Columns.Add("Ad", typeof(string));
         _table.Columns.Add("Tür", typeof(string));
         _table.Columns.Add("Fiyat", typeof(int));
         var pick = profile.LootPick.ToHashSet();
         var skip = profile.LootSkip.ToHashSet();
+        var drop = profile.LootThrow.ToHashSet();
         // Leftovers in the game's data (empty names, text in another code page like "¿ë½ÅÀÇ") are left out.
         foreach (var item in ItemBook.All().Where(i => Readable(i.Name)).OrderBy(i => i.Name, StringComparer.CurrentCulture).ThenBy(i => i.Vnum))
-            _table.Rows.Add(pick.Contains(item.Vnum), skip.Contains(item.Vnum), item.Vnum, item.Name, TypeName(item), item.Gold);
+            _table.Rows.Add(pick.Contains(item.Vnum), skip.Contains(item.Vnum), drop.Contains(item.Vnum), item.Vnum, item.Name, TypeName(item), item.Gold);
 
         Theme.Label(this, "Ara:", new Rectangle(12, 12, 40, 26), 9f, Theme.Muted);
         _search = new TextBox { Bounds = new Rectangle(52, 12, 260, 26), BackColor = Theme.Inset, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle };
@@ -90,9 +92,10 @@ internal sealed class ItemListForm : Form
         _grid.DataBindingComplete += (_, _) =>
         {
             foreach (DataGridViewColumn column in _grid.Columns)
-                column.ReadOnly = column.Name is not ("Topla" or "Alma");
+                column.ReadOnly = column.Name is not ("Topla" or "Alma" or "At");
             _grid.Columns["Topla"]!.FillWeight = 12;
             _grid.Columns["Alma"]!.FillWeight = 12;
+            _grid.Columns["At"]!.FillWeight = 10;
             _grid.Columns["No"]!.FillWeight = 14;
             _grid.Columns["Ad"]!.FillWeight = 60;
             _grid.Columns["Tür"]!.FillWeight = 30;
@@ -106,8 +109,8 @@ internal sealed class ItemListForm : Form
         _grid.CellValueChanged += (_, e) => Ticked(e.RowIndex, e.ColumnIndex);
         Controls.Add(_grid);
 
-        Theme.Label(this, "Topla: her zaman alınır (diğer seçenekler kapalı olsa da), düşünce Telegram'a yazılır. Alma: hiç yürünmez. " +
-            "Bir eşyayı işaretleyince aynı adı taşıyanlar da işaretlenir.", new Rectangle(12, 552, 640, 40), 8.5f, Theme.Muted,
+        Theme.Label(this, "Topla: her zaman alınır (diğer seçenekler kapalı olsa da), düşünce Telegram'a yazılır. Alma: hiç yürünmez. At: alınmaz; envanter " +
+            "dolunca çantadan atılır. Bir eşyayı işaretleyince aynı adı taşıyanlar da işaretlenir.", new Rectangle(12, 552, 640, 40), 8.5f, Theme.Muted,
             FontStyle.Regular, ContentAlignment.TopLeft).Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
         var close = Theme.Button(this, "Kaydet ve kapat", new Rectangle(668, 556, 140, 30), Theme.Primary, Theme.PrimaryHover);
         close.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
@@ -118,13 +121,13 @@ internal sealed class ItemListForm : Form
 
     private bool _ticking;
 
-    /// <summary>Ticking one item ticks every item with the same name; "Topla" and "Alma" exclude each other.</summary>
+    /// <summary>Ticking one item ticks every item with the same name; "Topla" excludes "Alma" and "At".</summary>
     private void Ticked(int rowIndex, int columnIndex)
     {
         if (_ticking || rowIndex < 0 || columnIndex < 0)
             return;
         string column = _grid.Columns[columnIndex].Name;
-        if (column is not ("Topla" or "Alma"))
+        if (column is not ("Topla" or "Alma" or "At"))
             return;
         var row = ((DataRowView)_grid.Rows[rowIndex].DataBoundItem).Row;
         bool on = (bool)row[column];
@@ -134,8 +137,10 @@ internal sealed class ItemListForm : Form
             if ((string)other["Ad"] == name)
             {
                 other[column] = on;
-                if (on)
-                    other[column == "Topla" ? "Alma" : "Topla"] = false;
+                if (on && column == "Topla")
+                    other["Alma"] = other["At"] = false;
+                else if (on)
+                    other["Topla"] = false;
             }
         _ticking = false;
         UpdateCount();
@@ -150,7 +155,7 @@ internal sealed class ItemListForm : Form
         if (_type.SelectedIndex > 0)
             parts.Add($"Tür = '{((string)_type.SelectedItem!).Replace("'", "''")}'");
         if (_onlyTicked.Checked)
-            parts.Add("(Topla = true OR Alma = true)");
+            parts.Add("(Topla = true OR Alma = true OR At = true)");
         _table.DefaultView.RowFilter = string.Join(" AND ", parts.Select(p => "(" + p + ")"));
         UpdateCount();
     }
@@ -159,7 +164,8 @@ internal sealed class ItemListForm : Form
     {
         int pick = _table.Rows.Cast<DataRow>().Count(r => (bool)r["Topla"]);
         int skip = _table.Rows.Cast<DataRow>().Count(r => (bool)r["Alma"]);
-        _count.Text = $"{_table.DefaultView.Count} / {_table.Rows.Count} eşya · topla {pick} · alma {skip}";
+        int drop = _table.Rows.Cast<DataRow>().Count(r => (bool)r["At"]);
+        _count.Text = $"{_table.DefaultView.Count} / {_table.Rows.Count} · topla {pick} · alma {skip} · at {drop}";
     }
 
     private void Save()
@@ -167,6 +173,7 @@ internal sealed class ItemListForm : Form
         _grid.EndEdit();
         _profile.LootPick = _table.Rows.Cast<DataRow>().Where(r => (bool)r["Topla"]).Select(r => (int)r["No"]).Order().ToList();
         _profile.LootSkip = _table.Rows.Cast<DataRow>().Where(r => (bool)r["Alma"]).Select(r => (int)r["No"]).Order().ToList();
+        _profile.LootThrow = _table.Rows.Cast<DataRow>().Where(r => (bool)r["At"]).Select(r => (int)r["No"]).Order().ToList();
     }
 
     internal static bool Readable(string name) =>

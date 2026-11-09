@@ -160,6 +160,9 @@ internal sealed partial class BotEngine
 
         if (world.Progress?.FreeSlots() is not int free)
             return;
+        // Full: throw the items ticked "At" when there are any (the bot carries on); otherwise stop.
+        if (free <= 0 && StartCleaning(world, profile))
+            return;
         if (free <= 0 && profile.StopWhenInventoryFull)
         {
             _log("⚠ Envanter doldu; toplanan eşyalar kaybolmasın diye bot durduruluyor.");

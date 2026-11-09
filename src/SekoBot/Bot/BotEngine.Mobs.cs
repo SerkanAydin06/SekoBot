@@ -139,7 +139,7 @@ internal sealed partial class BotEngine
 
     /// <summary>Whether to walk to this item (unknown items: yes, they may be anything).</summary>
     internal static bool WantedLoot(GroundItem item, BotProfile profile) =>
-        !profile.LootSkip.Contains(item.Vnum) && (AlwaysLoot(item.Vnum, profile) || item.Kind switch
+        !profile.LootSkip.Contains(item.Vnum) && !profile.LootThrow.Contains(item.Vnum) && (AlwaysLoot(item.Vnum, profile) || item.Kind switch
     {
         LootKind.Yang => profile.LootYang,
         LootKind.Potion => profile.LootPotions,

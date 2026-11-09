@@ -10,6 +10,13 @@ internal sealed record ClickAction(Point Client, bool Slow = false) : BotAction
     public override string ToString() => $"Tıkla ({Client.X}, {Client.Y}){(Slow ? " yavaş" : "")}";
 }
 
+/// <summary>Drag with the left button held, like a person does (an item out of the bag onto the
+/// ground). Points in game client pixels; the game is brought to the front for it.</summary>
+internal sealed record MouseDragAction(Point From, Point To) : BotAction
+{
+    public override string ToString() => $"Sürükle ({From.X}, {From.Y}) → ({To.X}, {To.Y})";
+}
+
 internal sealed record KeyTapAction(Keys Key) : BotAction
 {
     public override string ToString() => $"Tuş {Key}";
