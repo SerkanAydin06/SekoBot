@@ -51,7 +51,12 @@ internal enum LootKind { Unknown, Yang, Potion, Equipment, Other }
 
 internal static class Loot
 {
-    public static LootKind KindOf(int vnum) => vnum switch
+    public static LootKind KindOf(int vnum) => vnum > 1 && ItemBook.Get(vnum) is { } info ? info switch
+    {
+        { SubType: "USE_POTION" } => LootKind.Potion,
+        { Type: "ITEM_WEAPON" or "ITEM_ARMOR" } => LootKind.Equipment,
+        _ => LootKind.Other,
+    } : vnum switch
     {
         <= 0 => LootKind.Unknown,
         1 => LootKind.Yang,
@@ -280,6 +285,10 @@ internal sealed class GameWorldReader : IDisposable
         ("PanelSlot", "Content", 0x38),
         ("slot_C", "slotid", 0x2E0),
         ("slot_C", "slotItem", 0x2E8),
+        ("slot_C", "itemref.Name", 0x360 + 0x8),
+        ("slot_C", "itemref.Type", 0x360 + 0x18),
+        ("slot_C", "itemref.subType", 0x360 + 0x28),
+        ("slot_C", "itemref.gold", 0x360 + 0x80),
         ("reSpawn_C", "Timer", 0x2A8),
         ("reSpawn_C", "wait", 0x2AC),
         ("NPC", "thismob.vnum", 0x348),
@@ -606,7 +615,15 @@ internal sealed class GameWorldReader : IDisposable
                 int vnum = BitConverter.ToInt32(_slotBytes, itemAt - idAt);
                 int amount = BitConverter.ToInt32(_slotBytes, itemAt - idAt + 4);
                 if (slot >= CharacterProgress.FirstBagSlot && vnum > 0 && amount > 0)
+                {
                     items.Add(new InventoryItem(slot, vnum, amount));
+                    if (!ItemBook.Knows(vnum))
+                        ItemBook.Learn(new ItemInfo(vnum,
+                            ReadFString(widget + Offset(cls, "slot_C", "itemref.Name"), 64),
+                            ReadFString(widget + Offset(cls, "slot_C", "itemref.Type"), 32),
+                            ReadFString(widget + Offset(cls, "slot_C", "itemref.subType"), 32),
+                            Int32(widget + Offset(cls, "slot_C", "itemref.gold")) ?? 0));
+                }
             }
         }
         return items;
