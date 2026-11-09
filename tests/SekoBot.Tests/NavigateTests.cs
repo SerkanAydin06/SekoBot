@@ -86,6 +86,7 @@ public class NavigateTests
     public void Stops_and_holds_space_when_the_mob_is_next_to_the_character_then_loots()
     {
         var (brain, p) = Ready();
+        p.PickUpDrops = false; // Z every few seconds (when the bot doesn't walk to the items itself)
         var mob = new Point(Center.X + 300, Center.Y);
         Run(brain, 4000, 4500, _ => [mob]); // walking right
         // Arrived: the name is now right next to the middle.
@@ -199,6 +200,7 @@ public class NavigateTests
     public void Picks_up_loot_all_the_time_also_while_walking()
     {
         var (brain, p) = Ready();
+        p.PickUpDrops = false; // Z every few seconds (when the bot doesn't walk to the items itself)
         p.MoveStuckMs = 1_000_000;
         var walk = Run(brain, 4000, 8000, _ => [new Point(Center.X - 900, Center.Y)]);
         Assert.Equal(BotPhase.Moving, brain.Phase);

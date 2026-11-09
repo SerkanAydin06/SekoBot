@@ -56,3 +56,25 @@ public class LootTests
         Assert.DoesNotContain(actions, a => a is NoteAction n && n.Text.Contains("toplanıyor"));
     }
 }
+
+public class TimedPickupTests
+{
+    private static int Taps(bool walkToDrops)
+    {
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = walkToDrops, PullGroups = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        int taps = 0;
+        for (double t = 0; t < 10_000; t += 100)
+            taps += brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1) { Walking = true })
+                .Count(a => a is KeyTapAction k && k.Key == p.Keys.Pickup);
+        return taps;
+    }
+
+    [Fact]
+    public void No_z_every_few_seconds_while_the_bot_walks_to_the_items_itself()
+    {
+        Assert.Equal(0, Taps(walkToDrops: true));     // Z only on an item it chose
+        Assert.InRange(Taps(walkToDrops: false), 4, 10); // the old way: every ~1.5 s
+    }
+}

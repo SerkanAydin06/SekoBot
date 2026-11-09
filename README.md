@@ -13,7 +13,7 @@ Metin2 için tek dosyalı Windows farm botu. Kurulum gerekmez, açılışta kend
 3. **▶ BAŞLAT (F10)** ile başlat, **■ DURDUR (F11)** her zaman acil durdurur. (F12'yi Windows ayırdığı için kısayol F11'dir.) Üstteki satır botun ne yaptığını gösterir (ör. "Saldırıyor · Alanın içinde").
 
 **Arayüz:** Ortada canlı görüntü (sarı halka = bulunan mob), sağda **OTURUM**: süre, öldürülen mob, saatte mob, kazanılan EXP, saatte EXP, seviye (yüzde ve seviye atlamaya kalan tahmini süre), kazanılan yang, iksir (1 ve 2 tuşundaki iksirden envanterde kalan adet, içilen sayısı), ölüm. Altta ayar sekmeleri, her değişiklik hemen kaydedilir:
-- **Saldırı:** saldırı mesafesi, eşya toplama sıklığı, Kalabalığa git, kalabalık için en az mob.
+- **Saldırı:** saldırı mesafesi, Z ile toplama sıklığı (yalnız yürüyüp toplama kapalıyken), Kalabalığa git, kalabalık için en az mob.
 - **Hedef:** en yüksek mob seviyesi, sadece şu moblar / şu mobları atla, metin taşları (atla / normal / önce onlar), önce bana saldıranı kes, yerdeki eşyaları topla.
 - **İksir & Buff:** HP/MP iksiri eşiği, ölünce yeniden başla, F1–F5 buff süreleri.
 - **Alan:** alan sınırı (metre), GM / envanter dolu / güvenli bölgede dur, bellekten okunan konum.
@@ -56,7 +56,7 @@ Bot oyunun kendi pencerelerinin (Esc menüsü, envanter, karakter, beceriler, ay
 - **Önce bana saldıran mobu kes** (varsayılan açık): Bir mobun sana saldırdığını bot bellekten görür ve daha yakında başka mob olsa da önce onu keser.
 - **En yüksek mob seviyesi** (0 = sınırsız): Üstündeki mobları atlar. **Sadece bu moblar / Bu mobları atla:** mob adlarını virgülle yaz (ör. "Kurt, Domuz"), adın bir kısmı yeter. Sana saldıran mob bu ayarlardan bağımsız her zaman kesilir.
 - **Metin taşları:** *Atla* (hiç gitme), *Normal mob gibi* (varsayılan), *Önce onlara git* (taş her şeyden önce gelir, sana saldıran moblardan da; seviye ve isim filtreleri taşı atlamaz).
-- **Yürüyüp topla: Yang / İksir / Silah-zırh / Diğer** (Hedef sekmesi): yerdeki eşyanın ne olduğu bellekten okunur (eşya numarası ve adedi; yang = 1); bot yalnızca işaretli türlere yürür. Varsayılan: yang, iksir, diğer (malzeme, kitap…) açık; silah/zırh kapalı (bu seviyede çoğu işe yaramaz ve envanteri doldurur). Z tuşu yakındaki her şeyi yine toplar.
+- **Yürüyüp topla: Yang / İksir / Silah-zırh / Diğer** (Hedef sekmesi): yerdeki eşyanın ne olduğu bellekten okunur (eşya numarası ve adedi; yang = 1); bot yalnızca işaretli türlere yürür. Varsayılan: yang, iksir, diğer (malzeme, kitap…) açık; silah/zırh kapalı (bu seviyede çoğu işe yaramaz ve envanteri doldurur). Bot Z'ye yalnızca seçtiği eşyanın üstündeyken basar; birkaç saniyede bir Z'ye basma (yakındaki her şeyi, istenmeyenleri de toplar) yalnızca "Yerdeki eşyalara yürüyüp topla" kapalıyken çalışır.
 
 **Eşya bilgisi:** oyunun bellekte okunabilir bir eşya listesi yok, ama çantadaki her eşyanın **adı, türü ve satış fiyatı** yazıyor (ör. "Gümüş Küpe+3", küpe, 1700 yang). Bot her eşyayı ilk kez çantaya girdiğinde öğrenir ve saklar (`%LOCALAPPDATA%\SekoBot\esya-bilgisi.json`); sonra aynı eşya yere düşünce **almadan** ne olduğunu bilir: türü (iksir / silah-zırh / diğer) buna göre ayrılır ve Alan sekmesindeki konum satırında 10 m içinde yerde ne olduğu yazar ("Yerde: 107 yang, Gümüş Küpe+3"). Hiç görülmemiş eşya "eşya #numara" diye görünür ve numara aralığına göre ayrılır.
 
