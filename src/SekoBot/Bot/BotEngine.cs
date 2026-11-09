@@ -329,7 +329,7 @@ internal sealed partial class BotEngine : IDisposable
                 _log(why);
             _botHome = _farmSpot ?? World?.Player;
             // Windows already showing when the bot starts (chat, minimap, …) belong to the screen.
-            _windowsAtStart = [.. World?.OpenWindows ?? []];
+            _popups.Start(World?.OpenWindows ?? []);
             _windowsSeen = "";
             _sessionStarted = true;
         }
