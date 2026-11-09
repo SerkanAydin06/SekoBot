@@ -20,6 +20,10 @@ internal sealed partial class Brain
     private readonly Dictionary<int, TimeSpan> _pulled = [];
     private int _pullGroup;
     private TimeSpan _pullHitSince = Never;
+    /// <summary>When walking to the group being pulled started: one we can't get to (behind a
+    /// wall, on a ledge) is given up after <see cref="PullWalkMs"/>.</summary>
+    private TimeSpan _pullWalkSince = Never;
+    internal const int PullWalkMs = 6000;
     private bool _pulling;
     /// <summary>The middle of the first group gathered: the next ones come from around it.</summary>
     private Memory.Vec3? _pullAnchor;
@@ -29,6 +33,7 @@ internal sealed partial class Brain
         _pulled.Clear();
         _pullGroup = 0;
         _pullHitSince = Never;
+        _pullWalkSince = Never;
         _pulling = false;
         _pullAnchor = null;
     }
@@ -92,6 +97,7 @@ internal sealed partial class Brain
         {
             _pullGroup = group.Key;
             _pullHitSince = Never;
+            _pullWalkSince = now;
             _pullAnchor ??= Centre(group);
         }
         if (!_pulling)
@@ -122,6 +128,15 @@ internal sealed partial class Brain
         }
         else
         {
+            if (_pullWalkSince != Never && now - _pullWalkSince > Ms(PullWalkMs))
+            {
+                // Can't get to it (seen in the game: 30 s walking along a wall): leave it.
+                _pulled[group.Key] = now;
+                _pullGroup = 0;
+                _pullHitSince = _pullWalkSince = Never;
+                actions.Add(new NoteAction("Gruba ulaşılamadı; bırakıldı."));
+                return true;
+            }
             SetAttack(false, p, actions, refresh);
             SetMoves(Towards(dx, dy, radius * 0.5, p), p, actions, refresh);
             if (Phase != BotPhase.Moving)

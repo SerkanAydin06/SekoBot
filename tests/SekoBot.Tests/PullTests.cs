@@ -128,6 +128,19 @@ public class PullTests
     }
 
     [Fact]
+    public void Gives_up_a_group_it_cannot_get_to()
+    {
+        var (brain, _) = Ready(max: 9);
+        // A group 5 m away that we never get closer to (behind a wall).
+        TargetInfo[] walled = [At(20, 20, -500, 0), At(21, 20, -520, 50), At(22, 20, -540, -50)];
+        var actions = Run(brain, 0, 8000, walled);
+        Assert.Contains(actions, x => x is NoteAction n && n.Text.Contains("ulaşılamadı"));
+        // Then the normal fight takes over (walking to the nearest mob), no gathering note again soon.
+        var after = Run(brain, 8000, 12000, walled);
+        Assert.DoesNotContain(after, x => x is NoteAction n && n.Text.Contains("ulaşılamadı"));
+    }
+
+    [Fact]
     public void Stops_gathering_when_hp_is_low()
     {
         var (brain, _) = Ready(max: 9);
