@@ -47,9 +47,21 @@ internal sealed partial class BotEngine
         var drops = new List<GroundSpot>();
         if (profile.PickUpDrops)
             foreach (var item in (world.Drops ?? []).Where(d => WantedLoot(d, profile)).OrderBy(d => d.Position.DistanceXY(world.Player)))
-                if (item.Position.DistanceXY(world.Player) <= profile.DropRangeMetres * 100 &&
-                    camera.ToScreen(item.Position, width, height) is PointF p && OnPlayfield(p, width, height))
+            {
+                double away = item.Position.DistanceXY(world.Player);
+                // A special item ("Topla", e.g. an event card) is gone for from further away, also
+                // off the screen (seen: a card 9 m off left behind while fighting).
+                if (AlwaysLoot(item.Vnum, profile) && away <= Math.Max(profile.DropRangeMetres * 100, SpecialDropRange))
+                    drops.Add(new GroundSpot(item.Id,
+                        camera.ToScreen(item.Position, width, height) is PointF onScreen && OnPlayfield(onScreen, width, height)
+                            ? Point.Round(onScreen)
+                            : OffScreenSpot(camera, world.Player, item.Position, width, height), Special: true));
+                else if (away <= profile.DropRangeMetres * 100 &&
+                         camera.ToScreen(item.Position, width, height) is PointF p && OnPlayfield(p, width, height))
                     drops.Add(new GroundSpot(item.Id, Point.Round(p)));
+            }
+        // Special items first.
+        drops = [.. drops.OrderByDescending(d => d.Special)];
         // Metin stones set to "first" come before everything, also before mobs attacking us
         // (those stand around the stone and get hit too).
         var priority = metins.Count > 0 ? metins : profile.AttackersFirst ? attackers : [];
@@ -106,6 +118,8 @@ internal sealed partial class BotEngine
 
     /// <summary>Mobs this close (world units) are targets even when they're off the screen.</summary>
     internal const double OffScreenRange = 2500;
+    /// <summary>Special items ("Topla") are gone for from this far (world units; 15 m).</summary>
+    internal const double SpecialDropRange = 1500;
 
     /// <summary>A point in the direction of an off-screen mob (from the screen centre), for walking to it.</summary>
     private static Point OffScreenSpot(CameraView camera, Vec3 player, Vec3 mob, int width, int height)

@@ -50,6 +50,9 @@ internal sealed partial class Brain
         _travelSince = Never;
         ResetPull();
         _dropId = 0;
+        _dropTrying = TimeSpan.Zero;
+        _dropTriedAt = Never;
+        _specialNoted = false;
         _dropSince = _lastDropTap = Never;
         _ignoredDrops.Clear();
         _sidestepUntil = _notMovingSince = _walkStartedAt = _blockCheckedAt = _attackReleasedAt = Never;
@@ -174,6 +177,19 @@ internal sealed partial class Brain
         // A saved farm spot: walk there first (the area limit starts from there).
         if (TravelTick(state, p, actions, refresh))
             return;
+
+        // A special item on the ground ("Topla"): straight to it, even with mobs hitting us — it is
+        // worth more than the fight, and they follow anyway.
+        if (state.Drops.FirstOrDefault(d => d.Special && !_ignoredDrops.ContainsKey(d.Id)) is { Id: not 0 } special &&
+            GoForDrop(state, p, actions, refresh, radius, special))
+        {
+            if (!_specialNoted)
+                actions.Add(new NoteAction("Özel eşya yerde: saldırı bırakılıp alınıyor."));
+            _specialNoted = true;
+            FinishFight(p, actions, now);
+            return;
+        }
+        _specialNoted = false;
 
         // Stay in the area we started in (position from memory): walking back when too far.
         // Mobs hitting us close by are fought first: they would only follow and hit us on the way.
@@ -417,7 +433,10 @@ internal sealed partial class Brain
     }
 
     private long _dropId;
-    private TimeSpan _dropSince = Never, _lastDropTap = Never;
+    private TimeSpan _dropSince = Never, _lastDropTap = Never, _dropTriedAt = Never;
+    private bool _specialNoted;
+    /// <summary>How long an item has been gone for (only the ticks spent on it count).</summary>
+    private TimeSpan _dropTrying;
     private readonly Dictionary<long, TimeSpan> _ignoredDrops = [];
 
     /// <summary>
@@ -442,21 +461,27 @@ internal sealed partial class Brain
         _lastDropTap = now;
     }
 
-    private bool GoForDrop(GameState state, BotProfile p, List<BotAction> actions, bool refresh, double radius)
+    private bool GoForDrop(GameState state, BotProfile p, List<BotAction> actions, bool refresh, double radius, GroundSpot? only = null)
     {
         var now = state.Time;
         foreach (var (id, until) in _ignoredDrops.ToList())
             if (now >= until)
                 _ignoredDrops.Remove(id);
-        var drop = state.Drops.FirstOrDefault(d => !_ignoredDrops.ContainsKey(d.Id));
+        var drop = only ?? state.Drops.FirstOrDefault(d => !_ignoredDrops.ContainsKey(d.Id));
         if (!p.PickUpDrops || drop.Id == 0)
             return false;
+        // Only the time actually spent going for it counts (a fight in between doesn't use it up);
+        // a special item gets longer (it may be far, mobs may be in the way).
         if (drop.Id != _dropId)
         {
             _dropId = drop.Id;
             _dropSince = now;
+            _dropTrying = TimeSpan.Zero;
         }
-        else if (now - _dropSince > Ms(5000))
+        else if (now - _dropTriedAt < Ms(1000))
+            _dropTrying += now - _dropTriedAt;
+        _dropTriedAt = now;
+        if (_dropTrying > Ms(drop.Special ? 20000 : 5000))
         {
             _ignoredDrops[drop.Id] = now + Ms(60000);
             actions.Add(new NoteAction("Yerdeki eşya alınamadı (başkasının olabilir); bırakıldı."));
