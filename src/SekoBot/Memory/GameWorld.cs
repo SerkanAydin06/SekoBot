@@ -121,9 +121,9 @@ internal sealed record CharacterProgress(long Exp, long NeedExp, long Yang,
 
     /// <summary>
     /// A potion key: the item on its quick slot and how many of it are in the bag (all stacks).
-    /// When the stack on the key is used up the game empties the quick slot (seen: key 1 empty,
-    /// 600 of the same potion in two other stacks) and the key drinks nothing any more; the item
-    /// seen there before (<paramref name="known"/>) is still counted, with OnKey false.
+    /// When the stack on the key is used up the game moves the key on to the next stack of the same
+    /// potion by itself (seen: key 1 went from slot 42 to 43); for a moment the slot can read empty,
+    /// so the item seen there before (<paramref name="known"/>) is still counted, with OnKey false.
     /// </summary>
     public PotionKey Potion(int number, int? known)
     {
@@ -145,8 +145,8 @@ internal sealed record CharacterProgress(long Exp, long NeedExp, long Yang,
 /// <summary>The potion on a key: its item, how many are in the bag, and whether the key still holds it.</summary>
 internal sealed record PotionKey(int? Vnum, int InBag, bool OnKey)
 {
-    /// <summary>What pressing the key can still drink: nothing once the game emptied the slot.</summary>
-    public int Drinkable => OnKey ? InBag : 0;
+    /// <summary>What pressing the key can drink: every stack (the game moves on to the next one).</summary>
+    public int Drinkable => InBag;
 }
 
 /// <summary>Where the game camera is and where it looks (Unreal's FMinimalViewInfo).</summary>

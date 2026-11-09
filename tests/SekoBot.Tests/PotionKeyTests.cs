@@ -21,13 +21,14 @@ public class PotionKeyTests
     }
 
     [Fact]
-    public void An_emptied_key_still_counts_the_bag_but_drinks_nothing()
+    public void A_key_empty_for_a_moment_still_counts_the_bag()
     {
-        // The stack on key 1 ran out and the game emptied the slot (seen in the game: 0 there).
+        // The stack on key 1 ran out; the game moves the key to the next stack (seen: 42 → 43),
+        // for a moment the slot reads empty: the potion seen there is still counted.
         var hp = Bag(key1Slot: 0).Potion(1, known: 27001);
         Assert.False(hp.OnKey);
         Assert.Equal(600, hp.InBag);
-        Assert.Equal(0, hp.Drinkable);
+        Assert.Equal(600, hp.Drinkable);
         // Never seen on the key: nothing known.
         Assert.Equal(new PotionKey(null, 0, false), Bag(0).Potion(1, null));
     }
