@@ -211,12 +211,12 @@ internal sealed class MainForm : Form
         Check(targets, "İksir", 198, 104, 70, _profile.LootPotions, v => _profile.LootPotions = v);
         Check(targets, "Silah / zırh", 272, 104, 110, _profile.LootEquipment, v => _profile.LootEquipment = v);
         Check(targets, "Diğer (malzeme, kitap…)", 386, 104, 190, _profile.LootOther, v => _profile.LootOther = v);
-        Theme.Label(targets, "Zırh fiyatı ≥", new Rectangle(578, 104, 70, 26), 8.5f, Theme.Muted);
+        Theme.Label(targets, "Silah/zırh ≥", new Rectangle(578, 104, 70, 26), 8.5f, Theme.Muted);
         var minGold = Theme.Number(targets, new Rectangle(650, 104, 86, 26), 0, 10_000_000,
             Math.Clamp(_profile.LootEquipmentMinGold, 0, 10_000_000), 0, 500);
         minGold.ValueChanged += (_, _) => { _profile.LootEquipmentMinGold = (int)minGold.Value; SaveProfile(); };
-        Theme.Label(targets, "Mob adları virgülle, adın bir kısmı yeter; boş = hepsi. Seviye 0 = sınırsız. Zırh fiyatı: silah/zırh kapalıyken " +
-            "de bu kadar yang eden eşyalar alınır (fiyat, eşya bir kez çantaya girince öğrenilir; 0 = kapalı).",
+        Theme.Label(targets, "Mob adları virgülle, adın bir kısmı yeter; boş = hepsi. Seviye 0 = sınırsız. Silah/zırh ≥: silah/zırh kapalıyken bu kadar " +
+            "yang eden silah, zırh ve takılar alınır; daha ucuzları çantaya girdiyse dolunca atılır (0 = kapalı).",
             new Rectangle(0, 130, 736, 16), 8f, Theme.Muted);
 
         var potions = _tabPages[2];

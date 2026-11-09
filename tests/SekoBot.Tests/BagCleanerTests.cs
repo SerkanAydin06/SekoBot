@@ -156,3 +156,29 @@ public class CleanSpotTests
         Assert.False(brain.ReadyToClean);
     }
 }
+
+public class ThrowCheapEquipmentTests
+{
+    [Fact]
+    public void Weapons_and_armour_under_the_price_are_thrown_when_only_dear_ones_are_wanted()
+    {
+        ItemBook.Learn(new ItemInfo(96001, "Kılıç+0", "ITEM_WEAPON", "WEAPON_SWORD", 120));
+        ItemBook.Learn(new ItemInfo(96002, "Tahta Kolye+0", "ITEM_ARMOR", "ARMOR_NECK", 300));
+        ItemBook.Learn(new ItemInfo(96003, "Altın Kolye+0", "ITEM_ARMOR", "ARMOR_NECK", 900));
+        ItemBook.Learn(new ItemInfo(96004, "Ayı Safrası", "ITEM_MATERIAL", "MATERIAL_LEATHER", 10));
+        ItemBook.Learn(new ItemInfo(96005, "Olay Kılıcı", "ITEM_WEAPON", "WEAPON_SWORD", 0));
+        InventoryItem[] bag =
+        [
+            new(4, 96001, 1),   // worn: never
+            new(20, 96001, 1), new(21, 96002, 1), new(22, 96003, 1), new(23, 96004, 1), new(24, 96005, 1),
+        ];
+        var p = new BotProfile { LootEquipment = false, LootEquipmentMinGold = 500 };
+        Assert.Equal([96001, 96002], BotEngine.Throwables(bag, p).Order());
+        p.LootPick = [96002];                       // ticked "Topla": kept
+        Assert.Equal([96001], BotEngine.Throwables(bag, p));
+        p.LootEquipment = true;                     // all equipment wanted: nothing thrown
+        Assert.Empty(BotEngine.Throwables(bag, p));
+        p.LootThrow = [96004];                      // "At" still counts
+        Assert.Equal([96004], BotEngine.Throwables(bag, p));
+    }
+}
