@@ -25,17 +25,26 @@ namespace SekoBot.Bot
 
 /// <summary>
 /// Picks the best place to farm from the mobs seen (memory shows them up to ~40 m around): every
-/// point on a 5 m grid is scored by the mobs within 15 m of it — each worth its experience for the
-/// time it takes to kill (like the target choice), preferred Metin stones extra — and the best
-/// point wins. Pure logic; the walking around to see more is done by the engine.
+/// point on a 5 m grid is scored by the experience an hour farming the mobs within 15 m of it
+/// would bring, and the best point wins. Pure logic; the walking around to see more is done by
+/// the engine.
+/// <para>
+/// Experience an hour, not the sum of the mobs: five boars (61 EXP each) must not beat a Black
+/// Bear (384) just because there are more of them. Every mob takes its kill time + 1 s + the
+/// walk to the next one (the fewer mobs, the further apart: the 15 m circle shared out); killing
+/// them all takes at least <see cref="RespawnSec"/> — after that one waits for them to come back.
+/// So: total EXP ÷ max(time to kill them all, respawn). Preferred Metin stones count ×3.
+/// </para>
 /// </summary>
 internal static class FarmSpotFinder
 {
     public const double Radius = 1500;   // mobs within 15 m of a spot count for it
     public const double Grid = 500;      // candidate spots every 5 m
+    /// <summary>Roughly how long the mobs of a place take to come back (an estimate, seconds).</summary>
+    public const double RespawnSec = 60;
+    /// <summary>Walking with stops, in world units a second (as in the target choice).</summary>
+    private const double WalkSpeed = 200;
 
-    /// <param name="mobs">Every mob seen while looking around (one entry per mob).</param>
-    /// <param name="from">Where the search started; spots further than <paramref name="maxDistance"/> are left out.</param>
     public static FarmSpot? Best(IReadOnlyCollection<WorldMob> mobs, BotProfile profile, Vec3 from, string map,
         int attackPower, double maxDistance = 8000)
     {
@@ -43,13 +52,19 @@ internal static class FarmSpotFinder
         if (wanted.Count == 0)
             return null;
         double dps = Math.Max(50, attackPower);
-        double Value(WorldMob m)
+        double Exp(WorldMob m)
         {
             double exp = m.Exp > 0 ? m.Exp : m.MaxHp * 0.3;
-            double value = exp / (m.MaxHp / dps + 1);
-            if (m.IsMetin && profile.Metins == MetinMode.Prefer)
-                value *= 3;
-            return value;
+            return m.IsMetin && profile.Metins == MetinMode.Prefer ? exp * 3 : exp;
+        }
+        // Experience an hour from a group of mobs farmed together.
+        double PerHour(List<WorldMob> around)
+        {
+            if (around.Count == 0)
+                return 0;
+            double spacing = Math.Sqrt(Math.PI * Radius * Radius / around.Count); // between two mobs
+            double seconds = around.Sum(m => m.MaxHp / dps + 1 + spacing / WalkSpeed);
+            return around.Sum(Exp) / Math.Max(seconds, RespawnSec) * 3600;
         }
         double minX = wanted.Min(m => m.Position.X), maxX = wanted.Max(m => m.Position.X);
         double minY = wanted.Min(m => m.Position.Y), maxY = wanted.Max(m => m.Position.Y);
@@ -61,7 +76,7 @@ internal static class FarmSpotFinder
             var spot = new Vec3(x, y, from.Z);
             if (spot.DistanceXY(from) > maxDistance)
                 continue;
-            double score = wanted.Where(m => m.Position.DistanceXY(spot) <= Radius).Sum(Value);
+            double score = PerHour(wanted.Where(m => m.Position.DistanceXY(spot) <= Radius).ToList());
             if (score > bestScore)
             {
                 bestScore = score;
