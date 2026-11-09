@@ -111,6 +111,8 @@ Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü h
 
 **Mola** yakında (10 m) 3 ya da daha çok mob varken verilmez.
 
+**Günlükte tekrar yok:** botun sürekli yaptığı işler ("Gruplar toplanıyor", "toplanan 3 mob kesiliyor"…) bir kez yazılır; aynı mesaj (sayıları farklı olsa da) 5 dakika içinde tekrar gelirse yazılmaz. Tehlike, ölüm ve uyarılar her zaman yazılır.
+
 **Günlük dosyası:** günlük `%LOCALAPPDATA%\SekoBot\gunluk.txt` dosyasına da yazılır (2 MB'ı geçince `gunluk-eski.txt` olur).
 
 **Kapanmayan pencere:** bot başladıktan sonra açılan bilinmeyen bir pencere Esc ile 7 saniyede kapanmazsa yok sayılır ve bot devam eder (sohbet geçmişi penceresi açık kalınca bot her Esc'de oyun menüsünü açıp kapatıyor ve duruyordu).

@@ -89,3 +89,21 @@ public class DangerTests
         Assert.DoesNotContain(notes, n => n.Contains("Kısa mola"));
     }
 }
+
+public class NoteFilterTests
+{
+    [Fact]
+    public void Routine_notes_are_written_once_warnings_always()
+    {
+        var filter = new NoteFilter();
+        TimeSpan S(double s) => TimeSpan.FromSeconds(s);
+        Assert.True(filter.ShouldWrite("Gruplar toplanıyor (her üçlüden birine vurulup peşe takılıyor).", S(0)));
+        Assert.True(filter.ShouldWrite("Bu bölgede başka grup yok; toplanan 3 mob kesiliyor.", S(8)));
+        Assert.False(filter.ShouldWrite("Gruplar toplanıyor (her üçlüden birine vurulup peşe takılıyor).", S(9)));
+        Assert.False(filter.ShouldWrite("Bu bölgede başka grup yok; toplanan 4 mob kesiliyor.", S(17)));   // only the number differs
+        Assert.True(filter.ShouldWrite("Gruba ulaşılamadı; bırakıldı.", S(20)));                          // something else happened
+        Assert.True(filter.ShouldWrite("Tehlike: can %25, 4 mob saldırıyor; dövüş bırakılıp uzaklaşılıyor.", S(30)));
+        Assert.True(filter.ShouldWrite("Tehlike: can %22, 5 mob saldırıyor; dövüş bırakılıp uzaklaşılıyor.", S(40)));
+        Assert.True(filter.ShouldWrite("Gruplar toplanıyor (her üçlüden birine vurulup peşe takılıyor).", S(301)));  // after 5 minutes
+    }
+}
