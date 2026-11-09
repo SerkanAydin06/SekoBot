@@ -14,6 +14,8 @@ namespace SekoBot.Bot;
 internal sealed partial class BotEngine
 {
     private const int CleanTriesMax = 5;
+    /// <summary>Throwing starts with this many free slots left (not only when the bag is full).</summary>
+    internal const int CleanAtFreeSlots = 2;
     private readonly BagCleaner _cleaner = new();
     private BagLayout? _bagLayout;
     private int _cleanTries;
@@ -82,7 +84,7 @@ internal sealed partial class BotEngine
             _brain.WantsClean = true;
         }
         int count = (world.Progress?.Inventory ?? []).Count(i => ShouldThrow(i, profile, _bagAtStart));
-        _log($"Envanter doldu; çantada atılacak {count} eşya var ('At' işaretli ya da botun aldığı ucuz silah/zırh). Sakin bir yerde atılacak.");
+        _log($"Envanterde yer azaldı (zırh ya da uzun silah sığmıyor olabilir); çantada atılacak {count} eşya var ('At' işaretli ya da botun aldığı ucuz silah/zırh). Sakin bir yerde atılacak.");
         return true;
     }
 

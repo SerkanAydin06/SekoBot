@@ -132,6 +132,29 @@ internal sealed record CharacterProgress(long Exp, long NeedExp, long Yang,
         return InventoryEnd - FirstBagSlot + 1 - used.Count;
     }
 
+    /// <summary>
+    /// Whether a tall item (armour, sword, bow…) still fits: two empty slots one under the other on
+    /// the same page. Null when the bag size isn't known.
+    /// </summary>
+    public bool? TallSpace()
+    {
+        if (InventoryEnd < FirstBagSlot)
+            return null;
+        var used = new HashSet<int>();
+        foreach (var item in Inventory)
+        {
+            if (item.Slot < FirstBagSlot || item.Slot > InventoryEnd)
+                continue;
+            used.Add(item.Slot);
+            if (TwoSlots(item.Vnum))
+                used.Add(item.Slot + Columns);
+        }
+        for (int slot = FirstBagSlot; slot + Columns <= InventoryEnd; slot++)
+            if ((slot - FirstBagSlot) % (Columns * 8) / Columns < 7 && !used.Contains(slot) && !used.Contains(slot + Columns))
+                return true;
+        return false;
+    }
+
     /// <summary>Tall items, as seen in the game's inventory: swords (0–999), bows (2000–2999),
     /// two-handed (3000–3999) and armour (11000–11999). Daggers, fans, bells and the rest are
     /// counted as one slot.</summary>

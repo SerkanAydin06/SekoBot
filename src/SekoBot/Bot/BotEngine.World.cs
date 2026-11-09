@@ -160,8 +160,11 @@ internal sealed partial class BotEngine
 
         if (world.Progress?.FreeSlots() is not int free)
             return;
-        // Full: throw the items ticked "At" when there are any (the bot carries on); otherwise stop.
-        if (free <= 0 && StartCleaning(world, profile))
+        // Full, nearly full, or no room left for a tall item (armour, sword: two slots one under the
+        // other): throw the unwanted items when there are any (the bot carries on). Only a really
+        // full bag with nothing to throw stops the bot.
+        bool tight = free <= CleanAtFreeSlots || world.Progress?.TallSpace() == false;
+        if (tight && StartCleaning(world, profile))
             return;
         if (free <= 0 && profile.StopWhenInventoryFull)
         {

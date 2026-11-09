@@ -66,7 +66,7 @@ internal sealed partial class Brain
             _lastKeyRefresh = now;
         _tickTime = now;
         if (!_cleanNoted)
-            actions.Add(new NoteAction("Envanter dolu: moblardan uzak, sakin bir yere çekiliniyor."));
+            actions.Add(new NoteAction("Envanter boşaltılacak: moblardan uzak, sakin bir yere çekiliniyor."));
         _cleanNoted = true;
         SetAttack(false, p, actions, refresh);
         FinishFight(p, actions, now);
