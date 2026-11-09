@@ -92,7 +92,8 @@ internal sealed partial class BotEngine
             {
                 string found = $"🎁 Yere düştü: {ItemBook.NameOf(drop.Vnum)} ({drop.Position.DistanceXY(world.Player) / 100:0} m) — alınıyor.";
                 _log(found);
-                Notify(found);
+                if (profile.NotifyDrops)
+                    Notify(found);
             }
         if (_announcedDrops.Count > 500)
             _announcedDrops.Clear();
