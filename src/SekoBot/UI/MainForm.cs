@@ -189,7 +189,13 @@ internal sealed class MainForm : Form
         metins.SelectedIndexChanged += (_, _) => { _profile.Metins = (MetinMode)metins.SelectedIndex; SaveProfile(); };
         targets.Controls.Add(metins);
         Check(targets, "Eşyalara yürüyüp topla", 370, 34, 160, _profile.PickUpDrops, v => _profile.PickUpDrops = v);
-        var itemList = Theme.Button(targets, "📋  Eşya listesi…", new Rectangle(540, 34, 196, 26), Theme.Secondary, Theme.SecondaryHover);
+        var itemList = Theme.Button(targets, "📋 Eşyalar", new Rectangle(536, 34, 98, 26), Theme.Secondary, Theme.SecondaryHover);
+        var mobInfo = Theme.Button(targets, "📊 Moblar", new Rectangle(638, 34, 98, 26), Theme.Secondary, Theme.SecondaryHover);
+        mobInfo.Click += (_, _) =>
+        {
+            using var form = new MobInfoForm(_engine);
+            form.ShowDialog(this);
+        };
         itemList.Click += (_, _) =>
         {
             using var form = new ItemListForm(_profile);

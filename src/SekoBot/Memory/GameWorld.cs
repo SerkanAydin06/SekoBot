@@ -67,6 +67,11 @@ internal static class Loot
     };
 }
 
+/// <summary>A kind of mob on the current map, as the game describes it: level, experience, the
+/// yang it drops (min–max), the one item the game lists for it (often a material, e.g. Kaplan →
+/// Kaplan Postu) and how many of it are placed on the map.</summary>
+internal sealed record MobInfo(int Vnum, string Name, int Level, int Exp, int GoldMin, int GoldMax, int DropItem, int Spawns);
+
 /// <summary>A mob that just died (it stays in the world for a moment).</summary>
 internal readonly record struct DeadMob(int Id, Vec3 Position);
 
@@ -266,6 +271,7 @@ internal sealed class GameWorldReader : IDisposable
         ("loader", "qSlots", 0x278),
         ("loader", "charData.invCount", 0x770 + 0xC8),
         ("loader", "playerSkills", 0x288),
+        ("loader", "tempData1", 0x360),
         ("gameManager", "playerPos", 0xA10),
         ("gameManager", "mapname", 0x958),
         ("gameManager", "Player", 0x380),
@@ -462,6 +468,13 @@ internal sealed class GameWorldReader : IDisposable
         long loader = Pointer(instance + Offset(instanceClass, "m2data_C", "loader"));
         var (stats, characterLevel) = ReadStats(loader);
         var progress = ReadProgress(loader);
+        // The mobs of this map: read when the map changes (and again a little later if still empty).
+        if (mapName.Length > 0 && (mapName != _mobsMap || MapMobs.Count == 0 && DateTime.UtcNow - _mobsTriedAt > TimeSpan.FromSeconds(30)))
+        {
+            _mobsMap = mapName;
+            _mobsTriedAt = DateTime.UtcNow;
+            MapMobs = ReadMobTable(loader);
+        }
         // The game's list of every item (names, types, prices): read once, then every item is known.
         if (!_itemTableRead && DateTime.UtcNow - _itemTableTriedAt > TimeSpan.FromMinutes(1))
         {
@@ -570,6 +583,52 @@ internal sealed class GameWorldReader : IDisposable
                     open.Add(ClassName(cls));
             }
         return open;
+    }
+
+    /// <summary>The kinds of mobs on the current map (read when the map changes).</summary>
+    public IReadOnlyList<MobInfo> MapMobs { get; private set; } = [];
+    private string _mobsMap = "";
+    private DateTime _mobsTriedAt = DateTime.MinValue;
+
+    private const int MobStride = 0x188;   // the game's "mob" struct (vnum … Height at 0x180)
+
+    /// <summary>
+    /// The mobs placed on the map (loader.tempData1: one entry per placed mob, ~41 000 here, 77 kinds),
+    /// grouped by kind. Each entry is checked (a number and a name), so a wrong place reads nothing.
+    /// </summary>
+    private List<MobInfo> ReadMobTable(long loader)
+    {
+        var mobs = new Dictionary<int, MobInfo>();
+        long list = loader + Offset(Pointer(loader + ObjClass), "loader", "tempData1");
+        long data = Pointer(list);
+        int count = Int32(list + 8) ?? 0;
+        if (!MemoryReads.IsPointer(data) || count is <= 0 or > 500_000)
+            return [];
+        var chunk = new byte[512 * MobStride];
+        for (int first = 0; first < count; first += 512)
+        {
+            int n = Math.Min(512, count - first);
+            if (!_memory.Read(data + (long)first * MobStride, chunk, n * MobStride))
+                continue;
+            for (int i = 0; i < n; i++)
+            {
+                int at = i * MobStride;
+                int vnum = BitConverter.ToInt32(chunk, at);
+                if (vnum <= 0)
+                    continue;
+                if (mobs.TryGetValue(vnum, out var known))
+                {
+                    mobs[vnum] = known with { Spawns = known.Spawns + 1 };
+                    continue;
+                }
+                string name = ReadFString(data + (long)(first + i) * MobStride + 0x8, 64);
+                if (name.Length == 0)
+                    continue;
+                int Int(int offset) => BitConverter.ToInt32(chunk, at + offset);
+                mobs[vnum] = new MobInfo(vnum, name, Int(0x3C), Int(0xC8), Int(0xC0), Int(0xC4), Int(0xE4), 1);
+            }
+        }
+        return [.. mobs.Values.OrderBy(m => m.Level).ThenBy(m => m.Name)];
     }
 
     private bool _itemTableRead;
