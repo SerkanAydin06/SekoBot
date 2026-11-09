@@ -167,7 +167,8 @@ internal sealed partial class BotEngine : IDisposable
                             FarmSpot = _farmSpot,
                             Skills = SkillKeys(world, profile),
                             MpPoints = world?.Stats?.Mp,
-                            HpPotionsLeft = world is null ? null : PotionsLeft().Hp,
+                            // What the key can still drink: 0 once the game emptied it (then the bot gets away safely).
+                            HpPotionsLeft = world is null ? null : Potion(world, profile.Keys.HpPotion)?.Drinkable ?? 0,
                             AnalysisMs = watch.Elapsed.TotalMilliseconds,
                         };
                         Volatile.Write(ref _state, state);
@@ -178,6 +179,7 @@ internal sealed partial class BotEngine : IDisposable
                             {
                                 _session.Update(world, now, PotionVnum(world, profile.Keys.HpPotion), PotionVnum(world, profile.Keys.MpPotion));
                                 CheckSafety(world, profile);
+                                CheckPotionKeys(world, profile);
                                 NotifyEvents(world);
                             }
                             var (phase, actions) = TickBot(state);

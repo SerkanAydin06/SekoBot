@@ -236,17 +236,20 @@ internal sealed partial class BotEngine
     /// <summary>Free bag slots, when known.</summary>
     public int? FreeInventorySlots => World?.Progress?.FreeSlots();
 
-    /// <summary>HP and MP potions left in the inventory (the items on the potion keys), when known.</summary>
+    /// <summary>The potion last seen on each key: still counted after the game empties the slot.</summary>
+    private readonly Dictionary<Keys, int> _potionSeen = [];
+    private readonly HashSet<Keys> _potionKeyWarned = [];
+
+    /// <summary>HP and MP potions in the bag (every stack of the potion on the key), when known.</summary>
     public (int? Hp, int? Mp) PotionsLeft()
     {
-        if (World is not { Progress: { } progress } world)
+        if (World is not { } world)
             return (null, null);
-        int? Left(Keys key) => PotionVnum(world, key) is int vnum ? progress.Count(vnum) : 0;
-        return (Left(Profile.Keys.HpPotion), Left(Profile.Keys.MpPotion));
+        return (Potion(world, Profile.Keys.HpPotion)?.InBag, Potion(world, Profile.Keys.MpPotion)?.InBag);
     }
 
-    /// <summary>The item on the quick slot of a number key (1–9, 0 = 10), e.g. the HP potion.</summary>
-    private static int? PotionVnum(WorldSnapshot world, Keys key)
+    /// <summary>The potion on a number key (1–9, 0 = 10), remembering what was there.</summary>
+    private PotionKey? Potion(WorldSnapshot world, Keys key)
     {
         int number = key switch
         {
@@ -255,7 +258,39 @@ internal sealed partial class BotEngine
             >= Keys.NumPad1 and <= Keys.NumPad9 => key - Keys.NumPad0,
             _ => 0,
         };
-        return number == 0 ? null : world.Progress?.QuickSlotVnum(number);
+        if (number == 0 || world.Progress is not { } progress)
+            return null;
+        lock (_potionSeen)
+        {
+            var potion = progress.Potion(number, _potionSeen.TryGetValue(key, out int seen) ? seen : null);
+            if (potion.OnKey && potion.Vnum is int vnum)
+                _potionSeen[key] = vnum;
+            return potion;
+        }
+    }
+
+    private int? PotionVnum(WorldSnapshot world, Keys key) => Potion(world, key)?.Vnum;
+
+    /// <summary>The stack on a potion key ran out and the game emptied the key while more are in
+    /// the bag: say so (once), the key drinks nothing until the potion is put back on it.</summary>
+    private void CheckPotionKeys(WorldSnapshot world, BotProfile profile)
+    {
+        foreach (var (key, name) in new[] { (profile.Keys.HpPotion, "HP"), (profile.Keys.MpPotion, "MP") })
+        {
+            if (Potion(world, key) is not { } potion)
+                continue;
+            if (potion.OnKey || potion.InBag == 0)
+            {
+                _potionKeyWarned.Remove(key);
+                continue;
+            }
+            if (!_potionKeyWarned.Add(key))
+                continue;
+            string label = key.ToString().TrimStart('D');
+            _log($"⚠ {label} tuşundaki {name} iksiri yığını bitti; oyun bu tuşu boşalttı. Çantada {potion.InBag} tane daha var: oyunda iksiri tekrar {label} tuşuna koy.");
+            Notify($"⚠ {label} tuşundaki {name} iksiri bitti (çantada {potion.InBag} var). Oyunda tekrar {label} tuşuna koy.");
+            Alert();
+        }
     }
 
     /// <summary>A click on this spot didn't select a mob a moment ago: don't try it again right away.</summary>

@@ -46,7 +46,7 @@ Bot oyunun kendi pencerelerinin (Esc menüsü, envanter, karakter, beceriler, ay
 
 - **Öldürülen mob:** Karakterin 8 m yakınında canlı görülen bir mob ölür (ya da dünyadan kalkar) **ve** birkaç saniye içinde EXP'in artarsa sayılır. Başkasının kestiği mob (EXP gelmez) ve uzaktaki moblar sayılmaz.
 - **EXP:** Oturumda kazanılan EXP (seviye atlayınca eski seviyenin kalanı + yeni seviyedeki EXP), saatte EXP, seviye yüzdesi ve bu hızla seviye atlamaya kalan süre.
-- **İksir:** HP/MP iksir tuşunun (1, 2) hızlı slotundaki eşyanın envanterdeki toplam adedi; azaldıkça "içildi" sayılır. İksir bitince günlüğe uyarı yazılır, kutu 20'nin (MP 10'un) altında kırmızı olur.
+- **İksir:** HP/MP iksir tuşunun (1, 2) hızlı slotundaki eşyanın envanterdeki toplam adedi; azaldıkça "içildi" sayılır. Aynı iksirin bütün yığınları sayılır (ör. 3 × 200 = 600); başka boyuttaki iksirler (orta, büyük) sayılmaz. Tuştaki yığın bitince oyun o tuşu **boşaltır** ve tuş artık iksir içmez: bot bunu görür, iksiri hatırlayıp çantadakini saymaya devam eder ve günlüğe + Telegram'a "iksiri tekrar 1 tuşuna koy" uyarısı yazar (bot belleğe yazmadığı için kendisi koyamaz). Tuş boşken HP iksiri 0 sayılır, yani **Kaç HP iksiri kalınca kaç** açıksa bot güvenli bir yere çekilip durur. İksir bitince günlüğe uyarı yazılır, kutu 20'nin (MP 10'un) altında kırmızı olur.
 - **Yang:** Oturumda kazanılan yang.
 
 ## Hedef seçimi ve eşya toplama
