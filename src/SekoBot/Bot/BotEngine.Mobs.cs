@@ -46,7 +46,9 @@ internal sealed partial class BotEngine
         }
         var drops = new List<GroundSpot>();
         if (profile.PickUpDrops)
-            foreach (var item in (world.Drops ?? []).Where(d => WantedLoot(d, profile)).OrderBy(d => d.Position.DistanceXY(world.Player)))
+            // What can't go into the bag any more isn't walked to (a full bag: only yang and items adding to a stack).
+            foreach (var item in (world.Drops ?? []).Where(d => WantedLoot(d, profile) && world.Progress?.Fits(d.Vnum) != false)
+                         .OrderBy(d => d.Position.DistanceXY(world.Player)))
             {
                 double away = item.Position.DistanceXY(world.Player);
                 // A special item ("Topla", e.g. an event card) is gone for from further away, also

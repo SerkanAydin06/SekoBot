@@ -207,3 +207,39 @@ public class TallSpaceTests
         Assert.False(Bag(lastRow).TallSpace());
     }
 }
+
+public class FullBagLootTests
+{
+    [Fact]
+    public void A_full_bag_only_takes_yang_and_what_adds_to_a_stack()
+    {
+        // Page 1 full: potions (27002, 150 in a stack), a full stack of 27003, the rest single items.
+        var items = Enumerable.Range(13, 46).Select(s => new InventoryItem(s, 30070, 1)).Prepend(new InventoryItem(12, 27003, 200))
+            .Prepend(new InventoryItem(11, 27002, 150)).ToArray();
+        var full = new CharacterProgress(0, 0, 0, items, [], InventoryEnd: 58);
+        Assert.Equal(0, full.FreeSlots());
+        Assert.True(full.Fits(1));           // yang
+        Assert.True(full.Fits(27002));       // adds to the potion stack
+        Assert.False(full.Fits(27003));      // that stack is full
+        Assert.False(full.Fits(11210));      // armour
+        Assert.False(full.Fits(50300));      // anything else
+
+        // Two free slots side by side: a ring fits, armour (two slots one under the other) doesn't.
+        var two = new CharacterProgress(0, 0, 0, items.Where(i => i.Slot is not (20 or 21)).ToArray(), [], InventoryEnd: 58);
+        Assert.True(two.Fits(50300));
+        Assert.False(two.Fits(11210));
+    }
+
+    [Fact]
+    public void Items_that_cannot_go_into_the_bag_are_not_walked_to()
+    {
+        var p = new BotProfile { LootYang = true, LootOther = true, LootEquipment = true, PickUpDrops = true };
+        var items = Enumerable.Range(11, 48).Select(s => new InventoryItem(s, 30070, 1)).ToArray();
+        var me = new Vec3(10000, 10000, 1800);
+        var camera = new CameraView(me with { Z = me.Z + 1000 }, -90, 0, 0, 90);
+        var world = new WorldSnapshot(me, camera, [], 0, "c2", Progress: new CharacterProgress(0, 0, 0, items, [], InventoryEnd: 58),
+            Drops: [new GroundItem(1, new Vec3(10100, 10000, 1800), 1, 50), new GroundItem(2, new Vec3(10000, 10100, 1800), 11210, 1)]);
+        var view = BotEngine.MemoryView(world, p, 1920, 1080);
+        Assert.Equal([1L], view!.Value.Drops.Select(d => d.Id));
+    }
+}

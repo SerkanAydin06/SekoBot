@@ -164,8 +164,27 @@ internal sealed record CharacterProgress(long Exp, long NeedExp, long Yang,
     /// <summary>Tall items, as seen in the game's inventory: swords (0–999), bows (2000–2999),
     /// two-handed (3000–3999) and armour (11000–11999). Daggers, fans, bells and the rest are
     /// counted as one slot.</summary>
-    private static bool TwoSlots(int vnum) =>
+    internal static bool TwoSlots(int vnum) =>
         vnum is >= 0 and < 1000 or >= 2000 and < 4000 or >= 11000 and < 12000;
+
+    /// <summary>A stack that size is full (the game's usual limit).</summary>
+    public const int FullStack = 200;
+
+    /// <summary>
+    /// Whether an item lying on the ground can still go into the bag: yang always; an item that adds
+    /// to a stack already in the bag (a stack not full yet); otherwise a free slot is needed — for a
+    /// tall item (armour, sword…) two, one under the other. True when the bag isn't known.
+    /// </summary>
+    public bool Fits(int vnum)
+    {
+        if (vnum == 1 || FreeSlots() is not int free)
+            return true;
+        if (Inventory.Any(i => i.Slot >= FirstBagSlot && i.Vnum == vnum && i.Count is > 1 and < FullStack))
+            return true;
+        if (free <= 0)
+            return false;
+        return !TwoSlots(vnum) || TallSpace() != false;
+    }
 
     /// <summary>How many of an item are in the whole inventory.</summary>
     public int Count(int vnum) => Inventory.Where(i => i.Vnum == vnum).Sum(i => i.Count);

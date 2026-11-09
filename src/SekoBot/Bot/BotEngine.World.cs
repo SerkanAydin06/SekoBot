@@ -130,6 +130,7 @@ internal sealed partial class BotEngine
     }
 
     private int _inventoryWarnedAt = int.MaxValue;
+    private bool _fullNoted;
     private string? _gmSeen;
 
     /// <summary>
@@ -168,6 +169,14 @@ internal sealed partial class BotEngine
         bool tight = free <= CleanAtFreeSlots || world.Progress?.TallSpace() == false;
         if (tight && StartCleaning(world, profile))
             return;
+        if (free <= 0 && !_fullNoted)
+        {
+            _fullNoted = true;
+            if (!profile.StopWhenInventoryFull)
+                _log("Çanta dolu ve atılacak eşya yok: bundan sonra yalnızca yang ve çantadaki yığınlara eklenecek eşyalar toplanacak.");
+        }
+        else if (free > 2)
+            _fullNoted = false;
         if (free <= 0 && profile.StopWhenInventoryFull)
         {
             _log("⚠ Envanter doldu; toplanan eşyalar kaybolmasın diye bot durduruluyor.");
