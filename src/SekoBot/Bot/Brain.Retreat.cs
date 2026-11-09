@@ -45,7 +45,58 @@ internal sealed partial class Brain
     {
         _retreating = _potionsWereEnough = _potionWarned = false;
         _quietSince = Never;
+        _fleeing = false;
+        _fleeSince = _fleeQuietSince = Never;
         WantsClean = false;
+    }
+
+    // ── In danger: HP low with several mobs on us ──
+
+    /// <summary>Running away at most this long at a time (then fight again: running forever loses the area).</summary>
+    internal const int FleeMaxMs = 20_000;
+    private bool _fleeing;
+    private TimeSpan _fleeSince = Never, _fleeQuietSince = Never;
+
+    /// <summary>Seen in the game: 9 aggressive mobs took HP from 1071 to 0 in 10 s while the bot kept
+    /// hitting. Below FleeAtHp with 3 or more on us, the bot stops hitting and walks away from them
+    /// (potions keep being drunk), until HP is above FleeUntilHp, nothing hits us for 2 s, or 20 s passed.</summary>
+    /// <returns>True when this tick was spent getting away.</returns>
+    private bool FleeTick(GameState state, BotProfile p, List<BotAction> actions)
+    {
+        var now = state.Time;
+        int attackers = Math.Max(state.Attackers.Count, state.Targets.Count(t => t.AttacksMe));
+        if (!_fleeing)
+        {
+            if (p.FleeAtHp <= 0 || !p.NavigateMode || state.Hp is not double low || low >= p.FleeAtHp || attackers < 3)
+                return false;
+            _fleeing = true;
+            _fleeSince = now;
+            _fleeQuietSince = Never;
+            actions.Add(new NoteAction($"Tehlike: can %{low * 100:0}, {attackers} mob saldırıyor; dövüş bırakılıp uzaklaşılıyor."));
+        }
+        if (attackers == 0)
+        {
+            if (_fleeQuietSince == Never)
+                _fleeQuietSince = now;
+        }
+        else
+            _fleeQuietSince = Never;
+        bool better = state.Hp is double hp && hp >= p.FleeUntilHp;
+        bool quiet = _fleeQuietSince != Never && now - _fleeQuietSince >= Ms(2000);
+        if (better || quiet || now - _fleeSince >= Ms(FleeMaxMs))
+        {
+            _fleeing = false;
+            actions.Add(new NoteAction(better ? "Can toparlandı; dövüşe dönülüyor." : quiet ? "Kimse saldırmıyor; devam." : "Kaçmak işe yaramadı; yeniden dövüşülüyor."));
+            return false;
+        }
+        bool refresh = now - _lastKeyRefresh >= Ms(1000);
+        if (refresh)
+            _lastKeyRefresh = now;
+        _tickTime = now;
+        SetAttack(false, p, actions, refresh);
+        FinishFight(p, actions, now);
+        GetAway(state, p, actions, refresh);
+        return true;
     }
 
     /// <returns>True when this tick was spent getting to a quiet spot for throwing items away.</returns>

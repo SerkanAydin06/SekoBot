@@ -271,6 +271,10 @@ internal sealed class MainForm : Form
         Check(potions, "Ölünce yeniden başla", 0, 68, 300, _profile.ReviveOnDeath, v => _profile.ReviveOnDeath = v);
         NumberRow(potions, "Kaç HP iksiri kalınca kaç", 0, 102, 0, 200, _profile.RetreatAtPotions, 0, 1,
             v => _profile.RetreatAtPotions = (int)v);
+        NumberRow(potions, "Tehlikede kaç: can % altı", 0, 136, 0, 90, Math.Round(_profile.FleeAtHp * 100), 0, 5,
+            v => _profile.FleeAtHp = v / 100);
+        Hint(potions, "Tehlikede kaç: can bu yüzdenin altına düşer ve en az 3 mob saldırırsa bot vurmayı bırakıp moblardan " +
+            "uzaklaşır (iksir içmeye devam eder); can %60'ı geçince ya da 2 sn kimse saldırmayınca (en çok 20 sn) dövüşe döner. 0 = kapalı.", 176);
         Check(potions, "Becerileri otomatik kullan (bellekten)", 370, 0, 360, _profile.AutoSkills, v => _profile.AutoSkills = v);
         NumberRow(potions, "Alan becerisi: en az mob", 370, 34, 1, 15, _profile.AreaSkillMinMobs, 0, 1,
             v => _profile.AreaSkillMinMobs = (int)v);
@@ -1208,7 +1212,9 @@ internal sealed class MainForm : Form
     {
         if (IsDisposed)
             return;
-        _log.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
+        string line = $"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}";
+        _log.AppendText(line);
+        LogFile.Append(line);
         if (_log.TextLength > 20000)
             _log.Text = _log.Text[^14000..];
         _log.SelectionStart = _log.TextLength;

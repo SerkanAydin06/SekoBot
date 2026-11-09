@@ -50,6 +50,9 @@ internal sealed partial class Brain
         _travelSince = Never;
         ResetPull();
         _dropId = 0;
+        _unreachable.Clear();
+        _approachId = 0;
+        _approachSince = _approachLast = Never;
         _dropTrying = TimeSpan.Zero;
         _dropTriedAt = Never;
         _specialNoted = false;
@@ -112,8 +115,6 @@ internal sealed partial class Brain
         if (refresh)
             _lastKeyRefresh = now;
 
-        LearnPullSize(state, p, actions);
-
         // Nothing here ever stops the bot: camera keys, turning and loot run alongside.
         if (Phase == BotPhase.Setup)
         {
@@ -155,8 +156,12 @@ internal sealed partial class Brain
         bool fromMemory = state.Targets.Count > 0;
         // Nor to mobs on a ledge or behind a spot we got stuck at before.
         _walkGoal = null;
+        foreach (var (id, until) in _unreachable.ToList())
+            if (now >= until)
+                _unreachable.Remove(id);
         if (fromMemory)
-            state = state with { Targets = state.Targets.Where(t => InArea(t, p) && Walkable(t, state, now)).ToList() };
+            state = state with { Targets = state.Targets.Where(t => InArea(t, p) && Walkable(t, state, now) &&
+                                                                    (t.AttacksMe || !_unreachable.ContainsKey(t.Id))).ToList() };
         var chosen = state.Targets.Count > 0 ? ChooseTarget(state) : null;
         if (chosen != null)
         {
@@ -303,6 +308,15 @@ internal sealed partial class Brain
             dy = crowd.Y - cy;
         }
 
+        // Not getting any closer to it (behind a wall, a rock, on a ledge): leave it for a while.
+        if (chosen != null && !chosen.AttacksMe && NotGettingCloser(chosen, now))
+        {
+            _unreachable[chosen.Id] = now + Ms(UnreachableForMs);
+            StuckHere(state);
+            actions.Add(new NoteAction($"{(chosen.Priority ? "Metin taşına" : "Moba")} {ApproachGiveUpMs / 1000} sn'dir yaklaşılamıyor; bir süre bırakıldı."));
+            return;
+        }
+
         // Walk towards it: W up, S down, A left, D right (both for diagonals).
         _walkGoal = chosen?.Position;
         SetAttack(false, p, actions, refresh);
@@ -335,6 +349,38 @@ internal sealed partial class Brain
         _travelSince = Never;
         ResetLeash();
         ResetPull();
+    }
+
+    /// <summary>Walking to a mob or stone without getting 1 m closer for this long: it can't be reached.</summary>
+    internal const int ApproachGiveUpMs = 8000;
+    /// <summary>One that couldn't be reached is left alone this long.</summary>
+    internal const int UnreachableForMs = 120_000;
+    private readonly Dictionary<int, TimeSpan> _unreachable = [];
+    private int _approachId;
+    private double _approachBest;
+    private TimeSpan _approachSince = Never, _approachLast = Never;
+
+    /// <summary>
+    /// Measured on the real distance (not on the walk timers, which a step aside resets: seen walking
+    /// 70 s around a rock towards a Metin stone): no metre closer to it in 8 s.
+    /// </summary>
+    private bool NotGettingCloser(TargetInfo target, TimeSpan now)
+    {
+        // Another one, or not walked to just now (fighting meanwhile): start measuring again.
+        bool fresh = target.Id != _approachId || _approachSince == Never || now - _approachLast > Ms(1500);
+        _approachLast = now;
+        if (fresh || target.Distance < _approachBest - 100)
+        {
+            _approachId = target.Id;
+            _approachBest = Math.Min(fresh ? double.MaxValue : _approachBest, target.Distance);
+            _approachSince = now;
+            return false;
+        }
+        if (now - _approachSince < Ms(ApproachGiveUpMs))
+            return false;
+        _approachId = 0;
+        _approachSince = Never;
+        return true;
     }
 
     private int _targetId;

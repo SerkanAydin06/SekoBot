@@ -13,6 +13,8 @@ internal sealed partial class Brain
     /// <summary>Seeded from the start time: different every session, the same when a recording is replayed.</summary>
     private Random _random = new(0);
     private TimeSpan _nextBreak = Never, _breakUntil = Never;
+    /// <summary>A break waits while 3 or more mobs are this close (world units, 10 m).</summary>
+    internal const double BreakClearRange = 1000;
 
     private void ResetBreaks(TimeSpan now, BotProfile p)
     {
@@ -42,7 +44,9 @@ internal sealed partial class Brain
             ResetBreaks(now, p);
             return false;
         }
-        bool busy = Phase == BotPhase.Fighting || state.Attackers.Count > 0 || state.HasTarget;
+        // Not with mobs all around either (seen: 27 gathered around a break, and the fight after it was lost).
+        bool busy = Phase == BotPhase.Fighting || state.Attackers.Count > 0 || state.HasTarget ||
+                    state.Targets.Count(t => t.Distance < BreakClearRange) >= 3;
         if (now < _nextBreak || busy)
             return false;
         double seconds = p.BreakSeconds * (0.75 + 0.5 * _random.NextDouble());
