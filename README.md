@@ -86,9 +86,11 @@ Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü h
 **Bildirim** sekmesi: kendi Telegram botuna mesaj gönderir — GM görüldü, karakter öldü, seviye atladın, iksir bitti, bot durdu (sebebiyle; sen durdurursan mesaj gelmez). Aynı mesaj dakikada en fazla bir kez gelir.
 Kurulum: Telegram'da @BotFather'a `/newbot` yaz, verdiği anahtarı **Bot anahtarı**na yapıştır; kendi botuna "merhaba" yaz ve **Sohbeti bul**'a bas; **Deneme mesajı** ile dene; kutucuğu işaretle. Anahtar yalnızca bu bilgisayarda (`profile.json`) saklanır, yalnızca api.telegram.org'a bağlanılır.
 
-## Kalabalığa git
+## Grupları topla
 
-**Kalabalığa git** işaretliyken (varsayılan) bot, yanında mob yoksa ekrandaki en iyi mob grubuna yürür (moblar bellekten): birbirine yakın en az 3 mob (`CrowdMinMobs`) bir grup sayılır; yakın ve kalabalık grup kazanır, uzaktaki grubun çok daha büyük olması gerekir. Grubun ortasına varınca Space ile saldırır. Yanındaki mobu bitirmeden gruba koşmaz, neredeyse ulaştığı tek mobu önce alır ve seçtiği gruptan kolay kolay vazgeçmez (zikzak yapmaz). Kapalıyken her zaman en yakın moba gider.
+**Grupları topla** (Saldırı sekmesi, varsayılan açık): oyun mobları üçlü gruplar halinde çıkarır ve birine vurunca grubun hepsi gelir. Grubu bellekten bulur (aynı gruptaki mobların numaraları ardışık — ör. 1880, 1881, 1882 — ve yan yanalar). Bot 15 m içindeki henüz uyanmamış grupların en yakınındaki bir moba vurur, grup peşine takılınca bir sonraki gruba geçer; peşindeki mob sayısı **Toplanacak en fazla mob**'a (varsayılan 9) ulaşınca, yakında başka grup kalmayınca ya da can **Toplarken can en az %**'nin (varsayılan 70) altına düşünce durup hepsini birlikte keser (alan becerileri hepsine vurur). 3 sn vurulup uyanmayan grup bir dakika bırakılır. Öncelikli metin taşı varken toplama yapılmaz.
+
+Eski **Kalabalığa git** seçeneği bunun yerine kapatıldı (`PreferCrowds`, varsayılan kapalı).
 
 ## Beceriler (otomatik)
 

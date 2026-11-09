@@ -38,7 +38,7 @@ internal sealed class KeyBindings
 internal sealed class BotProfile
 {
     /// <summary>Current profile format; older files are upgraded once by <see cref="ProfileStore"/>.</summary>
-    public const int CurrentVersion = 5;
+    public const int CurrentVersion = 6;
 
     /// <summary>Number of skill keys (F1–F5).</summary>
     public const int SkillSlots = 5;
@@ -78,8 +78,15 @@ internal sealed class BotProfile
     /// nearest mob (from memory), hold Space when it is next to the character. Off: click mode.
     /// </summary>
     public bool NavigateMode { get; set; } = true;
-    /// <summary>Walk into the biggest nearby group of mobs instead of to the single nearest one.</summary>
-    public bool PreferCrowds { get; set; } = true;
+    /// <summary>Walk into the biggest nearby group of mobs on screen (old; replaced by <see cref="PullGroups"/>).</summary>
+    public bool PreferCrowds { get; set; }
+    /// <summary>Gather mobs first: hit one mob of each nearby spawn group (the group follows), then
+    /// fight them all together.</summary>
+    public bool PullGroups { get; set; } = true;
+    /// <summary>Stop gathering once this many mobs are after us.</summary>
+    public int PullMaxMobs { get; set; } = 9;
+    /// <summary>Only gather while HP is at least this (0..1).</summary>
+    public double PullMinHp { get; set; } = 0.7;
     /// <summary>A group needs at least this many mobs.</summary>
     public int CrowdMinMobs { get; set; } = 3;
     /// <summary>Mobs within this share of the screen height of each other form a group.</summary>
@@ -248,6 +255,9 @@ internal static class ProfileStore
     {
         if (profile.Version >= BotProfile.CurrentVersion)
             return false;
+        // v6: "go to the crowd" is replaced by gathering spawn groups.
+        if (profile.Version < 6)
+            profile.PreferCrowds = false;
         // v5: memory reading is fast enough for 20 decisions a second (was 10).
         if (profile.Version < 5 && profile.PerceptionFps == 10)
             profile.PerceptionFps = 20;

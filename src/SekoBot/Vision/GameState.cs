@@ -9,8 +9,10 @@ internal sealed record SkillSlot(Keys Key, string Name, SkillKind Kind, int Mana
 /// it can be hit, and what killing it is worth.</summary>
 /// <param name="Reach">Centre-to-centre distance from which the character hits it.</param>
 /// <param name="Priority">A mob to go for first (attacking us, or a preferred Metin stone).</param>
+/// <param name="AttacksMe">The mob is after us.</param>
+/// <param name="Group">The spawn group it belongs to (mobs of a group come together when one is hit); 0 = none.</param>
 internal sealed record TargetInfo(int Id, Point Spot, double Distance, double Reach, int Exp, int Hp, int MaxHp,
-    int DamageMax, bool Priority);
+    int DamageMax, bool Priority, bool AttacksMe = false, int Group = 0);
 
 /// <summary>An item on the ground and where it is on screen.</summary>
 internal readonly record struct GroundSpot(long Id, Point Spot);
