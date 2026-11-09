@@ -125,7 +125,7 @@ internal sealed partial class BotEngine
             _hotspots.Clear(); // another map
             _hotspotMap = world.MapName;
         }
-        _hotspots.Observe(world.Player, world.Mobs.Where(m => Wanted(m, profile)), now);
+        _hotspots.Observe(world.Player, world.Mobs.Where(m => Wanted(m, profile, world.Level)), now);
         return BotRunning ? _hotspots.Best(world.Player, now, _botHome, profile.LeashMeters * 100) : null;
     }
 
