@@ -85,6 +85,9 @@ internal sealed class BotProfile
     public bool PullGroups { get; set; } = true;
     /// <summary>Stop gathering once this many mobs are after us.</summary>
     public int PullMaxMobs { get; set; } = 9;
+    /// <summary>After the first group, only groups within this many metres of it are gathered
+    /// (so the bot gathers one area instead of being led further and further away).</summary>
+    public double PullAreaMetres { get; set; } = 8;
     /// <summary>Only gather while HP is at least this (0..1).</summary>
     public double PullMinHp { get; set; } = 0.7;
     /// <summary>A group needs at least this many mobs.</summary>

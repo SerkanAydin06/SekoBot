@@ -80,14 +80,43 @@ public class PullTests
         Assert.Equal(BotPhase.Fighting, brain.Phase);
     }
 
+    // Mobs with world positions: the character stands at x = 0; screen x follows world x.
+    private static TargetInfo At(int id, int group, double x, double y, int exp = 103, int hp = 305, bool attacks = false) =>
+        new(id, new Point(Center.X + (int)(x / 5), Center.Y + (int)(y / 5)), Math.Sqrt(x * x + y * y), 130, exp, hp, hp, 56,
+            attacks, attacks, group, new Vec3(x, y, 0));
+
+    [Fact]
+    public void Starts_with_the_group_worth_most_then_only_gathers_around_it()
+    {
+        var (brain, p) = Ready(max: 9);
+        p.PullAreaMetres = 8;
+        // Cheap bears 3 m to the right; black bears (384 EXP) 10 m to the left.
+        TargetInfo[] cheap = [At(10, 10, 300, 0), At(11, 10, 320, 50), At(12, 10, 340, -50)];
+        TargetInfo[] black = [At(20, 20, -1000, 0, 384, 624), At(21, 20, -1020, 50, 384, 624), At(22, 20, -1040, -50, 384, 624)];
+        var first = Run(brain, 0, 1000, [.. cheap, .. black]);
+        Assert.Contains(first, x => x is KeyDownAction d && d.Key == p.Keys.MoveLeft);   // to the black bears
+        Assert.DoesNotContain(first, x => x is KeyDownAction d && d.Key == p.Keys.MoveRight);
+
+        // Black bears woken (we're next to them now at x = -900). The cheap bears are 12 m from them:
+        // outside the 8 m area, so they're not gathered — fight what came.
+        TargetInfo[] blackComing = [At(20, 20, -100, 0, 384, 624, attacks: true), At(21, 20, -120, 50, 384, 624, attacks: true),
+            At(22, 20, -140, -50, 384, 624, attacks: true)];
+        TargetInfo[] cheapFar = [At(10, 10, 1200, 0), At(11, 10, 1220, 50), At(12, 10, 1240, -50)];
+        var next = Run(brain, 1000, 2000, [.. blackComing, .. cheapFar]);
+        Assert.Contains(next, x => x is NoteAction n && n.Text.Contains("Bu bölgede başka grup yok"));
+        Assert.DoesNotContain(next, x => x is KeyDownAction d && d.Key == p.Keys.MoveRight);
+    }
+
     [Fact]
     public void Stops_gathering_when_hp_is_low()
     {
         var (brain, _) = Ready(max: 9);
+        TargetInfo[] first = [Mob(10, 10, 40, 100), Mob(11, 10, 60, 150)];
         TargetInfo[] coming = [Mob(10, 10, 40, 100, attacks: true), Mob(11, 10, 60, 150, attacks: true)];
         TargetInfo[] fresh = [Mob(20, 20, -500, 1000), Mob(21, 20, -520, 1050)];
-        Run(brain, 0, 500, [.. coming, .. fresh]);
-        var low = Run(brain, 500, 1500, [.. coming, .. fresh], hp: 0.5);
+        Run(brain, 0, 500, [.. first, .. fresh]);          // gathering starts
+        Run(brain, 500, 1000, [.. coming, .. fresh]);      // the first group comes, on to the next
+        var low = Run(brain, 1000, 2000, [.. coming, .. fresh], hp: 0.5);
         Assert.Contains(low, x => x is NoteAction n && n.Text.StartsWith("Can azaldı"));
         Assert.Equal(BotPhase.Fighting, brain.Phase);
     }

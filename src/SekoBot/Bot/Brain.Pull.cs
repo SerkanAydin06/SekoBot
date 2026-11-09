@@ -5,10 +5,12 @@ namespace SekoBot.Bot;
 
 /// <summary>
 /// Gathering mobs before fighting them (the game spawns them in threes; hitting one brings the
-/// whole group): walk to the nearest group nobody has woken yet, hit one of its mobs until the
-/// group comes after us, then on to the next group — the ones behind follow. Fighting starts when
-/// PullMaxMobs are after us, when HP falls below PullMinHp, or when no group is left close by
-/// (15 m); then everything is fought together (area skills hit them all).
+/// whole group). The first group is the one worth most (experience for the time to kill, a little
+/// less for every metre away) within 15 m; the next ones only come from around that first group
+/// (PullAreaMetres from it), so the bot gathers one area instead of being led further and further
+/// away. A group is hit until it comes after us, then on to the next — the ones behind follow.
+/// Fighting starts when PullMaxMobs are after us, when HP falls below PullMinHp, or when no group
+/// is left in the area; then everything is fought together (area skills hit them all).
 /// </summary>
 internal sealed partial class Brain
 {
@@ -19,6 +21,8 @@ internal sealed partial class Brain
     private int _pullGroup;
     private TimeSpan _pullHitSince = Never;
     private bool _pulling;
+    /// <summary>The middle of the first group gathered: the next ones come from around it.</summary>
+    private Memory.Vec3? _pullAnchor;
 
     private void ResetPull()
     {
@@ -26,6 +30,13 @@ internal sealed partial class Brain
         _pullGroup = 0;
         _pullHitSince = Never;
         _pulling = false;
+        _pullAnchor = null;
+    }
+
+    private static Memory.Vec3? Centre(IEnumerable<TargetInfo> group)
+    {
+        var known = group.Where(t => t.Position != null).Select(t => t.Position!.Value).ToList();
+        return known.Count == 0 ? null : new Memory.Vec3(known.Average(v => v.X), known.Average(v => v.Y), known.Average(v => v.Z));
     }
 
     /// <returns>True when this tick was spent gathering.</returns>
@@ -42,6 +53,9 @@ internal sealed partial class Brain
             return EndPull(actions, $"Can azaldı; toplanan {chasing} mob kesiliyor.");
         if (chasing >= p.PullMaxMobs)
             return EndPull(actions, $"{chasing} mob toplandı; hepsi birden kesiliyor.");
+        // A new gathering only starts when nothing is after us: first fight what came.
+        if (!_pulling && chasing > 0)
+            return EndPull(actions, null);
 
         foreach (var (pulledGroup, when) in _pulled.ToList())
             if (now - when > Ms(60_000))
@@ -55,19 +69,30 @@ internal sealed partial class Brain
             _pullHitSince = Never;
         }
 
+        double area = Math.Max(1, p.PullAreaMetres) * 100;
         var fresh = state.Targets
-            .Where(t => t.Group != 0 && t.Distance <= PullRange && !_pulled.ContainsKey(t.Group))
+            .Where(t => t.Group != 0 && t.Distance <= PullRange * 1.5 && !_pulled.ContainsKey(t.Group))
             .GroupBy(t => t.Group)
             .Where(g => g.All(t => !t.AttacksMe && t.Hp >= t.MaxHp))
+            // The first group within 15 m; the next ones only around the first.
+            .Where(g => _pullAnchor is not Memory.Vec3 anchor
+                ? g.Min(t => t.Distance) <= PullRange
+                : Centre(g) is Memory.Vec3 c ? c.DistanceXY(anchor) <= area : g.Min(t => t.Distance) <= area)
             .ToList();
         if (fresh.Count == 0)
-            return EndPull(actions, chasing > 0 ? $"Yakında başka grup yok; toplanan {chasing} mob kesiliyor." : null);
+            return EndPull(actions, chasing > 0 ? $"Bu bölgede başka grup yok; toplanan {chasing} mob kesiliyor." : null);
 
-        var group = fresh.FirstOrDefault(g => g.Key == _pullGroup) ?? fresh.MinBy(g => g.Min(t => t.Distance))!;
+        double dps = Math.Max(50, state.AttackPower);
+        double Worth(IGrouping<int, TargetInfo> g) =>
+            g.Sum(t => (t.Exp > 0 ? t.Exp : t.MaxHp * 0.3) / (t.Hp / dps + 1)) / (1 + g.Min(t => t.Distance) / 1000);
+        // Keep the group being pulled; else the first one by worth, the next ones nearest to us.
+        var group = fresh.FirstOrDefault(g => g.Key == _pullGroup)
+                    ?? (_pullAnchor == null ? fresh.MaxBy(Worth)! : fresh.MinBy(g => g.Min(t => t.Distance))!);
         if (group.Key != _pullGroup)
         {
             _pullGroup = group.Key;
             _pullHitSince = Never;
+            _pullAnchor ??= Centre(group);
         }
         if (!_pulling)
         {
@@ -115,6 +140,7 @@ internal sealed partial class Brain
         _pulling = false;
         _pullGroup = 0;
         _pullHitSince = Never;
+        _pullAnchor = null;
         return false;
     }
 }

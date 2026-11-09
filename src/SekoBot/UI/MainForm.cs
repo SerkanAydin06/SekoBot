@@ -162,8 +162,10 @@ internal sealed class MainForm : Form
             v => _profile.PullMaxMobs = (int)v);
         NumberRow(attack, "Toplarken can en az (%)", 370, 68, 10, 100, Math.Round(_profile.PullMinHp * 100), 0, 5,
             v => _profile.PullMinHp = v / 100);
-        Hint(attack, "Saldırı mesafesi bellekteki gerçek menzille hesaplanır; % yalnızca yedek. Gruplar: bot yakındaki üçlülerin " +
-            "birer mobuna vurur, peşine takılanlar sınıra ulaşınca ya da can düşünce hepsini birden keser.", 102);
+        NumberRow(attack, "Toplama alanı (m)", 0, 68, 3, 30, _profile.PullAreaMetres, 0, 1,
+            v => _profile.PullAreaMetres = v);
+        Hint(attack, "Saldırı mesafesi bellekteki gerçek menzille hesaplanır; % yalnızca yedek. Gruplar: bot en değerli üçlüden başlar, " +
+            "toplama alanındaki diğer üçlüleri de toplar; sınıra ulaşınca, alan boşalınca ya da can düşünce hepsini birden keser.", 102);
 
         // İksir & Buff
         // Hedef: which mobs to go for, and loot.
