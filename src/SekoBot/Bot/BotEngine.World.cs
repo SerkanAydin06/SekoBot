@@ -271,8 +271,11 @@ internal sealed partial class BotEngine
 
     private int? PotionVnum(WorldSnapshot world, Keys key) => Potion(world, key)?.Vnum;
 
-    /// <summary>The stack on a potion key ran out and the game emptied the key while more are in
-    /// the bag: say so (once), the key drinks nothing until the potion is put back on it.</summary>
+    private readonly Dictionary<Keys, DateTime> _potionKeyEmptySince = [];
+
+    /// <summary>The game moves a potion key on to the next stack by itself when one runs out. Only
+    /// when the key stays empty for half a minute with potions still in the bag (put somewhere the
+    /// game doesn't look, or a different potion) say so, once.</summary>
     private void CheckPotionKeys(WorldSnapshot world, BotProfile profile)
     {
         foreach (var (key, name) in new[] { (profile.Keys.HpPotion, "HP"), (profile.Keys.MpPotion, "MP") })
@@ -282,13 +285,16 @@ internal sealed partial class BotEngine
             if (potion.OnKey || potion.InBag == 0)
             {
                 _potionKeyWarned.Remove(key);
+                _potionKeyEmptySince.Remove(key);
                 continue;
             }
-            if (!_potionKeyWarned.Add(key))
+            if (!_potionKeyEmptySince.TryGetValue(key, out var since))
+                _potionKeyEmptySince[key] = since = DateTime.UtcNow;
+            if (DateTime.UtcNow - since < TimeSpan.FromSeconds(30) || !_potionKeyWarned.Add(key))
                 continue;
             string label = key.ToString().TrimStart('D');
-            _log($"⚠ {label} tuşundaki {name} iksiri yığını bitti; oyun bu tuşu boşalttı. Çantada {potion.InBag} tane daha var: oyunda iksiri tekrar {label} tuşuna koy.");
-            Notify($"⚠ {label} tuşundaki {name} iksiri bitti (çantada {potion.InBag} var). Oyunda tekrar {label} tuşuna koy.");
+            _log($"⚠ {label} tuşu 30 sn'dir boş (çantada {potion.InBag} {name} iksiri var). Oyunda iksiri tekrar {label} tuşuna koy.");
+            Notify($"⚠ {label} tuşundaki {name} iksiri boş (çantada {potion.InBag} var). Oyunda tekrar {label} tuşuna koy.");
             Alert();
         }
     }
