@@ -278,6 +278,8 @@ internal sealed partial class Brain
 
     private int _targetId;
     private bool _toHotspot;
+    /// <summary>Mobs within this (world units, 8 m) are chosen before any further away.</summary>
+    internal const double NearbyRange = 800;
 
     /// <summary>
     /// Picks the mob worth most per second: the experience it gives ÷ (time to walk there + time
@@ -289,10 +291,16 @@ internal sealed partial class Brain
     private TargetInfo ChooseTarget(GameState state)
     {
         var pool = state.Targets.Any(t => t.Priority) ? state.Targets.Where(t => t.Priority).ToList() : state.Targets.ToList();
+        // Mobs close by come first: walking across the field for a slightly better one lost more
+        // than it won (seen in the game: 15 s of walking past mobs). Far ones only when none is near.
+        var nearby = pool.Where(t => t.Distance <= NearbyRange).ToList();
+        if (nearby.Count > 0)
+            pool = nearby;
         double dps = Math.Max(50, state.AttackPower); // roughly: the attack value per second
         double Score(TargetInfo t)
         {
-            double walk = Math.Max(0, t.Distance - t.Reach) / 350; // walking speed ~350 units/s (measured)
+            // Walking runs at ~350 units/s (measured), but with stops and mobs moving it's about 200.
+            double walk = Math.Max(0, t.Distance - t.Reach) / 200;
             double kill = t.Hp / dps;
             double exp = t.Exp > 0 ? t.Exp : t.MaxHp * 0.3;
             double score = exp / (walk + kill + 1);
