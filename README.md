@@ -30,7 +30,7 @@ Karakterin öldüğünü bot bellekten görür: tuşları bırakır, ölüm penc
 
 ## Açılır pencereler
 
-Bot oyunun kendi pencerelerinin (Esc menüsü, envanter, karakter, beceriler, ayarlar, etkinlik, arkadaşlık istekleri, …) açık olup olmadığını bellekten okur. Bot başladığında kapalı olan bir oyun penceresi açılırsa (ör. level atlayınca çıkan reklam) yürümeyi ve saldırıyı bırakır ve **bir kez Esc**'ye basar; pencere 3 sn sonra hâlâ açıksa tekrar basar. Hangi pencereyi gördüğünü günlüğe adıyla yazar ("Açık pencere (bellekten): EscMenu"). Kapatmak için `profile.json` içinde `"ClosePopups": false`. Not: bot çalışırken envanter gibi bir pencereyi kendin açarsan onu da kapatır.
+Bot oyunun kendi pencerelerinin (Esc menüsü, envanter, karakter, beceriler, ayarlar, etkinlik, arkadaşlık istekleri, …) açık olup olmadığını bellekten okur. Bot başladığında kapalı olan bir oyun penceresi açılırsa (ör. level atlayınca çıkan reklam) yürümeyi ve saldırıyı bırakır ve **bir kez Esc**'ye basar; pencere 3 sn sonra hâlâ açıksa tekrar basar. Seviye atlayınca çıkan reklam da (oyunda `popup_C`, ekrana sonradan eklenen pencereler listesinde) tanınır. Hangi pencereyi gördüğünü günlüğe adıyla yazar ("Açık pencere (bellekten): popup_C"). Kapatmak için `profile.json` içinde `"ClosePopups": false`. Not: bot çalışırken envanter gibi bir pencereyi kendin açarsan onu da kapatır.
 
 ## Alan sınırı ve takılma
 

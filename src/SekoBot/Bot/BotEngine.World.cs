@@ -78,12 +78,14 @@ internal sealed partial class BotEngine
     [
         "EscMenu", "settings", "inventory", "Character", "skills", "community", "costume", "events",
         "friendRequests", "efsunData", "oXGameUI", "pop_ayir", "pop_weaponArmor", "happyHourBoxMobile",
+        "popup_C", // the advert after a level-up (seen in the game, in UI_C.canvasAdds)
     ];
     /// <summary>Parts of the screen that come and go on their own (not windows to close).</summary>
     private static readonly HashSet<string> NotWindows =
     [
         "targetDetail", "dmNotifyer", "w_view", "w_viewSmall", "ustData", "data", "UIhandler", "taskbar",
         "miniMap", "chatBox", "dmBox", "happyHourBox", "closeCinematic", "WBP_QuestingInfoPanel",
+        "reSpawn", // the death window stays "visible" after reviving (seen in the game); death is read on its own
     ];
     private HashSet<string> _windowsAtStart = [];
     private string _windowsSeen = "";
