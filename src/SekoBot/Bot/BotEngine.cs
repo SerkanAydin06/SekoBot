@@ -334,6 +334,9 @@ internal sealed partial class BotEngine : IDisposable
     public void StopBot(string reason)
     {
         ItemBook.SaveIfChanged();
+        lock (_journal)
+            if (_journal.Changed)
+                _journal.Save(JournalPath);
         InputExecutor? input;
         lock (_botGate)
         {

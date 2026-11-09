@@ -12,6 +12,26 @@ internal sealed partial class BotEngine
 {
     private readonly RespawnTracker _respawn = RespawnTracker.Load();
     private readonly PlayerWatch _players = new();
+    private static string JournalPath => Path.Combine(ProfileStore.Directory, "dusme-kaydi.json");
+    private readonly DropJournal _journal = DropJournal.Load(JournalPath);
+    private TimeSpan _journalSavedAt;
+
+    /// <summary>The kinds of mobs on the current map, as the game describes them.</summary>
+    public IReadOnlyList<MobInfo> MapMobs => _world?.MapMobs ?? [];
+
+    /// <summary>What a kind of mob was seen to drop on a map (a copy, for the UI).</summary>
+    public MobDrops? Drops(string map, int mob)
+    {
+        lock (_journal)
+            return _journal.For(map, mob) is { } d ? new MobDrops { Kills = d.Kills, Yang = d.Yang, Items = new(d.Items) } : null;
+    }
+
+    /// <summary>Every map and mob something was recorded for (map, mob number).</summary>
+    public List<(string Map, int Mob)> JournalEntries()
+    {
+        lock (_journal)
+            return [.. _journal.Maps.SelectMany(m => m.Value.Keys.Select(k => (m.Key, k)))];
+    }
     private readonly Dictionary<int, (WorldMob Mob, TimeSpan Seen)> _seenMobs = [];
     private bool _respawnDirty;
     private TimeSpan _respawnSavedAt, _itemsSavedAt;
@@ -51,6 +71,16 @@ internal sealed partial class BotEngine
                 _respawn.Save();
                 _respawnDirty = false;
                 _respawnSavedAt = now;
+            }
+        }
+
+        lock (_journal)
+        {
+            _journal.Update(world, now);
+            if (_journal.Changed && now - _journalSavedAt > TimeSpan.FromSeconds(60))
+            {
+                _journal.Save(JournalPath);
+                _journalSavedAt = now;
             }
         }
 
