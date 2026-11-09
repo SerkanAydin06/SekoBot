@@ -167,3 +167,42 @@ public class ItemListTests
     public void Item_types_read_in_turkish(string type, string sub, string name) =>
         Assert.Equal(name, SekoBot.UI.ItemListForm.TypeName(new ItemInfo(1, "x", type, sub, 0)));
 }
+
+public class SpecialDropTests
+{
+    private static List<BotAction> Run(bool special, double untilMs = 3000)
+    {
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = true, PullGroups = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        var center = new Point(960, 540);
+        // A tiger hitting us on the right; the card lying 5 m to the left.
+        TargetInfo[] attacker = [new(30, new Point(center.X + 40, center.Y), 90, 130, 365, 400, 585, 56, false, AttacksMe: true)];
+        var actions = new List<BotAction>();
+        for (double t = 0; t < untilMs; t += 100)
+            actions.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
+            {
+                Targets = attacker, Attackers = [attacker[0].Spot], MobCandidates = [attacker[0].Spot], Walking = true, AttackPower = 189,
+                Drops = [new GroundSpot(7, new Point(center.X - 300, center.Y), special)],
+            }));
+        return actions;
+    }
+
+    [Fact]
+    public void A_special_item_is_fetched_even_while_a_mob_hits_us()
+    {
+        var actions = Run(special: true);
+        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == Keys.A);          // walks left to the card
+        Assert.Contains(actions, a => a is NoteAction n && n.Text.Contains("Özel eşya"));
+        var plain = Run(special: false);
+        Assert.DoesNotContain(plain, a => a is KeyDownAction d && d.Key == Keys.A);      // a plain item waits for the fight
+    }
+
+    [Fact]
+    public void A_special_item_out_of_reach_is_given_up_after_twenty_seconds_of_trying()
+    {
+        var actions = Run(special: true, untilMs: 25_000);
+        Assert.Contains(actions, a => a is NoteAction n && n.Text.Contains("alınamadı"));
+        Assert.DoesNotContain(Run(special: true, untilMs: 15_000), a => a is NoteAction n && n.Text.Contains("alınamadı"));
+    }
+}
