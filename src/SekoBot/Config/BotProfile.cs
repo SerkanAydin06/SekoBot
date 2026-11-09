@@ -55,6 +55,10 @@ internal sealed class BotProfile
     /// <summary>With this many HP potions left (or fewer), get away from the mobs and stop in a quiet
     /// spot, so the character isn't killed without potions (0 = off).</summary>
     public int RetreatAtPotions { get; set; } = 5;
+    /// <summary>HP below this (0..1) with 3 or more mobs on us: stop fighting and get away while
+    /// drinking, until HP is back above <see cref="FleeUntilHp"/> (0 = off).</summary>
+    public double FleeAtHp { get; set; } = 0.30;
+    public double FleeUntilHp { get; set; } = 0.60;
     /// <summary>At least this long between two skill presses.</summary>
     public int SkillGapMs { get; set; } = 1500;
     /// <summary>Stand still this long while a skill is cast.</summary>

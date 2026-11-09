@@ -141,6 +141,14 @@ internal sealed partial class Brain
         if (RetreatTick(state, p, actions))
             return actions;
 
+        // How the last fight went decides how many are gathered next (also while running away).
+        if (p.NavigateMode)
+            LearnPullSize(state, p, actions);
+
+        // HP low with several mobs on us: get away from them for a moment.
+        if (FleeTick(state, p, actions))
+            return actions;
+
         // Bag full with items to throw away: get to a quiet spot (the engine then throws them).
         if (CleanTick(state, p, actions))
             return actions;

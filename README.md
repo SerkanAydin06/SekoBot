@@ -105,6 +105,14 @@ Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü h
 - **Dağıtılmamış statü / beceri puanı** arttığında.
 - **Etkinlik:** oyunun saatlik düşme etkinlikleri (ör. 22:00–23:00 Nadir Ekipman Sandığı) sol menünün altında görünür; seviyen yeten bir etkinlik başlayınca bildirilir ve **eşyası otomatik "Topla" gibi alınır** ("Etkinlik eşyasını otomatik topla").
 
+**Tehlikede kaç** (İksir / Beceri sayfası, varsayılan %30, 0 = kapalı): can bu yüzdenin altına düşer ve en az 3 mob saldırırsa bot vurmayı bırakıp moblardan uzaklaşır, iksir içmeye devam eder; can %60'ı geçince, 2 sn kimse saldırmayınca ya da en çok 20 sn sonra dövüşe döner (görülen: 9 aç mob canı 10 sn'de 1071'den 0'a indirdi).
+
+**Ulaşılamayan hedef:** bir moba ya da Metin taşına 8 sn'de 1 m bile yaklaşılamazsa (kaya, duvar, yükseklik) 2 dakika bırakılır (görülen: Metin taşına giderken 70 sn bir kayanın çevresinde dönüldü).
+
+**Mola** yakında (10 m) 3 ya da daha çok mob varken verilmez.
+
+**Günlük dosyası:** günlük `%LOCALAPPDATA%\SekoBot\gunluk.txt` dosyasına da yazılır (2 MB'ı geçince `gunluk-eski.txt` olur).
+
 **Kapanmayan pencere:** bot başladıktan sonra açılan bilinmeyen bir pencere Esc ile 7 saniyede kapanmazsa yok sayılır ve bot devam eder (sohbet geçmişi penceresi açık kalınca bot her Esc'de oyun menüsünü açıp kapatıyor ve duruyordu).
 
 **Sersemleme:** karakter sersemleyince (bellekte "stuned") bot bekler; o anı takılma ya da ulaşılamayan grup saymaz.
