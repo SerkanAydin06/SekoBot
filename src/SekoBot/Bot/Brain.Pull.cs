@@ -28,8 +28,61 @@ internal sealed partial class Brain
     /// <summary>The middle of the first group gathered: the next ones come from around it.</summary>
     private Memory.Vec3? _pullAnchor;
 
+    // ── How many to gather: learned from how the fights went ──
+
+    /// <summary>A fight that took HP below this: gather fewer next time.</summary>
+    internal const double PullDangerHp = 0.40;
+    /// <summary>A fight that kept HP above this: one more next time (up to PullMaxMobs).</summary>
+    internal const double PullSafeHp = 0.70;
+    /// <summary>Never fewer than this.</summary>
+    internal const int PullMinMobs = 3;
+
+    /// <summary>How many to gather now (0: not set yet → PullMaxMobs).</summary>
+    private int _pullCap;
+    private double _fightLowHp = 1;
+    private int _fightMostAttackers;
+
+    /// <summary>How many mobs are gathered at most now (lowered after a fight that went badly).</summary>
+    public int PullCap(BotProfile p) => _pullCap is > 0 ? Math.Min(_pullCap, p.PullMaxMobs) : p.PullMaxMobs;
+
+    /// <summary>
+    /// Watches each fight with several mobs on us: when it is over (nothing attacks us any more),
+    /// a fight that took HP below 40 % lowers the number gathered by 2 (not under 3); one that kept
+    /// HP above 70 % with about as many as allowed raises it by 1 again (up to the setting).
+    /// </summary>
+    private void LearnPullSize(GameState state, BotProfile p, List<BotAction> actions)
+    {
+        int attackers = state.Targets.Count(t => t.AttacksMe);
+        if (attackers > 0)
+        {
+            _fightMostAttackers = Math.Max(_fightMostAttackers, attackers);
+            if (state.Hp is double hp)
+                _fightLowHp = Math.Min(_fightLowHp, hp);
+            return;
+        }
+        if (_fightMostAttackers >= PullMinMobs && p.PullGroups)
+        {
+            int cap = PullCap(p);
+            if (_fightLowHp < PullDangerHp && cap > PullMinMobs)
+            {
+                _pullCap = Math.Max(PullMinMobs, Math.Min(cap, _fightMostAttackers) - 2);
+                actions.Add(new NoteAction($"{_fightMostAttackers} mobla can %{_fightLowHp * 100:0}'e düştü; bundan sonra en fazla {_pullCap} mob toplanacak."));
+            }
+            else if (_fightLowHp > PullSafeHp && cap < p.PullMaxMobs && _fightMostAttackers >= cap - 1)
+            {
+                _pullCap = cap + 1;
+                actions.Add(new NoteAction($"Dövüş rahat geçti (can en az %{_fightLowHp * 100:0}); artık en fazla {_pullCap} mob toplanacak."));
+            }
+        }
+        _fightMostAttackers = 0;
+        _fightLowHp = 1;
+    }
+
     private void ResetPull()
     {
+        _pullCap = 0;
+        _fightLowHp = 1;
+        _fightMostAttackers = 0;
         _pulled.Clear();
         _pullGroup = 0;
         _pullHitSince = Never;
@@ -56,7 +109,7 @@ internal sealed partial class Brain
         int chasing = state.Targets.Count(t => t.AttacksMe);
         if (state.Hp is double hp && hp < p.PullMinHp)
             return EndPull(actions, $"Can azaldı; toplanan {chasing} mob kesiliyor.");
-        if (chasing >= p.PullMaxMobs)
+        if (chasing >= PullCap(p))
             return EndPull(actions, $"{chasing} mob toplandı; hepsi birden kesiliyor.");
         // Mobs already after us (one walked into us): a new gathering only takes groups right
         // around us — they follow us there anyway; far groups would leave them hitting our back.

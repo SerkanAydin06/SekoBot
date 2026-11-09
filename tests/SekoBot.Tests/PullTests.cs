@@ -202,3 +202,41 @@ public class PullTests
         Assert.DoesNotContain(actions, x => x is NoteAction n && n.Text.Contains("toplanıyor"));
     }
 }
+
+public class PullSizeTests
+{
+    private static GameState Fight(double ms, int attackers, double hp)
+    {
+        var center = new Point(960, 540);
+        var targets = Enumerable.Range(0, attackers)
+            .Select(i => new TargetInfo(100 + i, new Point(center.X + 40 + i, center.Y), 90, 130, 365, 400, 585, 56, false, AttacksMe: true)).ToArray();
+        return new GameState(TimeSpan.FromMilliseconds(ms), 1920, 1080, hp, 1, 0, 1) { Targets = targets, Walking = true, AttackPower = 189 };
+    }
+
+    [Fact]
+    public void A_fight_that_went_badly_means_fewer_mobs_next_time_an_easy_one_more()
+    {
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PullGroups = true, PullMaxMobs = 9 };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        var notes = new List<string>();
+        void Run(double from, double to, int attackers, double hp)
+        {
+            for (double t = from; t < to; t += 100)
+                notes.AddRange(brain.Tick(Fight(t, attackers, hp)).OfType<NoteAction>().Select(n => n.Text));
+        }
+        Assert.Equal(9, brain.PullCap(p));
+        Run(0, 2000, 9, 0.8);
+        Run(2000, 3000, 9, 0.3);        // 9 on us, HP down to 30 %
+        Run(3000, 3500, 0, 0.5);        // over
+        Assert.Equal(7, brain.PullCap(p));
+        Assert.Contains(notes, n => n.Contains("en fazla 7 mob"));
+
+        Run(3500, 5000, 7, 0.9);        // 7 on us, HP stayed high
+        Run(5000, 5500, 0, 0.9);
+        Assert.Equal(8, brain.PullCap(p));
+        Run(5500, 6000, 2, 0.2);        // a small fight going badly doesn't count (fewer than 3)
+        Run(6000, 6500, 0, 0.5);
+        Assert.Equal(8, brain.PullCap(p));
+    }
+}
