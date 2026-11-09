@@ -57,7 +57,7 @@ internal sealed class BagCleaner
         return bag?.Open == true ? [new KeyTapAction(p.Keys.Inventory)] : [];
     }
 
-    public IReadOnlyList<BotAction> Tick(TimeSpan now, BagLayout? bag, IReadOnlyCollection<int> toThrow, BotProfile p, Size client)
+    public IReadOnlyList<BotAction> Tick(TimeSpan now, BagLayout? bag, Func<BagSlotView, bool> throwIt, BotProfile p, Size client)
     {
         var actions = new List<BotAction>();
         if (!Active || now < _waitUntil)
@@ -142,7 +142,7 @@ internal sealed class BagCleaner
                     _step = Step.Open;
                     break;
                 }
-                var left = bag.Items.Where(i => toThrow.Contains(i.Vnum) && _failed.GetValueOrDefault(i.Slot) < TriesPerItem).ToList();
+                var left = bag.Items.Where(i => throwIt(i) && _failed.GetValueOrDefault(i.Slot) < TriesPerItem).ToList();
                 if (left.Count == 0)
                 {
                     Close(Thrown == 0 ? "atılacak eşya atılamadı" : null);

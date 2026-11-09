@@ -316,6 +316,7 @@ internal sealed partial class BotEngine : IDisposable
             _brain.Start(_clock.Elapsed);
             _cleaner.Abort(null, Profile, "");
             _cleanTries = 0;
+            RememberBagAtStart(World);
             _session.Reset(_clock.Elapsed);
             _players.Reset();
             _sessionStartedAt = DateTime.Now;
