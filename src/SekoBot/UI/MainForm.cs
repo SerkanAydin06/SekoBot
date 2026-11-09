@@ -154,7 +154,7 @@ internal sealed class MainForm : Form
         var attack = _tabPages[0];
         NumberRow(attack, "Saldırı mesafesi (%)", 0, 0, 1, 20, Math.Round(_profile.AttackRadius * 100, 1), 1, 0.5m,
             v => _profile.AttackRadius = v / 100);
-        NumberRow(attack, "Eşya toplama (sn)", 0, 34, 0.5m, 10, _profile.LootEveryMs / 1000.0, 1, 0.5m,
+        NumberRow(attack, "Z ile toplama (sn)", 0, 34, 0, 10, _profile.LootEveryMs / 1000.0, 1, 0.5m,
             v => _profile.LootEveryMs = (int)(v * 1000));
         Check(attack, "Grupları topla (üçlüleri toplayıp birden kes)", 370, 0, 366, _profile.PullGroups,
             v => _profile.PullGroups = v);
@@ -165,7 +165,8 @@ internal sealed class MainForm : Form
         NumberRow(attack, "Toplama alanı (m)", 0, 68, 3, 30, _profile.PullAreaMetres, 0, 1,
             v => _profile.PullAreaMetres = v);
         Hint(attack, "Saldırı mesafesi bellekteki gerçek menzille hesaplanır; % yalnızca yedek. Gruplar: bot en değerli üçlüden başlar, " +
-            "toplama alanındaki diğer üçlüleri de toplar; sınıra ulaşınca, alan boşalınca ya da can düşünce hepsini birden keser.", 102);
+            "toplama alanındaki diğer üçlüleri de toplar; sınıra ulaşınca, alan boşalınca ya da can düşünce hepsini birden keser. " +
+            "Z ile toplama yalnız \"yerdeki eşyalara yürüyüp topla\" kapalıyken çalışır (açıkken bot eşyanın üstünde Z'ye basar); 0 = kapalı.", 102);
 
         // İksir & Buff
         // Hedef: which mobs to go for, and loot.

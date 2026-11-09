@@ -120,7 +120,9 @@ internal sealed partial class Brain
             ScheduleCamera(p, now); // the camera can drift (a stray key, a cutscene)
         }
         RunTimedKeys(now, actions, refresh);
-        if (now - _lastLootTap >= Ms(p.LootEveryMs * _lootJitter))
+        // Z every few seconds picks up anything around (also what the loot choices leave out), so
+        // only when the bot doesn't walk to the items itself: then Z is pressed on the item.
+        if (!p.PickUpDrops && p.LootEveryMs > 0 && now - _lastLootTap >= Ms(p.LootEveryMs * _lootJitter))
         {
             actions.Add(new KeyTapAction(p.Keys.Pickup));
             _lastLootTap = now;
