@@ -77,6 +77,8 @@ internal sealed record GameState(
 
     /// <summary>The character is dead.</summary>
     public bool Dead { get; init; }
+    /// <summary>The character is stunned (can't move or hit for a moment).</summary>
+    public bool Stunned { get; init; }
 
     /// <summary>"Burada yeniden başla" can be clicked (its text turned white).</summary>
     public bool ReviveReady { get; init; }

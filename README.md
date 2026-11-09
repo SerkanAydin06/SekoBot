@@ -98,6 +98,15 @@ Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü h
 
 **Bildirim** sekmesi: kendi Telegram botuna mesaj gönderir — GM görüldü, karakter öldü, seviye atladın, iksir bitti, bot durdu (sebebiyle; sen durdurursan mesaj gelmez). Aynı mesaj dakikada en fazla bir kez gelir.
 
+**Fısıltı, istekler, sohbet** (Bildirim sayfası → "Neler bildirilsin", hepsi varsayılan açık): bot çalışırken bellekten okunur, günlüğe ve Telegram'a yazılır; acil olanlar uyarı sesiyle de:
+- **Fısıltı (özel mesaj):** yeni gelen her mesaj, yazanın adı ve seviyesiyle ("💬 Fısıltı — Ali (Sv 40): bot musun?"). Bot başlamadan önceki mesajlar söylenmez.
+- **Takas / grup / arkadaş isteği** ve oyunun Evet/Hayır sorduğu pencereler.
+- **Sohbette adın geçince** (rakamsız hali de sayılır: "KAiZER06" → "kaizer") ya da **adı [GM]/[GA]/[SA] olan biri yazınca**.
+- **Dağıtılmamış statü / beceri puanı** arttığında.
+- **Etkinlik:** oyunun saatlik düşme etkinlikleri (ör. 22:00–23:00 Nadir Ekipman Sandığı) sol menünün altında görünür; seviyen yeten bir etkinlik başlayınca bildirilir ve **eşyası otomatik "Topla" gibi alınır** ("Etkinlik eşyasını otomatik topla").
+
+**Sersemleme:** karakter sersemleyince (bellekte "stuned") bot bekler; o anı takılma ya da ulaşılamayan grup saymaz.
+
 **Komutlar** (Bildirim sekmesinde **Komutlar (durum/dur/başla)**, varsayılan açık): kendi botuna Telegram'dan yaz, SekoBot cevap verir:
 - **durum** — bot çalışıyor mu, seviye ve yüzdesi (seviyeye kalan süre), can/MP, oturum: süre, öldürülen mob, EXP ve saatte EXP, yang; kalan iksir; harita ve yakındaki oyuncu sayısı.
 - **dur** — botu durdurur (cevapta son durum).

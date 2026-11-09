@@ -180,6 +180,18 @@ internal sealed class BotProfile
     public double AvoidPlayerExpDrop { get; set; } = 40;
     /// <summary>Answer "durum", "dur", "başla" written to the Telegram bot.</summary>
     public bool TelegramCommands { get; set; } = true;
+    /// <summary>Tell (log, Telegram, sound) when someone writes a private message.</summary>
+    public bool NotifyWhispers { get; set; } = true;
+    /// <summary>Tell about trade / party / friend requests and the game's yes-no questions.</summary>
+    public bool NotifyRequests { get; set; } = true;
+    /// <summary>Tell when our name (or a GM) shows up in the chat.</summary>
+    public bool NotifyMentions { get; set; } = true;
+    /// <summary>Tell when a drop event starts.</summary>
+    public bool NotifyEvents { get; set; } = true;
+    /// <summary>Tell when there are stat / skill points to spend.</summary>
+    public bool NotifyPoints { get; set; } = true;
+    /// <summary>Pick up the item of a drop event going on now (level allowing), like "Topla".</summary>
+    public bool EventLoot { get; set; } = true;
     /// <summary>Stop the bot when the inventory has no free slot left (loot would be lost).</summary>
     public bool StopWhenInventoryFull { get; set; } = true;
 

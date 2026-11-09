@@ -15,6 +15,7 @@ namespace SekoBot.Bot;
 internal sealed partial class Brain
 {
     private static readonly TimeSpan Never = TimeSpan.FromDays(-1);
+    private TimeSpan _lastTickTime;
 
     private readonly Func<BotProfile> _profile;
 
@@ -104,6 +105,18 @@ internal sealed partial class Brain
             _lastMpPotion = now;
             Potions++;
         }
+
+        // Stunned: nothing can be done until it wears off. Waiting isn't being stuck: the timers
+        // that tell "stuck" / "can't reach" are held back (the 6 s pauses seen among attackers).
+        if (state.Stunned)
+        {
+            _movingSince = Never;
+            if (_pullWalkSince != Never)
+                _pullWalkSince += state.Time - _lastTickTime;
+            _lastTickTime = state.Time;
+            return actions;
+        }
+        _lastTickTime = state.Time;
 
         // A window over the game (advert after a level-up): let go of everything and close it
         // with one Esc; only press again if it is still there 3 s later (a second Esc with

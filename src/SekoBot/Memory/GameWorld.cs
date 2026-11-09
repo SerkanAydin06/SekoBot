@@ -63,6 +63,9 @@ internal enum LootKind { Unknown, Yang, Potion, Equipment, Other }
 
 internal static class Loot
 {
+    /// <summary>The items of the drop events going on now (set by the engine): picked up like "Topla".</summary>
+    public static volatile int[] EventItems = [];
+
     public static LootKind KindOf(int vnum) => vnum > 1 && ItemBook.Get(vnum) is { } info ? info switch
     {
         { SubType: "USE_POTION" } => LootKind.Potion,
@@ -92,9 +95,12 @@ internal readonly record struct DeadMob(int Id, Vec3 Position);
 internal sealed record OtherPlayer(string Name, bool IsGm, Vec3 Position)
 {
     /// <summary>A game master: marked as one, or "[GM]"-style tag in the name.</summary>
-    public bool LooksLikeGm => IsGm || Name.Contains("[GM]", StringComparison.OrdinalIgnoreCase) ||
-                               Name.Contains("[GA]", StringComparison.OrdinalIgnoreCase) ||
-                               Name.Contains("[SA]", StringComparison.OrdinalIgnoreCase);
+    public bool LooksLikeGm => IsGm || IsGmName(Name);
+
+    /// <summary>A "[GM]"-style tag in a name.</summary>
+    public static bool IsGmName(string name) => name.Contains("[GM]", StringComparison.OrdinalIgnoreCase) ||
+                                                 name.Contains("[GA]", StringComparison.OrdinalIgnoreCase) ||
+                                                 name.Contains("[SA]", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>A stack in the inventory: the item number (vnum) and how many.</summary>
@@ -243,7 +249,8 @@ internal sealed record WorldSnapshot(Vec3 Player, CameraView? Camera, IReadOnlyL
     WorldMob? Target = null, CharacterStats? Stats = null, bool Dead = false, int Level = 0,
     IReadOnlyList<DeadMob>? DeadMobs = null, CharacterProgress? Progress = null, IReadOnlyList<OtherPlayer>? Players = null,
     IReadOnlyList<GroundItem>? Drops = null, bool InSafeZone = false, IReadOnlyList<string>? OpenWindows = null,
-    double? ReviveIn = null, IReadOnlyList<SkillInfo>? Skills = null, double AttackDistance = 0, int AttackPower = 0)
+    double? ReviveIn = null, IReadOnlyList<SkillInfo>? Skills = null, double AttackDistance = 0, int AttackPower = 0,
+    bool Stunned = false)
 {
     /// <summary>Dead, and "Burada yeniden başla" can be clicked.</summary>
     public bool ReviveReady => Dead && ReviveIn is <= 0;
@@ -313,6 +320,17 @@ internal sealed class GameWorldReader : IDisposable
         ("gameManager", "drops", 0x850),
         ("playerMove", "dead", 0x778),
         ("playerMove", "isInSafe", 0x87C),
+        ("playerMove", "stuned", 0x7B0),
+        ("loader", "charData.playerid", 0x770 + 0x8),
+        ("loader", "charData.waitstat", 0x770 + 0xB0),
+        ("loader", "charData.waitskillstat", 0x770 + 0xB8),
+        ("loader", "dmDatas", 0x4E0),
+        ("loader", "tradeDatas", 0x4F0),
+        ("loader", "groupWant", 0x558),
+        ("loader", "friendRequests", 0x460),
+        ("loader", "askBoxes", 0x5B8),
+        ("loader", "waitingChats", 0x380),
+        ("loader", "eventDatas", 0x620),
         ("m2data_C", "uiMain", 0x1210),
         ("m2data_C", "dropWindow", 0x1440),
         ("msgbox_C", "evet", 0x288),
@@ -534,7 +552,7 @@ internal sealed class GameWorldReader : IDisposable
             _skills = ReadSkills(loader);
             _skillsReadAt = DateTime.UtcNow;
         }
-        bool dead = false, safe = false;
+        bool dead = false, safe = false, stunned = false;
         double attackDistance = 0;
         int attackPower = MemoryReads.IsPointer(loader)
             ? Int32(loader + Offset(Pointer(loader + ObjClass), "loader", "charData.attack")) ?? 0
@@ -546,6 +564,7 @@ internal sealed class GameWorldReader : IDisposable
             attackDistance = Float(pawn + Offset(pawnClass, "playerMove", "attackDistance")) is double reach and > 0 and < 2000 ? reach : 0;
             dead = Byte(pawn + Offset(pawnClass, "playerMove", "dead")) is byte b && b != 0;
             safe = Byte(pawn + Offset(pawnClass, "playerMove", "isInSafe")) is byte s && s != 0;
+            stunned = Byte(pawn + Offset(pawnClass, "playerMove", "stuned")) is byte st && st == 1;
         }
 
         Status = Searched ? $"Bellekten: {mobs.Count} mob (adresler yeniden bulundu)" : $"Bellekten: {mobs.Count} mob";
@@ -558,7 +577,7 @@ internal sealed class GameWorldReader : IDisposable
         var windows = _windows;
         double? reviveIn = dead ? ReviveIn(Pointer(instance + Offset(instanceClass, "m2data_C", "uiMain"))) : null;
         return new WorldSnapshot(player, camera, mobs, players.Count, mapName, target, stats, dead, characterLevel, deadMobs, progress, players,
-            drops, safe, windows, reviveIn, _skills, attackDistance, attackPower);
+            drops, safe, windows, reviveIn, _skills, attackDistance, attackPower, stunned);
     }
 
     private (CharacterStats? Stats, int Level) ReadStats(long loader)
@@ -793,6 +812,120 @@ internal sealed class GameWorldReader : IDisposable
                     fields.Add((Name(name), offset));
         }
         return fields;
+    }
+
+    // ── Messages, requests, events (read about once a second while the bot runs) ──
+
+    // Element sizes of the game's structs (from their fields, seen in the game).
+    private const int DmThreadSize = 0x60, DmMessageSize = 0x60, ProfileSize = 0x48, AskSize = 0x68, ChatSize = 0x68, EventSize = 0x30;
+    private int _chatSeen = -1;
+
+    /// <summary>
+    /// Private messages, trade / party / friend requests, the game's yes-no questions, chat lines that
+    /// came since the last call, the drop events and unspent points. Null when memory can't be read.
+    /// </summary>
+    public SocialSnapshot? ReadSocial()
+    {
+        try
+        {
+            if (!_located)
+                return null;
+            long instance = Pointer(_moduleBase + _gameInstance);
+            long instanceClass = Pointer(instance + ObjClass);
+            if (ClassName(instanceClass) != "m2data_C")
+                return null;
+            long loader = Pointer(instance + Offset(instanceClass, "m2data_C", "loader"));
+            if (!MemoryReads.IsPointer(loader))
+                return null;
+            long cls = Pointer(loader + ObjClass);
+            (long Data, int Count) Array(string field, int limit)
+            {
+                long at = loader + Offset(cls, "loader", field);
+                long data = Pointer(at);
+                int count = Int32(at + 8) ?? 0;
+                return MemoryReads.IsPointer(data) && count > 0 && count <= limit ? (data, count) : (0, 0);
+            }
+
+            string me = ReadFString(loader + Offset(cls, "loader", "charData.playerid"), 64);
+
+            var threads = new List<WhisperThread>();
+            var (dms, dmCount) = Array("dmDatas", 200);
+            for (int i = 0; i < dmCount; i++)
+            {
+                long thread = dms + (long)i * DmThreadSize;
+                string with = ReadFString(thread + 0x10, 64);
+                long messages = Pointer(thread + 0x20);
+                int count = Int32(thread + 0x28) ?? 0;
+                if (with.Length == 0 || !MemoryReads.IsPointer(messages) || count is < 0 or > 100_000)
+                    continue;
+                var last = new List<Whisper>();
+                for (int k = Math.Max(0, count - 5); k < count; k++)
+                {
+                    long message = messages + (long)k * DmMessageSize;
+                    last.Add(new Whisper(ReadFString(message + 0x10, 64), Int32(message + 0x8) ?? 0, ReadFString(message + 0x20, 512)));
+                }
+                threads.Add(new WhisperThread(with, count, last));
+            }
+
+            var requests = new List<PlayerRequest>();
+            foreach (var (field, kind) in new[] { ("tradeDatas", RequestKind.Trade), ("groupWant", RequestKind.Party), ("friendRequests", RequestKind.Friend) })
+            {
+                var (data, count) = Array(field, 100);
+                for (int i = 0; i < count; i++)
+                {
+                    long profile = data + (long)i * ProfileSize;
+                    string name = ReadFString(profile + 0x8, 64);
+                    if (name.Length > 0)
+                        requests.Add(new PlayerRequest(kind, name, Int32(profile + 0x18) ?? 0));
+                }
+            }
+
+            var questions = new List<GameQuestion>();
+            var (asks, askCount) = Array("askBoxes", 50);
+            for (int i = 0; i < askCount; i++)
+            {
+                long ask = asks + (long)i * AskSize;
+                string text = ReadFString(ask + 0x8, 512);
+                if (text.Length > 0)
+                    questions.Add(new GameQuestion(Int32(ask) ?? 0, text));
+            }
+
+            // Chat: only the lines that came since the last read (the list only grows; when it
+            // shrinks, it was cleared: start over from there).
+            var chat = new List<ChatLine>();
+            var (lines, lineCount) = Array("waitingChats", 1_000_000);
+            if (_chatSeen < 0 || lineCount < _chatSeen)
+                _chatSeen = lineCount;
+            for (int i = Math.Max(_chatSeen, lineCount - 50); i < lineCount; i++)
+            {
+                long line = lines + (long)i * ChatSize;
+                chat.Add(new ChatLine(Int32(line) ?? 0, ReadFString(line + 0x8, 64), Int32(line + 0x18) ?? 0, ReadFString(line + 0x20, 512)));
+            }
+            _chatSeen = lineCount;
+
+            var events = new List<GameEvent>();
+            var (eventData, eventCount) = Array("eventDatas", 100);
+            var eventBytes = new byte[EventSize];
+            for (int i = 0; i < eventCount; i++)
+            {
+                if (!_memory.Read(eventData + (long)i * EventSize, eventBytes, EventSize))
+                    continue;
+                long start = BitConverter.ToInt64(eventBytes, 0x18), end = BitConverter.ToInt64(eventBytes, 0x20);
+                if (start <= 0 || end <= start || end > DateTime.MaxValue.Ticks)
+                    continue;
+                events.Add(new GameEvent(BitConverter.ToInt32(eventBytes, 0), BitConverter.ToInt32(eventBytes, 8), BitConverter.ToInt32(eventBytes, 0xC),
+                    BitConverter.ToInt32(eventBytes, 0x10), eventBytes[0x14] != 0, new DateTime(start), new DateTime(end)));
+            }
+
+            int stat = Int32(loader + Offset(cls, "loader", "charData.waitstat")) ?? 0;
+            int skill = Int32(loader + Offset(cls, "loader", "charData.waitskillstat")) ?? 0;
+            return new SocialSnapshot(me, threads, requests, questions, chat, events,
+                stat is >= 0 and < 10_000 ? stat : 0, skill is >= 0 and < 10_000 ? skill : 0);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return null;
+        }
     }
 
     // ── The inventory window, for throwing items away ──

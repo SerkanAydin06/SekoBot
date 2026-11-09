@@ -147,6 +147,7 @@ internal sealed partial class BotEngine : IDisposable
                             Camera = world?.Camera,
                             Walking = Walking(world, now),
                             Dead = world?.Dead == true,
+                            Stunned = world?.Stunned == true,
                             TargetSpot = MemoryTargetSpot(world, frame.Width, frame.Height),
                         };
                         if (world is { Dead: true })
@@ -183,6 +184,7 @@ internal sealed partial class BotEngine : IDisposable
                                 CheckSafety(world, profile);
                                 CheckPotionKeys(world, profile);
                                 WatchTick(world, profile, now);
+                                SocialTick(world, profile, now);
                                 NotifyEvents(world);
                             }
                             ReadBagForCleaning();
@@ -317,6 +319,8 @@ internal sealed partial class BotEngine : IDisposable
             _cleaner.Abort(null, Profile, "");
             _cleanTries = 0;
             RememberBagAtStart(World);
+            lock (_social)
+                _social.Reset();
             _session.Reset(_clock.Elapsed);
             _players.Reset();
             _sessionStartedAt = DateTime.Now;
