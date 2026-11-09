@@ -74,7 +74,7 @@ internal sealed partial class BotEngine
             await WalkToAsync(input, start with { X = start.X + dx, Y = start.Y + dy }, TimeSpan.FromSeconds(15), token, Look);
         }
         Look();
-        var spot = FarmSpotFinder.Best(seen.Values, Profile, start, startWorld.MapName, World?.AttackPower ?? 0);
+        var spot = FarmSpotFinder.Best(seen.Values, Profile, start, startWorld.MapName, World?.AttackPower ?? 0, respawn: RespawnSeconds);
         if (spot == null)
             return "En iyi alan bulunamadı: çevrede uygun mob görülmedi (Hedef sekmesindeki filtrelere de bak).";
         Profile.FarmSpot = spot;

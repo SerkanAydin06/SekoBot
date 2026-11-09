@@ -1,0 +1,87 @@
+using SekoBot.Config;
+using SekoBot.Memory;
+
+namespace SekoBot.Bot;
+
+/// <summary>
+/// While farming: measuring how long mobs take to come back (<see cref="RespawnTracker"/>), and
+/// moving to another place when another player farms ours (<see cref="PlayerWatch"/>). The new
+/// place is picked from the mobs seen in the last minutes, away from the other players.
+/// </summary>
+internal sealed partial class BotEngine
+{
+    private readonly RespawnTracker _respawn = RespawnTracker.Load();
+    private readonly PlayerWatch _players = new();
+    private readonly Dictionary<int, (WorldMob Mob, TimeSpan Seen)> _seenMobs = [];
+    private bool _respawnDirty;
+    private TimeSpan _respawnSavedAt;
+
+    /// <summary>The measured wait for mobs of a level, when known (for the area choice).</summary>
+    private double? RespawnSeconds(int level)
+    {
+        lock (_respawn)
+            return _respawn.Seconds(level);
+    }
+
+    /// <summary>What was measured so far, for the UI: "Sv 19: 48 sn (6)".</summary>
+    public string RespawnSummary()
+    {
+        lock (_respawn)
+            return string.Join(", ", _respawn.Samples.Where(s => s.Value.Count >= 2).OrderBy(s => s.Key)
+                .Select(s => $"Sv {s.Key}: {_respawn.Seconds(s.Key):0} sn ({s.Value.Count})"));
+    }
+
+    private void WatchTick(WorldSnapshot world, BotProfile profile, TimeSpan now)
+    {
+        lock (_respawn)
+        {
+            if (!_respawnHooked)
+            {
+                _respawn.Measured += (level, seconds) => _respawnDirty = true;
+                _respawnHooked = true;
+            }
+            _respawn.Update(world, now);
+            if (_respawnDirty && now - _respawnSavedAt > TimeSpan.FromSeconds(60))
+            {
+                _respawn.Save();
+                _respawnDirty = false;
+                _respawnSavedAt = now;
+            }
+        }
+
+        foreach (var mob in world.Mobs)
+            _seenMobs[mob.Id] = (mob, now);
+        foreach (var (id, (_, seen)) in _seenMobs.ToList())
+            if (now - seen > TimeSpan.FromMinutes(3))
+                _seenMobs.Remove(id);
+
+        var players = world.Players ?? [];
+        string? reason = _players.Update(now, _session.Exp, world.Player, players, profile.AvoidPlayerMinutes, profile.AvoidPlayerExpDrop);
+        if (reason == null)
+            return;
+        var others = players.Where(p => !p.IsGm).Select(p => p.Position).ToList();
+        var old = _farmSpot ?? world.Player;
+        var spot = FarmSpotFinder.Best(_seenMobs.Values.Select(s => s.Mob).ToList(), profile, world.Player, world.MapName,
+            world.AttackPower, respawn: RespawnSeconds,
+            allowed: v => v.DistanceXY(old) > 1500 && others.All(o => o.DistanceXY(v) > 2500));
+        if (spot == null)
+        {
+            _log($"👥 {reason}; ama yakında başka uygun alan görülmedi, burada devam ediliyor.");
+            return;
+        }
+        double metres = spot.Position.DistanceXY(world.Player) / 100;
+        lock (_botGate)
+        {
+            _farmSpot = spot.Position;
+            _botHome = spot.Position;
+            profile.FarmSpot = spot;
+            _brain.NewFarmSpot();
+        }
+        string message = $"👥 {reason}. Yeni alana geçiliyor ({metres:0} m): {spot.Names}.";
+        _log(message);
+        Notify(message);
+        AreaScanFinished?.Invoke(message); // the UI saves the profile
+    }
+
+    private bool _respawnHooked;
+}

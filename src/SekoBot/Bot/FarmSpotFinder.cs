@@ -40,13 +40,13 @@ internal static class FarmSpotFinder
 {
     public const double Radius = 1500;   // mobs within 15 m of a spot count for it
     public const double Grid = 500;      // candidate spots every 5 m
-    /// <summary>Roughly how long the mobs of a place take to come back (an estimate, seconds).</summary>
+    /// <summary>How long the mobs of a place take to come back when not measured yet (an estimate, seconds).</summary>
     public const double RespawnSec = 60;
     /// <summary>Walking with stops, in world units a second (as in the target choice).</summary>
     private const double WalkSpeed = 200;
 
     public static FarmSpot? Best(IReadOnlyCollection<WorldMob> mobs, BotProfile profile, Vec3 from, string map,
-        int attackPower, double maxDistance = 8000)
+        int attackPower, double maxDistance = 8000, Func<int, double?>? respawn = null, Func<Vec3, bool>? allowed = null)
     {
         var wanted = mobs.Where(m => BotEngine.Wanted(m, profile)).ToList();
         if (wanted.Count == 0)
@@ -64,7 +64,9 @@ internal static class FarmSpotFinder
                 return 0;
             double spacing = Math.Sqrt(Math.PI * Radius * Radius / around.Count); // between two mobs
             double seconds = around.Sum(m => m.MaxHp / dps + 1 + spacing / WalkSpeed);
-            return around.Sum(Exp) / Math.Max(seconds, RespawnSec) * 3600;
+            // How long they take to come back: measured for their level when known (the median).
+            var waits = around.Select(m => respawn?.Invoke(m.Level) ?? RespawnSec).OrderBy(w => w).ToList();
+            return around.Sum(Exp) / Math.Max(seconds, waits[waits.Count / 2]) * 3600;
         }
         double minX = wanted.Min(m => m.Position.X), maxX = wanted.Max(m => m.Position.X);
         double minY = wanted.Min(m => m.Position.Y), maxY = wanted.Max(m => m.Position.Y);
@@ -74,7 +76,7 @@ internal static class FarmSpotFinder
         for (double y = Math.Floor(minY / Grid) * Grid; y <= maxY; y += Grid)
         {
             var spot = new Vec3(x, y, from.Z);
-            if (spot.DistanceXY(from) > maxDistance)
+            if (spot.DistanceXY(from) > maxDistance || allowed != null && !allowed(spot))
                 continue;
             double score = PerHour(wanted.Where(m => m.Position.DistanceXY(spot) <= Radius).ToList());
             if (score > bestScore)

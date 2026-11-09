@@ -86,12 +86,23 @@ Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü h
 ## Telegram bildirimi
 
 **Bildirim** sekmesi: kendi Telegram botuna mesaj gönderir — GM görüldü, karakter öldü, seviye atladın, iksir bitti, bot durdu (sebebiyle; sen durdurursan mesaj gelmez). Aynı mesaj dakikada en fazla bir kez gelir.
+
+**Komutlar** (Bildirim sekmesinde **Komutlar (durum/dur/başla)**, varsayılan açık): kendi botuna Telegram'dan yaz, SekoBot cevap verir:
+- **durum** — bot çalışıyor mu, seviye ve yüzdesi (seviyeye kalan süre), can/MP, oturum: süre, öldürülen mob, EXP ve saatte EXP, yang; kalan iksir; harita ve yakındaki oyuncu sayısı.
+- **dur** — botu durdurur (cevapta son durum).
+- **başla** — botu başlatır (BAŞLAT düğmesi gibi; olmazsa nedenini yazar).
+
+Yalnızca kayıtlı sohbetten (Sohbet no) gelen mesajlara cevap verilir; SekoBot kapalıyken yazılanlar sonradan uygulanmaz. Büyük/küçük harf, başta "/" ve Türkçe harfler fark etmez (durum, /Durum, BAŞLA, basla).
 Kurulum: Telegram'da @BotFather'a `/newbot` yaz, verdiği anahtarı **Bot anahtarı**na yapıştır; kendi botuna "merhaba" yaz ve **Sohbeti bul**'a bas; **Deneme mesajı** ile dene; kutucuğu işaretle. Anahtar yalnızca bu bilgisayarda (`profile.json`) saklanır, yalnızca api.telegram.org'a bağlanılır.
 
 ## En iyi farm alanı
 
-**📍 En iyi alanı bul / 🔄 Alanı güncelle** (Alan sekmesi): bellek çevredeki mobları ~40 m'ye kadar gösterir. Bot önce durduğu yerden bakar, sonra dört yöne ~30'ar m kısa birer yürüyüş yapar (yaklaşık 1 dk; yakındaki moblar saldırabilir), gördüğü bütün mobları (Hedef sekmesindeki filtrelere uyanları) toplar. 5 m'lik ızgaradaki her nokta, 15 m çevresindeki moblarla **saatte kazanılacak EXP**'ye göre puanlanır: toplam EXP ÷ hepsini kesme süresi (her mob için öldürme süresi + 1 sn + bir sonrakine yürüme; mob azsa aralar uzun), en az 60 sn (moblar ancak bu kadar sürede geri gelir). Böylece 15 domuz (61 EXP) 4 Siyah Ayı'yı (384 EXP) geçemez; kalabalık yine artıdır çünkü daha az yürünür. Öncelikli metin taşları 3 kat sayılır. En iyi nokta kaydedilir. Sekmede kayıtlı alanın haritası, zamanı, mob sayısı ve en çok bulunan moblar yazar.
+**📍 En iyi alanı bul / 🔄 Alanı güncelle** (Alan sekmesi): bellek çevredeki mobları ~40 m'ye kadar gösterir. Bot önce durduğu yerden bakar, sonra dört yöne ~30'ar m kısa birer yürüyüş yapar (yaklaşık 1 dk; yakındaki moblar saldırabilir), gördüğü bütün mobları (Hedef sekmesindeki filtrelere uyanları) toplar. 5 m'lik ızgaradaki her nokta, 15 m çevresindeki moblarla **saatte kazanılacak EXP**'ye göre puanlanır: toplam EXP ÷ hepsini kesme süresi (her mob için öldürme süresi + 1 sn + bir sonrakine yürüme; mob azsa aralar uzun), en az mobların geri gelme süresi (bot ölçtükçe o seviyedeki mobların ölçülen süresi, ölçülmediyse 60 sn). Böylece 15 domuz (61 EXP) 4 Siyah Ayı'yı (384 EXP) geçemez; kalabalık yine artıdır çünkü daha az yürünür. Öncelikli metin taşları 3 kat sayılır. En iyi nokta kaydedilir. Sekmede kayıtlı alanın haritası, zamanı, mob sayısı ve en çok bulunan moblar yazar.
 **Kayıtlı alanda başla** işaretliyse bot başlayınca önce o noktaya yürür (yolda can yarının altına düşerse ya da 2 dakikada varamazsa olduğu yerde başlar), alan sınırı ve yoğun bölge hafızası o noktaya göre işler. Kayıtlı alan başka haritadaysa ya da 300 m'den uzaksa kullanılmaz (günlüğe yazılır). İşaretli değilse bot durduğun yerde başlar.
+
+**Mobların geri gelme süresi:** bot farm yaparken bellekten ölçer: yakında bir mob ölünce yeri hatırlanır, aynı yerin 12 m yakınında yeni bir mob (daha önce görülmemiş numara) çıkınca aradaki süre o mobun **seviyesine** yazılır. Karakter arada o yerden 32 m'den fazla uzaklaştıysa sayılmaz (ne zaman geldiği bilinmez); başlangıçta görülen ve uzaktan görüş alanına giren moblar da sayılmaz. Her seviye için son 30 ölçüm saklanır (`%LOCALAPPDATA%\SekoBot\dogma-sureleri.json`), en iyi alan hesabında ortanca değer kullanılır (ölçülmeyen seviyeye en yakın ölçülmüş seviye, 3 seviyeye kadar). Alan sekmesinde ölçülenler yazar (ör. "Sv 19: 48 sn (6)").
+
+**Oyuncu kalınca yeni alan (dk)** (Alan sekmesi, varsayılan 3, 0 = kapalı): başka bir oyuncu (GM değil) bu kadar dakika 30 m içinde kalırsa ve o geldiğinden beri dakikadaki EXP, gelmeden önceki en az 2 dakikaya göre %40'tan fazla düştüyse (`AvoidPlayerExpDrop`), bot son 3 dakikada gördüğü mobların içinden en iyi alanı yeniden seçer — oyuncuların 25 m yakınında olmayan ve eski alandan en az 15 m ötede — ve oraya yürür (günlük + Telegram: kim, ne kadar düştü, yeni alan). Oyuncu kısa süre görünüp gittiyse ya da EXP düşmediyse bir şey yapmaz; yer değiştirdikten sonra 5 dk bekler.
 
 ## Grupları topla
 

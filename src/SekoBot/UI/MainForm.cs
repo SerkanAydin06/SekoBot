@@ -26,7 +26,7 @@ internal sealed class MainForm : Form
     private readonly PreviewControl _preview;
     private readonly Label _connection, _status, _calibrationHint, _calibrationState, _technical;
     private readonly Label _statTime, _statMobs, _statRate, _statDeaths, _statPotions, _statExp, _statExpRate, _statLevel, _statYang;
-    private readonly Label _positionState, _skillList, _farmState;
+    private readonly Label _positionState, _skillList, _farmState, _respawnState;
     private readonly Button _findArea;
     private readonly Button _scanMobs;
     private readonly Meter _hpMeter, _mpMeter, _targetMeter;
@@ -221,9 +221,12 @@ internal sealed class MainForm : Form
         _farmState = Theme.Label(area, "", new Rectangle(370, 32, 366, 40), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
         Check(area, "GM görünce dur", 0, 34, 180, _profile.StopNearGm, v => _profile.StopNearGm = v);
         Check(area, "Envanter dolunca dur", 190, 34, 175, _profile.StopWhenInventoryFull, v => _profile.StopWhenInventoryFull = v);
-        Check(area, "Güvenli bölgede (şehirde) dur", 0, 110, 300, _profile.StopInSafeZone, v => _profile.StopInSafeZone = v);
-        Check(area, "Ara sıra kısa mola ver (insan gibi)", 310, 110, 300, _profile.Breaks, v => _profile.Breaks = v);
-        _positionState = Theme.Label(area, "", new Rectangle(0, 74, 736, 32), 9f, Theme.Muted);
+        Check(area, "Şehirde dur", 0, 68, 110, _profile.StopInSafeZone, v => _profile.StopInSafeZone = v);
+        Check(area, "Ara sıra mola ver", 120, 68, 150, _profile.Breaks, v => _profile.Breaks = v);
+        NumberRow(area, "Oyuncu kalınca yeni alan (dk)", 0, 100, 0, 30, _profile.AvoidPlayerMinutes, 0, 1,
+            v => _profile.AvoidPlayerMinutes = v);
+        _respawnState = Theme.Label(area, "", new Rectangle(296, 100, 440, 26), 8.5f, Theme.Muted);
+        _positionState = Theme.Label(area, "", new Rectangle(0, 126, 736, 20), 8.5f, Theme.Muted);
 
         // Tuşlar
         // Bildirim: messages to the user's own Telegram bot.
@@ -248,8 +251,10 @@ internal sealed class MainForm : Form
         test.Click += async (_, _) =>
             WriteLog(await TelegramNotifier.SendAsync(_profile.TelegramToken, _profile.TelegramChatId, "SekoBot: deneme mesajı ✓")
                      ?? "Telegram deneme mesajı gönderildi ✓");
+        Check(notify, "Komutlar (durum/dur/başla)", 580, 68, 156, _profile.TelegramCommands,
+            v => _profile.TelegramCommands = v);
         Hint(notify, "Kurulum: Telegram'da @BotFather'a /newbot yaz, verdiği anahtarı buraya yapıştır. Sonra kendi botuna " +
-            "\"merhaba\" yaz ve 'Sohbeti bul'a bas. Anahtar yalnızca bu bilgisayarda saklanır.", 102);
+            "\"merhaba\" yaz ve 'Sohbeti bul'a bas. Botuna \"durum\", \"dur\", \"başla\" yazınca cevap verir (yalnız bu sohbete).", 102);
 
         var keys = _tabPages[5];
         var k = _profile.Keys;
@@ -360,11 +365,13 @@ internal sealed class MainForm : Form
             _scanTimer.Start();
             _statsTimer.Start();
             _updateTimer.Start();
+            _ = TelegramCommandsAsync(_telegramCts.Token);
             await CheckForUpdatesAsync(startup: true);
         };
         FormClosing += (_, _) =>
         {
             foreach (var t in new[] { _scanTimer, _previewTimer, _statsTimer, _updateTimer }) t.Stop();
+            _telegramCts.Cancel();
             _engine?.Dispose();
             _engine = null;
             _hotkeys.Dispose();
@@ -794,6 +801,9 @@ internal sealed class MainForm : Form
               (_engine.FreeInventorySlots is int free ? $", envanterde {free} boş yer)" : ")")
             : "📍 " + _engine.MemoryStatus;
         _positionState.ForeColor = world != null ? Theme.Green : Theme.Muted;
+        string respawn = _engine.RespawnSummary();
+        _respawnState.Text = "Doğma süreleri: " + (respawn.Length > 0 ? respawn : "ölçülüyor (bot çalışırken)") +
+                             " · 0 = kapalı";
         _farmState.Text = _profile.FarmSpot is { } farm
             ? $"Kayıtlı alan ({farm.MapName}, {farm.FoundAt:dd.MM HH:mm}): {farm.Mobs} mob — {farm.Names}" +
               (world != null && world.MapName == farm.MapName ? $" · {farm.Position.DistanceXY(world.Player) / 100:0} m uzakta" : "")
@@ -846,6 +856,106 @@ internal sealed class MainForm : Form
                         : "Hazır. Başlatmak için BAŞLAT ya da F10.",
                     _stopReason != null ? Theme.Yellow : Theme.Text);
         }
+    }
+
+    // ── Telegram commands ──
+
+    private readonly CancellationTokenSource _telegramCts = new();
+
+    /// <summary>Reads what the user writes to their Telegram bot and answers (runs on the UI thread
+    /// between waits): "durum" the numbers, "dur" stops, "başla" starts. Only the saved chat counts;
+    /// messages written while SekoBot was closed are skipped.</summary>
+    private async Task TelegramCommandsAsync(CancellationToken cancel)
+    {
+        long offset = -1;
+        string? lastError = null;
+        try
+        {
+            while (!cancel.IsCancellationRequested)
+            {
+                string token = _profile.TelegramToken, chat = _profile.TelegramChatId.Trim();
+                if (!_profile.TelegramEnabled || !_profile.TelegramCommands || token.Length == 0 || chat.Length == 0)
+                {
+                    offset = -1;
+                    await Task.Delay(5000, cancel);
+                    continue;
+                }
+                bool skipOld = offset < 0;
+                var (messages, error) = await TelegramNotifier.ReadAsync(token, Math.Max(0, offset), skipOld ? 0 : 25, cancel);
+                if (error != null)
+                {
+                    if (error != lastError)
+                        WriteLog(error);
+                    lastError = error;
+                    await Task.Delay(15000, cancel);
+                    continue;
+                }
+                lastError = null;
+                if (skipOld)
+                    offset = 0;
+                foreach (var (id, from, text) in messages)
+                {
+                    offset = Math.Max(offset, id + 1);
+                    if (skipOld || from != chat || text.Length == 0)
+                        continue;
+                    string reply = TelegramCommand(TelegramNotifier.Command(text));
+                    if (await TelegramNotifier.SendAsync(token, chat, reply) is string sendError)
+                        WriteLog(sendError);
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private string TelegramCommand(string command)
+    {
+        switch (command)
+        {
+            case "durum" or "status":
+                return TelegramStatus();
+            case "dur" or "stop":
+                if (_engine?.BotRunning != true)
+                    return "Bot zaten duruyor.";
+                StopBot("Telegram'dan durduruldu", byUser: true);
+                WriteLog("Telegram'dan durduruldu.");
+                return "⏹ Bot durduruldu.\n" + TelegramStatus();
+            case "basla" or "start":
+                if (_engine?.BotRunning == true)
+                    return "Bot zaten çalışıyor.";
+                ToggleBot();
+                if (_engine?.BotRunning == true)
+                {
+                    WriteLog("Telegram'dan başlatıldı.");
+                    return "▶ Bot başladı.";
+                }
+                return "Başlatılamadı: " + (_stopReason ?? (_engine == null ? "oyun açık değil" : "bilinmiyor"));
+            default:
+                return "Komutlar: durum · dur · başla";
+        }
+    }
+
+    private string TelegramStatus()
+    {
+        if (_engine == null)
+            return "SekoBot açık; oyun bağlı değil.";
+        var s = _engine.Stats;
+        var world = _engine.World;
+        var lines = new List<string> { _engine.BotRunning ? "▶ Bot çalışıyor" : "⏸ Bot duruyor" + (_stopReason != null ? $" ({_stopReason})" : "") };
+        if (world is { Progress: { } progress })
+            lines.Add($"Sv {world.Level} · %{100.0 * progress.Exp / Math.Max(1, progress.Exp + progress.NeedExp):0.0}" +
+                      (s.Session?.ToLevel is TimeSpan t ? $" (seviyeye ~{Duration(t)})" : ""));
+        if (world?.Stats is { } stats)
+            lines.Add($"Can %{stats.HpFraction * 100:0} · MP %{stats.MpFraction * 100:0}");
+        if (s.Session is { } session && s.BotUptime.TotalMinutes >= 1)
+        {
+            double hours = s.BotUptime.TotalHours;
+            lines.Add($"{Duration(s.BotUptime)}: {session.Kills:N0} mob, {Short(session.Exp)} EXP (saatte {Short((long)(session.Exp / hours))}), yang {Short(session.Yang)}");
+        }
+        var (hp, mp) = _engine.PotionsLeft();
+        lines.Add($"İksir: HP {Count(hp)} · MP {Count(mp)}");
+        if (world != null)
+            lines.Add($"Harita {world.MapName}, yakında {world.OtherPlayers} oyuncu");
+        return string.Join("\n", lines);
     }
 
     /// <summary>Big numbers short: 1.234 · 12,3 B · 1,23 Mn.</summary>

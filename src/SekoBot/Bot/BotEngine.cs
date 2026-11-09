@@ -180,6 +180,7 @@ internal sealed partial class BotEngine : IDisposable
                                 _session.Update(world, now, PotionVnum(world, profile.Keys.HpPotion), PotionVnum(world, profile.Keys.MpPotion));
                                 CheckSafety(world, profile);
                                 CheckPotionKeys(world, profile);
+                                WatchTick(world, profile, now);
                                 NotifyEvents(world);
                             }
                             var (phase, actions) = TickBot(state);
@@ -311,6 +312,7 @@ internal sealed partial class BotEngine : IDisposable
             _botStarted = _clock.Elapsed;
             _brain.Start(_clock.Elapsed);
             _session.Reset(_clock.Elapsed);
+            _players.Reset();
             _sessionStartedAt = DateTime.Now;
             _farmSpot = UsableFarmSpot(World, Profile, out string? why);
             if (why != null)
