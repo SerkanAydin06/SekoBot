@@ -46,6 +46,8 @@ internal sealed partial class Brain
         _crowdTarget = _lastCrowd = null;
         _targetId = 0;
         _toHotspot = false;
+        _atFarmSpot = _travelNoted = false;
+        _travelSince = Never;
         ResetPull();
         _dropId = 0;
         _dropSince = _lastDropTap = Never;
@@ -158,6 +160,10 @@ internal sealed partial class Brain
         double radius = p.AttackRadius * state.Height;
         bool nextToUs = chosen != null ? chosen.Distance <= chosen.Reach : best <= radius;
         bool closeBy = chosen != null ? chosen.Distance <= chosen.Reach * 2 : best <= radius * 2;
+
+        // A saved farm spot: walk there first (the area limit starts from there).
+        if (TravelTick(state, p, actions, refresh))
+            return;
 
         // Stay in the area we started in (position from memory): walking back when too far.
         if (LeashTick(state, p, actions, refresh, mobNextToUs: nextToUs))
@@ -283,6 +289,48 @@ internal sealed partial class Brain
 
     private int _targetId;
     private bool _toHotspot;
+    private bool _atFarmSpot, _travelNoted;
+    private TimeSpan _travelSince = Never;
+
+    /// <summary>
+    /// Walks to the saved farm spot before farming starts (mobs met on the way follow and are
+    /// fought there). Ends within 5 m of it, after 2 minutes, or when HP falls below half.
+    /// </summary>
+    /// <returns>True while walking there.</returns>
+    private bool TravelTick(GameState state, BotProfile p, List<BotAction> actions, bool refresh)
+    {
+        if (_atFarmSpot || state.FarmSpot is not Vec3 spot || state.Position is not Vec3 me || state.Camera is not CameraView camera)
+            return false;
+        var now = state.Time;
+        if (_travelSince == Never)
+            _travelSince = now;
+        double distance = me.DistanceXY(spot);
+        string? done = distance <= 500 ? "Farm alanına varıldı; farm başlıyor."
+            : state.Hp is < 0.5 ? "Can azaldı; farm burada başlıyor."
+            : now - _travelSince > Ms(120_000) ? "Farm alanına 2 dakikada varılamadı; burada başlanıyor."
+            : null;
+        if (done != null)
+        {
+            _atFarmSpot = true;
+            if (_travelNoted)
+                actions.Add(new NoteAction(done));
+            return false;
+        }
+        if (!_travelNoted)
+        {
+            _travelNoted = true;
+            actions.Add(new NoteAction($"Kayıtlı farm alanına gidiliyor ({distance / 100:0} m)."));
+        }
+        var (right, up) = camera.ToScreenDirection(spot.X - me.X, spot.Y - me.Y);
+        double length = Math.Max(1e-6, Math.Sqrt(right * right + up * up));
+        SetAttack(false, p, actions, refresh);
+        SetMoves(Towards(right / length * 100, -up / length * 100, 38, p), p, actions, refresh);
+        if (Phase != BotPhase.Moving)
+            Enter(BotPhase.Moving, now);
+        _movingSince = Never;
+        CheckBlocked(state, p, actions);
+        return true;
+    }
     /// <summary>Mobs within this (world units, 8 m) are chosen before any further away.</summary>
     internal const double NearbyRange = 800;
 

@@ -86,6 +86,11 @@ Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü h
 **Bildirim** sekmesi: kendi Telegram botuna mesaj gönderir — GM görüldü, karakter öldü, seviye atladın, iksir bitti, bot durdu (sebebiyle; sen durdurursan mesaj gelmez). Aynı mesaj dakikada en fazla bir kez gelir.
 Kurulum: Telegram'da @BotFather'a `/newbot` yaz, verdiği anahtarı **Bot anahtarı**na yapıştır; kendi botuna "merhaba" yaz ve **Sohbeti bul**'a bas; **Deneme mesajı** ile dene; kutucuğu işaretle. Anahtar yalnızca bu bilgisayarda (`profile.json`) saklanır, yalnızca api.telegram.org'a bağlanılır.
 
+## En iyi farm alanı
+
+**📍 En iyi alanı bul / 🔄 Alanı güncelle** (Alan sekmesi): bellek çevredeki mobları ~40 m'ye kadar gösterir. Bot önce durduğu yerden bakar, sonra dört yöne ~30'ar m kısa birer yürüyüş yapar (yaklaşık 1 dk; yakındaki moblar saldırabilir), gördüğü bütün mobları (Hedef sekmesindeki filtrelere uyanları) toplar. 5 m'lik ızgaradaki her nokta, 15 m çevresindeki mobların değeriyle puanlanır (EXP ÷ öldürme süresi; öncelikli metin taşları 3 kat) ve en iyi nokta kaydedilir. Sekmede kayıtlı alanın haritası, zamanı, mob sayısı ve en çok bulunan moblar yazar.
+**Kayıtlı alanda başla** işaretliyse bot başlayınca önce o noktaya yürür (yolda can yarının altına düşerse ya da 2 dakikada varamazsa olduğu yerde başlar), alan sınırı ve yoğun bölge hafızası o noktaya göre işler. Kayıtlı alan başka haritadaysa ya da 300 m'den uzaksa kullanılmaz (günlüğe yazılır). İşaretli değilse bot durduğun yerde başlar.
+
 ## Grupları topla
 
 **Grupları topla** (Saldırı sekmesi, varsayılan açık): oyun mobları üçlü gruplar halinde çıkarır ve birine vurunca grubun hepsi gelir. Grubu bellekten bulur (aynı gruptaki mobların numaraları ardışık — ör. 1880, 1881, 1882 — ve yan yanalar). Bot 15 m içindeki henüz uyanmamış grupların en yakınındaki bir moba vurur, grup peşine takılınca bir sonraki gruba geçer; peşindeki mob sayısı **Toplanacak en fazla mob**'a (varsayılan 9) ulaşınca, yakında başka grup kalmayınca ya da can **Toplarken can en az %**'nin (varsayılan 70) altına düşünce durup hepsini birlikte keser (alan becerileri hepsine vurur). 3 sn vurulup uyanmayan grup bir dakika bırakılır. Öncelikli metin taşı varken toplama yapılmaz.

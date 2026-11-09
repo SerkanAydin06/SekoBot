@@ -45,6 +45,7 @@ internal sealed partial class BotEngine : IDisposable
     private bool _disposed;
     private readonly SessionStats _session = new();
     private bool _sessionStarted;
+    private Vec3? _farmSpot;
     private DateTime _sessionStartedAt;
     /// <summary>The summary of the last run (for the stop message), or null.</summary>
     private string? _lastSummary;
@@ -163,6 +164,7 @@ internal sealed partial class BotEngine : IDisposable
                             Targets = view?.Targets ?? [],
                             AttackPower = world?.AttackPower ?? 0,
                             Hotspot = Hotspot(world, profile, now),
+                            FarmSpot = _farmSpot,
                             Skills = SkillKeys(world, profile),
                             MpPoints = world?.Stats?.Mp,
                             HpPotionsLeft = world is null ? null : PotionsLeft().Hp,
@@ -284,6 +286,11 @@ internal sealed partial class BotEngine : IDisposable
             error = "Oyunun belleği okunamıyor (" + _memoryStatus + "). SekoBot'u yönetici olarak aç ve karakterle oyuna gir.";
             return false;
         }
+        if (ScanningArea)
+        {
+            error = "Alan taranıyor; bitmesini bekle.";
+            return false;
+        }
         if (World.InSafeZone && Profile.StopInSafeZone)
         {
             error = "Karakter güvenli bölgede (şehirde). Önce avlanma alanına git.";
@@ -303,7 +310,10 @@ internal sealed partial class BotEngine : IDisposable
             _brain.Start(_clock.Elapsed);
             _session.Reset(_clock.Elapsed);
             _sessionStartedAt = DateTime.Now;
-            _botHome = World?.Player;
+            _farmSpot = UsableFarmSpot(World, Profile, out string? why);
+            if (why != null)
+                _log(why);
+            _botHome = _farmSpot ?? World?.Player;
             // Windows already showing when the bot starts (chat, minimap, …) belong to the screen.
             _windowsAtStart = [.. World?.OpenWindows ?? []];
             _windowsSeen = "";
@@ -450,6 +460,7 @@ internal sealed partial class BotEngine : IDisposable
         _disposed = true;
         StopBot("bağlantı kapandı");
         StopRecording();
+        _scanCts?.Cancel();
         _cts.Cancel();
         _capture?.Dispose();
         try { _loop?.Wait(1500); } catch { }

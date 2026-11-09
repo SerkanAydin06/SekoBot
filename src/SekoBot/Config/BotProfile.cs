@@ -92,6 +92,11 @@ internal sealed class BotProfile
     /// <summary>Mobs within this share of the screen height of each other form a group.</summary>
     public double CrowdRadius { get; set; } = 0.12;
 
+    /// <summary>The best place to farm, found with "En iyi alanı bul"; null until then.</summary>
+    public FarmSpot? FarmSpot { get; set; }
+    /// <summary>Walk to <see cref="FarmSpot"/> first when the bot starts (off: start where the character stands).</summary>
+    public bool UseFarmSpot { get; set; }
+
     /// <summary>Stay within this many metres of the starting point (0 = no limit). The position
     /// comes from memory.</summary>
     public double LeashMeters { get; set; } = 40;
