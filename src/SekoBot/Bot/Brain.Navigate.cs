@@ -257,6 +257,7 @@ internal sealed partial class Brain
             // swing moves the character a little and the mob moves too.
             SetMoves(Towards(dx, dy, radius * 0.35, p), p, actions, refresh);
             SetAttack(true, p, actions, refresh);
+            PickUpUnderFeet(state, p, actions, radius);
             if (Phase != BotPhase.Fighting)
                 Enter(BotPhase.Fighting, now);
             _wasFighting = true;
@@ -425,6 +426,22 @@ internal sealed partial class Brain
     /// for a minute.
     /// </summary>
     /// <returns>True when this tick was spent on loot.</returns>
+    /// <summary>Fighting with a wanted item lying right at our feet: keep hitting and press the
+    /// pickup key now and then, so it is taken without stopping the fight.</summary>
+    private void PickUpUnderFeet(GameState state, BotProfile p, List<BotAction> actions, double radius)
+    {
+        var now = state.Time;
+        if (!p.PickUpDrops || now - _lastDropTap < Ms(700))
+            return;
+        double cx = state.Width / 2.0, cy = state.Height / 2.0;
+        bool close = state.Drops.Any(d => !_ignoredDrops.ContainsKey(d.Id) &&
+                                          Math.Sqrt(Math.Pow(d.Spot.X - cx, 2) + Math.Pow(d.Spot.Y - cy, 2)) <= radius * 0.6);
+        if (!close)
+            return;
+        actions.Add(new KeyTapAction(p.Keys.Pickup));
+        _lastDropTap = now;
+    }
+
     private bool GoForDrop(GameState state, BotProfile p, List<BotAction> actions, bool refresh, double radius)
     {
         var now = state.Time;
@@ -445,6 +462,8 @@ internal sealed partial class Brain
             actions.Add(new NoteAction("Yerdeki eşya alınamadı (başkasının olabilir); bırakıldı."));
             return false;
         }
+        // Nothing to hit here: let go of the attack key, straight to the item.
+        SetAttack(false, p, actions, refresh);
         double dx = drop.Spot.X - state.Width / 2.0, dy = drop.Spot.Y - state.Height / 2.0;
         double distance = Math.Sqrt(dx * dx + dy * dy);
         if (distance <= radius * 0.5)

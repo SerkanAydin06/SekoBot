@@ -78,3 +78,54 @@ public class TimedPickupTests
         Assert.InRange(Taps(walkToDrops: false), 4, 10); // the old way: every ~1.5 s
     }
 }
+
+public class LootWhileFightingTests
+{
+    private static readonly Point Center = new(960, 540);
+
+    private static (Brain, BotProfile) Ready()
+    {
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = true, PullGroups = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        return (brain, p);
+    }
+
+    private static List<BotAction> Run(Brain brain, double from, double to, TargetInfo[] mobs, GroundSpot[] drops)
+    {
+        var all = new List<BotAction>();
+        for (double t = from; t < to; t += 100)
+            all.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
+                { Targets = mobs, Drops = drops, Walking = true, AttackPower = 189 }));
+        return all;
+    }
+
+    [Fact]
+    public void Keeps_hitting_and_picks_up_what_lies_at_its_feet()
+    {
+        var (brain, p) = Ready();
+        TargetInfo[] mob = [new(1, new Point(Center.X + 20, Center.Y), 80, 130, 103, 305, 305, 56, true, true)];
+        var fight = Run(brain, 0, 3000, mob, [new GroundSpot(7, new Point(Center.X + 10, Center.Y + 10))]);
+        Assert.Contains(fight, a => a is KeyDownAction d && d.Key == p.Keys.Attack);
+        Assert.DoesNotContain(fight, a => a is KeyUpAction u && u.Key == p.Keys.Attack);
+        Assert.True(fight.Count(a => a is KeyTapAction k && k.Key == p.Keys.Pickup) >= 2);
+    }
+
+    [Fact]
+    public void Lets_go_of_attack_and_goes_for_the_items_when_no_mob_is_left()
+    {
+        var (brain, p) = Ready();
+        TargetInfo[] mob = [new(1, new Point(Center.X + 20, Center.Y), 80, 130, 103, 305, 305, 56, true, true)];
+        Run(brain, 0, 2000, mob, []);                                              // fighting, attack held
+        var loot = Run(brain, 2000, 3000, [], [new GroundSpot(7, new Point(Center.X - 80, Center.Y))]);
+        Assert.Contains(loot, a => a is KeyUpAction u && u.Key == p.Keys.Attack);
+        Assert.Contains(loot, a => a is KeyDownAction d && d.Key == p.Keys.MoveLeft);
+        // A mob far off (not attacking) and items here: items first, attack stays off.
+        var (brain2, p2) = Ready();
+        Run(brain2, 0, 2000, mob, []);
+        TargetInfo[] far = [new(2, new Point(Center.X + 400, Center.Y), 1500, 130, 103, 305, 305, 56, false, false)];
+        var loot2 = Run(brain2, 2000, 3000, far, [new GroundSpot(8, new Point(Center.X - 80, Center.Y))]);
+        Assert.Contains(loot2, a => a is KeyUpAction u && u.Key == p2.Keys.Attack);
+        Assert.Contains(loot2, a => a is KeyDownAction d && d.Key == p2.Keys.MoveLeft);
+    }
+}
