@@ -138,7 +138,8 @@ internal sealed partial class BotEngine
     }
 
     /// <summary>Whether to walk to this item (unknown items: yes, they may be anything).</summary>
-    internal static bool WantedLoot(GroundItem item, BotProfile profile) => AlwaysLoot(item.Vnum, profile) || item.Kind switch
+    internal static bool WantedLoot(GroundItem item, BotProfile profile) =>
+        !profile.LootSkip.Contains(item.Vnum) && (AlwaysLoot(item.Vnum, profile) || item.Kind switch
     {
         LootKind.Yang => profile.LootYang,
         LootKind.Potion => profile.LootPotions,
@@ -146,11 +147,13 @@ internal sealed partial class BotEngine
                               profile.LootEquipmentMinGold > 0 && ItemBook.Get(item.Vnum)?.Gold >= profile.LootEquipmentMinGold,
         LootKind.Other => profile.LootOther,
         _ => true,
-    };
+    });
 
-    /// <summary>An item on the "always pick up" list (by name, part of it is enough).</summary>
+    /// <summary>An item ticked in the item list, or on the "always pick up" names (part of a name is enough).</summary>
     internal static bool AlwaysLoot(int vnum, BotProfile profile)
     {
+        if (vnum > 1 && profile.LootPick.Contains(vnum))
+            return true;
         if (profile.LootAlways.Length == 0 || vnum <= 1 || ItemBook.Get(vnum) is not { } info)
             return false;
         return profile.LootAlways.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
