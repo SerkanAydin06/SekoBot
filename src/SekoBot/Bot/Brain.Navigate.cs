@@ -166,7 +166,9 @@ internal sealed partial class Brain
             return;
 
         // Stay in the area we started in (position from memory): walking back when too far.
-        if (LeashTick(state, p, actions, refresh, mobNextToUs: nextToUs))
+        // Mobs hitting us close by are fought first: they would only follow and hit us on the way.
+        bool hitClose = state.Targets.Any(m => m.AttacksMe && m.Distance <= HitCloseRange);
+        if (LeashTick(state, p, actions, refresh, mobNextToUs: nextToUs || hitClose))
             return;
 
         // Gather the spawn groups around first, then fight them together.
@@ -331,6 +333,8 @@ internal sealed partial class Brain
         CheckBlocked(state, p, actions);
         return true;
     }
+    /// <summary>Mobs attacking us this close (world units, 5 m) are fought before walking back into the area.</summary>
+    internal const double HitCloseRange = 500;
     /// <summary>Mobs within this (world units, 8 m) are chosen before any further away.</summary>
     internal const double NearbyRange = 800;
 

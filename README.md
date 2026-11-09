@@ -34,7 +34,7 @@ Bot oyunun kendi pencerelerinin (Esc menüsü, envanter, karakter, beceriler, ay
 
 ## Alan sınırı ve takılma
 
-**Alan sınırı (metre)** (varsayılan 40, 0 = kapalı): Bot başladığı yeri bellekten okuyup kaydeder. Başlangıçtan bu mesafeden fazla uzaklaşınca geri yürür (yanındaki mobla yine savaşır), yarı mesafeye gelince avlanmaya devam eder. Hangi tuşun geri götürdüğünü kameranın baktığı yönden (yine bellekten) hesaplar; harita açmaz.
+**Alan sınırı (metre)** (varsayılan 40, 0 = kapalı): Bot başladığı yeri bellekten okuyup kaydeder. Başlangıçtan bu mesafeden fazla uzaklaşınca geri yürür (yanındaki mobla ve 5 m içinde ona vuran moblarla önce savaşır — onlar zaten peşinden gelip yolda vururdu), yarı mesafeye gelince avlanmaya devam eder. Hangi tuşun geri götürdüğünü kameranın baktığı yönden (yine bellekten) hesaplar; harita açmaz.
 
 **Bellekten okuma:** Oyun Unreal Engine 4.27 ile yapılmış. Bot oyunun ana nesnesine exe içindeki tek bir sabit noktadan ulaşır, gerisini (HP, ölü mü, moblar, seçili hedef…) oyunun kendi alan isimleriyle bulur. Oyun güncellenip sabit noktalar kayarsa bot onları kendisi arar ve bulur (bir kez, birkaç saniye sürer; günlüğe yazar). Bellek yalnızca okunur, oyuna hiçbir şey yazılmaz. Bellek uzun süre (15 sn) okunamazsa bot durur; yükleme ekranı gibi kısa kesintilerde bekler.
 
