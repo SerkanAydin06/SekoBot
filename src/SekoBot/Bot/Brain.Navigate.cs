@@ -179,6 +179,14 @@ internal sealed partial class Brain
         if (LeashTick(state, p, actions, refresh, mobNextToUs: nextToUs || hitClose))
             return;
 
+        // Loot lying close by first, when nothing is after us and no gathering is going on: walking
+        // off to the next group left it behind (seen: yang 1 m away never picked up).
+        if (!_pulling && !state.Targets.Any(t => t.AttacksMe) && GoForDrop(state, p, actions, refresh, radius))
+        {
+            FinishFight(p, actions, now);
+            return;
+        }
+
         // Gather the spawn groups around first, then fight them together.
         if (PullTick(state, p, actions, refresh, radius))
             return;

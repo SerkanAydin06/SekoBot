@@ -14,7 +14,7 @@ internal sealed partial class BotEngine
     private readonly PlayerWatch _players = new();
     private readonly Dictionary<int, (WorldMob Mob, TimeSpan Seen)> _seenMobs = [];
     private bool _respawnDirty;
-    private TimeSpan _respawnSavedAt;
+    private TimeSpan _respawnSavedAt, _itemsSavedAt;
 
     /// <summary>The measured wait for mobs of a level, when known (for the area choice).</summary>
     private double? RespawnSeconds(int level)
@@ -41,6 +41,11 @@ internal sealed partial class BotEngine
                 _respawnHooked = true;
             }
             _respawn.Update(world, now);
+            if (now - _itemsSavedAt > TimeSpan.FromSeconds(60))
+            {
+                ItemBook.SaveIfChanged();
+                _itemsSavedAt = now;
+            }
             if (_respawnDirty && now - _respawnSavedAt > TimeSpan.FromSeconds(60))
             {
                 _respawn.Save();

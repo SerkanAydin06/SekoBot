@@ -158,6 +158,9 @@ internal sealed class BotProfile
 
     /// <summary>Stop the bot when a game master (GM) shows up nearby.</summary>
     public bool StopNearGm { get; set; } = true;
+    /// <summary>Also pick up weapons and armour a shop pays at least this much for (0 = off;
+    /// the price is known once the item has been in the bag).</summary>
+    public int LootEquipmentMinGold { get; set; }
     /// <summary>Another player staying this many minutes within 30 m while the experience drops: find another place (0 = off).</summary>
     public double AvoidPlayerMinutes { get; set; } = 3;
     /// <summary>How much the experience a minute has to drop (percent) against before the player came.</summary>

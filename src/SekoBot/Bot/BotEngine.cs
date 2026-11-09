@@ -58,6 +58,8 @@ internal sealed partial class BotEngine : IDisposable
         Profile = profile;
         _log = log;
         _brain = new Brain(() => Profile);
+        if (ItemBook.FilePath == null)
+            ItemBook.Load(Path.Combine(ProfileStore.Directory, "esya-bilgisi.json"));
         _session.PotionsRanOut += kind =>
         {
             _log($"⚠ {kind} iksiri bitti! Envanterde kalmadı.");
@@ -331,6 +333,7 @@ internal sealed partial class BotEngine : IDisposable
 
     public void StopBot(string reason)
     {
+        ItemBook.SaveIfChanged();
         InputExecutor? input;
         lock (_botGate)
         {

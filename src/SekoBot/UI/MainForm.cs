@@ -194,8 +194,13 @@ internal sealed class MainForm : Form
         Check(targets, "Yang", 124, 104, 70, _profile.LootYang, v => _profile.LootYang = v);
         Check(targets, "İksir", 198, 104, 70, _profile.LootPotions, v => _profile.LootPotions = v);
         Check(targets, "Silah / zırh", 272, 104, 110, _profile.LootEquipment, v => _profile.LootEquipment = v);
-        Check(targets, "Diğer (malzeme, kitap…)", 386, 104, 200, _profile.LootOther, v => _profile.LootOther = v);
-        Theme.Label(targets, "Mob adları virgülle, adın bir kısmı yeter; boş = hepsi. Seviye 0 = sınırsız.",
+        Check(targets, "Diğer (malzeme, kitap…)", 386, 104, 190, _profile.LootOther, v => _profile.LootOther = v);
+        Theme.Label(targets, "Zırh fiyatı ≥", new Rectangle(578, 104, 70, 26), 8.5f, Theme.Muted);
+        var minGold = Theme.Number(targets, new Rectangle(650, 104, 86, 26), 0, 10_000_000,
+            Math.Clamp(_profile.LootEquipmentMinGold, 0, 10_000_000), 0, 500);
+        minGold.ValueChanged += (_, _) => { _profile.LootEquipmentMinGold = (int)minGold.Value; SaveProfile(); };
+        Theme.Label(targets, "Mob adları virgülle, adın bir kısmı yeter; boş = hepsi. Seviye 0 = sınırsız. Zırh fiyatı: silah/zırh kapalıyken " +
+            "de bu kadar yang eden eşyalar alınır (fiyat, eşya bir kez çantaya girince öğrenilir; 0 = kapalı).",
             new Rectangle(0, 130, 736, 16), 8f, Theme.Muted);
 
         var potions = _tabPages[2];
@@ -800,6 +805,14 @@ internal sealed class MainForm : Form
             ? $"📍 Konum bellekten ✓  X={world.Player.X:0}, Y={world.Player.Y:0}  (harita {world.MapName}, {world.Mobs.Count} mob, {world.OtherPlayers} oyuncu" +
               (_engine.FreeInventorySlots is int free ? $", envanterde {free} boş yer)" : ")")
             : "📍 " + _engine.MemoryStatus;
+        if (world?.Drops is { Count: > 0 } ground)
+        {
+            var near = ground.Where(d => d.Vnum > 0 && d.Position.DistanceXY(world.Player) <= 1000)
+                .GroupBy(d => d.Vnum).Select(g => g.Key == 1 ? $"{g.Sum(d => d.Count)} yang" : ItemBook.NameOf(g.Key) + (g.Count() > 1 ? $" ×{g.Count()}" : ""))
+                .Take(4).ToList();
+            if (near.Count > 0)
+                _positionState.Text += "  ·  Yerde: " + string.Join(", ", near);
+        }
         _positionState.ForeColor = world != null ? Theme.Green : Theme.Muted;
         string respawn = _engine.RespawnSummary();
         _respawnState.Text = "Doğma süreleri: " + (respawn.Length > 0 ? respawn : "ölçülüyor (bot çalışırken)") +

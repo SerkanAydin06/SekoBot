@@ -142,7 +142,8 @@ internal sealed partial class BotEngine
     {
         LootKind.Yang => profile.LootYang,
         LootKind.Potion => profile.LootPotions,
-        LootKind.Equipment => profile.LootEquipment,
+        LootKind.Equipment => profile.LootEquipment ||
+                              profile.LootEquipmentMinGold > 0 && ItemBook.Get(item.Vnum)?.Gold >= profile.LootEquipmentMinGold,
         LootKind.Other => profile.LootOther,
         _ => true,
     };

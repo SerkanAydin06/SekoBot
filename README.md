@@ -57,6 +57,12 @@ Bot oyunun kendi pencerelerinin (Esc menüsü, envanter, karakter, beceriler, ay
 - **En yüksek mob seviyesi** (0 = sınırsız): Üstündeki mobları atlar. **Sadece bu moblar / Bu mobları atla:** mob adlarını virgülle yaz (ör. "Kurt, Domuz"), adın bir kısmı yeter. Sana saldıran mob bu ayarlardan bağımsız her zaman kesilir.
 - **Metin taşları:** *Atla* (hiç gitme), *Normal mob gibi* (varsayılan), *Önce onlara git* (taş her şeyden önce gelir, sana saldıran moblardan da; seviye ve isim filtreleri taşı atlamaz).
 - **Yürüyüp topla: Yang / İksir / Silah-zırh / Diğer** (Hedef sekmesi): yerdeki eşyanın ne olduğu bellekten okunur (eşya numarası ve adedi; yang = 1); bot yalnızca işaretli türlere yürür. Varsayılan: yang, iksir, diğer (malzeme, kitap…) açık; silah/zırh kapalı (bu seviyede çoğu işe yaramaz ve envanteri doldurur). Z tuşu yakındaki her şeyi yine toplar.
+
+**Eşya bilgisi:** oyunun bellekte okunabilir bir eşya listesi yok, ama çantadaki her eşyanın **adı, türü ve satış fiyatı** yazıyor (ör. "Gümüş Küpe+3", küpe, 1700 yang). Bot her eşyayı ilk kez çantaya girdiğinde öğrenir ve saklar (`%LOCALAPPDATA%\SekoBot\esya-bilgisi.json`); sonra aynı eşya yere düşünce **almadan** ne olduğunu bilir: türü (iksir / silah-zırh / diğer) buna göre ayrılır ve Alan sekmesindeki konum satırında 10 m içinde yerde ne olduğu yazar ("Yerde: 107 yang, Gümüş Küpe+3"). Hiç görülmemiş eşya "eşya #numara" diye görünür ve numara aralığına göre ayrılır.
+
+**Zırh fiyatı ≥** (Hedef sekmesi, 0 = kapalı): silah/zırh toplama kapalıyken bile, dükkânın en az bu kadar yang verdiği silah ve zırhlara yürünür (fiyatı bilinenler; çöp ekipman yine alınmaz).
+
+**Yerdekini önce topla:** izlemede botun dibindeki yang (1–4 m) bazen hiç alınmıyordu: savaşırken Z işe yaramıyor, savaş bitince de bot hemen bir sonraki grubu toplamaya gidiyordu. Artık kimse saldırmıyorken ve toplama sürmüyorken önce yakındaki istenen eşyalar alınır, sonra yeni gruba gidilir.
 - **Yerdeki eşyalara yürüyüp topla** (varsayılan açık): Yanında mob yokken 6 m içindeki eşyaya (yerdeki eşyalar bellekte görünür, alınınca kaybolur) yürür ve toplama tuşuna basar. 5 sn'de alınamayan eşyayı (başkasının olabilir) bir dakika boyunca bırakır.
 
 ## Güvenlik: GM ve envanter
