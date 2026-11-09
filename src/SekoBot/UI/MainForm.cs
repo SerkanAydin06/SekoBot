@@ -188,7 +188,15 @@ internal sealed class MainForm : Form
         metins.SelectedIndex = (int)_profile.Metins;
         metins.SelectedIndexChanged += (_, _) => { _profile.Metins = (MetinMode)metins.SelectedIndex; SaveProfile(); };
         targets.Controls.Add(metins);
-        Check(targets, "Yerdeki eşyalara yürüyüp topla", 370, 34, 360, _profile.PickUpDrops, v => _profile.PickUpDrops = v);
+        Check(targets, "Eşyalara yürüyüp topla", 370, 34, 160, _profile.PickUpDrops, v => _profile.PickUpDrops = v);
+        Theme.Label(targets, "Mutlaka topla", new Rectangle(534, 34, 80, 26), 8.5f, Theme.Muted);
+        var always = new TextBox
+        {
+            Bounds = new Rectangle(616, 34, 120, 26), Text = _profile.LootAlways, BackColor = Theme.Inset, ForeColor = Theme.Text,
+            BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 9f),
+        };
+        always.TextChanged += (_, _) => { _profile.LootAlways = always.Text.Trim(); SaveProfile(); };
+        targets.Controls.Add(always);
         TextRow(targets, "Sadece bu moblar", 0, 68, _profile.OnlyMobs, v => _profile.OnlyMobs = v);
         TextRow(targets, "Bu mobları atla", 370, 68, _profile.SkipMobs, v => _profile.SkipMobs = v);
         Theme.Label(targets, "Yürüyüp topla:", new Rectangle(0, 104, 120, 26), 9f, Theme.Muted);

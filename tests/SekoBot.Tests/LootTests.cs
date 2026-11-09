@@ -129,3 +129,19 @@ public class LootWhileFightingTests
         Assert.Contains(loot2, a => a is KeyDownAction d && d.Key == p2.Keys.MoveLeft);
     }
 }
+
+public class AlwaysLootTests
+{
+    [Fact]
+    public void Items_on_the_must_pick_list_are_picked_whatever_the_other_choices()
+    {
+        // As in the game's item list: 39006 Cesaret Pelerini (ITEM_USE / USE_SPECIAL), 30038 Kaplan Postu.
+        ItemBook.Learn(new ItemInfo(93006, "Cesaret Pelerini", "ITEM_USE", "USE_SPECIAL", 0));
+        ItemBook.Learn(new ItemInfo(93038, "Kaplan Postu", "ITEM_MATERIAL", "MATERIAL_LEATHER", 300));
+        var p = new BotProfile { LootOther = false, LootEquipment = false, LootAlways = "cesaret pel, Ejderha" };
+        Assert.True(BotEngine.WantedLoot(new GroundItem(1, new Vec3(0, 0, 0), 93006, 1), p));   // part of the name, any case
+        Assert.False(BotEngine.WantedLoot(new GroundItem(2, new Vec3(0, 0, 0), 93038, 1), p));  // "other" is off
+        p.LootAlways = "";
+        Assert.False(BotEngine.WantedLoot(new GroundItem(1, new Vec3(0, 0, 0), 93006, 1), p));
+    }
+}

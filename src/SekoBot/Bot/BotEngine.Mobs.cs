@@ -138,7 +138,7 @@ internal sealed partial class BotEngine
     }
 
     /// <summary>Whether to walk to this item (unknown items: yes, they may be anything).</summary>
-    internal static bool WantedLoot(GroundItem item, BotProfile profile) => item.Kind switch
+    internal static bool WantedLoot(GroundItem item, BotProfile profile) => AlwaysLoot(item.Vnum, profile) || item.Kind switch
     {
         LootKind.Yang => profile.LootYang,
         LootKind.Potion => profile.LootPotions,
@@ -147,6 +147,15 @@ internal sealed partial class BotEngine
         LootKind.Other => profile.LootOther,
         _ => true,
     };
+
+    /// <summary>An item on the "always pick up" list (by name, part of it is enough).</summary>
+    internal static bool AlwaysLoot(int vnum, BotProfile profile)
+    {
+        if (profile.LootAlways.Length == 0 || vnum <= 1 || ItemBook.Get(vnum) is not { } info)
+            return false;
+        return profile.LootAlways.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(n => info.Name.Contains(n, StringComparison.CurrentCultureIgnoreCase));
+    }
 
     /// <summary>Whether the bot should go for this mob, by the profile's choices. A mob that is
     /// attacking us is always fought back, and a Metin stone set to "first" is always gone for
