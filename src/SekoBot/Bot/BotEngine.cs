@@ -44,6 +44,7 @@ internal sealed partial class BotEngine : IDisposable
     private SessionRecorder? _recorder;
     private bool _disposed;
     private readonly SessionStats _session = new();
+    private readonly NoteFilter _notes = new();
     private bool _sessionStarted;
     private Vec3? _farmSpot;
     private DateTime _sessionStartedAt;
@@ -233,7 +234,9 @@ internal sealed partial class BotEngine : IDisposable
                 }
                 if (action is NoteAction note)
                 {
-                    _log(note.Text);
+                    // The same routine note again within a few minutes isn't written (the log stayed unreadable).
+                    if (_notes.ShouldWrite(note.Text, state.Time))
+                        _log(note.Text);
                     continue;
                 }
                 _input.Enqueue(action);
@@ -318,6 +321,7 @@ internal sealed partial class BotEngine : IDisposable
             _brain.Start(_clock.Elapsed);
             _cleaner.Abort(null, Profile, "");
             _cleanTries = 0;
+            _notes.Reset();
             RememberBagAtStart(World);
             lock (_social)
                 _social.Reset();
