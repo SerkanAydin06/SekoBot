@@ -97,6 +97,38 @@ public class LeashTests
     }
 
     [Fact]
+    public void Fights_mobs_hitting_us_before_walking_back()
+    {
+        var p = Profile();
+        var world = new World(0);
+        var home = world.Pos;
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        List<BotAction> Run(double from, double to, TargetInfo[] mobs)
+        {
+            var all = new List<BotAction>();
+            for (double t = from; t < to; t += 100)
+            {
+                var actions = brain.Tick(world.State(t) with { Targets = mobs, AttackPower = 189 });
+                all.AddRange(actions);
+                world.Apply(actions);
+            }
+            return all;
+        }
+        Run(0, 500, []);                                         // home taken
+        world.Pos = home with { X = home.X + 3000 };             // 30 m off, past the 10 m limit
+        // A mob 3 m away hits us (it chased us out here): fight it, don't walk home with it behind.
+        var biter = new TargetInfo(1, new Point(960, 540 - 60), 300, 130, 103, 305, 305, 56, false, AttacksMe: true);
+        var fight = Run(500, 3000, [biter]);
+        Assert.Contains(fight, a => a is NoteAction n && n.Text.Contains("sınırı aşıldı"));
+        Assert.Contains(fight, a => a is KeyDownAction d && d.Key == p.Keys.MoveForward);   // towards the mob (up on screen)
+        Assert.DoesNotContain(fight, a => a is KeyDownAction d && d.Key == p.Keys.MoveBack);
+        // Killed: now back home (camera yaw 0: home is behind → S).
+        var back = Run(3000, 4000, []);
+        Assert.Contains(back, a => a is KeyDownAction d && d.Key == p.Keys.MoveBack);
+    }
+
+    [Fact]
     public void Area_limit_off_means_no_home()
     {
         var p = Profile();
