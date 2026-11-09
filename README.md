@@ -42,6 +42,8 @@ Bot oyunun kendi pencerelerinin (Esc menüsü, envanter, karakter, beceriler, ay
 
 **Takılma:** W/A/S/D basılıyken karakterin konumu 0,7 sn değişmiyorsa karakter bir ağaca/kayaya takılmıştır (yürümeye başladıktan sonraki ilk 1 sn — vurma hareketinin bitmesi — ve mobun dibindeyken sayılmaz); bot yana kayarak dolanır (her seferinde diğer yana), sonra yoluna devam eder.
 
+
+**Engelleri öğrenme ve yükseklik:** ağaç, taş, duvar gibi engellerin şekli bellekten okunamıyor; bot onları öğrenir. Bir moba yürürken takıldığı (yandan dolandığı, moba ya da gruba ulaşamadığı) yeri ve gitmeye çalıştığı yönü 5 dakika hatırlar; yolu böyle bir yerden geçen mobları seçmez. Yükseklik bellekten okunur: düz zeminde mob karakterden ~60 birim aşağıda görünür; bundan çok yukarıda ya da aşağıda olan mob (yamaç, uçurum; uzaklığının yarısından ve 2,5 m'den fazla fark) seçilmez. Sana saldıran moblar her zaman kesilir.
 ## Oturum istatistikleri
 
 - **Öldürülen mob:** Karakterin 8 m yakınında canlı görülen bir mob ölür (ya da dünyadan kalkar) **ve** birkaç saniye içinde EXP'in artarsa sayılır. Başkasının kestiği mob (EXP gelmez) ve uzaktaki moblar sayılmaz.

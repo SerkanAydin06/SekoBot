@@ -56,6 +56,7 @@ internal sealed partial class Brain
         _sidestepKeys = [];
         _sidesteps = 0;
         ResetLeash();
+        ResetTerrain();
     }
 
     /// <summary>Press <paramref name="key"/> from <paramref name="start"/> for <paramref name="ms"/> without blocking anything else.</summary>
@@ -145,8 +146,10 @@ internal sealed partial class Brain
         // Mobs outside the area aren't walked to at all (we'd only turn back halfway); those
         // attacking us are still fought.
         bool fromMemory = state.Targets.Count > 0;
+        // Nor to mobs on a ledge or behind a spot we got stuck at before.
+        _walkGoal = null;
         if (fromMemory)
-            state = state with { Targets = state.Targets.Where(t => InArea(t, p)).ToList() };
+            state = state with { Targets = state.Targets.Where(t => InArea(t, p) && Walkable(t, state, now)).ToList() };
         var chosen = state.Targets.Count > 0 ? ChooseTarget(state) : null;
         if (chosen != null)
         {
@@ -272,6 +275,7 @@ internal sealed partial class Brain
         }
 
         // Walk towards it: W up, S down, A left, D right (both for diagonals).
+        _walkGoal = chosen?.Position;
         SetAttack(false, p, actions, refresh);
         FinishFight(p, actions, now);
         SetMoves(Towards(dx, dy, radius * 0.5, p), p, actions, refresh);
@@ -285,6 +289,7 @@ internal sealed partial class Brain
         if (_movingSince != Never && now - _movingSince >= Ms(p.MoveStuckMs))
         {
             // The mob can't be reached: walk the other way for a moment and look elsewhere.
+            StuckHere(state);
             var away = Towards(-dx, -dy, radius * 0.5, p);
             actions.Add(new NoteAction("Moba ulaşılamıyor; başka yere bakılıyor."));
             StepAside(away, now, 1000);

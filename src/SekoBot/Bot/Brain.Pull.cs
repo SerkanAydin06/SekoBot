@@ -131,12 +131,15 @@ internal sealed partial class Brain
             if (_pullWalkSince != Never && now - _pullWalkSince > Ms(PullWalkMs))
             {
                 // Can't get to it (seen in the game: 30 s walking along a wall): leave it.
+                _walkGoal = member.Position;
+                StuckHere(state);
                 _pulled[group.Key] = now;
                 _pullGroup = 0;
                 _pullHitSince = _pullWalkSince = Never;
                 actions.Add(new NoteAction("Gruba ulaşılamadı; bırakıldı."));
                 return true;
             }
+            _walkGoal = member.Position;
             SetAttack(false, p, actions, refresh);
             SetMoves(Towards(dx, dy, radius * 0.5, p), p, actions, refresh);
             if (Phase != BotPhase.Moving)
