@@ -40,6 +40,9 @@ internal sealed record GameState(
     /// <summary>The mobs with their distance, reach and value (from memory); empty without memory.</summary>
     public IReadOnlyList<TargetInfo> Targets { get; init; } = [];
 
+    /// <summary>The saved farm spot to walk to before starting, when it is used.</summary>
+    public Vec3? FarmSpot { get; init; }
+
     /// <summary>Where the mobs were seen most (world), to walk to when none is on screen.</summary>
     public Vec3? Hotspot { get; init; }
 

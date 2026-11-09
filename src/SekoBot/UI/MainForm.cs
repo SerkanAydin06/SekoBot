@@ -26,7 +26,8 @@ internal sealed class MainForm : Form
     private readonly PreviewControl _preview;
     private readonly Label _connection, _status, _calibrationHint, _calibrationState, _technical;
     private readonly Label _statTime, _statMobs, _statRate, _statDeaths, _statPotions, _statExp, _statExpRate, _statLevel, _statYang;
-    private readonly Label _positionState, _skillList;
+    private readonly Label _positionState, _skillList, _farmState;
+    private readonly Button _findArea;
     private readonly Button _scanMobs;
     private readonly Meter _hpMeter, _mpMeter, _targetMeter;
     private readonly Button[] _tabButtons;
@@ -212,9 +213,10 @@ internal sealed class MainForm : Form
         var area = _tabPages[3];
         NumberRow(area, "Alan sınırı (metre)", 0, 0, 0, 500, Math.Round(_profile.LeashMeters), 0, 5,
             v => _profile.LeashMeters = v);
-        Theme.Label(area, "Bot başladığı yeri hatırlar ve bu sınırın dışına çıkınca geri yürür. Yerini oyunun " +
-            "belleğinden okur; harita açmaz, ayar gerekmez. 0 = sınır yok.",
-            new Rectangle(370, 0, 360, 68), 9f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+        _findArea = Theme.Button(area, "📍  En iyi alanı bul", new Rectangle(370, 0, 180, 28), Theme.Primary, Theme.PrimaryHover);
+        _findArea.Click += (_, _) => ToggleAreaScan();
+        Check(area, "Kayıtlı alanda başla", 560, 1, 176, _profile.UseFarmSpot, v => _profile.UseFarmSpot = v);
+        _farmState = Theme.Label(area, "", new Rectangle(370, 32, 366, 40), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
         Check(area, "GM görünce dur", 0, 34, 180, _profile.StopNearGm, v => _profile.StopNearGm = v);
         Check(area, "Envanter dolunca dur", 190, 34, 175, _profile.StopWhenInventoryFull, v => _profile.StopWhenInventoryFull = v);
         Check(area, "Güvenli bölgede (şehirde) dur", 0, 110, 300, _profile.StopInSafeZone, v => _profile.StopInSafeZone = v);
@@ -545,6 +547,7 @@ internal sealed class MainForm : Form
                     _autoAttached = false;
                 Disconnect(message);
             });
+            engine.AreaScanFinished += _ => PostUi(() => { SaveProfile(); UpdateControls(); UpdateStats(); });
             engine.BotStopped += reason => PostUi(() => { _stopReason = reason; UpdateControls(); UpdateStats(); });
             _engine = engine;
             engine.Start(previewFps: 30);
@@ -622,6 +625,26 @@ internal sealed class MainForm : Form
         UpdateStats();
         if (byUser && _pendingUpdate is PreparedUpdate pending)
             _ = ApplyUpdateAsync(pending);
+    }
+
+    // ── Farm area ──
+
+    private void ToggleAreaScan()
+    {
+        if (_engine == null)
+        {
+            WriteLog("Önce oyun açık olmalı.");
+            return;
+        }
+        if (_engine.ScanningArea)
+        {
+            _engine.StopAreaScan();
+            return;
+        }
+        if (!_engine.StartAreaScan(out string error))
+            WriteLog(error);
+        UpdateControls();
+        UpdateStats();
     }
 
     // ── Recording / replay ───────────────────────────────────────
@@ -769,6 +792,13 @@ internal sealed class MainForm : Form
               (_engine.FreeInventorySlots is int free ? $", envanterde {free} boş yer)" : ")")
             : "📍 " + _engine.MemoryStatus;
         _positionState.ForeColor = world != null ? Theme.Green : Theme.Muted;
+        _farmState.Text = _profile.FarmSpot is { } farm
+            ? $"Kayıtlı alan ({farm.MapName}, {farm.FoundAt:dd.MM HH:mm}): {farm.Mobs} mob — {farm.Names}" +
+              (world != null && world.MapName == farm.MapName ? $" · {farm.Position.DistanceXY(world.Player) / 100:0} m uzakta" : "")
+            : "Kayıtlı alan yok. \"En iyi alanı bul\": karakter ~1 dk çevrede dolaşıp en verimli yeri bulur.";
+        string scanText = _engine.ScanningArea ? "■  Taramayı durdur" : _profile.FarmSpot != null ? "🔄  Alanı güncelle" : "📍  En iyi alanı bul";
+        if (_findArea.Text != scanText)
+            _findArea.Text = scanText;
         _hpMeter.Value = state?.Hp;
         _mpMeter.Value = state?.Mp;
         _targetMeter.Value = state?.TargetHp;
@@ -840,7 +870,8 @@ internal sealed class MainForm : Form
         bool connected = _engine != null;
         bool running = _engine?.BotRunning == true;
         _gameButton.Text = connected ? "Bağlantı  ▾" : "Oyunu seç  ▾";
-        _startBot.Enabled = connected;
+        _startBot.Enabled = connected && _engine?.ScanningArea != true;
+        _findArea.Enabled = connected && !running;
         _scanMobs.Enabled = connected;
         _startBot.Text = running ? "❚❚  DURAKLAT   F10" : "▶  BAŞLAT   F10";
         _stopBot.Enabled = running;
