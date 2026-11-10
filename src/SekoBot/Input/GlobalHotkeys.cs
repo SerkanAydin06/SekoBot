@@ -10,10 +10,10 @@ internal sealed class GlobalHotkeys : NativeWindow, IDisposable
 
     public GlobalHotkeys() => CreateHandle(new CreateParams());
 
-    public bool Register(Keys key, Action action)
+    public bool Register(Keys key, Action action, bool control = false)
     {
         int id = _nextId++;
-        if (!Win32.RegisterHotKey(Handle, id, Win32.MOD_NOREPEAT, (uint)key))
+        if (!Win32.RegisterHotKey(Handle, id, Win32.MOD_NOREPEAT | (control ? Win32.MOD_CONTROL : 0), (uint)key))
             return false;
         _actions[id] = action;
         return true;

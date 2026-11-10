@@ -89,6 +89,7 @@ internal static class Win32
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool PostMessage(nint hwnd, uint msg, nint wParam, nint lParam);
     internal const uint MOD_NOREPEAT = 0x4000;
+    internal const uint MOD_CONTROL = 0x0002;
     internal const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
 
     internal delegate bool EnumWindowsProc(nint hwnd, nint lParam);

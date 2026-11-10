@@ -35,7 +35,17 @@ internal sealed class MainForm : Form
     private readonly Button _dashButton;
     private readonly Panel _dashboard;
     private readonly Card _settingsCard;
-    private readonly Label _pageTitle, _pageInfo, _bagState, _events;
+    private readonly Label _pageTitle, _pageInfo, _bagState, _events, _identity;
+
+    private static string StartKey => Instance.IsFirst ? "F10" : "Ctrl+F10";
+    private static string StopKey => Instance.IsFirst ? "F11" : "Ctrl+F11";
+
+    /// <summary>When a game process started (to take the oldest free game first).</summary>
+    private static DateTime GameStarted(uint processId)
+    {
+        try { return System.Diagnostics.Process.GetProcessById((int)processId).StartTime; }
+        catch { return DateTime.MaxValue; }
+    }
     private static readonly string[] PageInfo =
     [
         "Mobların nasıl kesileceği: menzil ve grupları toplayıp birden kesme.",
@@ -92,7 +102,7 @@ internal sealed class MainForm : Form
         var header = new Card { Bounds = new Rectangle(12, 10, 1156, 46) };
         Controls.Add(header);
         var title = Theme.Label(header, "◆  SEKOBOT", new Rectangle(14, 8, 150, 30), 13.5f, Theme.Text, FontStyle.Bold);
-        var version = Theme.Label(header, "v" + BuildInfo.Version, new Rectangle(160, 13, 110, 22), 8.5f, Theme.Muted);
+        var version = _identity = Theme.Label(header, "v" + BuildInfo.Version, new Rectangle(160, 13, 380, 22), 8.5f, Theme.Muted);
         _connection = Theme.Label(header, "○  Oyun bekleniyor", new Rectangle(560, 12, 380, 22), 9.5f, Theme.Muted,
             FontStyle.Bold, ContentAlignment.MiddleRight);
         foreach (Control c in new Control[] { header, title, version, _connection })
@@ -112,10 +122,10 @@ internal sealed class MainForm : Form
         // ── Control bar: Start / Stop and what the bot is doing ───
         var bar = new Card { Bounds = new Rectangle(12, 64, 1156, 64) };
         Controls.Add(bar);
-        _startBot = Theme.Button(bar, "▶  BAŞLAT   F10", new Rectangle(12, 10, 220, 44), Theme.Primary, Theme.PrimaryHover);
+        _startBot = Theme.Button(bar, $"▶  BAŞLAT   {StartKey}", new Rectangle(12, 10, 220, 44), Theme.Primary, Theme.PrimaryHover);
         _startBot.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
         _startBot.Click += (_, _) => ToggleBot();
-        _stopBot = Theme.Button(bar, "■  DURDUR   F11", new Rectangle(242, 10, 200, 44), Theme.Danger, Theme.DangerHover);
+        _stopBot = Theme.Button(bar, $"■  DURDUR   {StopKey}", new Rectangle(242, 10, 200, 44), Theme.Danger, Theme.DangerHover);
         _stopBot.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
         _stopBot.Click += (_, _) => StopBot("kullanıcı durdurdu", byUser: true);
         _status = Theme.Label(bar, "Oyun bekleniyor", new Rectangle(464, 10, 680, 44), 12f, Theme.Muted, FontStyle.Bold);
@@ -428,13 +438,17 @@ internal sealed class MainForm : Form
         _statsTimer = new System.Windows.Forms.Timer { Interval = 400 };
         _statsTimer.Tick += (_, _) => UpdateStats();
         _updateTimer = new System.Windows.Forms.Timer { Interval = (int)TimeSpan.FromHours(2).TotalMilliseconds };
-        _updateTimer.Tick += async (_, _) => await CheckForUpdatesAsync(startup: false);
+        _updateTimer.Tick += async (_, _) => { if (Instance.IsFirst) await CheckForUpdatesAsync(startup: false); };
 
-        if (!_hotkeys.Register(Keys.F10, () => BeginInvoke(new Action(ToggleBot))))
-            WriteLog("F10 kısayolu başka bir uygulamada kullanılıyor.");
-        // F12 is reserved by Windows for debuggers, so the emergency stop is F11.
-        if (!_hotkeys.Register(Keys.F11, () => BeginInvoke(new Action(() => StopBot("F11 acil durdurma", byUser: true)))))
-            WriteLog("F11 kısayolu başka bir uygulamada kullanılıyor; Durdur düğmesini kullan.");
+        // A second SekoBot (another game) uses Ctrl+F10 / Ctrl+F11; F12 is reserved by Windows for debuggers.
+        bool control = !Instance.IsFirst;
+        if (!_hotkeys.Register(Keys.F10, () => BeginInvoke(new Action(ToggleBot)), control))
+            WriteLog($"{StartKey} kısayolu başka bir uygulamada kullanılıyor.");
+        if (!_hotkeys.Register(Keys.F11, () => BeginInvoke(new Action(() => StopBot($"{StopKey} acil durdurma", byUser: true))), control))
+            WriteLog($"{StopKey} kısayolu başka bir uygulamada kullanılıyor; Durdur düğmesini kullan.");
+        if (!Instance.IsFirst)
+            WriteLog($"Bu {Instance.Number}. SekoBot: kendi ayarlarını kullanır, kısayollar {StartKey} / {StopKey}. " +
+                     "Telegram komutları ve güncelleme 1. SekoBot'ta.");
 
         Shown += async (_, _) =>
         {
@@ -443,8 +457,11 @@ internal sealed class MainForm : Form
             _scanTimer.Start();
             _statsTimer.Start();
             _updateTimer.Start();
-            _ = TelegramCommandsAsync(_telegramCts.Token);
-            await CheckForUpdatesAsync(startup: true);
+            if (Instance.IsFirst)
+            {
+                _ = TelegramCommandsAsync(_telegramCts.Token);
+                await CheckForUpdatesAsync(startup: true);
+            }
         };
         FormClosing += (_, _) =>
         {
@@ -622,10 +639,12 @@ internal sealed class MainForm : Form
             _preview.Placeholder = waiting;
             _preview.Invalidate();
 
-            if (!_autoAttached && ready.Count == 1 && _games.Count == 1)
+            // Each SekoBot takes a game no other SekoBot is connected to (the oldest one first).
+            var free = ready.Where(w => !Instance.GameTaken(w.ProcessId)).OrderBy(w => GameStarted(w.ProcessId)).ToList();
+            if (!_autoAttached && free.Count > 0 && (free.Count == 1 || _games.Count > 1))
             {
                 _autoAttached = true;
-                BeginInvoke(new Action(() => Connect(ready[0])));
+                BeginInvoke(new Action(() => Connect(free[0])));
             }
         }
         catch (Exception ex)
@@ -661,6 +680,7 @@ internal sealed class MainForm : Form
             engine.AreaScanFinished += _ => PostUi(() => { SaveProfile(); UpdateControls(); UpdateStats(); });
             engine.BotStopped += reason => PostUi(() => { _stopReason = reason; UpdateControls(); UpdateStats(); });
             _engine = engine;
+            Instance.TakeGame(window.ProcessId);
             engine.Start(previewFps: 30);
             _frameSequence = 0;
             _gameMinimized = false;
@@ -687,6 +707,7 @@ internal sealed class MainForm : Form
         _previewTimer.Stop();
         _engine.Dispose();
         _engine = null;
+        Instance.LeaveGame();
         _preview.Image = null;
         _preview.State = null;
         _preview.Overlay = "";
@@ -873,6 +894,13 @@ internal sealed class MainForm : Form
 
     private void UpdateStats()
     {
+        string name = _engine?.CharacterName ?? "";
+        string identity = "v" + BuildInfo.Version + (Instance.IsFirst ? "" : $"  ·  {Instance.Number}. SekoBot") + (name.Length > 0 ? $"  ·  {name}" : "");
+        if (_identity.Text != identity)
+        {
+            _identity.Text = identity;
+            Text = "SekoBot" + (Instance.IsFirst ? "" : $" {Instance.Number}") + (name.Length > 0 ? $" — {name}" : "");
+        }
         _calibrationState.Text = _engine?.World != null ? "Her şey bellekten ✓" : "Bellek bekleniyor";
         _calibrationState.ForeColor = _engine?.World != null ? Theme.Green : Theme.Muted;
         _events.Text = _engine?.EventsSummary() ?? "Bot çalışınca görünür.";
@@ -969,8 +997,8 @@ internal sealed class MainForm : Form
         else
         {
             SetLine(_stopReason is string reason
-                        ? $"Durdu ({reason}). Devam etmek için BAŞLAT ya da F10."
-                        : "Hazır. Başlatmak için BAŞLAT ya da F10.",
+                        ? $"Durdu ({reason}). Devam etmek için BAŞLAT ya da {StartKey}."
+                        : $"Hazır. Başlatmak için BAŞLAT ya da {StartKey}.",
                     _stopReason != null ? Theme.Yellow : Theme.Text);
         }
     }
@@ -1122,7 +1150,7 @@ internal sealed class MainForm : Form
         _startBot.Enabled = connected && _engine?.ScanningArea != true;
         _findArea.Enabled = connected && !running;
         _scanMobs.Enabled = connected;
-        _startBot.Text = running ? "❚❚  DURAKLAT   F10" : "▶  BAŞLAT   F10";
+        _startBot.Text = running ? $"❚❚  DURAKLAT   {StartKey}" : $"▶  BAŞLAT   {StartKey}";
         _stopBot.Enabled = running;
         bool recording = _engine?.IsRecording == true;
         _record.Enabled = connected;
