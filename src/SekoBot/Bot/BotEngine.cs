@@ -341,8 +341,8 @@ internal sealed partial class BotEngine : IDisposable
             _sessionStarted = true;
         }
         _log(dryRun ? "Bot kuru çalışmada başladı (girdi gönderilmez)."
-            : background ? "Bot başladı (oyun arka planda kalabilir). Acil durdurma: F11"
-            : "Bot başladı. Acil durdurma: F11");
+            : background ? $"Bot başladı (oyun arka planda kalabilir). Acil durdurma: {(Instance.IsFirst ? "F11" : "Ctrl+F11")}"
+            : $"Bot başladı. Acil durdurma: {(Instance.IsFirst ? "F11" : "Ctrl+F11")}");
         return true;
     }
 

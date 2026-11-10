@@ -250,10 +250,15 @@ internal static class ProfileStore
     public static string Directory { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SekoBot");
 
-    private static string ProfilePath => Path.Combine(Directory, "profile.json");
+    /// <summary>profile.json for the first SekoBot, profile-2.json for a second one open at the same time.</summary>
+    private static string ProfilePath => Path.Combine(Directory, Instance.FileName("profile", "json"));
 
     public static BotProfile Load()
     {
+        // A second SekoBot starts from the first one's settings (Telegram, keys…), then keeps its own.
+        string first = Path.Combine(Directory, "profile.json");
+        if (!Instance.IsFirst && !File.Exists(ProfilePath) && File.Exists(first))
+            try { File.Copy(first, ProfilePath); } catch { }
         // Leftover from v0.4.0 (Metin stone templates); no longer used.
         try { System.IO.Directory.Delete(Path.Combine(Directory, "templates"), true); } catch { }
         try

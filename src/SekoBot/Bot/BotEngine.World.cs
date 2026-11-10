@@ -219,7 +219,7 @@ internal sealed partial class BotEngine
                 return;
             _notified[text] = now;
         }
-        string message = $"SekoBot · {_window.Title}\n{text}";
+        string message = $"SekoBot · {(CharacterName.Length > 0 ? CharacterName : _window.Title)}\n{text}";
         _ = Task.Run(async () =>
         {
             string? error = await Update.TelegramNotifier.SendAsync(p.TelegramToken, p.TelegramChatId, message);
@@ -249,6 +249,9 @@ internal sealed partial class BotEngine
     {
         try { System.Media.SystemSounds.Exclamation.Play(); } catch { }
     }
+
+    /// <summary>The character's name, once read from memory (empty before).</summary>
+    public string CharacterName => _world?.CharacterName ?? "";
 
     /// <summary>Free bag slots, when known.</summary>
     public int? FreeInventorySlots => World?.Progress?.FreeSlots();

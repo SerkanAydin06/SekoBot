@@ -12,7 +12,7 @@ internal static class LogFile
     private const long MaxBytes = 2 * 1024 * 1024;
     private static readonly object Gate = new();
 
-    public static string FilePath => Path.Combine(ProfileStore.Directory, "gunluk.txt");
+    public static string FilePath => Path.Combine(ProfileStore.Directory, Instance.FileName("gunluk", "txt"));
 
     public static void Append(string line)
     {
@@ -23,7 +23,7 @@ internal static class LogFile
                 Directory.CreateDirectory(ProfileStore.Directory);
                 var file = new FileInfo(FilePath);
                 if (file.Exists && file.Length > MaxBytes)
-                    File.Move(FilePath, Path.Combine(ProfileStore.Directory, "gunluk-eski.txt"), overwrite: true);
+                    File.Move(FilePath, Path.Combine(ProfileStore.Directory, Instance.FileName("gunluk-eski", "txt")), overwrite: true);
                 File.AppendAllText(FilePath, $"{DateTime.Now:yyyy-MM-dd} {line}");
             }
         }

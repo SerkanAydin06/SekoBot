@@ -1,3 +1,4 @@
+using SekoBot;
 using SekoBot.Bot;
 using SekoBot.Config;
 using SekoBot.Memory;
@@ -74,5 +75,24 @@ public class WhisperSenderTests
         watch.ExpectOwn("oxyygen", now);
         Assert.Empty(watch.Update(Social(new WhisperThread("OxyyGeN", 3, [], 67)), p, 20, now.AddSeconds(20)));   // our answer
         Assert.Single(watch.Update(Social(new WhisperThread("OxyyGeN", 4, [], 67)), p, 20, now.AddSeconds(40))); // their reply
+    }
+}
+
+public class InstanceTests
+{
+    [Fact]
+    public void The_first_sekobot_keeps_the_old_file_names() =>
+        Assert.Equal("profile.json", Instance.FileName("profile", "json"));
+
+    [Fact]
+    public void A_game_marked_by_another_sekobot_is_taken_and_ours_is_not()
+    {
+        uint fake = 4_000_000_000u - (uint)Environment.ProcessId;
+        using (new EventWaitHandle(false, EventResetMode.ManualReset, $@"Local\SekoBot-game-{fake}"))
+            Assert.True(Instance.GameTaken(fake));       // another SekoBot holds it
+        Assert.False(Instance.GameTaken(fake));          // let go
+        Instance.TakeGame(fake);
+        try { Assert.False(Instance.GameTaken(fake)); }  // ours
+        finally { Instance.LeaveGame(); }
     }
 }

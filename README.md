@@ -125,6 +125,8 @@ Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü h
 
 Fısıltı bildirimi artık mesaj penceresinin konuşma listesinden de okunur; mesaj metni okunamazsa "yeni mesaj yazdı" diye bildirilir.
 
+**İki oyunda aynı anda bot:** iki oyun açıkken SekoBot'u iki kez aç. Her SekoBot başka bir oyuna kendiliğinden bağlanır (önce açılan oyun 1. SekoBot'a). 2. SekoBot kendi ayarlarını (`profile-2.json`, ilk açılışta 1.'nin ayarlarından kopyalanır) ve günlüğünü (`gunluk-2.txt`) kullanır; kısayolları **Ctrl+F10 / Ctrl+F11**. Telegram komutları ve otomatik güncelleme yalnızca 1. SekoBot'ta; bildirimler ikisinden de gelir ve başlarında karakter adı yazar. Pencere başlığında ve üst çubukta kaçıncı SekoBot olduğu ve karakter adı görünür.
+
 **Sersemleme:** karakter sersemleyince (bellekte "stuned") bot bekler; o anı takılma ya da ulaşılamayan grup saymaz.
 
 **Komutlar** (Bildirim sekmesinde **Komutlar (durum/dur/başla)**, varsayılan açık): kendi botuna Telegram'dan yaz, SekoBot cevap verir:

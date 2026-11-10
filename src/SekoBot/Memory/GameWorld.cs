@@ -552,6 +552,13 @@ internal sealed class GameWorldReader : IDisposable
 
         long loader = Pointer(instance + Offset(instanceClass, "m2data_C", "loader"));
         var (stats, characterLevel) = ReadStats(loader);
+        if (MemoryReads.IsPointer(loader) && DateTime.UtcNow - _nameReadAt > TimeSpan.FromSeconds(5))
+        {
+            _nameReadAt = DateTime.UtcNow;
+            string name = ReadFString(loader + Offset(Pointer(loader + ObjClass), "loader", "charData.playerid"), 64);
+            if (name.Length > 0)
+                CharacterName = name;
+        }
         var progress = ReadProgress(loader);
         // The mobs of this map: read when the map changes (and again a little later if still empty).
         if (mapName.Length > 0 && (mapName != _mobsMap || MapMobs.Count == 0 && DateTime.UtcNow - _mobsTriedAt > TimeSpan.FromSeconds(30)))
@@ -1110,6 +1117,10 @@ internal sealed class GameWorldReader : IDisposable
     /// The inventory window as it is drawn now (read on demand, while throwing items away): the
     /// page showing, the page buttons, each item with its slot, and the "Evet" of the drop question.
     /// </summary>
+    /// <summary>The character's name (read every few seconds); empty until known.</summary>
+    public string CharacterName { get; private set; } = "";
+    private DateTime _nameReadAt = DateTime.MinValue;
+
     public BagLayout? ReadBagLayout()
     {
         try
