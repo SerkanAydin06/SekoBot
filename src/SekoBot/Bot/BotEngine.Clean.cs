@@ -25,31 +25,49 @@ internal sealed partial class BotEngine
         profile.ThrowWhenInventoryFull && HasThrowables(world, profile);
 
     private bool HasThrowables(WorldSnapshot world, BotProfile profile) =>
-        profile.NavigateMode && (world.Progress?.Inventory ?? []).Any(i => ShouldThrow(i, profile, _bagAtStart));
+        profile.NavigateMode && (world.Progress?.Inventory ?? []).Any(i => ShouldThrow(i, profile, BotPicked));
 
-    /// <summary>What was in the bag (slot, item) when the bot started: the user's own things.</summary>
-    private HashSet<(int Slot, int Vnum)>? _bagAtStart;
+    /// <summary>The bag items the bot picked up itself (kept across restarts, per character).</summary>
+    private readonly PickedItems _pickedItems = new();
+    private TimeSpan _pickedSavedAt;
 
-    private void RememberBagAtStart(WorldSnapshot? world) =>
-        _bagAtStart = world?.Progress is { Inventory.Count: > 0 } progress
-            ? [.. progress.Inventory.Select(i => (i.Slot, i.Vnum))]
-            : null;
+    private IReadOnlySet<(int Slot, int Vnum)> BotPicked
+    {
+        get { lock (_pickedItems) return new HashSet<(int, int)>(_pickedItems.Picked); }
+    }
+
+    /// <summary>On the perception thread: notes what came into the bag, saves it now and then.</summary>
+    private void TrackPicked(WorldSnapshot world, TimeSpan now)
+    {
+        if (world.Progress is not { Inventory.Count: > 0 } progress)
+            return;
+        lock (_pickedItems)
+        {
+            _pickedItems.UseCharacter(_world?.CharacterName ?? "");
+            _pickedItems.Update(progress.Inventory, BotRunning);
+            if (_pickedItems.Changed && now - _pickedSavedAt > TimeSpan.FromSeconds(5))
+            {
+                _pickedSavedAt = now;
+                _pickedItems.Save();
+            }
+        }
+    }
 
     /// <summary>
     /// Whether to throw this bag item away: ticked "At"; or — when weapons and armour are only
     /// picked up from a price on (Silah / zırh off, "≥" set) — a weapon or armour worth less than
-    /// that which came into the bag while the bot ran (what was there at the start is the user's and
-    /// stays; not known what was there: nothing is thrown this way). Ticked "Topla" or on the
+    /// that the bot picked up itself (<paramref name="botPicked"/>; the user's own things stay, also
+    /// after a restart; not known: nothing is thrown this way). Ticked "Topla" or on the
     /// "always pick up" names: kept. Price unknown (or 0, often a special item): kept. Worn: kept.
     /// </summary>
-    internal static bool ShouldThrow(InventoryItem item, BotProfile profile, IReadOnlySet<(int Slot, int Vnum)>? atStart)
+    internal static bool ShouldThrow(InventoryItem item, BotProfile profile, IReadOnlySet<(int Slot, int Vnum)>? botPicked)
     {
         if (item.Slot < CharacterProgress.FirstBagSlot || AlwaysLoot(item.Vnum, profile))
             return false;
         if (profile.LootThrow.Contains(item.Vnum))
             return true;
         return !profile.LootEquipment && profile.LootEquipmentMinGold > 0 &&
-               atStart != null && !atStart.Contains((item.Slot, item.Vnum)) &&
+               botPicked != null && botPicked.Contains((item.Slot, item.Vnum)) &&
                Loot.KindOf(item.Vnum) == LootKind.Equipment &&
                ItemBook.Get(item.Vnum) is { Gold: > 0 } info && info.Gold < profile.LootEquipmentMinGold;
     }
@@ -60,7 +78,7 @@ internal sealed partial class BotEngine
         var progress = World?.Progress;
         if (progress?.FreeSlots() is not int free)
             return "Çanta okunamadı (oyun bağlı değil ya da yükleniyor).";
-        int toThrow = progress.Inventory.Count(i => ShouldThrow(i, Profile, BotRunning ? _bagAtStart : null));
+        int toThrow = progress.Inventory.Count(i => ShouldThrow(i, Profile, BotPicked));
         return $"Çanta: {free} boş yer  ·  zırh / uzun silah {(progress.TallSpace() == false ? "SIĞMIYOR" : "sığar")}  ·  atılacak {toThrow} eşya" +
                (_cleaner.Active || _brain.WantsClean ? "  ·  şimdi atılıyor" : "");
     }
@@ -94,7 +112,7 @@ internal sealed partial class BotEngine
                 return false;
             _brain.WantsClean = true;
         }
-        int count = (world.Progress?.Inventory ?? []).Count(i => ShouldThrow(i, profile, _bagAtStart));
+        int count = (world.Progress?.Inventory ?? []).Count(i => ShouldThrow(i, profile, BotPicked));
         _log($"Envanterde yer azaldı (zırh ya da uzun silah sığmıyor olabilir); çantada atılacak {count} eşya var ('At' işaretli ya da botun aldığı ucuz silah/zırh). Sakin bir yerde atılacak.");
         return true;
     }
@@ -116,9 +134,10 @@ internal sealed partial class BotEngine
             _cleaner.Start(state.Time);
             _log("Sakin bir yerdeyiz; envanter açılıp 'At' işaretli eşyalar atılıyor.");
         }
+        var picked = BotPicked;
         IReadOnlyList<BotAction> actions = state.Dead || state.Attackers.Count > 0 || state.Targets.Any(t => t.AttacksMe)
             ? _cleaner.Abort(_bagLayout, p, "saldırı geldi")
-            : _cleaner.Tick(state.Time, _bagLayout, i => ShouldThrow(new InventoryItem(i.Slot, i.Vnum, i.Count), p, _bagAtStart), p, new Size(state.Width, state.Height));
+            : _cleaner.Tick(state.Time, _bagLayout, i => ShouldThrow(new InventoryItem(i.Slot, i.Vnum, i.Count), p, picked), p, new Size(state.Width, state.Height));
         if (!_cleaner.Active)
             CleaningDone();
         return actions;

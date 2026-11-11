@@ -188,6 +188,8 @@ internal sealed partial class BotEngine : IDisposable
                                 SocialTick(world, profile, now);
                                 NotifyEvents(world);
                             }
+                            if (world != null)
+                                TrackPicked(world, now);
                             ReadBagForCleaning();
                             ReadDmForWhisper();
                             var (phase, actions) = TickBot(state);
@@ -325,7 +327,6 @@ internal sealed partial class BotEngine : IDisposable
             _pendingWhisper = null;
             _cleanTries = 0;
             _notes.Reset();
-            RememberBagAtStart(World);
             lock (_social)
                 _social.Reset();
             _session.Reset(_clock.Elapsed);

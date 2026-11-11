@@ -104,6 +104,20 @@ public class NavigateTests
     }
 
     [Fact]
+    public void After_a_fight_the_pickup_key_is_not_pressed_with_nothing_wanted_around()
+    {
+        // The key takes whatever lies closest (also cheap armour the loot choices leave out).
+        var (brain, p) = Ready();
+        p.PickUpDrops = true;
+        var mob = new Point(Center.X + 300, Center.Y);
+        Run(brain, 4000, 4500, _ => [mob]);
+        Run(brain, 4500, 7000, _ => [new Point(Center.X + 10, Center.Y + 5)]);
+        var after = Run(brain, 7000, 7500, _ => []);
+        Assert.Equal(1, brain.Cycles);
+        Assert.DoesNotContain(after, a => a is KeyTapAction k && k.Key == p.Keys.Pickup);
+    }
+
+    [Fact]
     public void Goes_to_the_next_mob_after_a_kill()
     {
         var (brain, p) = Ready();

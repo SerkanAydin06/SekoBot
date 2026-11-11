@@ -167,8 +167,8 @@ public class ThrowCheapEquipmentTests
         ItemBook.Learn(new ItemInfo(96003, "Altın Kolye+0", "ITEM_ARMOR", "ARMOR_NECK", 900));
         ItemBook.Learn(new ItemInfo(96004, "Ayı Safrası", "ITEM_MATERIAL", "MATERIAL_LEATHER", 10));
         ItemBook.Learn(new ItemInfo(96005, "Olay Kılıcı", "ITEM_WEAPON", "WEAPON_SWORD", 0));
-        // In the bag when the bot started: a cheap sword of the user's (slot 12).
-        HashSet<(int, int)> atStart = [(4, 96001), (12, 96001)];
+        // Picked up by the bot: slots 20–24 (slot 12 is a cheap sword of the user's own).
+        HashSet<(int, int)> atStart = [(20, 96001), (21, 96002), (22, 96003), (23, 96004), (24, 96005)];
         InventoryItem[] bag =
         [
             new(4, 96001, 1),   // worn
@@ -178,7 +178,7 @@ public class ThrowCheapEquipmentTests
         var p = new BotProfile { LootEquipment = false, LootEquipmentMinGold = 500 };
         int[] Thrown(IReadOnlySet<(int, int)>? start) => [.. bag.Where(i => BotEngine.ShouldThrow(i, p, start)).Select(i => i.Slot)];
         Assert.Equal([20, 21], Thrown(atStart));
-        Assert.Empty(Thrown(null));                 // not known what was there: none thrown this way
+        Assert.Empty(Thrown(null));                 // not known what the bot picked: none thrown this way
         p.LootPick = [96002];                       // ticked "Topla": kept
         Assert.Equal([20], Thrown(atStart));
         p.LootEquipment = true;                     // all equipment wanted: nothing thrown
@@ -241,5 +241,38 @@ public class FullBagLootTests
             Drops: [new GroundItem(1, new Vec3(10100, 10000, 1800), 1, 50), new GroundItem(2, new Vec3(10000, 10100, 1800), 11210, 1)]);
         var view = BotEngine.MemoryView(world, p, 1920, 1080);
         Assert.Equal([1L], view!.Value.Drops.Select(d => d.Id));
+    }
+}
+
+public class PickedItemsTests
+{
+    private static InventoryItem I(int slot, int vnum) => new(slot, vnum, 1);
+
+    [Fact]
+    public void What_comes_in_while_the_bot_runs_is_the_bots_moves_keep_their_owner()
+    {
+        var picked = new PickedItems();
+        picked.Update([I(12, 500), I(13, 600)], botRunning: false);          // the user's own
+        picked.Update([I(12, 500), I(13, 600), I(20, 700)], botRunning: true); // picked by the bot
+        Assert.Equal([(20, 700)], picked.Picked);
+        picked.Update([I(12, 500), I(13, 600), I(20, 700), I(21, 800)], botRunning: false); // the user's, bot stopped
+        Assert.Equal([(20, 700)], picked.Picked);
+        // The user moves the bot's item and his own: the bot's stays the bot's, his own stays his.
+        picked.Update([I(12, 500), I(30, 600), I(25, 700), I(21, 800)], botRunning: true);
+        Assert.Equal([(25, 700)], picked.Picked);
+        // Thrown away: forgotten.
+        picked.Update([I(12, 500), I(30, 600), I(21, 800)], botRunning: true);
+        Assert.Empty(picked.Picked);
+    }
+
+    [Fact]
+    public void A_bad_read_with_the_bag_almost_empty_does_not_make_everything_the_bots()
+    {
+        var picked = new PickedItems();
+        InventoryItem[] bag = [I(12, 1), I(13, 2), I(14, 3), I(15, 4), I(16, 5), I(17, 6)];
+        picked.Update(bag, botRunning: false);
+        picked.Update([I(12, 1)], botRunning: true); // one bad read
+        picked.Update(bag, botRunning: true);
+        Assert.Empty(picked.Picked);
     }
 }
