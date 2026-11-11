@@ -7,8 +7,8 @@ namespace SekoBot.UI;
 /// <summary>
 /// Every item the game knows (read from its item list, or learned from the bag), with its type and
 /// shop price: the user ticks "Topla" (always pick up) or "Alma" (never walk to it). Searching by
-/// name and filtering by type; ticking one item ticks every item with the same name (the game has
-/// several "Cesaret Pelerini", one for each kind of event).
+/// name and filtering by type. One row per item name without its "+N" (Ağıt Plaka Zırh+0 … +9 is one
+/// row, as are the several "Cesaret Pelerini" of the game): a tick holds for all of them.
 /// </summary>
 internal sealed class ItemListForm : Form
 {
@@ -37,16 +37,24 @@ internal sealed class ItemListForm : Form
         _table.Columns.Add("Topla", typeof(bool));
         _table.Columns.Add("Alma", typeof(bool));
         _table.Columns.Add("At", typeof(bool));
-        _table.Columns.Add("No", typeof(int));
         _table.Columns.Add("Ad", typeof(string));
         _table.Columns.Add("Tür", typeof(string));
-        _table.Columns.Add("Fiyat", typeof(int));
+        _table.Columns.Add("Fiyat", typeof(string));
+        _table.Columns.Add("Çeşit", typeof(int));
+        _table.Columns.Add("Nolar", typeof(string)); // hidden: ",12,13,…," (the items of the row)
         var pick = profile.LootPick.ToHashSet();
         var skip = profile.LootSkip.ToHashSet();
         var drop = profile.LootThrow.ToHashSet();
         // Leftovers in the game's data (empty names, text in another code page like "¿ë½ÅÀÇ") are left out.
-        foreach (var item in ItemBook.All().Where(i => Readable(i.Name)).OrderBy(i => i.Name, StringComparer.CurrentCulture).ThenBy(i => i.Vnum))
-            _table.Rows.Add(pick.Contains(item.Vnum), skip.Contains(item.Vnum), drop.Contains(item.Vnum), item.Vnum, item.Name, TypeName(item), item.Gold);
+        foreach (var group in ItemBook.All().Where(i => Readable(i.Name)).GroupBy(i => (Name: BaseName(i.Name), Type: TypeName(i)))
+                     .OrderBy(g => g.Key.Name, StringComparer.CurrentCulture).ThenBy(g => g.Key.Type))
+        {
+            var items = group.OrderBy(i => i.Vnum).ToList();
+            int low = items.Min(i => i.Gold), high = items.Max(i => i.Gold);
+            _table.Rows.Add(items.Any(i => pick.Contains(i.Vnum)), items.Any(i => skip.Contains(i.Vnum)), items.Any(i => drop.Contains(i.Vnum)),
+                group.Key.Name, group.Key.Type, low == high ? $"{low:N0}" : $"{low:N0}–{high:N0}", items.Count,
+                "," + string.Join(",", items.Select(i => i.Vnum)) + ",");
+        }
 
         Theme.Label(this, "Ara:", new Rectangle(12, 12, 40, 26), 9f, Theme.Muted);
         _search = new TextBox { Bounds = new Rectangle(52, 12, 260, 26), BackColor = Theme.Inset, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle };
@@ -96,10 +104,11 @@ internal sealed class ItemListForm : Form
             _grid.Columns["Topla"]!.FillWeight = 12;
             _grid.Columns["Alma"]!.FillWeight = 12;
             _grid.Columns["At"]!.FillWeight = 10;
-            _grid.Columns["No"]!.FillWeight = 14;
             _grid.Columns["Ad"]!.FillWeight = 60;
             _grid.Columns["Tür"]!.FillWeight = 30;
-            _grid.Columns["Fiyat"]!.FillWeight = 16;
+            _grid.Columns["Fiyat"]!.FillWeight = 24;
+            _grid.Columns["Çeşit"]!.FillWeight = 10;
+            _grid.Columns["Nolar"]!.Visible = false;
         };
         _grid.CurrentCellDirtyStateChanged += (_, _) =>
         {
@@ -110,7 +119,7 @@ internal sealed class ItemListForm : Form
         Controls.Add(_grid);
 
         Theme.Label(this, "Topla: her zaman alınır (diğer seçenekler kapalı olsa da), düşünce Telegram'a yazılır. Alma: hiç yürünmez. At: alınmaz; envanter " +
-            "dolunca çantadan atılır. Bir eşyayı işaretleyince aynı adı taşıyanlar da işaretlenir.", new Rectangle(12, 552, 640, 40), 8.5f, Theme.Muted,
+            "dolunca çantadan atılır. Her satır +0, +1, +2… hepsini kapsar (Çeşit: kaç tane).", new Rectangle(12, 552, 640, 40), 8.5f, Theme.Muted,
             FontStyle.Regular, ContentAlignment.TopLeft).Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
         var close = Theme.Button(this, "Kaydet ve kapat", new Rectangle(668, 556, 140, 30), Theme.Primary, Theme.PrimaryHover);
         close.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
@@ -121,7 +130,7 @@ internal sealed class ItemListForm : Form
 
     private bool _ticking;
 
-    /// <summary>Ticking one item ticks every item with the same name; "Topla" excludes "Alma" and "At".</summary>
+    /// <summary>"Topla" excludes "Alma" and "At" (a row holds all the "+N" of an item).</summary>
     private void Ticked(int rowIndex, int columnIndex)
     {
         if (_ticking || rowIndex < 0 || columnIndex < 0)
@@ -131,17 +140,11 @@ internal sealed class ItemListForm : Form
             return;
         var row = ((DataRowView)_grid.Rows[rowIndex].DataBoundItem).Row;
         bool on = (bool)row[column];
-        string name = (string)row["Ad"];
         _ticking = true;
-        foreach (DataRow other in _table.Rows)
-            if ((string)other["Ad"] == name)
-            {
-                other[column] = on;
-                if (on && column == "Topla")
-                    other["Alma"] = other["At"] = false;
-                else if (on)
-                    other["Topla"] = false;
-            }
+        if (on && column == "Topla")
+            row["Alma"] = row["At"] = false;
+        else if (on)
+            row["Topla"] = false;
         _ticking = false;
         UpdateCount();
     }
@@ -151,7 +154,7 @@ internal sealed class ItemListForm : Form
         var parts = new List<string>();
         string text = _search.Text.Trim().Replace("'", "''").Replace("[", "[[]").Replace("%", "[%]").Replace("*", "[*]");
         if (text.Length > 0)
-            parts.Add($"Ad LIKE '%{text}%'" + (int.TryParse(text, out int number) ? $" OR No = {number}" : ""));
+            parts.Add($"Ad LIKE '%{text}%'" + (int.TryParse(text, out int number) ? $" OR Nolar LIKE '%,{number},%'" : ""));
         if (_type.SelectedIndex > 0)
             parts.Add($"Tür = '{((string)_type.SelectedItem!).Replace("'", "''")}'");
         if (_onlyTicked.Checked)
@@ -171,10 +174,19 @@ internal sealed class ItemListForm : Form
     private void Save()
     {
         _grid.EndEdit();
-        _profile.LootPick = _table.Rows.Cast<DataRow>().Where(r => (bool)r["Topla"]).Select(r => (int)r["No"]).Order().ToList();
-        _profile.LootSkip = _table.Rows.Cast<DataRow>().Where(r => (bool)r["Alma"]).Select(r => (int)r["No"]).Order().ToList();
-        _profile.LootThrow = _table.Rows.Cast<DataRow>().Where(r => (bool)r["At"]).Select(r => (int)r["No"]).Order().ToList();
+        _profile.LootPick = Ticked("Topla");
+        _profile.LootSkip = Ticked("Alma");
+        _profile.LootThrow = Ticked("At");
     }
+
+    /// <summary>Every item of the rows ticked in this column.</summary>
+    private List<int> Ticked(string column) =>
+        [.. _table.Rows.Cast<DataRow>().Where(r => (bool)r[column])
+            .SelectMany(r => ((string)r["Nolar"]).Split(',', StringSplitOptions.RemoveEmptyEntries).Select(int.Parse)).Distinct().Order()];
+
+    /// <summary>"Ağıt Plaka Zırh+3" → "Ağıt Plaka Zırh" (the "+N" of an item's level).</summary>
+    internal static string BaseName(string name) =>
+        System.Text.RegularExpressions.Regex.Replace(name.Trim(), @"\s*\+\s*\d+$", "");
 
     internal static bool Readable(string name) =>
         name.Trim().Length > 1 && !name.Any(c => c is '¿' or '¼' or '½' or '¾' or 'À' or 'Á' or 'Â' or 'Ã' or 'Å' or 'È' or 'É' or 'Ê' or 'Ë' or 'Ì' or 'Í' or 'Ó' or 'Ô' or 'Õ' or '¸' or '¹' or 'º' or '¶');

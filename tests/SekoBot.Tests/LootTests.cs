@@ -235,3 +235,15 @@ public class JunkCloserTests
         Assert.Contains(farther, a => a is KeyTapAction k && k.Key == Keys.Z);
     }
 }
+
+public class ItemListGroupTests
+{
+    [Fact]
+    public void Levels_of_an_item_are_one_row()
+    {
+        Assert.Equal("Ağıt Plaka Zırh", SekoBot.UI.ItemListForm.BaseName("Ağıt Plaka Zırh+0"));
+        Assert.Equal("Ağıt Plaka Zırh", SekoBot.UI.ItemListForm.BaseName("Ağıt Plaka Zırh +9"));
+        Assert.Equal("Cesaret Pelerini", SekoBot.UI.ItemListForm.BaseName("Cesaret Pelerini"));
+        Assert.Equal("Ayı Safrası+", SekoBot.UI.ItemListForm.BaseName("Ayı Safrası+"));   // a different item, no level
+    }
+}
