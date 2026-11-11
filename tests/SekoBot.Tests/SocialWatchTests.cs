@@ -78,6 +78,8 @@ public class SocialWatchTests
         Assert.Equal([33028], watch.ActiveEvents.Select(e => e.Item));
         Assert.Contains("Etkinlik", Assert.Single(notices).Text);
         Assert.Empty(watch.Update(Social(events: events), p, 20, Now));             // told once
+        // Every event's reward is picked up, also later ones and those above our level.
+        Assert.Equal([33028, 39028, 50266], watch.EventItems.Order());
 
         Loot.EventItems = [33028];
         try

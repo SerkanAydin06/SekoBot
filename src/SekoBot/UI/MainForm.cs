@@ -340,7 +340,7 @@ internal sealed class MainForm : Form
         Check(notify, "Sohbette adım ya da GM", 402, 128, 190, _profile.NotifyMentions, v => _profile.NotifyMentions = v);
         Check(notify, "Dağıtılmamış puan", 598, 128, 160, _profile.NotifyPoints, v => _profile.NotifyPoints = v);
         Check(notify, "Etkinlik başlayınca", 0, 156, 170, _profile.NotifyEvents, v => _profile.NotifyEvents = v);
-        Check(notify, "Etkinlik eşyasını otomatik topla (seviyem yetiyorsa)", 176, 156, 380, _profile.EventLoot, v => _profile.EventLoot = v);
+        Check(notify, "Tüm etkinlik ödüllerini her zaman topla", 176, 156, 380, _profile.EventLoot, v => _profile.EventLoot = v);
         Check(notify, "Topla eşyası düşünce", 562, 156, 200, _profile.NotifyDrops, v => _profile.NotifyDrops = v);
 
         var keys = _tabPages[6];
