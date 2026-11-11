@@ -124,3 +124,26 @@ public class MetinLevelTests
         Assert.False(BotEngine.Wanted(Stone(25), p, level: 20));
     }
 }
+
+public class FarAttackerTests
+{
+    [Fact]
+    public void A_mob_marked_as_attacking_but_far_away_is_not_an_attacker()
+    {
+        var me = new Vec3(20000, 18000, 900);
+        var camera = new CameraView(me with { Z = me.Z + 1000 }, -90, 0, 0, 90);
+        var far = new WorldMob(1, 101, "Aç Yaban Domuzu", 7, 198, 198, me with { X = me.X + 2000 }, AttacksMe: true);
+        var near = new WorldMob(2, 101, "Kaplan", 18, 300, 585, me with { X = me.X + 100 }, AttacksMe: true);
+        var world = new WorldSnapshot(me, camera, [far, near], 0, "c2");
+        var view = BotEngine.MemoryView(world, new BotProfile(), 1920, 1080)!.Value;
+        Assert.Equal([2], view.Targets.Where(t => t.AttacksMe).Select(t => t.Id));
+        Assert.Single(view.Attackers);
+    }
+
+    [Fact]
+    public void The_launcher_is_not_taken_for_the_game()
+    {
+        Assert.False(SekoBot.Capture.WindowService.IsGameTitle("Metin2f Patcher v0.1"));
+        Assert.True(SekoBot.Capture.WindowService.IsGameTitle("Mobile2 Global"));
+    }
+}

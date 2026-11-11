@@ -107,6 +107,8 @@ Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü h
 
 **Tehlikede kaç** (İksir / Beceri sayfası, varsayılan %30, 0 = kapalı): can bu yüzdenin altına düşer ve en az 3 mob saldırırsa bot vurmayı bırakıp moblardan uzaklaşır, iksir içmeye devam eder; can %60'ı geçince, 2 sn kimse saldırmayınca ya da en çok 20 sn sonra dövüşe döner (görülen: 9 aç mob canı 10 sn'de 1071'den 0'a indirdi).
 
+**Uzaktaki "saldırgan":** oyun bazen 20 m ötede duran, hiç yaklaşmayan bir moba da "bana saldırıyor" der; 12 m'den uzaktaki böyle bir mob saldırgan sayılmaz (bot onun için alanından çıkıp yürümez).
+
 **Ulaşılamayan hedef:** bir moba ya da Metin taşına 8 sn'de 1 m bile yaklaşılamazsa (kaya, duvar, yükseklik) 2 dakika bırakılır (görülen: Metin taşına giderken 70 sn bir kayanın çevresinde dönüldü).
 
 **Mola** yakında (10 m) 3 ya da daha çok mob varken verilmez.

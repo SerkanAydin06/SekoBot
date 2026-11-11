@@ -20,7 +20,9 @@ internal static class WindowService
 
     private static string Squash(string text) => text.Replace(" ", "", StringComparison.Ordinal);
 
+    /// <summary>The game's window; not its launcher ("Metin2f Patcher v0.1" was taken for the game once).</summary>
     public static bool IsGameTitle(string title) =>
+        !title.Contains("Patcher", StringComparison.OrdinalIgnoreCase) &&
         GameTitles.Any(t => t.Length > 0 && Squash(title).Contains(Squash(t), StringComparison.OrdinalIgnoreCase));
 
     public static IReadOnlyList<WindowInfo> GetOpenWindows()
