@@ -164,6 +164,7 @@ internal sealed partial class BotEngine : IDisposable
                             MobCandidates = mobs,
                             PriorityMobs = view?.Priority ?? [],
                             Drops = view?.Drops ?? [],
+                            Junk = view?.Junk ?? [],
                             Attackers = view?.Attackers ?? [],
                             Targets = view?.Targets ?? [],
                             AttackPower = world?.AttackPower ?? 0,

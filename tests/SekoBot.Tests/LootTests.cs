@@ -206,3 +206,32 @@ public class SpecialDropTests
         Assert.DoesNotContain(Run(special: true, untilMs: 15_000), a => a is NoteAction n && n.Text.Contains("alınamadı"));
     }
 }
+
+public class JunkCloserTests
+{
+    private static readonly Point Center = new(960, 540);
+
+    private static List<BotAction> Run(Point wanted, Point junk)
+    {
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = true, PullGroups = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        var all = new List<BotAction>();
+        for (double t = 0; t < 2000; t += 100)
+            all.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
+                { Drops = [new GroundSpot(7, wanted)], Junk = [junk], Walking = true, AttackPower = 189 }));
+        return all;
+    }
+
+    [Fact]
+    public void The_pickup_key_waits_while_an_unwanted_item_lies_closer()
+    {
+        // The key takes the closest item: with cheap armour closer, step onto the wanted one first.
+        var closer = Run(new Point(Center.X + 40, Center.Y), new Point(Center.X + 15, Center.Y));
+        Assert.DoesNotContain(closer, a => a is KeyTapAction k && k.Key == Keys.Z);
+        Assert.Contains(closer, a => a is KeyDownAction d && d.Key == Keys.D);
+        // The unwanted one farther away: picked up right away.
+        var farther = Run(new Point(Center.X + 15, Center.Y), new Point(Center.X + 45, Center.Y));
+        Assert.Contains(farther, a => a is KeyTapAction k && k.Key == Keys.Z);
+    }
+}

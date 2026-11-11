@@ -71,7 +71,7 @@ internal sealed partial class Brain
         var p = _profile();
         var now = state.Time;
         var actions = new List<BotAction>();
-        _wantedDropsAround = state.Drops.Count > 0;
+        _wantedDropsAround = state.Drops.Any(d => !JunkCloser(state, d.Spot));
 
         // Dead: wait for "Burada yeniden başla", click it; then heal before fighting again.
         if (p.ReviveOnDeath && state.Dead)

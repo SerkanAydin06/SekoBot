@@ -501,7 +501,7 @@ internal sealed partial class Brain
         if (!p.PickUpDrops || now - _lastDropTap < Ms(700))
             return;
         double cx = state.Width / 2.0, cy = state.Height / 2.0;
-        bool close = state.Drops.Any(d => !_ignoredDrops.ContainsKey(d.Id) &&
+        bool close = state.Drops.Any(d => !_ignoredDrops.ContainsKey(d.Id) && !JunkCloser(state, d.Spot) &&
                                           Math.Sqrt(Math.Pow(d.Spot.X - cx, 2) + Math.Pow(d.Spot.Y - cy, 2)) <= radius * 0.6);
         if (!close)
             return;
@@ -539,7 +539,14 @@ internal sealed partial class Brain
         SetAttack(false, p, actions, refresh);
         double dx = drop.Spot.X - state.Width / 2.0, dy = drop.Spot.Y - state.Height / 2.0;
         double distance = Math.Sqrt(dx * dx + dy * dy);
-        if (distance <= radius * 0.5)
+        // An unwanted item lying closer would be taken instead: step right onto the wanted one first
+        // (standing on it, it is pressed anyway).
+        bool junkCloser = JunkCloser(state, drop.Spot);
+        if (junkCloser && distance > radius * 0.08)
+        {
+            SetMoves(Towards(dx, dy, radius * 0.04, p), p, actions, refresh);
+        }
+        else if (distance <= radius * 0.5)
         {
             SetMoves([], p, actions, refresh);
             if (now - _lastDropTap >= Ms(400))
@@ -603,7 +610,20 @@ internal sealed partial class Brain
     }
 
     /// <summary>The fight just ended (no mob next to us any more): grab the loot, count it.</summary>
-    /// <summary>A wanted item lies around this tick (on the screen, within the loot range).</summary>
+    /// <summary>
+    /// Whether an unwanted item lies closer to the character than this wanted one (screen pixels
+    /// from the middle; the camera looks down): the pickup key would take that one.
+    /// </summary>
+    internal static bool JunkCloser(GameState state, Point wanted)
+    {
+        if (state.Junk.Count == 0)
+            return false;
+        double cx = state.Width / 2.0, cy = state.Height / 2.0;
+        double mine = Math.Sqrt(Math.Pow(wanted.X - cx, 2) + Math.Pow(wanted.Y - cy, 2));
+        return state.Junk.Any(j => Math.Sqrt(Math.Pow(j.X - cx, 2) + Math.Pow(j.Y - cy, 2)) <= mine + 4);
+    }
+
+    /// <summary>A wanted item lies around this tick (on the screen, within the loot range) and no unwanted one closer.</summary>
     private bool _wantedDropsAround;
 
     private void FinishFight(BotProfile p, List<BotAction> actions, TimeSpan now)
