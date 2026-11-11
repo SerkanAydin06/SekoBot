@@ -603,14 +603,23 @@ internal sealed partial class Brain
     }
 
     /// <summary>The fight just ended (no mob next to us any more): grab the loot, count it.</summary>
+    /// <summary>A wanted item lies around this tick (on the screen, within the loot range).</summary>
+    private bool _wantedDropsAround;
+
     private void FinishFight(BotProfile p, List<BotAction> actions, TimeSpan now)
     {
         if (!_wasFighting)
             return;
         _wasFighting = false;
         Cycles++;
-        actions.Add(new KeyTapAction(p.Keys.Pickup));
-        actions.Add(new KeyTapAction(p.Keys.Pickup));
+        // The pickup key takes whatever lies closest, also what the loot choices leave out (seen:
+        // cheap armour taken with "only items worth ≥ 5000"): pressed only with a wanted item around.
+        // The bot walks to farther items itself.
+        if (!p.PickUpDrops || _wantedDropsAround)
+        {
+            actions.Add(new KeyTapAction(p.Keys.Pickup));
+            actions.Add(new KeyTapAction(p.Keys.Pickup));
+        }
         _lastLootTap = now;
     }
 
