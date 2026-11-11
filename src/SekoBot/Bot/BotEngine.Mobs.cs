@@ -22,8 +22,12 @@ internal sealed partial class BotEngine
         var attackers = new List<Point>();
         var metins = new List<Point>();
         var found = new List<(WorldMob Mob, Point Spot)>();
-        foreach (var mob in world.ByDistance)
+        foreach (var seenMob in world.ByDistance)
         {
+            // The game keeps "after us" on a mob that stays far away (seen: a boar 20 m off, full HP,
+            // never coming: the bot walked out of its area to it). Only one close by really attacks.
+            var mob = seenMob.AttacksMe && seenMob.Position.DistanceXY(world.Player) > AttackerRange
+                ? seenMob with { AttacksMe = false } : seenMob;
             if (!Wanted(mob, profile, world.Level))
                 continue;
             var onScreen = camera.ToScreen(mob.Position, width, height) is PointF p && OnPlayfield(p, width, height) ? p : (PointF?)null;
@@ -120,6 +124,8 @@ internal sealed partial class BotEngine
 
     /// <summary>Mobs this close (world units) are targets even when they're off the screen.</summary>
     internal const double OffScreenRange = 2500;
+    /// <summary>A mob marked as after us counts as attacking only this close (world units, 12 m).</summary>
+    internal const double AttackerRange = 1200;
     /// <summary>Special items ("Topla") are gone for from this far (world units; 15 m).</summary>
     internal const double SpecialDropRange = 1500;
 
