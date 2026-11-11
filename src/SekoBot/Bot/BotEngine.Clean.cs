@@ -44,7 +44,9 @@ internal sealed partial class BotEngine
         lock (_pickedItems)
         {
             _pickedItems.UseCharacter(_world?.CharacterName ?? "");
-            _pickedItems.Update(progress.Inventory, BotRunning);
+            var profile = Profile;
+            // Wanted when it came in (yang, potions, dear equipment, "Topla", an event's reward): never junk.
+            _pickedItems.Update(progress.Inventory, BotRunning, vnum => WantedLoot(new GroundItem(0, default, vnum), profile));
             if (_pickedItems.Changed && now - _pickedSavedAt > TimeSpan.FromSeconds(5))
             {
                 _pickedSavedAt = now;
