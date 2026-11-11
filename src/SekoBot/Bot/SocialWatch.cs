@@ -30,6 +30,13 @@ internal sealed class SocialWatch
     /// <summary>All events the game lists (now and coming).</summary>
     public IReadOnlyList<GameEvent> Events { get; private set; } = [];
 
+    /// <summary>
+    /// The reward items of every event seen (going on, coming or just over; whatever the level):
+    /// always picked up when they drop.
+    /// </summary>
+    public IReadOnlySet<int> EventItems => _eventItems;
+    private readonly HashSet<int> _eventItems = [];
+
     public void Reset()
     {
         _threads.Clear();
@@ -97,6 +104,9 @@ internal sealed class SocialWatch
 
         // Drop events: the items of those going on now (level allowing) are picked up.
         Events = social.Events;
+        foreach (var e in social.Events)
+            if (e.Item > 1)
+                _eventItems.Add(e.Item);
         ActiveEvents = [.. social.Events.Where(e => (e.Active || now >= e.Start && now < e.End) && level >= e.MinLevel)];
         foreach (var e in ActiveEvents)
             if (_events.Add(e.Id) && p.NotifyEvents)

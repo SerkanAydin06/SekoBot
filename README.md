@@ -103,7 +103,7 @@ Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü h
 - **Takas / grup / arkadaş isteği** ve oyunun Evet/Hayır sorduğu pencereler.
 - **Sohbette adın geçince** (rakamsız hali de sayılır: "KAiZER06" → "kaizer") ya da **adı [GM]/[GA]/[SA] olan biri yazınca**.
 - **Dağıtılmamış statü / beceri puanı** arttığında.
-- **Etkinlik:** oyunun saatlik düşme etkinlikleri (ör. 22:00–23:00 Nadir Ekipman Sandığı) sol menünün altında görünür; seviyen yeten bir etkinlik başlayınca bildirilir ve **eşyası otomatik "Topla" gibi alınır** ("Etkinlik eşyasını otomatik topla").
+- **Etkinlik:** oyunun saatlik düşme etkinlikleri (ör. 22:00–23:00 Nadir Ekipman Sandığı) sol menünün altında görünür; seviyen yeten bir etkinlik başlayınca bildirilir. Listede görünen **bütün etkinliklerin ödülleri** (şu anki, sıradakiler ve yeni bitenler; seviyeye bakılmadan) düşünce **"Topla" gibi her zaman alınır**: 15 m'ye kadar, saldırı bırakılıp hemen ("Tüm etkinlik ödüllerini her zaman topla").
 
 **Tehlikede kaç** (İksir / Beceri sayfası, varsayılan %30, 0 = kapalı): can bu yüzdenin altına düşer ve en az 3 mob saldırırsa bot vurmayı bırakıp moblardan uzaklaşır, iksir içmeye devam eder; can %60'ı geçince, 2 sn kimse saldırmayınca ya da en çok 20 sn sonra dövüşe döner (görülen: 9 aç mob canı 10 sn'de 1071'den 0'a indirdi).
 

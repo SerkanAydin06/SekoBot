@@ -6,7 +6,7 @@ namespace SekoBot.Bot;
 /// <summary>
 /// While the bot runs: private messages, requests, the game's questions, our name or a GM in the
 /// chat, drop events and unspent points go to the log and Telegram (see <see cref="SocialWatch"/>);
-/// urgent ones also with a sound. The items of the drop events going on now are picked up.
+/// urgent ones also with a sound. The reward items of all drop events are picked up.
 /// </summary>
 internal sealed partial class BotEngine
 {
@@ -22,7 +22,8 @@ internal sealed partial class BotEngine
         lock (_social)
         {
             notices = _social.Update(social, profile, world.Level, DateTime.Now);
-            Loot.EventItems = profile.EventLoot ? [.. _social.ActiveEvents.Select(e => e.Item)] : [];
+            // Every event's reward, not only the one going on now (an item may still drop or lie around).
+            Loot.EventItems = profile.EventLoot ? [.. _social.EventItems] : [];
         }
         foreach (var notice in notices)
         {
