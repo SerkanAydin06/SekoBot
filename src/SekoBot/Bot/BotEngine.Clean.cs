@@ -46,7 +46,7 @@ internal sealed partial class BotEngine
             _pickedItems.UseCharacter(_world?.CharacterName ?? "");
             var profile = Profile;
             // Wanted when it came in (yang, potions, dear equipment, "Topla", an event's reward): never junk.
-            _pickedItems.Update(progress.Inventory, BotRunning, vnum => WantedLoot(new GroundItem(0, default, vnum), profile));
+            _pickedItems.Update(progress.Inventory, BotRunning, vnum => WantedLoot(new GroundItem(0, default, vnum), profile) || Array.IndexOf(Loot.AllEventItems, vnum) >= 0);
             if (_pickedItems.Changed && now - _pickedSavedAt > TimeSpan.FromSeconds(5))
             {
                 _pickedSavedAt = now;
@@ -65,7 +65,8 @@ internal sealed partial class BotEngine
     /// </summary>
     internal static bool ShouldThrow(InventoryItem item, BotProfile profile, IReadOnlySet<(int Slot, int Vnum)>? botPicked)
     {
-        if (item.Slot < CharacterProgress.FirstBagSlot || AlwaysLoot(item.Vnum, profile))
+        // An event's reward (any event seen, also over or coming, also ticked "At"): never thrown.
+        if (item.Slot < CharacterProgress.FirstBagSlot || AlwaysLoot(item.Vnum, profile) || Array.IndexOf(Loot.AllEventItems, item.Vnum) >= 0)
             return false;
         if (profile.LootThrow.Contains(item.Vnum))
             return true;

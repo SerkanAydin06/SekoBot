@@ -280,6 +280,17 @@ public class PickedItemsTests
     }
 
     [Fact]
+    public void An_event_reward_is_never_thrown_also_ticked_at_or_with_event_loot_off()
+    {
+        var p = new BotProfile { EventLoot = false, LootThrow = [50096] };
+        HashSet<(int, int)> junk = [(20, 50096)];
+        Loot.AllEventItems = [50096];
+        try { Assert.False(BotEngine.ShouldThrow(new InventoryItem(20, 50096, 1), p, junk)); }
+        finally { Loot.AllEventItems = []; }
+        Assert.True(BotEngine.ShouldThrow(new InventoryItem(20, 50096, 1), p, junk));
+    }
+
+    [Fact]
     public void A_bad_read_with_the_bag_almost_empty_does_not_make_everything_the_bots()
     {
         var picked = new PickedItems();
