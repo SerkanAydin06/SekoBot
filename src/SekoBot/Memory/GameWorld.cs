@@ -55,8 +55,11 @@ internal readonly record struct BagSlotView(int Slot, int Vnum, int Count, int P
 /// buttons are (left to right), the items, and the "Evet" button of the "throw this item away?"
 /// question when that is showing.
 /// </summary>
+/// <param name="MenuKnown">The item menu (one click on an item: "Kullan", "Yere at"…) is found in memory.</param>
+/// <param name="DropButton">That menu's "Yere at", while the menu is showing.</param>
+/// <param name="MenuSlot">The bag slot the menu is showing for.</param>
 internal sealed record BagLayout(bool Open, Rectangle Window, int Page, IReadOnlyList<Point> PageButtons,
-    IReadOnlyList<BagSlotView> Items, Point? Confirm);
+    IReadOnlyList<BagSlotView> Items, Point? Confirm, bool MenuKnown = false, Point? DropButton = null, int MenuSlot = -1);
 
 /// <summary>What kind of thing an item is, by its number (Metin2's item numbers).</summary>
 internal enum LootKind { Unknown, Yang, Potion, Equipment, Other }
@@ -354,6 +357,9 @@ internal sealed class GameWorldReader : IDisposable
         ("loader", "eventDatas", 0x620),
         ("m2data_C", "uiMain", 0x1210),
         ("m2data_C", "dropWindow", 0x1440),
+        ("UI_C", "pop_weaponArmor", 0x480),
+        ("pop_equp_C", "yeret", 0x330),
+        ("pop_equp_C", "slotid", 0x508),
         ("UI_C", "dmBox", 0x328),
         ("dmBox_C", "IsOpen", 0x368),
         ("dmBox_C", "boxData", 0x288),
@@ -1203,7 +1209,21 @@ internal sealed class GameWorldReader : IDisposable
                 if (Showing(yes) && DrawnAt(yes) is { } r)
                     confirm = new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
             }
-            return new BagLayout(open, window, showing, buttons, items, confirm);
+            // One click on an item opens its menu (UI_C.pop_weaponArmor, a pop_equp_C, for every item
+            // seen): "Yere at" there asks the same question as dragging the item out.
+            long menu = Pointer(ui + Offset(Pointer(ui + ObjClass), "UI_C", "pop_weaponArmor"));
+            long menuClass = Pointer(menu + ObjClass);
+            bool menuKnown = MemoryReads.IsPointer(menu) && ClassName(menuClass) == "pop_equp_C";
+            Point? dropButton = null;
+            int menuSlot = -1;
+            if (menuKnown && open && Showing(menu))
+            {
+                long drop = Pointer(menu + Offset(menuClass, "pop_equp_C", "yeret"));
+                if (Showing(drop) && DrawnAt(drop) is { } r)
+                    dropButton = new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
+                menuSlot = Int32(menu + Offset(menuClass, "pop_equp_C", "slotid")) ?? -1;
+            }
+            return new BagLayout(open, window, showing, buttons, items, confirm, menuKnown, dropButton, menuSlot);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

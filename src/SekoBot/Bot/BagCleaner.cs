@@ -5,7 +5,8 @@ namespace SekoBot.Bot;
 
 /// <summary>
 /// Throws the items ticked "At" out of a full bag, the way a person does: open the inventory,
-/// go to the page an item is on, drag it out of the window onto the ground, answer "Evet" to
+/// go to the page an item is on, click it and press "Yere at" in its menu (or, when that menu
+/// doesn't show, drag it out of the window onto the ground), answer "Evet" to
 /// "throw it away?", check it is gone, and at the end close the inventory. Works only from what
 /// memory shows (<see cref="BagLayout"/>): where the window, the page buttons, the slots and the
 /// "Evet" button are drawn. Each step waits for the input to be done and the game to show the
@@ -22,8 +23,14 @@ internal sealed class BagCleaner
     public static readonly TimeSpan AfterClick = TimeSpan.FromMilliseconds(1800);
     public static readonly TimeSpan AfterKey = TimeSpan.FromMilliseconds(1200);
     public const int TriesPerItem = 2;
+    /// <summary>The item's menu shows a moment after the click; not there after this: dragged instead.</summary>
+    public static readonly TimeSpan MenuTimeout = TimeSpan.FromMilliseconds(2500);
+    public static readonly TimeSpan AfterItemClick = TimeSpan.FromMilliseconds(700);
 
-    private enum Step { Open, Pick, Dragged, Confirmed, Close }
+    private enum Step { Open, Pick, Menu, Dragged, Confirmed, Close }
+    private TimeSpan _clickedAt;
+    private int _menuMisses;
+    private bool _menuTried;
 
     private Step _step;
     private TimeSpan _started, _waitUntil, _draggedAt;
@@ -43,7 +50,7 @@ internal sealed class BagCleaner
         _step = Step.Open;
         _started = now;
         _waitUntil = now;
-        _opens = _closes = _noLayout = _yesClicks = _escapes = Thrown = 0;
+        _opens = _closes = _noLayout = _yesClicks = _escapes = Thrown = _menuMisses = 0;
         Problem = null;
         _failed.Clear();
         _pageClicks.Clear();
@@ -117,6 +124,24 @@ internal sealed class BagCleaner
                 _waitUntil = now + AfterKey;
                 break;
 
+            case Step.Menu:
+                // The item's menu is up: "Yere at" (the question comes next, as after a drag).
+                if (bag.DropButton is Point drop && bag.MenuSlot == _slot)
+                {
+                    actions.Add(new ClickAction(drop, Slow: true));
+                    _draggedAt = now;
+                    _step = Step.Dragged;
+                    _waitUntil = now + AfterItemClick;
+                    break;
+                }
+                if (now - _clickedAt >= MenuTimeout)
+                {
+                    _menuMisses++; // twice no menu: drag from now on
+                    _step = Step.Pick;
+                    goto case Step.Pick;
+                }
+                break;
+
             case Step.Dragged:
                 // No question came up: the drag didn't take.
                 if (now - _draggedAt >= QuestionTimeout)
@@ -152,6 +177,21 @@ internal sealed class BagCleaner
                         .Select(i => (BagSlotView?)i).FirstOrDefault() is { } here)
                 {
                     var from = new Point(here.Rect.X + here.Rect.Width / 2, here.Rect.Y + here.Rect.Height / 2);
+                    // A new item: try its menu first (faster); the same item after a missing menu: drag.
+                    bool sameItem = here.Slot == _slot && here.Vnum == _vnum && _menuTried;
+                    if (bag.MenuKnown && _menuMisses < 2 && !sameItem)
+                    {
+                        actions.Add(new ClickAction(from, Slow: true));
+                        _slot = here.Slot;
+                        _vnum = here.Vnum;
+                        _yesClicks = 0;
+                        _menuTried = true;
+                        _clickedAt = now;
+                        _step = Step.Menu;
+                        _waitUntil = now + AfterItemClick;
+                        break;
+                    }
+                    _menuTried = false;
                     actions.Add(new MouseDragAction(from, DropPoint(bag, client)));
                     _slot = here.Slot;
                     _vnum = here.Vnum;
