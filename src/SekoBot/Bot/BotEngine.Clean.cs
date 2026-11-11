@@ -45,8 +45,15 @@ internal sealed partial class BotEngine
         {
             _pickedItems.UseCharacter(_world?.CharacterName ?? "");
             var profile = Profile;
-            // Wanted when it came in (yang, potions, dear equipment, "Topla", an event's reward): never junk.
-            _pickedItems.Update(progress.Inventory, BotRunning, vnum => WantedLoot(new GroundItem(0, default, vnum), profile) || Array.IndexOf(Loot.AllEventItems, vnum) >= 0);
+            // Wanted when it came in (yang, potions, dear equipment or good bonuses, "Topla", an event's reward): never junk.
+            _pickedItems.Update(progress.Inventory, BotRunning, item => KeepPicked(item, profile));
+            foreach (var item in _pickedItems.CameIn)
+                if (Loot.KindOf(item.Vnum) == LootKind.Equipment && GoodBonus(item, profile))
+                {
+                    string text = $"⭐ Efsunlu eşya alındı: {ItemBook.NameOf(item.Vnum)} — {ItemBonuses.Describe(item.Bonuses ?? [])}";
+                    _log(text);
+                    Notify(text);
+                }
             if (_pickedItems.Changed && now - _pickedSavedAt > TimeSpan.FromSeconds(5))
             {
                 _pickedSavedAt = now;
@@ -77,8 +84,10 @@ internal sealed partial class BotEngine
         // weapon / armour of unknown price stays, it may be special).
         var kind = Loot.KindOf(item.Vnum);
         if (kind == LootKind.Equipment)
-            return !profile.LootEquipment && profile.LootEquipmentMinGold > 0 &&
-                   ItemBook.Get(item.Vnum) is { Gold: > 0 } info && info.Sell < profile.LootEquipmentMinGold;
+            return !profile.LootEquipment && !GoodBonus(item, profile) &&
+                   (profile.LootEquipmentMinGold > 0 || profile.LootBonuses.Count > 0) &&
+                   ItemBook.Get(item.Vnum) is { Gold: > 0 } info &&
+                   (profile.LootEquipmentMinGold == 0 || info.Sell < profile.LootEquipmentMinGold);
         return kind switch
         {
             LootKind.Potion => !profile.LootPotions,
@@ -150,9 +159,12 @@ internal sealed partial class BotEngine
             _log("Sakin bir yerdeyiz; envanter açılıp 'At' işaretli eşyalar atılıyor.");
         }
         var picked = BotPicked;
+        // The bag as read (with the bonuses), for each slot shown in the window.
+        var full = (World?.Progress?.Inventory ?? []).Where(i => i.Slot >= CharacterProgress.FirstBagSlot)
+            .GroupBy(i => (i.Slot, i.Vnum)).ToDictionary(g => g.Key, g => g.First());
         IReadOnlyList<BotAction> actions = state.Dead || state.Attackers.Count > 0 || state.Targets.Any(t => t.AttacksMe)
             ? _cleaner.Abort(_bagLayout, p, "saldırı geldi")
-            : _cleaner.Tick(state.Time, _bagLayout, i => ShouldThrow(new InventoryItem(i.Slot, i.Vnum, i.Count), p, picked), p, new Size(state.Width, state.Height));
+            : _cleaner.Tick(state.Time, _bagLayout, i => ShouldThrow(full.GetValueOrDefault((i.Slot, i.Vnum), new InventoryItem(i.Slot, i.Vnum, i.Count)), p, picked), p, new Size(state.Width, state.Height));
         if (!_cleaner.Active)
             CleaningDone();
         return actions;

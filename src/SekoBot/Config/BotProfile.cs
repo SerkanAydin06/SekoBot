@@ -167,6 +167,12 @@ internal sealed class BotProfile
     /// <summary>Also pick up weapons and armour a shop pays at least this much for (the selling
     /// price, <see cref="Memory.ItemInfo.Sell"/>; 0 = off).</summary>
     public int LootEquipmentMinGold { get; set; }
+    /// <summary>
+    /// The bonus list ("efsun listesi"): a weapon or armour with one of these bonuses at least this
+    /// big is kept (and told), whatever its price. While the list isn't empty all weapons and armour
+    /// are picked up — a bonus shows only in the bag — and the rest is thrown away again.
+    /// </summary>
+    public List<BonusWant> LootBonuses { get; set; } = [];
     /// <summary>Items always picked up, whatever the other loot choices (names, comma separated,
     /// part of the name is enough), e.g. "Cesaret Pelerini". A message is sent when one drops.</summary>
     public string LootAlways { get; set; } = "";
@@ -334,4 +340,11 @@ internal static class ProfileStore
         File.WriteAllText(temp, JsonSerializer.Serialize(profile, Options));
         File.Move(temp, ProfilePath, true);
     }
+}
+
+/// <summary>One line of the bonus list: the game's bonus kind and the least value wanted (10 = +10 %).</summary>
+public sealed class BonusWant
+{
+    public int Type { get; set; }
+    public int Min { get; set; }
 }

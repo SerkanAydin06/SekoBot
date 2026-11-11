@@ -260,6 +260,17 @@ internal sealed class MainForm : Form
         var throwNow = Theme.Button(items, "🗑  Şimdi at", new Rectangle(0, 172, 140, 30), Theme.Secondary, Theme.SecondaryHover);
         throwNow.Click += (_, _) => WriteLog(_engine?.CleanNow() ?? "Önce oyunu bağla.");
         _bagState = Theme.Label(items, "", new Rectangle(152, 172, 760, 30), 9f, Theme.Text);
+        var bonusList = Theme.Button(items, "✨  Efsun listesi", new Rectangle(310, 72, 180, 26), Theme.Secondary, Theme.SecondaryHover);
+        bonusList.Click += (_, _) =>
+        {
+            using var form = new BonusListForm(_profile);
+            form.ShowDialog(this);
+            SaveProfile();
+            WriteLog(_profile.LootBonuses.Count == 0
+                ? "Efsun listesi boş: silah / zırh sadece fiyatına göre alınır."
+                : "Efsun listesi: " + string.Join(", ", _profile.LootBonuses.Select(w => $"{Memory.ItemBonuses.NameOf(w.Type)} ≥ {w.Min}")) +
+                  ". Bütün silah / zırhlar alınır, bu efsunlardan biri olmayan ucuzlar geri atılır.");
+        };
         itemList.Click += (_, _) =>
         {
             using var form = new ItemListForm(_profile);
