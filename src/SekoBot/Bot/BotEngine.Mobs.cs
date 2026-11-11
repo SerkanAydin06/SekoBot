@@ -13,11 +13,14 @@ internal sealed partial class BotEngine
 {
     /// <summary>What the bot sees on screen from memory: the mobs it may go for (nearest to us
     /// first), the ones to go for first, and the items close by. Null when the camera can't be read.</summary>
+    /// <param name="avoid">Where items were just thrown away: its items aren't picked up and its
+    /// mobs aren't gone for (only those attacking us), so the bot doesn't take the junk back.</param>
     internal static (List<Point> Mobs, List<Point> Priority, List<GroundSpot> Drops, List<Point> Attackers, List<TargetInfo> Targets, List<Point> Junk)? MemoryView(
-        WorldSnapshot? world, BotProfile profile, int width, int height)
+        WorldSnapshot? world, BotProfile profile, int width, int height, Vec3? avoid = null)
     {
         if (world?.Camera is not CameraView camera)
             return null;
+        bool AtDump(Vec3 at) => avoid is Vec3 dump && at.DistanceXY(dump) <= DumpRange;
         var mobs = new List<Point>();
         var attackers = new List<Point>();
         var metins = new List<Point>();
@@ -28,7 +31,7 @@ internal sealed partial class BotEngine
             // never coming: the bot walked out of its area to it). Only one close by really attacks.
             var mob = seenMob.AttacksMe && seenMob.Position.DistanceXY(world.Player) > AttackerRange
                 ? seenMob with { AttacksMe = false } : seenMob;
-            if (!Wanted(mob, profile, world.Level))
+            if (!Wanted(mob, profile, world.Level) || !mob.AttacksMe && AtDump(mob.Position))
                 continue;
             var onScreen = camera.ToScreen(mob.Position, width, height) is PointF p && OnPlayfield(p, width, height) ? p : (PointF?)null;
             if (onScreen is PointF seen)
@@ -51,7 +54,7 @@ internal sealed partial class BotEngine
         var drops = new List<GroundSpot>();
         if (profile.PickUpDrops)
             // What can't go into the bag any more isn't walked to (a full bag: only yang and items adding to a stack).
-            foreach (var item in (world.Drops ?? []).Where(d => WantedLoot(d, profile) && world.Progress?.Fits(d.Vnum) != false)
+            foreach (var item in (world.Drops ?? []).Where(d => WantedLoot(d, profile) && world.Progress?.Fits(d.Vnum) != false && !AtDump(d.Position))
                          .OrderBy(d => d.Position.DistanceXY(world.Player)))
             {
                 double away = item.Position.DistanceXY(world.Player);
@@ -73,7 +76,7 @@ internal sealed partial class BotEngine
         var junk = new List<Point>();
         if (profile.PickUpDrops)
             foreach (var item in world.Drops ?? [])
-                if (!(WantedLoot(item, profile) && world.Progress?.Fits(item.Vnum) != false) &&
+                if ((!(WantedLoot(item, profile) && world.Progress?.Fits(item.Vnum) != false) || AtDump(item.Position)) &&
                     item.Position.DistanceXY(world.Player) <= profile.DropRangeMetres * 100 + 300 &&
                     camera.ToScreen(item.Position, width, height) is PointF j)
                     junk.Add(Point.Round(j));
@@ -179,6 +182,9 @@ internal sealed partial class BotEngine
         LootKind.Other => profile.LootOther,
         _ => true,
     });
+
+    /// <summary>Around the spot where items were thrown away (world units, 10 m).</summary>
+    internal const double DumpRange = 1000;
 
     /// <summary>A bonus of the item is on the bonus list, at least as big as wanted there.</summary>
     internal static bool GoodBonus(InventoryItem item, BotProfile profile) =>

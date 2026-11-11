@@ -173,6 +173,13 @@ internal sealed partial class BotEngine
         return actions;
     }
 
+    /// <summary>Where items were last thrown away, and until when that spot is kept away from.</summary>
+    private Vec3? _dumpAt;
+    private TimeSpan _dumpUntil;
+    internal static readonly TimeSpan DumpAvoidFor = TimeSpan.FromMinutes(1);
+
+    private Vec3? DumpSpot(TimeSpan now) => _dumpAt is Vec3 at && now < _dumpUntil ? at : null;
+
     private void CleaningDone()
     {
         if (_cleaner.Problem == "saldırı geldi" && ++_cleanTries < CleanTriesMax)
@@ -185,7 +192,15 @@ internal sealed partial class BotEngine
         if (_cleaner.Thrown > 0)
         {
             _cleanTries = 0;
-            _log($"🗑 {_cleaner.Thrown} eşya atıldı" + (_cleaner.Problem is { } p ? $" ({p})" : "") + "; avlanmaya devam, kayıtlı alana dönülüyor.");
+            // The thrown items lie here: neither they nor the mobs around are gone for for a minute
+            // (seen: the bot went straight back and picked junk from the pile).
+            if (World?.Player is Vec3 here)
+            {
+                _dumpAt = here;
+                _dumpUntil = _clock.Elapsed + DumpAvoidFor;
+            }
+            _log($"🗑 {_cleaner.Thrown} eşya atıldı" + (_cleaner.Problem is { } p ? $" ({p})" : "") +
+                 "; avlanmaya devam. Atılan yığının 10 m çevresine 1 dakika yaklaşılmıyor.");
         }
         else
         {
