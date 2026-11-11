@@ -54,7 +54,8 @@ internal sealed partial class BotEngine
     }
 
     /// <summary>
-    /// Whether to throw this bag item away: ticked "At"; or — when weapons and armour are only
+    /// Whether to throw this bag item away: ticked "At"; or something the bot picked up that the
+    /// loot choices leave out (a potion with "İksir" off, other things with "Diğer" off); or — when weapons and armour are only
     /// picked up from a price on (Silah / zırh off, "≥" set) — a weapon or armour worth less than
     /// that the bot picked up itself (<paramref name="botPicked"/>; the user's own things stay, also
     /// after a restart; not known: nothing is thrown this way). Ticked "Topla" or on the
@@ -66,10 +67,21 @@ internal sealed partial class BotEngine
             return false;
         if (profile.LootThrow.Contains(item.Vnum))
             return true;
-        return !profile.LootEquipment && profile.LootEquipmentMinGold > 0 &&
-               botPicked != null && botPicked.Contains((item.Slot, item.Vnum)) &&
-               Loot.KindOf(item.Vnum) == LootKind.Equipment &&
-               ItemBook.Get(item.Vnum) is { Gold: > 0 } info && info.Gold < profile.LootEquipmentMinGold;
+        if (botPicked == null || !botPicked.Contains((item.Slot, item.Vnum)))
+            return false;
+        // The pickup key takes the closest item, so something unwanted can come along with a wanted
+        // one: what the bot picked that the loot choices don't want goes again (not yang; a
+        // weapon / armour of unknown price stays, it may be special).
+        var kind = Loot.KindOf(item.Vnum);
+        if (kind == LootKind.Equipment)
+            return !profile.LootEquipment && profile.LootEquipmentMinGold > 0 &&
+                   ItemBook.Get(item.Vnum) is { Gold: > 0 } info && info.Gold < profile.LootEquipmentMinGold;
+        return kind switch
+        {
+            LootKind.Potion => !profile.LootPotions,
+            LootKind.Other => !profile.LootOther && ItemBook.Get(item.Vnum) != null,
+            _ => false,
+        };
     }
 
     /// <summary>One line for the window: free slots, room for a tall item, how many items would be thrown.</summary>
@@ -90,7 +102,7 @@ internal sealed partial class BotEngine
         if (!BotRunning)
             return "Önce botu başlat; atma bot çalışırken yapılır.";
         if (world == null || !HasThrowables(world, Profile))
-            return "Çantada atılacak eşya yok ('At' işaretli ya da botun aldığı ucuz silah/zırh).";
+            return "Çantada atılacak eşya yok ('At' işaretli ya da botun yanlışlıkla aldığı istenmeyen eşya).";
         lock (_botGate)
         {
             if (_cleaner.Active || _brain.WantsClean)
@@ -113,7 +125,7 @@ internal sealed partial class BotEngine
             _brain.WantsClean = true;
         }
         int count = (world.Progress?.Inventory ?? []).Count(i => ShouldThrow(i, profile, BotPicked));
-        _log($"Envanterde yer azaldı (zırh ya da uzun silah sığmıyor olabilir); çantada atılacak {count} eşya var ('At' işaretli ya da botun aldığı ucuz silah/zırh). Sakin bir yerde atılacak.");
+        _log($"Envanterde yer azaldı (zırh ya da uzun silah sığmıyor olabilir); çantada atılacak {count} eşya var ('At' işaretli ya da botun yanlışlıkla aldığı istenmeyen eşya). Sakin bir yerde atılacak.");
         return true;
     }
 

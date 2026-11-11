@@ -177,6 +177,7 @@ public class ThrowCheapEquipmentTests
         ];
         var p = new BotProfile { LootEquipment = false, LootEquipmentMinGold = 500 };
         int[] Thrown(IReadOnlySet<(int, int)>? start) => [.. bag.Where(i => BotEngine.ShouldThrow(i, p, start)).Select(i => i.Slot)];
+        p.LootOther = true;                         // (the material in slot 23 wanted)
         Assert.Equal([20, 21], Thrown(atStart));
         Assert.Empty(Thrown(null));                 // not known what the bot picked: none thrown this way
         p.LootPick = [96002];                       // ticked "Topla": kept
@@ -184,6 +185,9 @@ public class ThrowCheapEquipmentTests
         p.LootEquipment = true;                     // all equipment wanted: nothing thrown
         Assert.Empty(Thrown(atStart));
         p.LootThrow = [96004];                      // "At" still counts
+        Assert.Equal([23], Thrown(atStart));
+        p.LootThrow = [];
+        p.LootOther = false;                        // "Diğer" off: the material the bot took goes
         Assert.Equal([23], Thrown(atStart));
     }
 }
