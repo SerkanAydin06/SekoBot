@@ -68,6 +68,20 @@ public class BreakTests
     }
 
     [Fact]
+    public void Junk_in_the_bag_is_thrown_during_a_break()
+    {
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], BreakEveryMin = 1, BreakSeconds = 40 };
+        bool junk = true;
+        var brain = new Brain(() => p) { JunkInBag = () => junk };
+        brain.Start(TimeSpan.Zero);
+        var actions = new List<BotAction>();
+        for (double t = 0; t < 80_000 && !brain.WantsClean; t += 100)
+            actions.AddRange(brain.Tick(At(t)));
+        Assert.True(brain.WantsClean);
+        Assert.Contains(actions, a => a is NoteAction n && n.Text.Contains("istenmeyen eşyalar atılıyor"));
+    }
+
+    [Fact]
     public void No_breaks_when_switched_off()
     {
         var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], BreakEveryMin = 1, Breaks = false };

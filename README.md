@@ -93,7 +93,7 @@ Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü h
 
 ## Molalar ve oturum raporu
 
-- **Ara sıra kısa mola ver** (Alan sekmesi, varsayılan açık): yaklaşık 30 dakikada bir (±%20), dövüş yokken ve kimse saldırmıyorken bot ~40 sn (±%25) durur; bir mob saldırırsa mola hemen biter. Toplama tuşu aralıkları da her seferinde biraz değişir. Ayarlar: `BreakEveryMin`, `BreakSeconds`.
+- **Ara sıra kısa mola ver** (Alan sekmesi, varsayılan açık): yaklaşık 30 dakikada bir (±%20), dövüş yokken ve kimse saldırmıyorken bot ~40 sn (±%25) durur; bir mob saldırırsa mola hemen biter. Çantada atılacak eşya varsa ("At" işaretli ya da botun yanlışlıkla aldığı istenmeyen eşya) mola sırasında envanter açılıp atılır; çantanın dolması beklenmez. Toplama tuşu aralıkları da her seferinde biraz değişir. Ayarlar: `BreakEveryMin`, `BreakSeconds`.
 - **Oturum raporu:** bot 1 dakikadan uzun çalışıp durduğunda özet günlüğe yazılır ve `%LOCALAPPDATA%\SekoBot\oturumlar.csv` dosyasına bir satır eklenir (başlangıç, bitiş, süre, harita, öldürülen, saatte mob, EXP, saatte EXP, seviye, yang, iksir, ölüm, durma sebebi). Excel'de açılır; **Gelişmiş → 📊 Oturum raporları**. Bot kendiliğinden durduysa özet Telegram mesajına da eklenir.
 
 ## Telegram bildirimi
