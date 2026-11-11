@@ -58,7 +58,7 @@ internal sealed partial class BotEngine : IDisposable
         _window = window;
         Profile = profile;
         _log = log;
-        _brain = new Brain(() => Profile);
+        _brain = new Brain(() => Profile) { JunkInBag = JunkInBag };
         if (ItemBook.FilePath == null)
             ItemBook.Load(Path.Combine(ProfileStore.Directory, "esya-bilgisi.json"));
         _session.PotionsRanOut += kind =>

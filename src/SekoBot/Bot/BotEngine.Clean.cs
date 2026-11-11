@@ -24,6 +24,9 @@ internal sealed partial class BotEngine
     private bool CanThrow(WorldSnapshot world, BotProfile profile) =>
         profile.ThrowWhenInventoryFull && HasThrowables(world, profile);
 
+    /// <summary>For the brain's breaks: something to throw away now (the bag read last).</summary>
+    private bool JunkInBag() => Profile.ThrowWhenInventoryFull && _world != null && World is { } world && HasThrowables(world, Profile);
+
     private bool HasThrowables(WorldSnapshot world, BotProfile profile) =>
         profile.NavigateMode && (world.Progress?.Inventory ?? []).Any(i => ShouldThrow(i, profile, BotPicked));
 

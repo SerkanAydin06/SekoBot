@@ -6,7 +6,8 @@ namespace SekoBot.Bot;
 /// <summary>
 /// Acting a little more like a person: every BreakEveryMin minutes (±20 %), when nothing is being
 /// fought and nothing attacks, the bot lets go of everything and stands still for BreakSeconds
-/// (±25 %). A mob attacking ends the break at once.
+/// (±25 %). A mob attacking ends the break at once. Junk in the bag (<see cref="JunkInBag"/>) is
+/// thrown away during the break, without waiting for the bag to fill.
 /// </summary>
 internal sealed partial class Brain
 {
@@ -15,6 +16,9 @@ internal sealed partial class Brain
     private TimeSpan _nextBreak = Never, _breakUntil = Never;
     /// <summary>A break waits while 3 or more mobs are this close (world units, 10 m).</summary>
     internal const double BreakClearRange = 1000;
+
+    /// <summary>Set by the engine: whether the bag holds something to throw away.</summary>
+    public Func<bool>? JunkInBag { get; set; }
 
     private void ResetBreaks(TimeSpan now, BotProfile p)
     {
@@ -59,7 +63,13 @@ internal sealed partial class Brain
         }
         else
             actions.Add(new KeyUpAction(p.Keys.Attack));
-        actions.Add(new NoteAction($"Kısa mola ({seconds:0} sn)."));
+        if (!WantsClean && JunkInBag?.Invoke() == true)
+        {
+            WantsClean = true;
+            actions.Add(new NoteAction($"Kısa mola ({seconds:0} sn); bu arada çantadaki istenmeyen eşyalar atılıyor."));
+        }
+        else
+            actions.Add(new NoteAction($"Kısa mola ({seconds:0} sn)."));
         return true;
     }
 }
