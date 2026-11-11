@@ -23,7 +23,7 @@ internal sealed partial class BotEngine
         {
             if (File.Exists(EventItemsFile) && System.Text.Json.JsonSerializer.Deserialize<int[]>(File.ReadAllText(EventItemsFile)) is { } saved)
             {
-                Loot.EventItems = saved;
+                Loot.EventItems = Loot.AllEventItems = saved;
                 return [.. saved];
             }
         }
@@ -53,6 +53,7 @@ internal sealed partial class BotEngine
             notices = _social.Update(social, profile, world.Level, DateTime.Now);
             // Every event's reward, not only the one going on now (an item may still drop or lie around).
             KeepEventItems(_social.EventItems);
+            Loot.AllEventItems = [.. _knownEventItems];
             Loot.EventItems = profile.EventLoot ? [.. _knownEventItems] : [];
         }
         foreach (var notice in notices)

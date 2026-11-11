@@ -65,6 +65,8 @@ internal static class Loot
 {
     /// <summary>The items of the drop events going on now (set by the engine): picked up like "Topla".</summary>
     public static volatile int[] EventItems = [];
+    /// <summary>Every event reward ever seen, whatever the settings: never thrown away.</summary>
+    public static volatile int[] AllEventItems = [];
 
     public static LootKind KindOf(int vnum) => vnum > 1 && ItemBook.Get(vnum) is { } info ? info switch
     {
