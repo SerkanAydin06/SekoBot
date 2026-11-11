@@ -54,6 +54,42 @@ public class BagCleanerTests
     }
 
     [Fact]
+    public void Clicks_the_item_and_presses_yere_at_in_its_menu()
+    {
+        // As seen in the game: one click on an item opens its menu ("Kullan", "Yere at"); "Yere at"
+        // asks the same question as a drag.
+        var p = new BotProfile();
+        var cleaner = new BagCleaner();
+        Func<BagSlotView, bool> toThrow = i => i.Vnum == Junk;
+        var junk = Item(20, Junk, 0, true);
+        BagLayout With(Point? menuDrop = null, int menuSlot = -1, Point? confirm = null, params BagSlotView[] items) =>
+            Bag(true, 0, items, confirm) with { MenuKnown = true, DropButton = menuDrop, MenuSlot = menuSlot };
+        cleaner.Start(S(0));
+        var click = Assert.IsType<ClickAction>(Assert.Single(cleaner.Tick(S(0), With(items: junk), toThrow, p, Client)));
+        Assert.Equal(new Point(junk.Rect.X + 21, junk.Rect.Y + 21), click.Client);
+        var yereAt = new Point(848, 613);
+        Assert.Equal([new ClickAction(yereAt, Slow: true)], cleaner.Tick(S(1), With(yereAt, 20, null, junk), toThrow, p, Client));
+        var yes = new Point(531, 389);
+        Assert.Equal([new ClickAction(yes, Slow: true)], cleaner.Tick(S(2), With(null, -1, yes, junk), toThrow, p, Client));
+        Assert.Equal([new KeyTapAction(p.Keys.Inventory)], cleaner.Tick(S(4), With(items: []), toThrow, p, Client));
+        Assert.Equal(1, cleaner.Thrown);
+    }
+
+    [Fact]
+    public void No_menu_after_the_click_the_item_is_dragged()
+    {
+        var p = new BotProfile();
+        var cleaner = new BagCleaner();
+        var bag = Bag(true, 0, [Item(20, Junk, 0, true)]) with { MenuKnown = true };
+        cleaner.Start(S(0));
+        Assert.IsType<ClickAction>(Assert.Single(cleaner.Tick(S(0), bag, i => i.Vnum == Junk, p, Client)));
+        var later = new List<BotAction>();
+        for (double t = 0.5; t < 4; t += 0.5)
+            later.AddRange(cleaner.Tick(S(t), bag, i => i.Vnum == Junk, p, Client));
+        Assert.Single(later.OfType<MouseDragAction>());
+    }
+
+    [Fact]
     public void An_item_that_does_not_go_is_left_after_two_tries()
     {
         var p = new BotProfile();
