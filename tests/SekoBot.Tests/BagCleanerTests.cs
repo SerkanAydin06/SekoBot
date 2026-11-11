@@ -270,6 +270,16 @@ public class PickedItemsTests
     }
 
     [Fact]
+    public void What_was_wanted_when_picked_is_never_junk_later()
+    {
+        // An event's reward (Futbol Topu) picked while the event ran: kept after the event too.
+        var picked = new PickedItems();
+        picked.Update([I(12, 500)], botRunning: false);
+        picked.Update([I(12, 500), I(20, 50096), I(21, 17000)], botRunning: true, wanted: v => v == 50096);
+        Assert.Equal([(21, 17000)], picked.Picked);
+    }
+
+    [Fact]
     public void A_bad_read_with_the_bag_almost_empty_does_not_make_everything_the_bots()
     {
         var picked = new PickedItems();

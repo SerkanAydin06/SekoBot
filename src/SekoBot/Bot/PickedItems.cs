@@ -5,8 +5,10 @@ using SekoBot.Memory;
 namespace SekoBot.Bot;
 
 /// <summary>
-/// Which bag items the bot picked up itself (slot, item), so only those are thrown as cheap junk and
-/// the user's own things stay. Watches the bag: an item that comes in while the bot runs is the bot's;
+/// Which bag items the bot picked up itself without wanting them (slot, item) — the pickup key takes
+/// the closest item — so only those are thrown and the user's own things, and what was wanted when it
+/// was picked (an event's reward, also after the event), stay. Watches the bag: an item that comes in
+/// while the bot runs and isn't wanted then is junk;
 /// one only moved to another slot keeps what it was; what leaves the bag is forgotten. Kept in a file
 /// per character, so a restart (an update) still knows what the bot picked before.
 /// </summary>
@@ -29,7 +31,7 @@ internal sealed class PickedItems
     /// A new bag read. <paramref name="botRunning"/>: items coming in now are the bot's. The first read
     /// (or after a different character) only drops remembered items no longer there.
     /// </summary>
-    public void Update(IReadOnlyList<InventoryItem> inventory, bool botRunning)
+    public void Update(IReadOnlyList<InventoryItem> inventory, bool botRunning, Func<int, bool>? wanted = null)
     {
         var bag = inventory.Where(i => i.Slot >= CharacterProgress.FirstBagSlot && i.Count > 0)
             .GroupBy(i => (i.Slot, i.Vnum)).ToDictionary(g => g.Key, g => g.Sum(i => i.Count));
@@ -52,7 +54,7 @@ internal sealed class PickedItems
             for (int i = 0; i < came.Count; i++)
             {
                 // Moved from a slot that left: same owner as before. Otherwise new: the bot's while it runs.
-                bool bots = i < gone.Count ? _picked.Contains(gone[i]) : botRunning;
+                bool bots = i < gone.Count ? _picked.Contains(gone[i]) : botRunning && wanted?.Invoke(group) != true;
                 if (bots && _picked.Add(came[i]))
                     Changed = true;
             }
@@ -66,7 +68,7 @@ internal sealed class PickedItems
     // ---- the file (per character) ----
 
     private static string FileOf(string character) =>
-        Path.Combine(ProfileStore.Directory, "bot-aldiklari-" +
+        Path.Combine(ProfileStore.Directory, "bot-istenmeyen-" +
                      string.Concat(character.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)) + ".json");
 
     /// <summary>The character is known (or changed): load what the bot picked for it before.</summary>

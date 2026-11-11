@@ -11,6 +11,35 @@ namespace SekoBot.Bot;
 internal sealed partial class BotEngine
 {
     private readonly SocialWatch _social = new();
+
+    /// <summary>Every event reward ever seen (kept in a file: an event over or the game's list
+    /// changed, its item still counts as an event item).</summary>
+    private static readonly HashSet<int> _knownEventItems = LoadEventItems();
+    private static string EventItemsFile => Path.Combine(ProfileStore.Directory, "etkinlik-esyalari.json");
+
+    private static HashSet<int> LoadEventItems()
+    {
+        try
+        {
+            if (File.Exists(EventItemsFile) && System.Text.Json.JsonSerializer.Deserialize<int[]>(File.ReadAllText(EventItemsFile)) is { } saved)
+            {
+                Loot.EventItems = saved;
+                return [.. saved];
+            }
+        }
+        catch { }
+        return [];
+    }
+
+    private static void KeepEventItems(IEnumerable<int> items)
+    {
+        bool added = false;
+        foreach (int item in items)
+            added |= _knownEventItems.Add(item);
+        if (added)
+            try { File.WriteAllText(EventItemsFile, System.Text.Json.JsonSerializer.Serialize(_knownEventItems.Order().ToArray())); }
+            catch { }
+    }
     private TimeSpan _socialReadAt = TimeSpan.FromDays(-1);
 
     private void SocialTick(WorldSnapshot world, BotProfile profile, TimeSpan now)
@@ -23,7 +52,8 @@ internal sealed partial class BotEngine
         {
             notices = _social.Update(social, profile, world.Level, DateTime.Now);
             // Every event's reward, not only the one going on now (an item may still drop or lie around).
-            Loot.EventItems = profile.EventLoot ? [.. _social.EventItems] : [];
+            KeepEventItems(_social.EventItems);
+            Loot.EventItems = profile.EventLoot ? [.. _knownEventItems] : [];
         }
         foreach (var notice in notices)
         {
