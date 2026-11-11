@@ -39,7 +39,7 @@ internal sealed class ItemListForm : Form
         _table.Columns.Add("At", typeof(bool));
         _table.Columns.Add("Ad", typeof(string));
         _table.Columns.Add("Tür", typeof(string));
-        _table.Columns.Add("Fiyat", typeof(string));
+        _table.Columns.Add("Satış", typeof(string)); // what a shop pays (a fifth of the game's price)
         _table.Columns.Add("Çeşit", typeof(int));
         _table.Columns.Add("Nolar", typeof(string)); // hidden: ",12,13,…," (the items of the row)
         var pick = profile.LootPick.ToHashSet();
@@ -50,7 +50,7 @@ internal sealed class ItemListForm : Form
                      .OrderBy(g => g.Key.Name, StringComparer.CurrentCulture).ThenBy(g => g.Key.Type))
         {
             var items = group.OrderBy(i => i.Vnum).ToList();
-            int low = items.Min(i => i.Gold), high = items.Max(i => i.Gold);
+            int low = items.Min(i => i.Sell), high = items.Max(i => i.Sell);
             _table.Rows.Add(items.Any(i => pick.Contains(i.Vnum)), items.Any(i => skip.Contains(i.Vnum)), items.Any(i => drop.Contains(i.Vnum)),
                 group.Key.Name, group.Key.Type, low == high ? $"{low:N0}" : $"{low:N0}–{high:N0}", items.Count,
                 "," + string.Join(",", items.Select(i => i.Vnum)) + ",");
@@ -106,7 +106,7 @@ internal sealed class ItemListForm : Form
             _grid.Columns["At"]!.FillWeight = 10;
             _grid.Columns["Ad"]!.FillWeight = 60;
             _grid.Columns["Tür"]!.FillWeight = 30;
-            _grid.Columns["Fiyat"]!.FillWeight = 24;
+            _grid.Columns["Satış"]!.FillWeight = 24;
             _grid.Columns["Çeşit"]!.FillWeight = 10;
             _grid.Columns["Nolar"]!.Visible = false;
         };

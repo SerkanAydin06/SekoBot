@@ -248,7 +248,7 @@ internal sealed class MainForm : Form
         Check(items, "İksir", 198, 38, 70, _profile.LootPotions, v => _profile.LootPotions = v);
         Check(items, "Silah / zırh", 272, 38, 110, _profile.LootEquipment, v => _profile.LootEquipment = v);
         Check(items, "Diğer (malzeme, kitap…)", 386, 38, 200, _profile.LootOther, v => _profile.LootOther = v);
-        Theme.Label(items, "Silah / zırh en az (yang)", new Rectangle(0, 72, 190, 26), 9f, Theme.Muted);
+        Theme.Label(items, "Silah / zırh satışta en az", new Rectangle(0, 72, 190, 26), 9f, Theme.Muted);
         var minGold = Theme.Number(items, new Rectangle(196, 72, 100, 26), 0, 10_000_000,
             Math.Clamp(_profile.LootEquipmentMinGold, 0, 10_000_000), 0, 500);
         minGold.ValueChanged += (_, _) => { _profile.LootEquipmentMinGold = (int)minGold.Value; SaveProfile(); };

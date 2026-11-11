@@ -164,8 +164,8 @@ internal sealed class BotProfile
 
     /// <summary>Stop the bot when a game master (GM) shows up nearby.</summary>
     public bool StopNearGm { get; set; } = true;
-    /// <summary>Also pick up weapons and armour a shop pays at least this much for (0 = off;
-    /// the price is known once the item has been in the bag).</summary>
+    /// <summary>Also pick up weapons and armour a shop pays at least this much for (the selling
+    /// price, <see cref="Memory.ItemInfo.Sell"/>; 0 = off).</summary>
     public int LootEquipmentMinGold { get; set; }
     /// <summary>Items always picked up, whatever the other loot choices (names, comma separated,
     /// part of the name is enough), e.g. "Cesaret Pelerini". A message is sent when one drops.</summary>

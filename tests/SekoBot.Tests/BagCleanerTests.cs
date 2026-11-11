@@ -211,7 +211,7 @@ public class ThrowCheapEquipmentTests
             new(12, 96001, 1),  // the user's own
             new(20, 96001, 1), new(21, 96002, 1), new(22, 96003, 1), new(23, 96004, 1), new(24, 96005, 1),
         ];
-        var p = new BotProfile { LootEquipment = false, LootEquipmentMinGold = 500 };
+        var p = new BotProfile { LootEquipment = false, LootEquipmentMinGold = 100 }; // sold for 24, 60, 180
         int[] Thrown(IReadOnlySet<(int, int)>? start) => [.. bag.Where(i => BotEngine.ShouldThrow(i, p, start)).Select(i => i.Slot)];
         p.LootOther = true;                         // (the material in slot 23 wanted)
         Assert.Equal([20, 21], Thrown(atStart));

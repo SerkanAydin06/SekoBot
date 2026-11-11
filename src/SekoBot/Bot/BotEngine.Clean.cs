@@ -78,7 +78,7 @@ internal sealed partial class BotEngine
         var kind = Loot.KindOf(item.Vnum);
         if (kind == LootKind.Equipment)
             return !profile.LootEquipment && profile.LootEquipmentMinGold > 0 &&
-                   ItemBook.Get(item.Vnum) is { Gold: > 0 } info && info.Gold < profile.LootEquipmentMinGold;
+                   ItemBook.Get(item.Vnum) is { Gold: > 0 } info && info.Sell < profile.LootEquipmentMinGold;
         return kind switch
         {
             LootKind.Potion => !profile.LootPotions,

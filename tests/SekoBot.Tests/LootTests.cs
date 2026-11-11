@@ -28,9 +28,13 @@ public class LootTests
         ItemBook.Learn(new ItemInfo(92001, "Bakır Küpe+5", "ITEM_ARMOR", "ARMOR_EAR", 4000));
         ItemBook.Learn(new ItemInfo(92002, "Mızrak+4", "ITEM_WEAPON", "WEAPON_TWO_HANDED", 400));
         GroundItem Drop(int vnum) => new(1, new Vec3(0, 0, 0), vnum, 1);
-        var p = new BotProfile { LootEquipment = false, LootEquipmentMinGold = 1000 };
-        Assert.True(BotEngine.WantedLoot(Drop(92001), p));     // 4000 yang
-        Assert.False(BotEngine.WantedLoot(Drop(92002), p));    // 400 yang
+        // The limit is what a shop pays: a fifth of the game's price (4000 → 800, 400 → 80).
+        var p = new BotProfile { LootEquipment = false, LootEquipmentMinGold = 500 };
+        Assert.True(BotEngine.WantedLoot(Drop(92001), p));
+        Assert.False(BotEngine.WantedLoot(Drop(92002), p));
+        p.LootEquipmentMinGold = 1000;                          // 800 in the shop: not enough
+        Assert.False(BotEngine.WantedLoot(Drop(92001), p));
+        p.LootEquipmentMinGold = 500;
         p.LootEquipmentMinGold = 0;
         Assert.False(BotEngine.WantedLoot(Drop(92001), p));
     }
