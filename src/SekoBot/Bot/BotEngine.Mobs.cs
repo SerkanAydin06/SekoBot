@@ -13,7 +13,7 @@ internal sealed partial class BotEngine
 {
     /// <summary>What the bot sees on screen from memory: the mobs it may go for (nearest to us
     /// first), the ones to go for first, and the items close by. Null when the camera can't be read.</summary>
-    internal static (List<Point> Mobs, List<Point> Priority, List<GroundSpot> Drops, List<Point> Attackers, List<TargetInfo> Targets)? MemoryView(
+    internal static (List<Point> Mobs, List<Point> Priority, List<GroundSpot> Drops, List<Point> Attackers, List<TargetInfo> Targets, List<Point> Junk)? MemoryView(
         WorldSnapshot? world, BotProfile profile, int width, int height)
     {
         if (world?.Camera is not CameraView camera)
@@ -68,6 +68,15 @@ internal sealed partial class BotEngine
             }
         // Special items first.
         drops = [.. drops.OrderByDescending(d => d.Special)];
+        // The items not wanted, close by: the pickup key takes the closest item, so it is pressed
+        // only when a wanted one is closer than these.
+        var junk = new List<Point>();
+        if (profile.PickUpDrops)
+            foreach (var item in world.Drops ?? [])
+                if (!(WantedLoot(item, profile) && world.Progress?.Fits(item.Vnum) != false) &&
+                    item.Position.DistanceXY(world.Player) <= profile.DropRangeMetres * 100 + 300 &&
+                    camera.ToScreen(item.Position, width, height) is PointF j)
+                    junk.Add(Point.Round(j));
         // Metin stones set to "first" come before everything, also before mobs attacking us
         // (those stand around the stone and get hit too).
         var priority = metins.Count > 0 ? metins : profile.AttackersFirst ? attackers : [];
@@ -81,7 +90,7 @@ internal sealed partial class BotEngine
                 preferMetins ? f.Mob.IsMetin : profile.AttackersFirst && f.Mob.AttacksMe,
                 f.Mob.AttacksMe, groups.GetValueOrDefault(f.Mob.Id), f.Mob.Position))
             .ToList();
-        return (mobs, priority, drops, attackers, targets);
+        return (mobs, priority, drops, attackers, targets, junk);
     }
 
     /// <summary>

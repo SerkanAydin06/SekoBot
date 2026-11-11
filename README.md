@@ -67,7 +67,7 @@ Bot oyunun kendi pencerelerinin (Esc menüsü, envanter, karakter, beceriler, ay
 **Silah / zırh en az (yang)** (Eşya / Envanter sayfası, 0 = kapalı): silah/zırh toplama kapalıyken bile, dükkânın en az bu kadar yang verdiği silah ve zırhlara yürünür (fiyatı bilinenler; çöp ekipman yine alınmaz).
 
 **Yerdekini önce topla:** izlemede botun dibindeki yang (1–4 m) bazen hiç alınmıyordu: savaşırken Z işe yaramıyor, savaş bitince de bot hemen bir sonraki grubu toplamaya gidiyordu. Artık kimse saldırmıyorken ve toplama sürmüyorken önce yakındaki istenen eşyalar alınır, sonra yeni gruba gidilir. Etrafta kesilecek mob yokken eşyaya giderken saldırı tuşu bırakılır (boşa vurmaz). Mob keserken dibinde istenen eşya varsa saldırı sürer ve arada Z'ye basılır (savaşı bırakmadan alır).
-- **Yerdeki eşyalara yürüyüp topla** (varsayılan açık): Yanında mob yokken 6 m içindeki eşyaya (yerdeki eşyalar bellekte görünür, alınınca kaybolur) yürür ve toplama tuşuna basar. 5 sn'de alınamayan eşyayı (başkasının olabilir) bir dakika boyunca bırakır. Toplama tuşu oyunda en yakındaki her şeyi aldığı için dövüş bitince tuşa yalnızca yakında istenen bir eşya varken basılır (istenmeyen ucuz zırh böylece alınmaz).
+- **Yerdeki eşyalara yürüyüp topla** (varsayılan açık): Yanında mob yokken 6 m içindeki eşyaya (yerdeki eşyalar bellekte görünür, alınınca kaybolur) yürür ve toplama tuşuna basar. 5 sn'de alınamayan eşyayı (başkasının olabilir) bir dakika boyunca bırakır. Toplama tuşu oyunda en yakındaki her şeyi aldığı için dövüş bitince tuşa yalnızca yakında istenen bir eşya varken basılır (istenmeyen ucuz zırh böylece alınmaz); istenen eşyanın yanında daha yakında istenmeyen bir eşya varsa bot önce istenenin tam üstüne yürür, sonra basar.
 
 ## Güvenlik: GM ve envanter
 

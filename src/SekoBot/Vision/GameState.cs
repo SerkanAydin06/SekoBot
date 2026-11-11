@@ -66,6 +66,9 @@ internal sealed record GameState(
     /// <summary>Items on the ground close to the character (on screen).</summary>
     public IReadOnlyList<GroundSpot> Drops { get; init; } = [];
 
+    /// <summary>Items on the ground not wanted (on screen, may be off the playfield).</summary>
+    public IReadOnlyList<Point> Junk { get; init; } = [];
+
     /// <summary>The character is moving (its position changed a moment ago) — null when not known.</summary>
     public bool? Walking { get; init; }
 
