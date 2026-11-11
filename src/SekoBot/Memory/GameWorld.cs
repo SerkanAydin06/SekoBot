@@ -108,8 +108,8 @@ internal sealed record OtherPlayer(string Name, bool IsGm, Vec3 Position)
                                                  name.Contains("[SA]", StringComparison.OrdinalIgnoreCase);
 }
 
-/// <summary>A stack in the inventory: the item number (vnum) and how many.</summary>
-internal readonly record struct InventoryItem(int Slot, int Vnum, int Count);
+/// <summary>A stack in the inventory: the item number (vnum) and how many; a weapon's or armour's bonuses ("efsun").</summary>
+internal readonly record struct InventoryItem(int Slot, int Vnum, int Count, ItemBonus[]? Bonuses = null);
 
 /// <summary>The character's progress: experience, money and inventory.</summary>
 /// <param name="QuickSlots">What the quick slot keys 1, 2, … point at: an inventory slot
@@ -342,6 +342,7 @@ internal sealed class GameWorldReader : IDisposable
         ("gameManager", "mapname", 0x958),
         ("gameManager", "Player", 0x380),
         ("gameManager", "drops", 0x850),
+        ("gameManager", "efsunlar", 0x2C8),
         ("playerMove", "dead", 0x778),
         ("playerMove", "isInSafe", 0x87C),
         ("playerMove", "stuned", 0x7B0),
@@ -494,6 +495,11 @@ internal sealed class GameWorldReader : IDisposable
         {
             Status = "Oyun dünyası bulunamadı (giriş ekranı ya da yükleme ekranı)";
             return null;
+        }
+        if (DateTime.UtcNow - _bonusNamesAt > TimeSpan.FromMinutes(1))
+        {
+            _bonusNamesAt = DateTime.UtcNow;
+            ReadBonusNames(gm + Offset(gmClass, "gameManager", "efsunlar"));
         }
         if (!TryVec3(gm + Offset(gmClass, "gameManager", "playerPos"), out var player))
         {
@@ -1380,6 +1386,34 @@ internal sealed class GameWorldReader : IDisposable
     }
 
     /// <summary>The inventory map (TMap: a sparse array of slot → item, with a bit per used element).</summary>
+    private DateTime _bonusNamesAt = DateTime.MinValue;
+
+    /// <summary>gameManager.efsunlar: the names of the bonus kinds (an array of strings, index = kind).</summary>
+    private void ReadBonusNames(long array)
+    {
+        long data = Pointer(array);
+        int count = Int32(array + 8) ?? 0;
+        if (!MemoryReads.IsPointer(data) || count is < 2 or > 500)
+            return;
+        var names = new string[count];
+        for (int i = 0; i < count; i++)
+            names[i] = ReadFString(data + i * 16L, 64);
+        ItemBonuses.Learn(names);
+    }
+
+    /// <summary>The bonuses of an item (invItem: kind / value pairs at +4…+0x28 and the sixth at +0x7C).</summary>
+    private static ItemBonus[]? Bonuses(byte[] elements, int value)
+    {
+        List<ItemBonus>? found = null;
+        foreach (int at in (ReadOnlySpan<int>)[4, 0xC, 0x14, 0x1C, 0x24, 0x7C])
+        {
+            int type = BitConverter.ToInt32(elements, value + at), amount = BitConverter.ToInt32(elements, value + at + 4);
+            if (type is > 0 and < 500)
+                (found ??= []).Add(new ItemBonus(type, amount));
+        }
+        return found?.ToArray();
+    }
+
     private List<InventoryItem> ReadInventory(long map)
     {
         var items = new List<InventoryItem>();
@@ -1405,7 +1439,7 @@ internal sealed class GameWorldReader : IDisposable
             int vnum = BitConverter.ToInt32(elements, at + InventoryValue + ItemVnum);
             int amount = BitConverter.ToInt32(elements, at + InventoryValue + ItemCount);
             if (vnum > 0 && amount > 0 && slot >= 0)
-                items.Add(new InventoryItem(slot, vnum, amount));
+                items.Add(new InventoryItem(slot, vnum, amount, Bonuses(elements, at + InventoryValue)));
         }
         return items;
     }

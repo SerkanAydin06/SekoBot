@@ -337,3 +337,44 @@ public class PickedItemsTests
         Assert.Empty(picked.Picked);
     }
 }
+
+public class BonusListTests
+{
+    [Fact]
+    public void A_weapon_with_a_wanted_bonus_is_kept_the_rest_goes()
+    {
+        // As read in the game: Okyanus Yelpazesi+0 with 35 / 10 ("Orklara karşı güçlü +%10").
+        ItemBook.Learn(new ItemInfo(97001, "Okyanus Yelpazesi+0", "ITEM_WEAPON", "WEAPON_FAN", 15000));
+        Assert.Equal("Orklara karşı güçlü", ItemBonuses.NameOf(35));
+        Assert.Equal("Zehirleme şansı", ItemBonuses.NameOf(41));
+        var orcs10 = new InventoryItem(20, 97001, 1, [new ItemBonus(35, 10)]);
+        var poison3 = new InventoryItem(21, 97001, 1, [new ItemBonus(41, 3)]);
+        var none = new InventoryItem(22, 97001, 1);
+        var p = new BotProfile { LootEquipmentMinGold = 5000, LootBonuses = [new BonusWant { Type = 35, Min = 10 }] };
+        // All weapons are walked to (the bonus shows only in the bag).
+        Assert.True(BotEngine.WantedLoot(new GroundItem(1, default, 97001, 1), p));
+        Assert.True(BotEngine.KeepPicked(orcs10, p));
+        Assert.False(BotEngine.KeepPicked(poison3, p));
+        Assert.False(BotEngine.KeepPicked(none, p));
+        p.LootBonuses[0].Min = 15;                              // +10 is less than wanted
+        Assert.False(BotEngine.KeepPicked(orcs10, p));
+        p.LootBonuses[0].Min = 10;
+        HashSet<(int, int)> junk = [(20, 97001), (21, 97001), (22, 97001)];
+        Assert.False(BotEngine.ShouldThrow(orcs10, p, junk));
+        Assert.True(BotEngine.ShouldThrow(poison3, p, junk));   // sold for 3000 < 5000, no wanted bonus
+        p.LootEquipmentMinGold = 0;                             // no price limit: only the bonus counts
+        Assert.True(BotEngine.ShouldThrow(none, p, junk));
+        Assert.False(BotEngine.ShouldThrow(orcs10, p, junk));
+    }
+
+    [Fact]
+    public void Items_coming_in_while_the_bot_runs_are_listed()
+    {
+        var picked = new PickedItems();
+        picked.Update([new InventoryItem(12, 500, 1)], botRunning: false);
+        var sword = new InventoryItem(20, 600, 1, [new ItemBonus(47, 15)]);
+        picked.Update([new InventoryItem(12, 500, 1), sword], true, (Func<InventoryItem, bool>)(i => i.Bonuses != null));
+        Assert.Equal([sword], picked.CameIn);
+        Assert.Empty(picked.Picked); // kept by its bonus: not junk
+    }
+}

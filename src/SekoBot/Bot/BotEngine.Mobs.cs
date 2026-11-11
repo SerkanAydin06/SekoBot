@@ -174,11 +174,31 @@ internal sealed partial class BotEngine
     {
         LootKind.Yang => profile.LootYang,
         LootKind.Potion => profile.LootPotions,
-        LootKind.Equipment => profile.LootEquipment ||
+        LootKind.Equipment => profile.LootEquipment || profile.LootBonuses.Count > 0 ||
                               profile.LootEquipmentMinGold > 0 && ItemBook.Get(item.Vnum)?.Sell >= profile.LootEquipmentMinGold,
         LootKind.Other => profile.LootOther,
         _ => true,
     });
+
+    /// <summary>A bonus of the item is on the bonus list, at least as big as wanted there.</summary>
+    internal static bool GoodBonus(InventoryItem item, BotProfile profile) =>
+        item.Bonuses is { Length: > 0 } bonuses && profile.LootBonuses.Count > 0 &&
+        bonuses.Any(b => profile.LootBonuses.Any(w => ItemBonuses.Same(w.Type, b.Type) && b.Value >= w.Min));
+
+    /// <summary>
+    /// Whether an item that just came into the bag is one the loot choices want (else the bot took
+    /// it by accident and it can go): a weapon or armour by its price or bonuses, the rest as on the ground.
+    /// </summary>
+    internal static bool KeepPicked(InventoryItem item, BotProfile profile)
+    {
+        if (AlwaysLoot(item.Vnum, profile) || Array.IndexOf(Loot.AllEventItems, item.Vnum) >= 0)
+            return true;
+        if (Loot.KindOf(item.Vnum) != LootKind.Equipment)
+            return WantedLoot(new GroundItem(0, default, item.Vnum), profile);
+        return !profile.LootThrow.Contains(item.Vnum) && !profile.LootSkip.Contains(item.Vnum) &&
+               (profile.LootEquipment || GoodBonus(item, profile) ||
+                profile.LootEquipmentMinGold > 0 && ItemBook.Get(item.Vnum)?.Sell >= profile.LootEquipmentMinGold);
+    }
 
     /// <summary>An item ticked in the item list, or on the "always pick up" names (part of a name is enough).</summary>
     internal static bool AlwaysLoot(int vnum, BotProfile profile)

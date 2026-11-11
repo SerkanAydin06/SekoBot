@@ -31,8 +31,15 @@ internal sealed class PickedItems
     /// A new bag read. <paramref name="botRunning"/>: items coming in now are the bot's. The first read
     /// (or after a different character) only drops remembered items no longer there.
     /// </summary>
-    public void Update(IReadOnlyList<InventoryItem> inventory, bool botRunning, Func<int, bool>? wanted = null)
+    public void Update(IReadOnlyList<InventoryItem> inventory, bool botRunning, Func<int, bool>? wanted = null) =>
+        Update(inventory, botRunning, wanted == null ? null : (Func<InventoryItem, bool>)(i => wanted(i.Vnum)));
+
+    /// <summary>Items that came into the bag at the last read while the bot ran (not moved ones).</summary>
+    public IReadOnlyList<InventoryItem> CameIn { get; private set; } = [];
+
+    public void Update(IReadOnlyList<InventoryItem> inventory, bool botRunning, Func<InventoryItem, bool>? wanted)
     {
+        CameIn = [];
         var bag = inventory.Where(i => i.Slot >= CharacterProgress.FirstBagSlot && i.Count > 0)
             .GroupBy(i => (i.Slot, i.Vnum)).ToDictionary(g => g.Key, g => g.Sum(i => i.Count));
         if (_last == null)
@@ -47,6 +54,8 @@ internal sealed class PickedItems
             return;
         _shrunkReads = 0;
 
+        var bySlot = inventory.Where(i => i.Slot >= CharacterProgress.FirstBagSlot).GroupBy(i => i.Slot).ToDictionary(g => g.Key, g => g.First());
+        var cameIn = new List<InventoryItem>();
         foreach (var group in bag.Keys.Concat(_last.Keys).Select(k => k.Vnum).Distinct().ToList())
         {
             var came = bag.Keys.Where(k => k.Vnum == group && !_last.ContainsKey(k)).OrderBy(k => k.Slot).ToList();
@@ -54,7 +63,10 @@ internal sealed class PickedItems
             for (int i = 0; i < came.Count; i++)
             {
                 // Moved from a slot that left: same owner as before. Otherwise new: the bot's while it runs.
-                bool bots = i < gone.Count ? _picked.Contains(gone[i]) : botRunning && wanted?.Invoke(group) != true;
+                var item = bySlot.GetValueOrDefault(came[i].Slot);
+                if (i >= gone.Count && botRunning)
+                    cameIn.Add(item);
+                bool bots = i < gone.Count ? _picked.Contains(gone[i]) : botRunning && wanted?.Invoke(item) != true;
                 if (bots && _picked.Add(came[i]))
                     Changed = true;
             }
@@ -63,6 +75,7 @@ internal sealed class PickedItems
                     Changed = true;
         }
         _last = bag;
+        CameIn = cameIn;
     }
 
     // ---- the file (per character) ----
