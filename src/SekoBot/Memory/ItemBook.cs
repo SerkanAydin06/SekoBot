@@ -5,7 +5,14 @@ namespace SekoBot.Memory;
 
 /// <summary>What the game says about an item: its name, type ("ITEM_WEAPON", "ITEM_USE", …),
 /// sub-type ("USE_POTION", "ARMOR_EAR", …) and what a shop pays for it.</summary>
-internal sealed record ItemInfo(int Vnum, string Name, string Type, string SubType, int Gold);
+internal sealed record ItemInfo(int Vnum, string Name, string Type, string SubType, int Gold)
+{
+    /// <summary>
+    /// What a shop pays for it: a fifth of the game's price (seen: 8000 → 1600 for a +0, a little
+    /// more for a +1 / +2: 1800, 1900; 5000 → 1100 for a +1). Never more than what is paid.
+    /// </summary>
+    public int Sell => Gold / 5;
+}
 
 /// <summary>
 /// Items the bot has learned about. The game keeps no item list in memory that could be read, but
