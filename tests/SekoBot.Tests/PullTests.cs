@@ -255,3 +255,24 @@ public class PullSizeTests
         Assert.Equal(8, brain.PullCap(p));
     }
 }
+
+public class PullUnreachableTests
+{
+    private static readonly Point Center = new(960, 540);
+    private static TargetInfo At(int id, int group, double x) =>
+        new(id, new Point(Center.X + (int)(x / 5), Center.Y), Math.Abs(x), 130, 103, 305, 305, 56, false, false, group, new Vec3(x, 0, 0));
+
+    [Fact]
+    public void A_group_that_could_not_be_reached_is_not_tried_again_for_minutes()
+    {
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = false, PullMaxMobs = 9, Breaks = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        TargetInfo[] wall = [At(10, 10, 800), At(11, 10, 820), At(12, 10, 840)]; // never gets closer
+        var notes = new List<string>();
+        for (double t = 0; t < 120_000; t += 100)
+            notes.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
+                { Targets = wall, Walking = true, AttackPower = 189 }).OfType<NoteAction>().Select(n => n.Text));
+        Assert.Single(notes, n => n.Contains("Gruba ulaşılamadı"));
+    }
+}

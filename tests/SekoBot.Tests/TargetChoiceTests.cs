@@ -104,9 +104,9 @@ public class TargetChoiceTests
         var brain = new Brain(() => p);
         brain.Start(TimeSpan.Zero);
         var actions = new List<BotAction>();
-        for (double t = 0; t < 4500; t += 100)
+        for (double t = 0; t < 3500; t += 100)
             actions.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), W, H, 1, 1, 0, 1)
-                { Targets = view.Targets, Walking = true, AttackPower = 189 }));
+                { Targets = view.Targets, Walking = true, AttackPower = 189 })); // (not getting closer for 4 s: given up)
         Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.MoveForward);
         Assert.Equal(BotPhase.Moving, brain.Phase);
     }
