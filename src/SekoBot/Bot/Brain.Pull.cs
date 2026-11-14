@@ -24,6 +24,8 @@ internal sealed partial class Brain
     /// wall, on a ledge) is given up after <see cref="PullWalkMs"/>.</summary>
     private TimeSpan _pullWalkSince = Never;
     internal const int PullWalkMs = 4000;
+    /// <summary>A group that couldn't be reached is left this long.</summary>
+    internal const int PullUnreachableMs = 300_000;
     /// <summary>With mobs already after us, the next group is gone for only this close (world units,
     /// 10 m): recorded in the game, half the gatherings walked 5–11 s for 1–3 more mobs while the
     /// ones gathered hit our back; fighting them right away is quicker.</summary>
@@ -194,6 +196,10 @@ internal sealed partial class Brain
                 _walkGoal = member.Position;
                 StuckHere(state);
                 _pulled[group.Key] = now;
+                // Not again in a minute (recorded on c3: 30 give-ups in 22 min, the same groups
+                // tried again and again): its mobs are left for 5 minutes unless they come to us.
+                foreach (var t in group)
+                    _unreachable[t.Id] = now + Ms(PullUnreachableMs);
                 _pullGroup = 0;
                 _pullHitSince = _pullWalkSince = Never;
                 actions.Add(new NoteAction("Gruba ulaşılamadı; bırakıldı."));
