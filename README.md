@@ -93,6 +93,8 @@ Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü h
 
 **Grup toplarken:** peşimizde mob varken bir sonraki gruba sadece 10 m'den yakınsa gidilir (kayıtta toplamaların yarısı 1–3 mob için 5–11 sn yürüyordu; uzaktaki grup yerine toplananlar hemen kesilir); ulaşılamayan gruba 4 sn sonra vazgeçilir.
 
+**Mobların arasından geçme:** bütün mobların yeri bellekten bilindiği için bot yürürken (alana dönerken, mobların çok olduğu yere ya da kayıtlı farm alanına giderken, yerdeki eşyaya, bir moba ya da toplanacak gruba yürürken) önündeki 7 m içinde yolun 2,5 m yakınında duran mobların **etrafından dolanır**; böylece yolda istemeden mob uyandırmaz. Gidilen mob / grup ve zaten peşindeki moblar sayılmaz.
+
 **Vururken durma:** mob vurma mesafesindeyken (bellekten) bot yön tuşlarını bırakıp yerinde vurur — yürürken vurmak hasarı neredeyse yarıya indiriyordu (ölçüldü: yürürken 96, dururken 172 can/sn). Mob mesafenin kıyısındaysa ya da 1,5 sn hasar gitmiyorsa kısa bir adım atılır.
 
 ## Molalar ve oturum raporu
