@@ -5,7 +5,8 @@ internal abstract record BotAction;
 /// <summary>Left click at a point in game client pixels.</summary>
 /// <param name="Slow">For UI buttons (e.g. "Burada yeniden başla"): the real cursor is put on
 /// the button, hovers a moment, and the button is held down a bit, like a person clicks.</param>
-internal sealed record ClickAction(Point Client, bool Slow = false) : BotAction
+/// <param name="Fast">With <paramref name="Slow"/>: the same careful click (game in front, hover first) with shorter waits — for the item menu and its question while throwing items away.</param>
+internal sealed record ClickAction(Point Client, bool Slow = false, bool Fast = false) : BotAction
 {
     public override string ToString() => $"Tıkla ({Client.X}, {Client.Y}){(Slow ? " yavaş" : "")}";
 }

@@ -106,7 +106,7 @@ internal sealed class InputExecutor : IDisposable
         switch (action)
         {
             case ClickAction { Slow: true } button:
-                await ClickButtonAsync(button.Client, token);
+                await ClickButtonAsync(button.Client, token, button.Fast);
                 break;
             case ClickAction click:
                 await ClickAsync(click.Client, 30, 60, token);
@@ -186,7 +186,7 @@ internal sealed class InputExecutor : IDisposable
     /// hover, press with a real mouse event, hold, release, and wait for the game to take it.
     /// Afterwards the cursor and the window that was in front are put back.
     /// </summary>
-    private async Task ClickButtonAsync(Point client, CancellationToken token)
+    private async Task ClickButtonAsync(Point client, CancellationToken token, bool fast = false)
     {
         Win32.GetCursorPos(out var previous);
         nint before = Win32.GetForegroundWindow();
@@ -198,25 +198,25 @@ internal sealed class InputExecutor : IDisposable
         try
         {
             // Come in with a few small moves so the button sees the cursor arrive (hover).
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < (fast ? 3 : 5); i++)
             {
-                int d = 8 - i * 2;
+                int d = 8 - i * (fast ? 3 : 2);
                 MoveMouse(new Point(screen.X + d, screen.Y + d / 2));
                 Win32.PostMessage(_window.Handle, Win32.WM_MOUSEMOVE, 0, lParam);
-                await Task.Delay(60, token);
+                await Task.Delay(fast ? 35 : 60, token);
             }
             MoveMouse(screen);
-            await Task.Delay(300, token);
+            await Task.Delay(fast ? 120 : 300, token);
             if (front)
                 SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);
             else
                 Win32.PostMessage(_window.Handle, Win32.WM_LBUTTONDOWN, Win32.MK_LBUTTON, lParam);
-            await Task.Delay(250, token);
+            await Task.Delay(fast ? 110 : 250, token);
             if (front)
                 SendMouse(Win32.MOUSEEVENTF_LEFTUP);
             else
                 Win32.PostMessage(_window.Handle, Win32.WM_LBUTTONUP, 0, lParam);
-            await Task.Delay(500, token); // keep the cursor there while the game handles it
+            await Task.Delay(fast ? 200 : 500, token); // keep the cursor there while the game handles it
         }
         finally
         {
