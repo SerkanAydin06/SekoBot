@@ -164,8 +164,8 @@ internal sealed partial class Brain
         double dx = member.Spot.X - cx, dy = member.Spot.Y - cy;
         if (member.Distance <= member.Reach - 10)
         {
-            // Next to it: hit it until the group wakes up (a few seconds at most).
-            SetMoves(Towards(dx, dy, radius * 0.35, p), p, actions, refresh);
+            // Next to it: hit it until the group wakes up (a few seconds at most), standing still.
+            SetMoves(SteerInReach(state, member, now) ? Towards(dx, dy, radius * 0.35, p) : [], p, actions, refresh);
             SetAttack(true, p, actions, refresh);
             if (_pullHitSince == Never)
                 _pullHitSince = now;

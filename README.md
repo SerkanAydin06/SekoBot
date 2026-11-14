@@ -91,6 +91,8 @@ Bot her mobun oyundaki bilgisini bellekten okur: verdiği EXP, canı, en sert vu
 
 Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü hatırlar (etrafını gördükçe tazeler; boşalan kare düşer, görülmeyen kareler yavaşça unutulur). Metin taşı olan kareler 5 mob sayılır. Ekranda mob kalmayınca rastgele dolaşmak yerine en çok mobun olduğu yakın kareye yürür ("Etrafta mob yok; mobların çok olduğu yere gidiliyor"). Alan sınırı açıksa sınırın dışındaki kareler seçilmez. Başka haritaya geçince hafıza sıfırlanır.
 
+**Vururken durma:** mob vurma mesafesindeyken (bellekten) bot yön tuşlarını bırakıp yerinde vurur — yürürken vurmak hasarı neredeyse yarıya indiriyordu (ölçüldü: yürürken 96, dururken 172 can/sn). Mob mesafenin kıyısındaysa ya da 1,5 sn hasar gitmiyorsa kısa bir adım atılır.
+
 ## Molalar ve oturum raporu
 
 - **Ara sıra kısa mola ver** (Alan sekmesi, varsayılan açık): yaklaşık 30 dakikada bir (±%20), dövüş yokken ve kimse saldırmıyorken bot ~40 sn (±%25) durur; bir mob saldırırsa mola hemen biter. Çantada atılacak eşya varsa ("At" işaretli ya da botun yanlışlıkla aldığı istenmeyen eşya) mola sırasında envanter açılıp atılır; çantanın dolması beklenmez. Toplama tuşu aralıkları da her seferinde biraz değişir. Ayarlar: `BreakEveryMin`, `BreakSeconds`.

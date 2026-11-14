@@ -276,9 +276,10 @@ internal sealed partial class Brain
             : best <= radius || (Phase == BotPhase.Fighting && best <= radius * 1.4);
         if (inRange)
         {
-            // Next to the character: attack, and keep steering onto the mob, because every
-            // swing moves the character a little and the mob moves too.
-            SetMoves(Towards(dx, dy, radius * 0.35, p), p, actions, refresh);
+            // Next to the character: attack. Walking while hitting halves the damage (measured: 96
+            // HP/s walking vs 172 standing, the mob in reach), so the keys are let go while the mob
+            // is within reach; steered onto it only when it is at the edge or no damage is done.
+            SetMoves(SteerInReach(state, chosen, now) ? Towards(dx, dy, radius * 0.35, p) : [], p, actions, refresh);
             SetAttack(true, p, actions, refresh);
             PickUpUnderFeet(state, p, actions, radius);
             if (Phase != BotPhase.Fighting)
@@ -610,6 +611,34 @@ internal sealed partial class Brain
     }
 
     /// <summary>The fight just ended (no mob next to us any more): grab the loot, count it.</summary>
+    private int _reachTarget, _reachHp;
+    private TimeSpan _reachHpAt = Never, _steerUntil = Never;
+    /// <summary>No damage for this long with the mob in reach: step onto it a moment (maybe facing away).</summary>
+    internal const int NoDamageSteerMs = 1500;
+
+    /// <summary>
+    /// Whether to keep walking onto the mob being hit: not while it is in reach (from memory) and
+    /// its HP goes down; yes at the edge of the reach, without memory, or after 1.5 s without damage.
+    /// </summary>
+    private bool SteerInReach(GameState state, TargetInfo? mob, TimeSpan now)
+    {
+        if (mob == null || mob.Distance > mob.Reach)
+            return true;
+        if (mob.Id != _reachTarget || mob.Hp < _reachHp)
+        {
+            _reachTarget = mob.Id;
+            _reachHp = mob.Hp;
+            _reachHpAt = now;
+            return now < _steerUntil;
+        }
+        if (now - _reachHpAt > Ms(NoDamageSteerMs))
+        {
+            _steerUntil = now + Ms(400);
+            _reachHpAt = now;
+        }
+        return now < _steerUntil;
+    }
+
     /// <summary>
     /// Whether an unwanted item lies closer to the character than this wanted one (screen pixels
     /// from the middle; the camera looks down): the pickup key would take that one.

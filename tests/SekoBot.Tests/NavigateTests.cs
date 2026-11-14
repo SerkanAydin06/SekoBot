@@ -326,3 +326,40 @@ public class NavigateTests
         Assert.DoesNotContain(walk, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
     }
 }
+
+public class StandStillInReachTests
+{
+    private static readonly Point Center = new(960, 540);
+
+    [Fact]
+    public void With_the_mob_in_reach_and_losing_hp_the_bot_stands_and_hits()
+    {
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PullGroups = false, Breaks = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        var all = new List<BotAction>();
+        int hp = 600;
+        for (double t = 0; t < 3000; t += 100)
+        {
+            // Measured in the game: walking while hitting halves the damage.
+            var mob = new TargetInfo(5, new Point(Center.X + 45, Center.Y), 90, 130, 365, hp, 600, 50, false, AttacksMe: true);
+            var actions = brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
+                { Targets = [mob], Walking = false, AttackPower = 189 });
+            if (t >= 500) all.AddRange(actions);
+            hp -= 15;
+        }
+        Assert.DoesNotContain(all, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
+
+        // No damage for a while (facing away?): a short step onto it.
+        var brain2 = new Brain(() => p);
+        brain2.Start(TimeSpan.Zero);
+        var stuck = new List<BotAction>();
+        for (double t = 0; t < 3000; t += 100)
+            stuck.AddRange(brain2.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
+            {
+                Targets = [new TargetInfo(5, new Point(Center.X + 45, Center.Y), 90, 130, 365, 600, 600, 50, false, AttacksMe: true)],
+                Walking = false, AttackPower = 189,
+            }));
+        Assert.Contains(stuck, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
+    }
+}
