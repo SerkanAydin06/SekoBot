@@ -68,9 +68,9 @@ public class BagCleanerTests
         var click = Assert.IsType<ClickAction>(Assert.Single(cleaner.Tick(S(0), With(items: junk), toThrow, p, Client)));
         Assert.Equal(new Point(junk.Rect.X + 21, junk.Rect.Y + 21), click.Client);
         var yereAt = new Point(848, 613);
-        Assert.Equal([new ClickAction(yereAt, Slow: true)], cleaner.Tick(S(1), With(yereAt, 20, null, junk), toThrow, p, Client));
+        Assert.Equal([new ClickAction(yereAt, Slow: true, Fast: true)], cleaner.Tick(S(1), With(yereAt, 20, null, junk), toThrow, p, Client));
         var yes = new Point(531, 389);
-        Assert.Equal([new ClickAction(yes, Slow: true)], cleaner.Tick(S(2), With(null, -1, yes, junk), toThrow, p, Client));
+        Assert.Equal([new ClickAction(yes, Slow: true, Fast: true)], cleaner.Tick(S(2), With(null, -1, yes, junk), toThrow, p, Client));
         Assert.Equal([new KeyTapAction(p.Keys.Inventory)], cleaner.Tick(S(4), With(items: []), toThrow, p, Client));
         Assert.Equal(1, cleaner.Thrown);
     }

@@ -40,7 +40,7 @@ internal sealed class KeyBindings
 internal sealed class BotProfile
 {
     /// <summary>Current profile format; older files are upgraded once by <see cref="ProfileStore"/>.</summary>
-    public const int CurrentVersion = 7;
+    public const int CurrentVersion = 8;
 
     /// <summary>Number of skill keys (F1–F5).</summary>
     public const int SkillSlots = 5;
@@ -90,7 +90,7 @@ internal sealed class BotProfile
     /// fight them all together.</summary>
     public bool PullGroups { get; set; } = true;
     /// <summary>Stop gathering once this many mobs are after us.</summary>
-    public int PullMaxMobs { get; set; } = 9;
+    public int PullMaxMobs { get; set; } = 12;
     /// <summary>After the first group, only groups within this many metres of it are gathered
     /// (so the bot gathers one area instead of being led further and further away).</summary>
     public double PullAreaMetres { get; set; } = 8;
@@ -314,6 +314,9 @@ internal static class ProfileStore
     {
         if (profile.Version >= BotProfile.CurrentVersion)
             return false;
+        // v8: 9 mobs never took the HP below half (watched 18 min, 2 potions): 12 (it still lowers itself on low HP).
+        if (profile.Version < 8 && profile.PullMaxMobs == 9)
+            profile.PullMaxMobs = 12;
         // v7: area skills were wasted on 3 mobs (and on mobs still on their way): 5 within 3 m now.
         if (profile.Version < 7 && profile.AreaSkillMinMobs == 3)
             profile.AreaSkillMinMobs = 5;

@@ -15,12 +15,15 @@ namespace SekoBot.Bot;
 /// </summary>
 internal sealed class BagCleaner
 {
-    public static readonly TimeSpan GiveUpAfter = TimeSpan.FromSeconds(120);
+    /// <summary>Long enough for a full bag of junk (seen: 26 items took longer than 2 minutes).</summary>
+    public static readonly TimeSpan GiveUpAfter = TimeSpan.FromSeconds(300);
     /// <summary>A drag takes ~1.5 s of input; then the question needs a moment to show.</summary>
     public static readonly TimeSpan AfterDrag = TimeSpan.FromMilliseconds(2200);
     /// <summary>No question this long after the drag: it didn't take.</summary>
     public static readonly TimeSpan QuestionTimeout = TimeSpan.FromMilliseconds(4500);
     public static readonly TimeSpan AfterClick = TimeSpan.FromMilliseconds(1800);
+    /// <summary>After "Evet" in the item menu's question: the item goes within a second (seen).</summary>
+    public static readonly TimeSpan AfterYes = TimeSpan.FromMilliseconds(1000);
     public static readonly TimeSpan AfterKey = TimeSpan.FromMilliseconds(1200);
     public const int TriesPerItem = 2;
     /// <summary>The item's menu shows a moment after the click; not there after this: dragged instead.</summary>
@@ -30,7 +33,7 @@ internal sealed class BagCleaner
     private enum Step { Open, Pick, Menu, Dragged, Confirmed, Close }
     private TimeSpan _clickedAt;
     private int _menuMisses;
-    private bool _menuTried;
+    private bool _menuTried, _viaMenu;
 
     private Step _step;
     private TimeSpan _started, _waitUntil, _draggedAt;
@@ -84,10 +87,10 @@ internal sealed class BagCleaner
         {
             if (_step == Step.Dragged || _step == Step.Confirmed && _yesClicks < 2)
             {
-                actions.Add(new ClickAction(yes, Slow: true));
+                actions.Add(new ClickAction(yes, Slow: true, Fast: _viaMenu));
                 _yesClicks++;
                 _step = Step.Confirmed;
-                _waitUntil = now + AfterClick;
+                _waitUntil = now + (_viaMenu ? AfterYes : AfterClick);
             }
             else if (_escapes < 3)
             {
@@ -128,7 +131,7 @@ internal sealed class BagCleaner
                 // The item's menu is up: "Yere at" (the question comes next, as after a drag).
                 if (bag.DropButton is Point drop && bag.MenuSlot == _slot)
                 {
-                    actions.Add(new ClickAction(drop, Slow: true));
+                    actions.Add(new ClickAction(drop, Slow: true, Fast: true));
                     _draggedAt = now;
                     _step = Step.Dragged;
                     _waitUntil = now + AfterItemClick;
@@ -179,9 +182,10 @@ internal sealed class BagCleaner
                     var from = new Point(here.Rect.X + here.Rect.Width / 2, here.Rect.Y + here.Rect.Height / 2);
                     // A new item: try its menu first (faster); the same item after a missing menu: drag.
                     bool sameItem = here.Slot == _slot && here.Vnum == _vnum && _menuTried;
-                    if (bag.MenuKnown && _menuMisses < 2 && !sameItem)
+                    _viaMenu = bag.MenuKnown && _menuMisses < 2 && !sameItem;
+                    if (_viaMenu)
                     {
-                        actions.Add(new ClickAction(from, Slow: true));
+                        actions.Add(new ClickAction(from, Slow: true, Fast: true));
                         _slot = here.Slot;
                         _vnum = here.Vnum;
                         _yesClicks = 0;

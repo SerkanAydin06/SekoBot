@@ -147,3 +147,25 @@ public class FarAttackerTests
         Assert.True(SekoBot.Capture.WindowService.IsGameTitle("Mobile2 Global"));
     }
 }
+
+public class DumpSpotTests
+{
+    [Fact]
+    public void Where_items_were_thrown_its_items_and_quiet_mobs_are_left_alone()
+    {
+        var me = new Vec3(20000, 18000, 900);
+        var camera = new CameraView(me with { Z = me.Z + 1000 }, -90, 0, 0, 90);
+        var quiet = new WorldMob(1, 101, "Kaplan", 18, 300, 585, me with { X = me.X + 200 });
+        var hitting = new WorldMob(2, 101, "Kaplan", 18, 300, 585, me with { X = me.X + 100 }, AttacksMe: true);
+        GroundItem[] drops = [new(7, me with { Y = me.Y + 150 }, 1, 50)];
+        var world = new WorldSnapshot(me, camera, [quiet, hitting], 0, "c2") { Drops = drops };
+        var p = new BotProfile { PickUpDrops = true, LootYang = true };
+        var normal = BotEngine.MemoryView(world, p, 1920, 1080)!.Value;
+        Assert.Equal(2, normal.Targets.Count);
+        Assert.Single(normal.Drops);
+        var avoiding = BotEngine.MemoryView(world, p, 1920, 1080, avoid: me)!.Value;
+        Assert.Equal([2], avoiding.Targets.Select(t => t.Id)); // the attacker is still fought
+        Assert.Empty(avoiding.Drops);
+        Assert.Single(avoiding.Junk);                          // and the pickup key isn't pressed by it
+    }
+}
