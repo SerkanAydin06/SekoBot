@@ -146,6 +146,21 @@ public class PullTests
     }
 
     [Fact]
+    public void With_mobs_after_us_a_group_13_m_away_is_not_gone_for()
+    {
+        // Recorded in the game: half the gatherings walked 5–11 s for 1–3 more mobs, the gathered ones hitting our back.
+        var (brain, p) = Ready(max: 9);
+        p.PullAreaMetres = 20;
+        TargetInfo[] a = [At(10, 10, 100, 0), At(11, 10, 120, 40), At(12, 10, 140, -40)];
+        TargetInfo[] far = [At(20, 20, -1300, 0), At(21, 20, -1320, 40), At(22, 20, -1340, -40)];
+        Run(brain, 0, 1000, [.. a, .. far]);
+        TargetInfo[] aComing = [At(10, 10, 100, 0, attacks: true), At(11, 10, 120, 40, attacks: true), At(12, 10, 140, -40, attacks: true)];
+        var next = Run(brain, 1000, 2000, [.. aComing, .. far]);
+        Assert.Contains(next, x => x is NoteAction n && n.Text.Contains("3 mob kesiliyor"));
+        Assert.DoesNotContain(next, x => x is KeyDownAction d && d.Key == p.Keys.MoveLeft);
+    }
+
+    [Fact]
     public void Gathers_the_groups_close_by_even_with_a_mob_already_on_us()
     {
         var (brain, p) = Ready(max: 9);
