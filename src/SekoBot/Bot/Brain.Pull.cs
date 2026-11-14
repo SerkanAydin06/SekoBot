@@ -23,7 +23,11 @@ internal sealed partial class Brain
     /// <summary>When walking to the group being pulled started: one we can't get to (behind a
     /// wall, on a ledge) is given up after <see cref="PullWalkMs"/>.</summary>
     private TimeSpan _pullWalkSince = Never;
-    internal const int PullWalkMs = 6000;
+    internal const int PullWalkMs = 4000;
+    /// <summary>With mobs already after us, the next group is gone for only this close (world units,
+    /// 10 m): recorded in the game, half the gatherings walked 5–11 s for 1–3 more mobs while the
+    /// ones gathered hit our back; fighting them right away is quicker.</summary>
+    internal const double PullNextWithChasers = 1000;
     private bool _pulling;
     /// <summary>The middle of the first group gathered: the next ones come from around it.</summary>
     private Memory.Vec3? _pullAnchor;
@@ -137,6 +141,9 @@ internal sealed partial class Brain
                 ? g.Min(t => t.Distance) <= (startingWithChasers ? area : PullRange)
                 : Centre(g) is Memory.Vec3 c ? c.DistanceXY(anchor) <= area : g.Min(t => t.Distance) <= area)
             .ToList();
+        // Mobs after us: the next group only when it is close (else they are fought now).
+        if (chasing > 0 && _pullGroup == 0)
+            fresh = [.. fresh.Where(g => g.Min(t => t.Distance) <= PullNextWithChasers)];
         if (fresh.Count == 0)
             return EndPull(actions, chasing > 0 ? $"Bu bölgede başka grup yok; toplanan {chasing} mob kesiliyor." : null);
 
