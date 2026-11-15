@@ -143,6 +143,7 @@ internal static class Win32
     internal static extern bool ShowWindow(nint hwnd, int command);
 
     internal const int SW_RESTORE = 9;
+    internal const int SW_SHOWNOACTIVATE = 4;
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

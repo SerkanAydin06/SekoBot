@@ -95,6 +95,8 @@ Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü h
 
 **Mobların arasından geçme:** bütün mobların yeri bellekten bilindiği için bot yürürken (alana dönerken, mobların çok olduğu yere ya da kayıtlı farm alanına giderken, yerdeki eşyaya, bir moba ya da toplanacak gruba yürürken) önündeki 7 m içinde yolun 2,5 m yakınında duran mobların **etrafından dolanır**; böylece yolda istemeden mob uyandırmaz. Gidilen mob / grup ve zaten peşindeki moblar sayılmaz.
 
+**Oyun simge durumuna alınırsa:** bot çalışırken oyun penceresi yanlışlıkla küçültülürse bot onu (senin kullandığın pencereden odağı almadan) geri açar ve devam eder; geri açılamazsa durur.
+
 **Pencere düzeni:** canlı görüntü ve oturum bilgileri her sayfada üstte durur; altta Panel'de **günlük** ve **Bu tur eşyalar** (bu turda botun çantaya aldığı ve attığı her eşya, adetleriyle; bot her başlayınca sıfırlanır, `tur-esyalari.txt` dosyasına da yazılır — 📄 düğmesi açar), ayar sayfalarında ise o sayfanın ayarları görünür.
 
 **Vururken durma:** mob vurma mesafesindeyken (bellekten) bot yön tuşlarını bırakıp yerinde vurur — yürürken vurmak hasarı neredeyse yarıya indiriyordu (ölçüldü: yürürken 96, dururken 172 can/sn). Mob mesafenin kıyısındaysa ya da 1,5 sn hasar gitmiyorsa kısa bir adım atılır.

@@ -138,6 +138,13 @@ internal static class WindowService
         Win32.SetForegroundWindow(target.Handle);
     }
 
+    /// <summary>Un-minimizes the game window without taking the focus from the window in use.</summary>
+    public static void RestoreQuietly(WindowInfo target)
+    {
+        if (Win32.IsIconic(target.Handle))
+            Win32.ShowWindow(target.Handle, Win32.SW_SHOWNOACTIVATE);
+    }
+
     public static Point ClientToScreen(WindowInfo target, Point client)
     {
         var p = new Win32.POINT { X = client.X, Y = client.Y };
