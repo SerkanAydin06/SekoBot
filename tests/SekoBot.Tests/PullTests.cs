@@ -275,6 +275,40 @@ public class PullUnreachableTests
                 { Targets = wall, Walking = true, AttackPower = 189 }).OfType<NoteAction>().Select(n => n.Text));
         Assert.Single(notes, n => n.Contains("Gruba ulaşılamadı"));
     }
+
+    [Fact]
+    public void A_group_we_keep_getting_closer_to_is_not_given_up_after_four_seconds()
+    {
+        // Recorded: 18 of 23 gatherings in an evening gave a group up after a flat 4 s, also ones only a detour away.
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = false, PullMaxMobs = 9, Breaks = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        var notes = new List<string>();
+        for (double t = 0; t < 8000; t += 100)
+        {
+            double x = 1400 - t * 0.15;                       // slowly closer: 1.5 m a second (a detour)
+            TargetInfo[] group = [At(10, 10, x), At(11, 10, x + 20), At(12, 10, x + 40)];
+            notes.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
+                { Targets = group, Walking = true, AttackPower = 189 }).OfType<NoteAction>().Select(n => n.Text));
+        }
+        Assert.DoesNotContain(notes, n => n.Contains("Gruba ulaşılamadı"));
+    }
+
+    [Fact]
+    public void A_mob_given_up_on_that_is_next_to_us_now_is_hit()
+    {
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = false, PullMaxMobs = 9, Breaks = false, PullGroups = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        TargetInfo[] far = [At(10, 10, 800)];
+        for (double t = 0; t < 20_000; t += 100)          // can't get closer: left as unreachable
+            brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1) { Targets = far, Walking = true, AttackPower = 189 });
+        TargetInfo[] close = [At(10, 10, 100)];            // now it stands right by us (still asleep)
+        var actions = new List<BotAction>();
+        for (double t = 20_000; t < 22_000; t += 100)
+            actions.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1) { Targets = close, Walking = false, AttackPower = 189 }));
+        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.Attack);
+    }
 }
 
 public class PullFinishFirstTests

@@ -36,7 +36,7 @@ internal sealed partial class Brain
             ResetBreaks(now, p);
         if (_breakUntil != Never)
         {
-            if (state.Attackers.Count > 0)
+            if (state.Attackers.Count > 0 || state.Targets.Any(t => t.AttacksMe))
             {
                 actions.Add(new NoteAction("Mola bitti: bir mob saldırıyor."));
                 ResetBreaks(now, p);
@@ -49,7 +49,7 @@ internal sealed partial class Brain
             return false;
         }
         // Not with mobs all around either (seen: 27 gathered around a break, and the fight after it was lost).
-        bool busy = Phase == BotPhase.Fighting || state.Attackers.Count > 0 || state.HasTarget ||
+        bool busy = Phase == BotPhase.Fighting || state.Attackers.Count > 0 || state.Targets.Any(t => t.AttacksMe) || state.HasTarget ||
                     state.Targets.Count(t => t.Distance < BreakClearRange) >= 3;
         if (now < _nextBreak || busy)
             return false;
