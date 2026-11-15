@@ -92,6 +92,13 @@ internal sealed class ObstacleMap
                 : [];
     }
 
+    /// <summary>How many spots were noted on a map (sure or not).</summary>
+    public int Noted(string map)
+    {
+        lock (_gate)
+            return _maps.TryGetValue(map, out var spots) ? spots.Count : 0;
+    }
+
     /// <summary>How many sure obstacles are known on a map.</summary>
     public int Count(string map)
     {

@@ -156,11 +156,23 @@ internal sealed partial class Brain
     internal static bool OnOtherLevel(TargetInfo t, Vec3 me) =>
         t.Position is Vec3 at && Math.Abs(at.Z - me.Z - MobHeightOffset) > Math.Max(250, 0.5 * t.Distance);
 
-    /// <summary>Can we walk to it? Mobs attacking us, in reach, or without a position always pass.</summary>
+    /// <summary>An archer this much higher or lower than us (world units, 1.5 m; a quarter of its
+    /// distance when further) shoots from a ledge the character can't climb (the user saw it: archers
+    /// walk up where the player can't follow).</summary>
+    internal const double LedgeHeight = 150;
+
+    /// <summary>A mob (an archer) on a ledge up or down from us: it can't be walked to.</summary>
+    internal static bool OnLedge(TargetInfo t, Vec3 me) =>
+        t.Position is Vec3 at && Math.Abs(at.Z - me.Z - MobHeightOffset) > Math.Max(LedgeHeight, 0.25 * t.Distance);
+
+    /// <summary>Can we walk to it? Mobs in reach or without a position always pass, and mobs
+    /// attacking us that fight up close (they come to us). An archer attacking us from a ledge doesn't.</summary>
     private bool Walkable(TargetInfo t, GameState state, TimeSpan now)
     {
-        if (t.AttacksMe || t.Distance <= t.Reach || state.Position is not Vec3 me || t.Position is not Vec3 at)
+        if (t.Distance <= t.Reach || state.Position is not Vec3 me || t.Position is not Vec3 at)
             return true;
+        if (t.AttacksMe)
+            return !t.Ranged || !OnLedge(t, me) && !_unreachable.ContainsKey(t.Id);
         if (OnOtherLevel(t, me))
             return false;
         _stuckSpots.RemoveAll(s => now - s.When > TimeSpan.FromMilliseconds(StuckForgetMs));
@@ -171,20 +183,40 @@ internal sealed partial class Brain
         return known.Count == 0 || !WayBlocked(known.Select(o => (o, (Vec3?)null, now)), me, at);
     }
 
-    /// <summary>Notes where we are stuck right now (heading for the goal of this tick).</summary>
-    private void StuckHere(GameState state)
+    /// <summary>A mob this close to where we were held up (world units, 3 m) may be what held us:
+    /// the spot isn't noted as a tree or a rock.</summary>
+    internal const double MobFreeAround = 300;
+    /// <summary>The mob walked to is this much higher or lower (world units, 1 m): held up by a slope, not a tree.</summary>
+    internal const double SlopeHeight = 100;
+
+    /// <summary>Notes where we are stuck right now (heading for the goal of this tick). Only
+    /// <paramref name="solid"/> (keys held, the character not moving at all) can make it a tree or
+    /// a rock for good, and only with no mob around it and the goal on our level.</summary>
+    private void StuckHere(GameState state, bool solid = false)
     {
         if (state.Position is not Vec3 me)
             return;
         RememberStuck(me, _walkGoal, state.Time);
-        // For good: the spot just in front of us, the way the keys push (else the way to the goal).
-        if (Obstacles == null || state.MapName.Length == 0)
+        if (!solid || Obstacles == null || state.MapName.Length == 0)
             return;
+        // Going up or down to a mob (an archer up a slope): the slope stopped us. That mob is
+        // left alone for a while; the place is no obstacle (other ways lead past it).
+        if (_walkGoal is Vec3 goal && state.Targets.MinBy(t => t.Position is Vec3 at ? at.DistanceXY(goal) : double.MaxValue) is { Position: Vec3 at } mob &&
+            at.DistanceXY(goal) < 50 && Math.Abs(at.Z - me.Z - MobHeightOffset) > SlopeHeight)
+        {
+            _unreachable[mob.Id] = state.Time + Ms(UnreachableForMs);
+            return;
+        }
+        // For good: the spot just in front of us, the way the keys push (else the way to the goal).
         (double X, double Y)? way = HeldDirection(state);
         if (way == null && _walkGoal is Vec3 g && g.DistanceXY(me) > 1)
             way = ((g.X - me.X) / g.DistanceXY(me), (g.Y - me.Y) / g.DistanceXY(me));
         if (way is not var (wx, wy))
             return;
-        Obstacles.Stuck(state.MapName, me.X + wx * ObstacleMap.Ahead, me.Y + wy * ObstacleMap.Ahead, DateTime.Now);
+        var spot = new Vec3(me.X + wx * ObstacleMap.Ahead, me.Y + wy * ObstacleMap.Ahead, me.Z);
+        // A mob next to us or the spot (a living one moves: it was the mob, not the ground).
+        if (state.Targets.Any(t => t.Position is Vec3 m && (m.DistanceXY(spot) < MobFreeAround || m.DistanceXY(me) < MobFreeAround)))
+            return;
+        Obstacles.Stuck(state.MapName, spot.X, spot.Y, DateTime.Now);
     }
 }

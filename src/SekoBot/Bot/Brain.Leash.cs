@@ -87,7 +87,7 @@ internal sealed partial class Brain
         // Something is in the way: step to the side, the other side next time. Walking to a mob:
         // remember the spot, the next choice avoids going this way again.
         if (_walkGoal != null)
-            StuckHere(state);
+            StuckHere(state, solid: true);
         _sidesteps++;
         bool vertical = _heldMoves.Contains(p.Keys.MoveForward) || _heldMoves.Contains(p.Keys.MoveBack);
         bool first = _sidesteps % 2 == 1;
