@@ -163,7 +163,7 @@ internal sealed partial class Brain
                 _unreachable.Remove(id);
         if (fromMemory)
             state = state with { Targets = state.Targets.Where(t => InArea(t, p) && Walkable(t, state, now) &&
-                                                                    (t.AttacksMe || !_unreachable.ContainsKey(t.Id))).ToList() };
+                                                                    (t.AttacksMe && !t.Ranged || t.Distance <= t.Reach || !_unreachable.ContainsKey(t.Id))).ToList() };
         var chosen = state.Targets.Count > 0 ? ChooseTarget(state) : null;
         if (chosen != null)
         {
