@@ -69,7 +69,7 @@ Bot oyunun kendi pencerelerinin (Esc menüsü, envanter, karakter, beceriler, ay
 **Silah / zırh en az (yang)** (Eşya / Envanter sayfası, 0 = kapalı): silah/zırh toplama kapalıyken bile, dükkânın en az bu kadar yang verdiği silah ve zırhlara yürünür (fiyatı bilinenler; çöp ekipman yine alınmaz).
 
 **Yerdekini önce topla:** izlemede botun dibindeki yang (1–4 m) bazen hiç alınmıyordu: savaşırken Z işe yaramıyor, savaş bitince de bot hemen bir sonraki grubu toplamaya gidiyordu. Artık kimse saldırmıyorken ve toplama sürmüyorken önce yakındaki istenen eşyalar alınır, sonra yeni gruba gidilir. Etrafta kesilecek mob yokken eşyaya giderken saldırı tuşu bırakılır (boşa vurmaz). Mob keserken dibinde istenen eşya varsa saldırı sürer ve arada Z'ye basılır (savaşı bırakmadan alır).
-- **Yerdeki eşyalara yürüyüp topla** (varsayılan açık): Yanında mob yokken 6 m içindeki eşyaya (yerdeki eşyalar bellekte görünür, alınınca kaybolur) yürür ve toplama tuşuna basar. 5 sn'de alınamayan eşyayı (başkasının olabilir) bir dakika boyunca bırakır. Toplama tuşu oyunda en yakındaki her şeyi aldığı için dövüş bitince tuşa yalnızca yakında istenen bir eşya varken basılır (istenmeyen ucuz zırh böylece alınmaz); istenen eşyanın yanında daha yakında istenmeyen bir eşya varsa bot önce istenenin tam üstüne yürür, sonra basar.
+- **Yerdeki eşyalara yürüyüp topla** (varsayılan açık): Yanında mob yokken 6 m içindeki eşyaya (yerdeki eşyalar bellekte görünür, alınınca kaybolur) yürür ve toplama tuşuna basar. Oyun sohbete sarı yazıyla "Kazanmadığın için bu nesneyi toplayamazsın." yazınca o eşyanın başkasının olduğu anlaşılır ve 3 dakika bırakılır (günlükte: "Yerdeki eşya başkasının… bırakıldı"). 8 sn uğraşıp alınamayan kendi eşyası ise (yol kapalı vb.) 20 sn bırakılıp tekrar denenir. Toplama tuşu oyunda en yakındaki her şeyi aldığı için dövüş bitince tuşa yalnızca yakında istenen bir eşya varken basılır (istenmeyen ucuz zırh böylece alınmaz); istenen eşyanın yanında daha yakında istenmeyen bir eşya varsa bot önce istenenin tam üstüne yürür, sonra basar.
 
 ## Güvenlik: GM ve envanter
 
@@ -115,6 +115,7 @@ Bot haritayı 10 m'lik karelere bölüp her karede ne kadar mob gördüğünü h
 - **Takas / grup / arkadaş isteği** ve oyunun Evet/Hayır sorduğu pencereler.
 - **Sohbette adın geçince** (rakamsız hali de sayılır: "KAiZER06" → "kaizer") ya da **adı [GM]/[GA]/[SA] olan biri yazınca**.
 - **Dağıtılmamış statü / beceri puanı** arttığında.
+- **Sunucu duyurusu:** ekranın üstünde çıkan duyuru kutusuna yeni bir yazı gelince (aynı duyuru bir kez; bot başladığında orada olan duyurmaz). "Etkinlik" bildirimi açıkken gelir.
 - **Etkinlik:** oyunun saatlik düşme etkinlikleri (ör. 22:00–23:00 Nadir Ekipman Sandığı) sol menünün altında görünür; seviyen yeten bir etkinlik başlayınca bildirilir. Listede görünen **bütün etkinliklerin ödülleri** (şu anki, sıradakiler ve yeni bitenler; seviyeye bakılmadan) düşünce **"Topla" gibi her zaman alınır**: 15 m'ye kadar, saldırı bırakılıp hemen ("Tüm etkinlik ödüllerini her zaman topla").
 
 **Tehlikede kaç** (İksir / Beceri sayfası, varsayılan %30, 0 = kapalı): can bu yüzdenin altına düşer ve en az 3 mob saldırırsa bot vurmayı bırakıp moblardan uzaklaşır, iksir içmeye devam eder; can %60'ı geçince, 2 sn kimse saldırmayınca ya da en çok 20 sn sonra dövüşe döner (görülen: 9 aç mob canı 10 sn'de 1071'den 0'a indirdi).
@@ -172,7 +173,7 @@ Eski **Kalabalığa git** seçeneği bunun yerine kapatıldı (`PreferCrowds`, v
 - **Güçlendirmeler** (ör. Güçlü beden): süresi bitmeden ~5 sn önce yenilenir.
 - **Alan saldırıları** (ör. Güçlü vuruş, Kılıç darbesi): yalnızca bot **vururken** ve **3 m içinde en az 5 mob** varken (**Alan becerisi: en az mob**, varsayılan 5). Peşindeki moblar henüz gelmemişken, moba yürürken ya da grup toplarken kullanılmaz — boşa gitmesin.
 - **Tek hedef saldırıları** (ör. Şiddetli vuruş): yalnızca bot yanındaki moba vururken.
-- Hepsi bekleme süresi dolunca ve MP yetiyorsa basılır; basarken bot 1 sn durur ki beceri kesilmesin, iki beceri arasında en az 1,5 sn olur.
+- Hepsi bekleme süresi dolunca ve MP yetiyorsa basılır; basarken bot 1 sn durur ki beceri kesilmesin, iki beceri arasında en az 1,5 sn olur. Oyun sohbete "WAIT!" yazarsa (beceri hazır olmadan basıldı) o becerinin tuşu bundan sonra 1 sn daha geç basılır; her yeni "WAIT!" 1 sn daha ekler (en çok 20 sn).
 
 Kapalıyken eski usul F1–F5 "kaç saniyede bir" ayarları (`SkillEverySec`) kullanılır.
 

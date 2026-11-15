@@ -15,7 +15,8 @@ internal readonly record struct PlayerRequest(RequestKind Kind, string Name, int
 /// <summary>A yes / no question the game shows (e.g. an invitation).</summary>
 internal readonly record struct GameQuestion(int Id, string Text);
 
-/// <summary>A line of the chat. <paramref name="Sender"/>: -1 the game's own messages ("27 Yang Kazandın").</summary>
+/// <summary>A line of the chat. <paramref name="Sender"/>: -1 the game's own messages ("27 Yang Kazandın"),
+/// 0 also the game's ("WAIT!" for a skill pressed too soon), -5 a shout.</summary>
 internal readonly record struct ChatLine(int Sender, string Name, int Level, string Message);
 
 /// <summary>An hourly drop event: this item drops (up to <paramref name="Count"/>) for characters of
@@ -28,4 +29,4 @@ internal readonly record struct GameEvent(int Id, int Item, int Count, int MinLe
 /// </summary>
 internal sealed record SocialSnapshot(string OwnName, IReadOnlyList<WhisperThread> Whispers, IReadOnlyList<PlayerRequest> Requests,
     IReadOnlyList<GameQuestion> Questions, IReadOnlyList<ChatLine> NewChat, IReadOnlyList<GameEvent> Events,
-    int StatPoints, int SkillPoints);
+    int StatPoints, int SkillPoints, string Announcement = "");

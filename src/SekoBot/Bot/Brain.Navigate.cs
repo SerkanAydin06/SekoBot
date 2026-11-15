@@ -490,6 +490,45 @@ internal sealed partial class Brain
     private TimeSpan _dropTrying;
     private readonly Dictionary<long, TimeSpan> _ignoredDrops = [];
 
+    /// <summary>Going for an item this long without getting it: left for DropRetryMs, then tried again.</summary>
+    internal const int DropGiveUpMs = 8000, DropRetryMs = 20000;
+    /// <summary>An item the game said isn't ours is left this long (by then it is everyone's, or gone).</summary>
+    internal const int NotOursMs = 180_000;
+
+    /// <summary>The game's own chat lines since the last tick (set from the memory loop).</summary>
+    private int _notOursHeard, _skillWaitsHeard;
+
+    /// <summary>The game said (in the chat) an item isn't ours <paramref name="notOurs"/> times and
+    /// "WAIT!" (a skill pressed too soon) <paramref name="skillWaits"/> times.</summary>
+    public void GameSaid(int notOurs, int skillWaits)
+    {
+        if (notOurs > 0)
+            Interlocked.Add(ref _notOursHeard, notOurs);
+        if (skillWaits > 0)
+            Interlocked.Add(ref _skillWaitsHeard, skillWaits);
+    }
+
+    private void HearGame(GameState state, List<BotAction> actions)
+    {
+        var now = state.Time;
+        if (Interlocked.Exchange(ref _notOursHeard, 0) > 0 && now - _lastDropTap < Ms(4000))
+        {
+            // The pickup key takes the item closest to the character: that one is someone else's.
+            double cx = state.Width / 2.0, cy = state.Height / 2.0;
+            var theirs = state.Drops.Where(d => !_ignoredDrops.ContainsKey(d.Id))
+                .OrderBy(d => Math.Pow(d.Spot.X - cx, 2) + Math.Pow(d.Spot.Y - cy, 2)).FirstOrDefault();
+            if (theirs.Id != 0)
+            {
+                _ignoredDrops[theirs.Id] = now + Ms(NotOursMs);
+                if (theirs.Id == _dropId)
+                    _dropId = 0;
+                actions.Add(new NoteAction("Yerdeki eşya başkasının (oyun \"toplayamazsın\" dedi); bırakıldı."));
+            }
+        }
+        if (Interlocked.Exchange(ref _skillWaitsHeard, 0) > 0)
+            SkillTooSoon(now, actions);
+    }
+
     /// <summary>
     /// Walks to the nearest item on the ground and presses the pickup key on it. An item that
     /// can't be picked up within 5 s (someone else's, or the inventory is full) is left alone
@@ -532,10 +571,12 @@ internal sealed partial class Brain
         else if (now - _dropTriedAt < Ms(1000))
             _dropTrying += now - _dropTriedAt;
         _dropTriedAt = now;
-        if (_dropTrying > Ms(drop.Special ? 20000 : 5000))
+        // Someone else's item is told by the game ("toplayamazsın", see HearGame). One that still
+        // isn't taken after a while (something in the way): left for a little, then tried again.
+        if (_dropTrying > Ms(drop.Special ? 20000 : DropGiveUpMs))
         {
-            _ignoredDrops[drop.Id] = now + Ms(60000);
-            actions.Add(new NoteAction("Yerdeki eşya alınamadı (başkasının olabilir); bırakıldı."));
+            _ignoredDrops[drop.Id] = now + Ms(DropRetryMs);
+            actions.Add(new NoteAction("Yerdeki eşyaya ulaşılamadı; biraz sonra tekrar denenecek."));
             return false;
         }
         // Nothing to hit here: let go of the attack key, straight to the item.

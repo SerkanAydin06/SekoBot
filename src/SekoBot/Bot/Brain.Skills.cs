@@ -17,12 +17,38 @@ internal sealed partial class Brain
     private readonly TimeSpan[] _lastSkill = new TimeSpan[BotProfile.SkillSlots];
     private readonly Dictionary<Keys, TimeSpan> _skillUsed = [];
     private TimeSpan _lastAnySkill = Never;
+    private Keys _lastSkillKey;
+    private int _lastSkillSlot = -1;
+    /// <summary>Learnt from the game's "WAIT!": how much longer each skill key needs than thought.</summary>
+    private readonly Dictionary<Keys, TimeSpan> _skillExtra = [];
+
+    /// <summary>Each "WAIT!" adds this much to the skill's wait (up to SkillExtraMaxMs).</summary>
+    internal const int SkillExtraStepMs = 1000, SkillExtraMaxMs = 20000;
 
     private void ResetSkills()
     {
         Array.Fill(_lastSkill, Never);
         _skillUsed.Clear();
+        _skillExtra.Clear();
         _lastAnySkill = Never;
+        _lastSkillSlot = -1;
+    }
+
+    /// <summary>The game said "WAIT!": the skill pressed last wasn't ready yet. It waits a little
+    /// longer from now on (and from now), so its key isn't pressed for nothing again.</summary>
+    private void SkillTooSoon(TimeSpan now, List<BotAction> actions)
+    {
+        if (_lastAnySkill == Never || now - _lastAnySkill > Ms(3000))
+            return;
+        var extra = _skillExtra.GetValueOrDefault(_lastSkillKey) + Ms(SkillExtraStepMs);
+        if (extra > Ms(SkillExtraMaxMs))
+            extra = Ms(SkillExtraMaxMs);
+        if (!_skillExtra.ContainsKey(_lastSkillKey))
+            actions.Add(new NoteAction($"Oyun \"WAIT!\" dedi: {_lastSkillKey} becerisi hazır olmadan basılmış; artık biraz daha seyrek basılacak."));
+        _skillExtra[_lastSkillKey] = extra;
+        _skillUsed[_lastSkillKey] = now;
+        if (_lastSkillSlot >= 0)
+            _lastSkill[_lastSkillSlot] = now;
     }
 
     /// <returns>True when a skill was pressed this tick.</returns>
@@ -36,10 +62,12 @@ internal sealed partial class Brain
         for (int i = 0; i < BotProfile.SkillSlots; i++)
         {
             int every = i < p.SkillEverySec.Length ? p.SkillEverySec[i] : 0;
-            if (every <= 0 || i >= p.Keys.Skills.Length || now - _lastSkill[i] < Ms(every * 1000.0))
+            if (every <= 0 || i >= p.Keys.Skills.Length ||
+                now - _lastSkill[i] < Ms(every * 1000.0) + _skillExtra.GetValueOrDefault(p.Keys.Skills[i]))
                 continue;
             Cast(p.Keys.Skills[i], state, p, actions);
             _lastSkill[i] = now;
+            _lastSkillSlot = i;
             return true;
         }
         return false;
@@ -79,9 +107,11 @@ internal sealed partial class Brain
             double wait = skill.Kind == SkillKind.Buff && skill.DurationSec > 0
                 ? Math.Max(skill.CooldownSec, skill.DurationSec - 5)
                 : skill.CooldownSec;
-            if (_skillUsed.TryGetValue(skill.Key, out var used) && now - used < Ms((wait + 0.5) * 1000))
+            if (_skillUsed.TryGetValue(skill.Key, out var used) &&
+                now - used < Ms((wait + 0.5) * 1000) + _skillExtra.GetValueOrDefault(skill.Key))
                 continue;
             Cast(skill.Key, state, p, actions);
+            _lastSkillSlot = -1;
             _skillUsed[skill.Key] = now;
             return true;
         }
@@ -99,5 +129,6 @@ internal sealed partial class Brain
         }
         actions.Add(new KeyTapAction(key));
         _lastAnySkill = now;
+        _lastSkillKey = key;
     }
 }

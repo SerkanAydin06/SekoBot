@@ -148,8 +148,8 @@ public class TargetChoiceTests
     {
         var (brain, _) = Ready();
         var onIt = new GroundSpot(5, new Point(Center.X, Center.Y - 10));
-        var actions = Run(brain, 4000, 10_000, t => State(t, drops: [onIt]));
-        Assert.Contains(actions, a => a is NoteAction n && n.Text.Contains("alınamadı"));
+        var actions = Run(brain, 4000, 14_000, t => State(t, drops: [onIt]));
+        Assert.Contains(actions, a => a is NoteAction n && n.Text.Contains("ulaşılamadı"));
         Assert.NotEqual(BotPhase.Looting, brain.Phase);
     }
 }

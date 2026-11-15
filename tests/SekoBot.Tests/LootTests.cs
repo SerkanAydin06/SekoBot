@@ -206,8 +206,8 @@ public class SpecialDropTests
     public void A_special_item_out_of_reach_is_given_up_after_twenty_seconds_of_trying()
     {
         var actions = Run(special: true, untilMs: 25_000);
-        Assert.Contains(actions, a => a is NoteAction n && n.Text.Contains("alınamadı"));
-        Assert.DoesNotContain(Run(special: true, untilMs: 15_000), a => a is NoteAction n && n.Text.Contains("alınamadı"));
+        Assert.Contains(actions, a => a is NoteAction n && n.Text.Contains("ulaşılamadı"));
+        Assert.DoesNotContain(Run(special: true, untilMs: 15_000), a => a is NoteAction n && n.Text.Contains("ulaşılamadı"));
     }
 }
 
