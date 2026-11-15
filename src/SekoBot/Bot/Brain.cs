@@ -72,6 +72,7 @@ internal sealed partial class Brain
         var now = state.Time;
         var actions = new List<BotAction>();
         HearGame(state, actions);
+        NoteWalking(state);
         _wantedDropsAround = state.Drops.Any(d => !JunkCloser(state, d.Spot));
 
         // Dead: wait for "Burada yeniden başla", click it; then heal before fighting again.

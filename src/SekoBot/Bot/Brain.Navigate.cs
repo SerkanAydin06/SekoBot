@@ -732,6 +732,8 @@ internal sealed partial class Brain
             _avoidSide[id] = (wanted, now + Ms(AvoidSideKeepMs));
             return wanted;
         });
+        if (state.Camera is CameraView camera && state.Position is Vec3 me && KnownObstacles(state) is { Count: > 0 } known)
+            (x, y) = AroundObstacles(known, me, camera, x, y);
         return Steady(x, y, dead, p);
     }
 
