@@ -12,8 +12,9 @@ internal sealed record SkillSlot(Keys Key, string Name, SkillKind Kind, int Mana
 /// <param name="AttacksMe">The mob is after us.</param>
 /// <param name="Group">The spawn group it belongs to (mobs of a group come together when one is hit); 0 = none.</param>
 /// <param name="Position">Where it is in the world, when known.</param>
+/// <param name="Ranged">It shoots from afar (an archer): it doesn't come up to us, it has to be walked to.</param>
 internal sealed record TargetInfo(int Id, Point Spot, double Distance, double Reach, int Exp, int Hp, int MaxHp,
-    int DamageMax, bool Priority, bool AttacksMe = false, int Group = 0, Vec3? Position = null);
+    int DamageMax, bool Priority, bool AttacksMe = false, int Group = 0, Vec3? Position = null, bool Ranged = false);
 
 /// <summary>An item on the ground and where it is on screen.</summary>
 /// <param name="Special">Ticked "Topla" / on the "always pick up" names: gone for even while mobs attack us.</param>
