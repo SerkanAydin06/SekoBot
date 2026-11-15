@@ -115,6 +115,8 @@ internal sealed partial class Brain
             _movingSince = Never;
             if (_pullWalkSince != Never)
                 _pullWalkSince += state.Time - _lastTickTime;
+            if (_pullWalkStarted != Never)
+                _pullWalkStarted += state.Time - _lastTickTime;
             _lastTickTime = state.Time;
             return actions;
         }

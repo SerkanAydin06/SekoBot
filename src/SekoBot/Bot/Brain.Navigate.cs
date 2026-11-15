@@ -156,8 +156,10 @@ internal sealed partial class Brain
         bool fromMemory = state.Targets.Count > 0;
         // Nor to mobs on a ledge or behind a spot we got stuck at before.
         _walkGoal = null;
+        // A mob left as "can't get to it" that is next to us now was reachable after all (recorded:
+        // the bot stood 6 s beside a sleeping mob of a group it had given up on).
         foreach (var (id, until) in _unreachable.ToList())
-            if (now >= until)
+            if (now >= until || state.Targets.Any(t => t.Id == id && t.Distance <= t.Reach * ReachableAgain))
                 _unreachable.Remove(id);
         if (fromMemory)
             state = state with { Targets = state.Targets.Where(t => InArea(t, p) && Walkable(t, state, now) &&
@@ -359,6 +361,8 @@ internal sealed partial class Brain
     /// <summary>One that couldn't be reached is left alone this long.</summary>
     internal const int UnreachableForMs = 120_000;
     private readonly Dictionary<int, TimeSpan> _unreachable = [];
+    /// <summary>A mob left as unreachable this close (× its reach) is reachable again.</summary>
+    internal const double ReachableAgain = 1.5;
     private int _approachId;
     private double _approachBest;
     private TimeSpan _approachSince = Never, _approachLast = Never;

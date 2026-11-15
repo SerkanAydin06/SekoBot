@@ -20,10 +20,14 @@ internal sealed partial class Brain
     private readonly Dictionary<int, TimeSpan> _pulled = [];
     private int _pullGroup;
     private TimeSpan _pullHitSince = Never;
-    /// <summary>When walking to the group being pulled started: one we can't get to (behind a
-    /// wall, on a ledge) is given up after <see cref="PullWalkMs"/>.</summary>
-    private TimeSpan _pullWalkSince = Never;
-    internal const int PullWalkMs = 4000;
+    /// <summary>Since when walking to the group being pulled hasn't got us closer: one we can't get
+    /// to (behind a wall, on a ledge) is given up after <see cref="PullWalkMs"/> without coming
+    /// <see cref="PullProgress"/> closer (recorded: 18 of 23 gatherings in an evening gave a group up
+    /// after a flat 4 s, also ones only a detour away), and after <see cref="PullWalkMaxMs"/> anyway.</summary>
+    private TimeSpan _pullWalkSince = Never, _pullWalkStarted = Never;
+    private double _pullClosest = double.MaxValue;
+    internal const int PullWalkMs = 4000, PullWalkMaxMs = 12000;
+    internal const double PullProgress = 150;
     /// <summary>A group that couldn't be reached is left this long.</summary>
     internal const int PullUnreachableMs = 300_000;
     /// <summary>With mobs already after us, the next group is gone for only this close (world units,
@@ -163,7 +167,8 @@ internal sealed partial class Brain
         {
             _pullGroup = group.Key;
             _pullHitSince = Never;
-            _pullWalkSince = now;
+            _pullWalkSince = _pullWalkStarted = now;
+            _pullClosest = double.MaxValue;
             _pullAnchor ??= Centre(group);
         }
         if (!_pulling)
@@ -194,7 +199,13 @@ internal sealed partial class Brain
         }
         else
         {
-            if (_pullWalkSince != Never && now - _pullWalkSince > Ms(PullWalkMs))
+            if (member.Distance < _pullClosest - PullProgress)
+            {
+                _pullClosest = member.Distance;
+                _pullWalkSince = now;     // getting there: the clock starts again
+            }
+            if (_pullWalkSince != Never && (now - _pullWalkSince > Ms(PullWalkMs) ||
+                                            _pullWalkStarted != Never && now - _pullWalkStarted > Ms(PullWalkMaxMs)))
             {
                 // Can't get to it (seen in the game: 30 s walking along a wall): leave it.
                 _walkGoal = member.Position;
@@ -205,7 +216,7 @@ internal sealed partial class Brain
                 foreach (var t in group)
                     _unreachable[t.Id] = now + Ms(PullUnreachableMs);
                 _pullGroup = 0;
-                _pullHitSince = _pullWalkSince = Never;
+                _pullHitSince = _pullWalkSince = _pullWalkStarted = Never;
                 actions.Add(new NoteAction("Gruba ulaşılamadı; bırakıldı."));
                 return true;
             }
