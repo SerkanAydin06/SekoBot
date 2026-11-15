@@ -25,6 +25,10 @@ internal sealed partial class BotEngine
         profile.ThrowWhenInventoryFull && HasThrowables(world, profile);
 
     /// <summary>For the brain's breaks: something to throw away now (the bag read last).</summary>
+    /// <summary>What came into the bag and was thrown away during this run (window and tur-esyalari.txt).</summary>
+    private readonly SessionItems _sessionItems = new();
+    public SessionItems SessionItems => _sessionItems;
+
     private bool JunkInBag() => Profile.ThrowWhenInventoryFull && _world != null && World is { } world && HasThrowables(world, Profile);
 
     private bool HasThrowables(WorldSnapshot world, BotProfile profile) =>
@@ -50,6 +54,9 @@ internal sealed partial class BotEngine
             var profile = Profile;
             // Wanted when it came in (yang, potions, dear equipment or good bonuses, "Topla", an event's reward): never junk.
             _pickedItems.Update(progress.Inventory, BotRunning, item => KeepPicked(item, profile));
+            foreach (var (vnum, count) in _pickedItems.Gained)
+                _sessionItems.Picked(vnum, count);
+            _sessionItems.Save();
             foreach (var item in _pickedItems.CameIn)
                 if (Loot.KindOf(item.Vnum) == LootKind.Equipment && GoodBonus(item, profile))
                 {
@@ -168,6 +175,10 @@ internal sealed partial class BotEngine
         IReadOnlyList<BotAction> actions = state.Dead || state.Attackers.Count > 0 || state.Targets.Any(t => t.AttacksMe)
             ? _cleaner.Abort(_bagLayout, p, "saldırı geldi")
             : _cleaner.Tick(state.Time, _bagLayout, i => ShouldThrow(full.GetValueOrDefault((i.Slot, i.Vnum), new InventoryItem(i.Slot, i.Vnum, i.Count)), p, picked), p, new Size(state.Width, state.Height));
+        foreach (var (vnum, count) in _cleaner.ThrownItems)
+            _sessionItems.Thrown(vnum, count);
+        _cleaner.ThrownItems.Clear();
+        _sessionItems.Save();
         if (!_cleaner.Active)
             CleaningDone();
         return actions;

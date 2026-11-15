@@ -329,6 +329,7 @@ internal sealed partial class BotEngine : IDisposable
             _pendingWhisper = null;
             _cleanTries = 0;
             _notes.Reset();
+            _sessionItems.Reset();
             lock (_social)
                 _social.Reset();
             _session.Reset(_clock.Elapsed);
@@ -352,6 +353,7 @@ internal sealed partial class BotEngine : IDisposable
     public void StopBot(string reason)
     {
         ItemBook.SaveIfChanged();
+        _sessionItems.Save(force: true);
         lock (_journal)
             if (_journal.Changed)
                 _journal.Save(JournalPath);

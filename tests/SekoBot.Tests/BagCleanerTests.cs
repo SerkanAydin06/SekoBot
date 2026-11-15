@@ -378,3 +378,22 @@ public class BonusListTests
         Assert.Empty(picked.Picked); // kept by its bonus: not junk
     }
 }
+
+public class SessionItemsTests
+{
+    [Fact]
+    public void Picked_items_are_counted_by_how_much_more_the_bag_holds_moves_do_not_count()
+    {
+        var picked = new PickedItems();
+        picked.Update([new InventoryItem(12, 27002, 100), new InventoryItem(20, 600, 1)], botRunning: false);
+        // 20 potions more on the stack, a new sword; the 600 only moved.
+        picked.Update([new InventoryItem(12, 27002, 120), new InventoryItem(25, 600, 1), new InventoryItem(30, 700, 1)], botRunning: true);
+        Assert.Equal([(27002, 20), (700, 1)], picked.Gained.OrderByDescending(g => g.Count));
+
+        var run = new SessionItems();
+        foreach (var (vnum, count) in picked.Gained)
+            run.Picked(vnum, count);
+        run.Thrown(700, 1);
+        Assert.Equal([(27002, 20, 0), (700, 1, 1)], run.Rows().Select(r => (r.Vnum, r.Picked, r.Thrown)));
+    }
+}
