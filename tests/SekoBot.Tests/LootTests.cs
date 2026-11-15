@@ -238,6 +238,30 @@ public class JunkCloserTests
         var farther = Run(new Point(Center.X + 15, Center.Y), new Point(Center.X + 45, Center.Y));
         Assert.Contains(farther, a => a is KeyTapAction k && k.Key == Keys.Z);
     }
+
+    [Fact]
+    public void An_unwanted_item_lying_on_top_of_the_wanted_one_does_not_make_it_circle()
+    {
+        // Seen in the game: the bot turned round and round there. Both are taken (the junk thrown later).
+        var onTop = Run(new Point(Center.X + 40, Center.Y), new Point(Center.X + 32, Center.Y + 5));
+        Assert.Contains(onTop, a => a is KeyTapAction k && k.Key == Keys.Z);
+    }
+
+    [Fact]
+    public void Junk_closer_for_long_the_key_is_pressed_anyway()
+    {
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = true, PullGroups = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        double firstZ = -1;
+        // The character never gets past the unwanted one (it stays closer, as the screen is seen).
+        for (double t = 0; t < 4000 && firstZ < 0; t += 100)
+            if (brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
+                    { Drops = [new GroundSpot(7, new Point(Center.X + 50, Center.Y))], Junk = [new Point(Center.X + 5, Center.Y)], Walking = true, AttackPower = 189 })
+                .Any(a => a is KeyTapAction k && k.Key == Keys.Z))
+                firstZ = t;
+        Assert.InRange(firstZ, Brain.JunkStepMaxMs, 4000);    // tried to step past first, then took both
+    }
 }
 
 public class ItemListGroupTests

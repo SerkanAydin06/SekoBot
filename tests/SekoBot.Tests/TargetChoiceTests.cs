@@ -153,3 +153,28 @@ public class TargetChoiceTests
         Assert.NotEqual(BotPhase.Looting, brain.Phase);
     }
 }
+
+public class InReachFirstTests
+{
+    private static readonly Point Center = new(960, 540);
+
+    [Fact]
+    public void A_mob_we_can_hit_here_comes_before_a_better_one_behind_it()
+    {
+        // Seen in the game: the bot walked around the mobs next to it to a better one behind them.
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = false, PullGroups = false, Breaks = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        TargetInfo[] mobs =
+        [
+            new(1, new Point(Center.X + 20, Center.Y), 100, 130, 103, 305, 305, 56, true, true),      // right here, hitting us
+            new(2, new Point(Center.X + 45, Center.Y), 220, 130, 2000, 305, 305, 56, true, true),     // worth more, behind it
+        ];
+        var actions = new List<BotAction>();
+        for (double t = 0; t < 2000; t += 100)
+            actions.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
+                { Targets = mobs, Walking = false, AttackPower = 189 }));
+        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.Attack);
+        Assert.DoesNotContain(actions, a => a is KeyUpAction u && u.Key == p.Keys.Attack);
+    }
+}

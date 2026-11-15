@@ -480,6 +480,15 @@ internal sealed partial class Brain
             _targetId = near.Id;
             return near;
         }
+        // Mobs we can hit right here come first: one a little better behind them made the bot
+        // walk around the others to it (they block the way), hitting nothing meanwhile.
+        var inReach = pool.Where(t => t.Distance <= t.Reach).ToList();
+        if (inReach.Count > 0)
+        {
+            pool = inReach;
+            if (current != null && !inReach.Contains(current))
+                current = null;
+        }
         var best = pool.MaxBy(Score)!;
         if (current != null && Score(best) < Score(current) * 1.3)
             best = current;
@@ -590,6 +599,16 @@ internal sealed partial class Brain
         // An unwanted item lying closer would be taken instead: step right onto the wanted one first
         // (standing on it, it is pressed anyway).
         bool junkCloser = JunkCloser(state, drop.Spot);
+        if (junkCloser && (_junkStepDrop != drop.Id || _junkStepSince == Never))
+        {
+            _junkStepDrop = drop.Id;
+            _junkStepSince = now;
+        }
+        else if (!junkCloser)
+            _junkStepSince = Never;
+        // Couldn't get closer to it than the unwanted one: take both (thrown away later).
+        if (junkCloser && now - _junkStepSince > Ms(JunkStepMaxMs))
+            junkCloser = false;
         if (junkCloser && distance > radius * 0.08)
         {
             SetMoves(Towards(dx, dy, radius * 0.04, p), p, actions, refresh);
@@ -776,8 +795,19 @@ internal sealed partial class Brain
             return false;
         double cx = state.Width / 2.0, cy = state.Height / 2.0;
         double mine = Math.Sqrt(Math.Pow(wanted.X - cx, 2) + Math.Pow(wanted.Y - cy, 2));
-        return state.Junk.Any(j => Math.Sqrt(Math.Pow(j.X - cx, 2) + Math.Pow(j.Y - cy, 2)) <= mine + 4);
+        // One lying on top of the wanted item can't be stepped past (the bot circled there, seen in
+        // the game): both are taken, the unwanted one is thrown away later.
+        double onTop = JunkOnTopPx * state.Height / 1080.0;
+        return state.Junk.Any(j => Math.Sqrt(Math.Pow(j.X - wanted.X, 2) + Math.Pow(j.Y - wanted.Y, 2)) > onTop &&
+                                   Math.Sqrt(Math.Pow(j.X - cx, 2) + Math.Pow(j.Y - cy, 2)) <= mine + 4);
     }
+
+    /// <summary>An unwanted item this close to the wanted one (screen pixels at 1080 high) lies on top of it.</summary>
+    internal const double JunkOnTopPx = 20;
+    /// <summary>Stepping onto a wanted item this long with junk still closer: the key is pressed anyway.</summary>
+    internal const int JunkStepMaxMs = 2500;
+    private TimeSpan _junkStepSince = Never;
+    private long _junkStepDrop;
 
     /// <summary>A wanted item lies around this tick (on the screen, within the loot range) and no unwanted one closer.</summary>
     private bool _wantedDropsAround;
