@@ -363,3 +363,29 @@ public class StandStillInReachTests
         Assert.Contains(stuck, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
     }
 }
+
+public class WalkAroundMobsTests
+{
+    private static readonly Point Center = new(960, 540);
+    // 0.2 screen pixels per world unit: a mob 300 units up is 60 px above the middle.
+    private static TargetInfo Mob(int id, double x, double y, bool attacks = false) =>
+        new(id, new Point(Center.X + (int)(x * 0.2), Center.Y + (int)(y * 0.2)), Math.Sqrt(x * x + y * y), 130, 365, 600, 600, 50,
+            false, attacks, 0, null);
+
+    private static GameState With(params TargetInfo[] mobs) => new(TimeSpan.Zero, 1920, 1080, 1, 1, 0, 1) { Targets = mobs };
+
+    [Fact]
+    public void A_mob_in_the_way_is_walked_around_others_are_not()
+    {
+        // Walking up (screen y negative); a mob 3 m ahead, a little to the left.
+        var (x, y) = Brain.AroundMobs(With(Mob(1, -50, -300)), 0, -100);
+        Assert.True(x > 20);          // bends to the right, away from it
+        Assert.True(y < 0);           // still going up
+        // Behind us, far to the side, or the one we walk to: straight on.
+        Assert.Equal((0.0, -100.0), Brain.AroundMobs(With(Mob(2, 0, 300)), 0, -100));
+        Assert.Equal((0.0, -100.0), Brain.AroundMobs(With(Mob(3, 600, -300)), 0, -100));
+        Assert.Equal((0.0, -100.0), Brain.AroundMobs(With(Mob(4, -50, -300)), 0, -100, m => m.Id == 4));
+        // One already after us: no use walking around it.
+        Assert.Equal((0.0, -100.0), Brain.AroundMobs(With(Mob(5, -50, -300, attacks: true)), 0, -100));
+    }
+}

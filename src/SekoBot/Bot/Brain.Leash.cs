@@ -138,7 +138,7 @@ internal sealed partial class Brain
         double length = Math.Sqrt(sx * sx + sy * sy);
         SetAttack(false, p, actions, refresh);
         FinishFight(p, actions, now);
-        SetMoves(Towards(sx, sy, length * 0.38, p), p, actions, refresh);
+        SetMoves(Around(state, sx, sy, length * 0.38, p), p, actions, refresh);
         if (Phase != BotPhase.Moving)
             Enter(BotPhase.Moving, now);
         _movingSince = Never; // not chasing a mob, no "can't reach" give-up

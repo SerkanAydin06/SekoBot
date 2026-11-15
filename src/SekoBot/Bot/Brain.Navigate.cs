@@ -238,7 +238,7 @@ internal sealed partial class Brain
                     if (!_toHotspot)
                         actions.Add(new NoteAction("Etrafta mob yok; mobların çok olduğu yere gidiliyor."));
                     _toHotspot = true;
-                    SetMoves(Towards(right / length * 100, -up / length * 100, 38, p), p, actions, refresh);
+                    SetMoves(Around(state, right / length * 100, -up / length * 100, 38, p), p, actions, refresh);
                     CheckBlocked(state, p, actions);
                     if (Phase != BotPhase.Searching)
                         Enter(BotPhase.Searching, now);
@@ -322,7 +322,9 @@ internal sealed partial class Brain
         _walkGoal = chosen?.Position;
         SetAttack(false, p, actions, refresh);
         FinishFight(p, actions, now);
-        SetMoves(Towards(dx, dy, radius * 0.5, p), p, actions, refresh);
+        // Around the other mobs on the way (the one gone for doesn't count).
+        int goal = chosen?.Id ?? 0;
+        SetMoves(Around(state, dx, dy, radius * 0.5, p, m => m.Id == goal), p, actions, refresh);
         if (Phase != BotPhase.Moving)
         {
             Enter(BotPhase.Moving, now);
@@ -421,7 +423,7 @@ internal sealed partial class Brain
         var (right, up) = camera.ToScreenDirection(spot.X - me.X, spot.Y - me.Y);
         double length = Math.Max(1e-6, Math.Sqrt(right * right + up * up));
         SetAttack(false, p, actions, refresh);
-        SetMoves(Towards(right / length * 100, -up / length * 100, 38, p), p, actions, refresh);
+        SetMoves(Around(state, right / length * 100, -up / length * 100, 38, p), p, actions, refresh);
         if (Phase != BotPhase.Moving)
             Enter(BotPhase.Moving, now);
         _movingSince = Never;
@@ -558,7 +560,7 @@ internal sealed partial class Brain
         }
         else
         {
-            SetMoves(Towards(dx, dy, radius * 0.25, p), p, actions, refresh);
+            SetMoves(Around(state, dx, dy, radius * 0.25, p), p, actions, refresh);
         }
         if (Phase != BotPhase.Looting)
             Enter(BotPhase.Looting, now);
@@ -600,6 +602,55 @@ internal sealed partial class Brain
     }
 
     /// <summary>W up, S down, A left, D right (two keys for diagonals); nothing inside the dead zone.</summary>
+    /// <summary>A mob this close to the way ahead (world units, 2.5 m) is walked around.</summary>
+    internal const double AvoidClearance = 250;
+    /// <summary>How far ahead mobs in the way are looked for (world units, 7 m).</summary>
+    internal const double AvoidAhead = 700;
+
+    /// <summary>
+    /// The direction to walk (screen) bent around the mobs standing in the way, so they aren't
+    /// woken by walking into them (seen: the bot walked right into a mob on its way back to the
+    /// area). Every mob position is known from memory: one within 2.5 m of the straight line ahead
+    /// (up to 7 m) pushes the way sideways, away from it, the more the closer it is. Mobs already
+    /// after us and <paramref name="goingFor"/> (the mobs being walked to) don't count.
+    /// </summary>
+    internal static (double X, double Y) AroundMobs(GameState state, double dx, double dy, Func<TargetInfo, bool>? goingFor = null)
+    {
+        double length = Math.Sqrt(dx * dx + dy * dy);
+        if (length < 1e-6 || state.Targets.Count == 0)
+            return (dx, dy);
+        double ux = dx / length, uy = dy / length;
+        double cx = state.Width / 2.0, cy = state.Height / 2.0;
+        double sideX = 0, sideY = 0;
+        foreach (var mob in state.Targets)
+        {
+            if (mob.AttacksMe || goingFor?.Invoke(mob) == true || mob.Distance < 1)
+                continue;
+            double mx = mob.Spot.X - cx, my = mob.Spot.Y - cy;
+            double screen = Math.Sqrt(mx * mx + my * my);
+            if (screen < 1)
+                continue;
+            double perUnit = screen / mob.Distance; // screen pixels per world unit for this mob
+            double ahead = (mx * ux + my * uy) / perUnit, across = (mx * -uy + my * ux) / perUnit;
+            if (ahead <= 0 || ahead > AvoidAhead || Math.Abs(across) >= AvoidClearance)
+                continue;
+            // Away from the mob's side (straight ahead: to the right); stronger the closer it is.
+            double away = across > 0 ? -1 : 1;
+            double weight = (1 - Math.Abs(across) / AvoidClearance) * (1 - ahead / AvoidAhead * 0.5) * 1.6;
+            sideX += -uy * away * weight;
+            sideY += ux * away * weight;
+        }
+        if (sideX == 0 && sideY == 0)
+            return (dx, dy);
+        return ((ux + sideX) * length, (uy + sideY) * length);
+    }
+
+    private HashSet<Keys> Around(GameState state, double dx, double dy, double dead, BotProfile p, Func<TargetInfo, bool>? goingFor = null)
+    {
+        var (x, y) = AroundMobs(state, dx, dy, goingFor);
+        return Towards(x, y, dead, p);
+    }
+
     private static HashSet<Keys> Towards(double dx, double dy, double dead, BotProfile p)
     {
         var keys = new HashSet<Keys>();
