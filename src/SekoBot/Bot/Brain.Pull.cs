@@ -34,6 +34,8 @@ internal sealed partial class Brain
     /// 10 m): recorded in the game, half the gatherings walked 5–11 s for 1–3 more mobs while the
     /// ones gathered hit our back; fighting them right away is quicker.</summary>
     internal const double PullNextWithChasers = 1000;
+    /// <summary>This many mobs (or fewer) left after us and none here to hit: the next group is gone for.</summary>
+    internal const int LeftoverMobs = 2;
     private bool _pulling;
     /// <summary>The middle of the first group gathered: the next ones come from around it.</summary>
     private Memory.Vec3? _pullAnchor;
@@ -128,6 +130,12 @@ internal sealed partial class Brain
         // Mobs already after us (one walked into us): a new gathering only takes groups right
         // around us — they follow us there anyway; far groups would leave them hitting our back.
         bool startingWithChasers = !_pulling && chasing > 0;
+        // The last ones of a fight, none of them here to hit (1–2 left, or only archers shooting
+        // from 3 m): on to the next group close by — they follow (recorded: ~11 % of the time went
+        // on 1–2 last mobs with a sleeping group within 10 m).
+        var after = state.Targets.Where(t => t.AttacksMe).ToList();
+        bool leftovers = startingWithChasers && !after.Any(t => t.Distance <= t.Reach * 1.4) &&
+                         (after.Count <= LeftoverMobs || after.All(t => t.Ranged));
 
         foreach (var (pulledGroup, when) in _pulled.ToList())
             if (now - when > Ms(60_000))
@@ -148,7 +156,7 @@ internal sealed partial class Brain
             .Where(g => g.All(t => !t.AttacksMe && t.Hp >= t.MaxHp))
             // The first group within 15 m; the next ones only around the first.
             .Where(g => _pullAnchor is not Memory.Vec3 anchor
-                ? g.Min(t => t.Distance) <= (startingWithChasers ? area : PullRange)
+                ? g.Min(t => t.Distance) <= (leftovers ? Math.Max(area, PullNextWithChasers) : startingWithChasers ? area : PullRange)
                 : Centre(g) is Memory.Vec3 c ? c.DistanceXY(anchor) <= area : g.Min(t => t.Distance) <= area)
             .ToList();
         // Mobs after us: the next group only when it is close (else they are fought now).

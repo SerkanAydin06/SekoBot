@@ -91,7 +91,7 @@ internal sealed partial class BotEngine
         var targets = found.Select(f => new TargetInfo(f.Mob.Id, f.Spot, f.Mob.Position.DistanceXY(world.Player),
                 attackDistance + Math.Max(0, f.Mob.Radius - 40), f.Mob.Exp, f.Mob.Hp, f.Mob.MaxHp, f.Mob.DamageMax,
                 preferMetins ? f.Mob.IsMetin : profile.AttackersFirst && f.Mob.AttacksMe,
-                f.Mob.AttacksMe, groups.GetValueOrDefault(f.Mob.Id), f.Mob.Position))
+                f.Mob.AttacksMe, groups.GetValueOrDefault(f.Mob.Id), f.Mob.Position, f.Mob.Ranged))
             .ToList();
         return (mobs, priority, drops, attackers, targets, junk);
     }

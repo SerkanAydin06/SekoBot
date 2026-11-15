@@ -21,8 +21,17 @@ internal readonly record struct CharacterStats(int Hp, int Mp, int MaxHp, int Ma
 /// <param name="Exp">Experience it gives when killed (the game's mob table).</param>
 /// <param name="DamageMax">Its strongest hit.</param>
 /// <param name="Radius">Its body size (capsule radius, world units).</param>
+/// <param name="AttackRange">How far it hits from (the game's mob table, world units): 1 for a mob
+/// that fights up close, 300 for an archer ("Siyah Rüzgar Okçusu", seen in the game).</param>
 internal sealed record WorldMob(int Id, int Vnum, string Name, int Level, int Hp, int MaxHp, Vec3 Position,
-    bool AttacksMe = false, bool IsMetin = false, int Exp = 0, int DamageMax = 0, double Radius = 40);
+    bool AttacksMe = false, bool IsMetin = false, int Exp = 0, int DamageMax = 0, double Radius = 40, int AttackRange = 0)
+{
+    /// <summary>It shoots from afar (an archer): it doesn't come up to us.</summary>
+    public bool Ranged => AttackRange >= RangedFrom;
+
+    /// <summary>A mob hitting from this far (world units, 2 m) or further shoots from afar.</summary>
+    public const int RangedFrom = 200;
+}
 
 /// <summary>What a skill does.</summary>
 internal enum SkillKind
@@ -411,6 +420,7 @@ internal sealed class GameWorldReader : IDisposable
         ("NPC", "thismob.Type", 0x348 + 0x28),
         ("NPC", "thismob.Exp", 0x348 + 0xC8),
         ("NPC", "thismob.damge_max", 0x348 + 0xB0),
+        ("NPC", "thismob.ATTACK_RANGE", 0x348 + 0xE0),
         ("CapsuleComponent", "CapsuleRadius", 0x47C),
         ("playerMove", "attackDistance", 0x75C),
         ("loader", "charData.attack", 0x770 + 0xA8),
@@ -1514,7 +1524,7 @@ internal sealed class GameWorldReader : IDisposable
         bool attacksMe = _pawn != 0 && after == _pawn;
         double radius = Float(root + Offset(Pointer(root + ObjClass), "CapsuleComponent", "CapsuleRadius")) is double r and > 0 and < 2000 ? r : 40;
         return new WorldMob(Int("ID"), vnum, name, Int("thismob.Level"), hp, maxHp, position, attacksMe, metin,
-            Int("thismob.Exp"), Int("thismob.damge_max"), radius);
+            Int("thismob.Exp"), Int("thismob.damge_max"), radius, Int("thismob.ATTACK_RANGE"));
     }
 
     private CameraView? ReadCamera(long pov)

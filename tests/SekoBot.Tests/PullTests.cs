@@ -333,3 +333,41 @@ public class PullFinishFirstTests
         Assert.Equal(BotPhase.Fighting, brain.Phase);
     }
 }
+
+public class ArcherTests
+{
+    private static readonly Point Center = new(960, 540);
+    private static TargetInfo At(int id, int group, double x, int hp = 818, bool attacks = false, bool ranged = false) =>
+        new(id, new Point(Center.X + (int)(x / 5), Center.Y), Math.Abs(x), 130, 365, hp, 818, 56, attacks, attacks, group, new Vec3(x, 0, 0), ranged);
+
+    private static List<BotAction> Run(BotProfile p, TargetInfo[] mobs, double ms = 1500)
+    {
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        var actions = new List<BotAction>();
+        for (double t = 0; t < ms; t += 100)
+            actions.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
+                { Targets = mobs, Walking = true, AttackPower = 189 }));
+        return actions;
+    }
+
+    [Fact]
+    public void With_nothing_to_hit_here_the_archer_is_walked_to_first()
+    {
+        // The one fighting up close comes by itself (to the right); the archer stays 3 m off (to the left).
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = false, PullGroups = false, Breaks = false };
+        var actions = Run(p, [At(1, 0, 250, attacks: true), At(2, 0, -300, attacks: true, ranged: true)]);
+        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.MoveLeft);
+        Assert.DoesNotContain(actions, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
+    }
+
+    [Fact]
+    public void Only_archers_left_the_next_group_close_by_is_gathered()
+    {
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = false, PullMaxMobs = 9, Breaks = false, PullAreaMetres = 5 };
+        // An archer shooting from 3 m, a sleeping group 9 m off (outside the 5 m gathering area).
+        var actions = Run(p, [At(1, 1, -300, hp: 400, attacks: true, ranged: true), At(10, 10, 900), At(11, 10, 920), At(12, 10, 940)]);
+        Assert.Contains(actions, a => a is NoteAction n && n.Text.Contains("toplanıyor"));
+        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
+    }
+}

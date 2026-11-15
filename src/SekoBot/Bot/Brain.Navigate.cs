@@ -489,6 +489,15 @@ internal sealed partial class Brain
             if (current != null && !inReach.Contains(current))
                 current = null;
         }
+        // Nothing to hit here: an archer attacking us is walked to first. The ones fighting up
+        // close come to us by themselves; an archer stays 3 m off and shoots (recorded: two thirds of
+        // the last mobs of a fight were archers the bot ended up walking after one by one).
+        else if (pool.Where(t => t.Ranged && t.AttacksMe).ToList() is { Count: > 0 } archers)
+        {
+            pool = archers;
+            if (current != null && !archers.Contains(current))
+                current = null;
+        }
         var best = pool.MaxBy(Score)!;
         if (current != null && Score(best) < Score(current) * 1.3)
             best = current;
