@@ -117,6 +117,10 @@ internal sealed partial class Brain
             return EndPull(actions, $"Can azaldı; toplanan {chasing} mob kesiliyor.");
         if (chasing >= PullCap(p))
             return EndPull(actions, $"{chasing} mob toplandı; hepsi birden kesiliyor.");
+        // Mobs hitting us right here and hurt: finish them first (recorded: a gathering started
+        // again while a mob at 24 % HP was being hit, and the bot walked off and came back).
+        if (!_pulling && state.Targets.Any(t => t.AttacksMe && t.Distance <= t.Reach * 1.4 && t.Hp < t.MaxHp))
+            return EndPull(actions, null);
         // Mobs already after us (one walked into us): a new gathering only takes groups right
         // around us — they follow us there anyway; far groups would leave them hitting our back.
         bool startingWithChasers = !_pulling && chasing > 0;
