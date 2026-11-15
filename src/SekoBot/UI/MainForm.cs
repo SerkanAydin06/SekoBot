@@ -68,6 +68,8 @@ internal sealed class MainForm : Form
     private Bitmap? _frameBitmap;
     private long _frameSequence;
     private bool _autoAttached, _updating, _gameMinimized, _replaying;
+    private DateTime _restoreSince = DateTime.MinValue;
+    private int _restoreTries;
     private List<WindowInfo> _games = [], _others = [];
     /// <summary>Why the bot last stopped (shown in the status line until it starts again).</summary>
     private string? _stopReason;
@@ -166,11 +168,11 @@ internal sealed class MainForm : Form
         _statTime = Tile(statsCard, "SÜRE", 16, 32);
         _statMobs = Tile(statsCard, "ÖLDÜRÜLEN", 126, 32);
         _statRate = Tile(statsCard, "SAATTE MOB", 236, 32);
-        _statExp = Tile(statsCard, "KAZANILAN EXP", 16, 98);
+        _statExp = Tile(statsCard, "EXP", 16, 98);
         _statExpRate = Tile(statsCard, "SAATTE EXP", 126, 98);
         _statLevel = Tile(statsCard, "SEVİYE", 236, 98, small: true);
         _statYang = Tile(statsCard, "YANG", 16, 164);
-        _statPotions = Tile(statsCard, "İKSİR KALAN · İÇİLEN", 126, 164, small: true);
+        _statPotions = Tile(statsCard, "İKSİR", 126, 164, small: true);
         _statDeaths = Tile(statsCard, "ÖLÜM", 236, 164);
         Theme.Label(statsCard, "KARAKTER", new Rectangle(16, 244, 200, 18), 8f, Theme.Accent, FontStyle.Bold);
         _hpMeter = AddMeter(statsCard, "HP", Theme.Red, 268);
@@ -526,6 +528,13 @@ internal sealed class MainForm : Form
             _frameBitmap?.Dispose();
         };
 
+        // Everything a size smaller (the window was bigger than needed).
+        Compact(this, UiScale);
+        // List columns don't scale with the window: fit them to the list.
+        int number = 52, nameWidth = _runItems.ClientSize.Width - 2 * number;
+        _runItems.Columns[0].Width = nameWidth;
+        _runItems.Columns[1].Width = number;
+        _runItems.Columns[2].Width = number;
         ResumeLayout(false);
         UpdateControls();
         UpdateStats();
@@ -919,13 +928,31 @@ internal sealed class MainForm : Form
         if (_engine == null)
             return;
         bool minimized = _engine.GameMinimized;
+        // Minimized by mistake while the bot runs: opened again (without taking the focus) and the bot
+        // carries on. Only when that keeps failing does it stop.
+        if (minimized && _engine.BotRunning)
+        {
+            var now = DateTime.UtcNow;
+            if (now - _restoreSince > TimeSpan.FromSeconds(20))
+            {
+                _restoreSince = now;
+                _restoreTries = 0;
+            }
+            if (++_restoreTries <= 60)
+            {
+                if (_restoreTries == 1)
+                    WriteLog("Oyun simge durumuna alındı; bot pencereyi geri açıp devam ediyor.");
+                WindowService.RestoreQuietly(_engine.Window);
+                minimized = _engine.GameMinimized;
+            }
+        }
         if (minimized != _gameMinimized)
         {
             _gameMinimized = minimized;
-            if (minimized)
+            if (minimized && _engine.BotRunning)
             {
-                StopBot("oyun simge durumuna alındı");
-                WriteLog("Oyun simge durumunda: Windows küçültülmüş pencereyi çizmez, görüntü alınamaz.");
+                StopBot("oyun simge durumunda kaldı");
+                WriteLog("Oyun simge durumundan geri açılamadı: Windows küçültülmüş pencereyi çizmez, görüntü alınamaz.");
             }
             _preview.Placeholder = minimized
                 ? "Oyun simge durumunda\n\nWindows küçültülmüş pencereyi çizmediği için görüntü yok.\nOyunu geri açmak için buraya tıkla."
@@ -943,6 +970,21 @@ internal sealed class MainForm : Form
             _preview.Overlay = _engine.IsRecording ? "⏺ KAYIT" : "";
             _preview.Invalidate();
         }
+    }
+
+    /// <summary>The window is laid out at full size and then shrunk by this much.</summary>
+    private const float UiScale = 0.84f;
+
+    private static void Compact(Control root, float k)
+    {
+        root.Scale(new SizeF(k, k));
+        void Fonts(Control c)
+        {
+            c.Font = new Font(c.Font.FontFamily, Math.Max(7f, c.Font.Size * (k + 0.03f)), c.Font.Style);
+            foreach (Control child in c.Controls)
+                Fonts(child);
+        }
+        Fonts(root);
     }
 
     /// <summary>This run's picked / thrown items, redrawn when they change.</summary>
