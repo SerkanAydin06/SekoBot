@@ -276,3 +276,26 @@ public class PullUnreachableTests
         Assert.Single(notes, n => n.Contains("Gruba ulaşılamadı"));
     }
 }
+
+public class PullFinishFirstTests
+{
+    private static readonly Point Center = new(960, 540);
+    private static TargetInfo At(int id, int group, double x, int hp = 600, bool attacks = false) =>
+        new(id, new Point(Center.X + (int)(x / 5), Center.Y), Math.Abs(x), 130, 365, hp, 600, 56, false, attacks, group, new Vec3(x, 0, 0));
+
+    [Fact]
+    public void No_new_gathering_while_a_hurt_mob_hits_us_right_here()
+    {
+        // Recorded: gathering started again while a mob at 24 % HP was being hit; the bot walked off and came back.
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = false, PullMaxMobs = 9, Breaks = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        TargetInfo[] mobs = [At(1, 1, 90, hp: 150, attacks: true), At(10, 10, 600), At(11, 10, 620), At(12, 10, 640)];
+        var actions = new List<BotAction>();
+        for (double t = 0; t < 2000; t += 100)
+            actions.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
+                { Targets = mobs, Walking = false, AttackPower = 189 }));
+        Assert.DoesNotContain(actions, a => a is NoteAction n && n.Text.Contains("toplanıyor"));
+        Assert.Equal(BotPhase.Fighting, brain.Phase);
+    }
+}

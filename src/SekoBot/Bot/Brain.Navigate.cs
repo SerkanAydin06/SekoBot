@@ -614,7 +614,8 @@ internal sealed partial class Brain
     /// (up to 7 m) pushes the way sideways, away from it, the more the closer it is. Mobs already
     /// after us and <paramref name="goingFor"/> (the mobs being walked to) don't count.
     /// </summary>
-    internal static (double X, double Y) AroundMobs(GameState state, double dx, double dy, Func<TargetInfo, bool>? goingFor = null)
+    internal static (double X, double Y) AroundMobs(GameState state, double dx, double dy, Func<TargetInfo, bool>? goingFor = null,
+        Func<int, int, int>? side = null)
     {
         double length = Math.Sqrt(dx * dx + dy * dy);
         if (length < 1e-6 || state.Targets.Count == 0)
@@ -636,6 +637,9 @@ internal sealed partial class Brain
                 continue;
             // Away from the mob's side (straight ahead: to the right); stronger the closer it is.
             double away = across > 0 ? -1 : 1;
+            // The side chosen for a mob is kept for a moment (else it flips left / right as we walk).
+            if (side != null)
+                away = side(mob.Id, (int)away);
             double weight = (1 - Math.Abs(across) / AvoidClearance) * (1 - ahead / AvoidAhead * 0.5) * 1.6;
             sideX += -uy * away * weight;
             sideY += ux * away * weight;
@@ -647,8 +651,35 @@ internal sealed partial class Brain
 
     private HashSet<Keys> Around(GameState state, double dx, double dy, double dead, BotProfile p, Func<TargetInfo, bool>? goingFor = null)
     {
-        var (x, y) = AroundMobs(state, dx, dy, goingFor);
-        return Towards(x, y, dead, p);
+        var now = state.Time;
+        var (x, y) = AroundMobs(state, dx, dy, goingFor, (id, wanted) =>
+        {
+            if (_avoidSide.TryGetValue(id, out var kept) && now < kept.Until)
+                return kept.Side;
+            _avoidSide[id] = (wanted, now + Ms(AvoidSideKeepMs));
+            return wanted;
+        });
+        return Steady(x, y, dead, p);
+    }
+
+    /// <summary>Which way a mob in the way is passed (kept this long so the bot doesn't zigzag).</summary>
+    internal const int AvoidSideKeepMs = 2000;
+    private readonly Dictionary<int, (int Side, TimeSpan Until)> _avoidSide = [];
+
+    /// <summary>
+    /// Like <see cref="Towards"/>, but a direction key already held is kept until the way is clearly
+    /// inside the dead zone (recorded: keys pressed and let go several times a second at the edge).
+    /// </summary>
+    private HashSet<Keys> Steady(double dx, double dy, double dead, BotProfile p)
+    {
+        var keys = Towards(dx, dy, dead, p);
+        double keep = dead * 0.4;
+        void Hold(Keys key, bool stillThatWay) { if (_heldMoves.Contains(key) && stillThatWay) keys.Add(key); }
+        Hold(p.Keys.MoveRight, dx > keep);
+        Hold(p.Keys.MoveLeft, dx < -keep);
+        Hold(p.Keys.MoveBack, dy > keep);
+        Hold(p.Keys.MoveForward, dy < -keep);
+        return keys;
     }
 
     private static HashSet<Keys> Towards(double dx, double dy, double dead, BotProfile p)
