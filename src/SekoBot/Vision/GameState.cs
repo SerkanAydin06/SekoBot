@@ -79,6 +79,9 @@ internal sealed record GameState(
     /// <summary>The game camera (which way "screen up" points in the world).</summary>
     public CameraView? Camera { get; init; }
 
+    /// <summary>The map the character is on ("c3"), from memory; empty when not known.</summary>
+    public string MapName { get; init; } = "";
+
     /// <summary>The character is dead.</summary>
     public bool Dead { get; init; }
     /// <summary>The character is stunned (can't move or hit for a moment).</summary>

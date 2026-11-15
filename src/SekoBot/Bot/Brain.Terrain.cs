@@ -10,6 +10,11 @@ namespace SekoBot.Bot;
 /// heading, and mobs whose way leads through such a spot are not chosen. Heights are known: a mob
 /// far above or below us (on a ledge, down a slope) is left alone too. Mobs attacking us always
 /// count: they come to us.
+/// <para>
+/// Kept between sessions too (<see cref="ObstacleMap"/>): a spot run into twice is a tree or a rock
+/// for good, on that map. Walking bends around it like around a sleeping mob, and the way to a mob
+/// through it isn't taken.
+/// </para>
 /// </summary>
 internal sealed partial class Brain
 {
@@ -25,10 +30,77 @@ internal sealed partial class Brain
     /// <summary>Seen in the game: a mob's position is ~60 below ours on flat ground (its pivot is lower).</summary>
     internal const double MobHeightOffset = -60;
 
+    /// <summary>The obstacles of every map, kept between sessions (set by the engine; null in tests that don't need it).</summary>
+    internal ObstacleMap? Obstacles { get; set; }
+    private TimeSpan _walkedNotedAt = Never;
+    /// <summary>Known obstacles this far around us are looked at (world units, 15 m).</summary>
+    internal const double ObstacleLook = 1500;
+    /// <summary>A known obstacle this close to the straight way (world units, 1.3 m) is gone around.</summary>
+    internal const double ObstacleClearance = 130;
+
     private void ResetTerrain()
     {
         _stuckSpots.Clear();
         _walkGoal = null;
+        _walkedNotedAt = Never;
+    }
+
+    /// <summary>Walking freely: known obstacles under our feet weren't real (once a second).</summary>
+    private void NoteWalking(GameState state)
+    {
+        if (Obstacles == null || state.Walking != true || state.Position is not Vec3 me || state.MapName.Length == 0 ||
+            state.Time - _walkedNotedAt < Ms(1000))
+            return;
+        _walkedNotedAt = state.Time;
+        Obstacles.Walked(state.MapName, me);
+    }
+
+    /// <summary>
+    /// The screen direction to walk bent around the known obstacles ahead (trees, rocks the bot ran
+    /// into before on this map): one within 1.3 m of the way ahead (up to 6 m) pushes it sideways.
+    /// </summary>
+    internal static (double X, double Y) AroundObstacles(IReadOnlyList<Vec3> obstacles, Vec3 me, CameraView camera, double dx, double dy)
+    {
+        double length = Math.Sqrt(dx * dx + dy * dy);
+        if (length < 1e-6 || obstacles.Count == 0)
+            return (dx, dy);
+        double ux = dx / length, uy = dy / length;
+        double sideX = 0, sideY = 0;
+        foreach (var o in obstacles)
+        {
+            var (right, up) = camera.ToScreenDirection(o.X - me.X, o.Y - me.Y);
+            double ox = right, oy = -up;                     // world units, screen directions
+            double ahead = ox * ux + oy * uy, across = ox * -uy + oy * ux;
+            if (ahead <= 0 || ahead > AvoidAhead - 100 || Math.Abs(across) >= ObstacleClearance)
+                continue;
+            double away = across > 0 ? -1 : 1;
+            double weight = (1 - Math.Abs(across) / ObstacleClearance) * (1 - ahead / AvoidAhead * 0.5) * 1.8;
+            sideX += -uy * away * weight;
+            sideY += ux * away * weight;
+        }
+        if (sideX == 0 && sideY == 0)
+            return (dx, dy);
+        return ((ux + sideX) * length, (uy + sideY) * length);
+    }
+
+    private IReadOnlyList<Vec3> KnownObstacles(GameState state) =>
+        Obstacles != null && state.Position is Vec3 me && state.MapName.Length > 0
+            ? Obstacles.Near(state.MapName, me, ObstacleLook) : [];
+
+    /// <summary>The world direction the held walking keys push the character (unit), when known.</summary>
+    private (double X, double Y)? HeldDirection(GameState state)
+    {
+        if (state.Camera is not CameraView camera || _heldMoves.Count == 0)
+            return null;
+        var k = _profile().Keys;
+        double right = (_heldMoves.Contains(k.MoveRight) ? 1 : 0) - (_heldMoves.Contains(k.MoveLeft) ? 1 : 0);
+        double up = (_heldMoves.Contains(k.MoveForward) ? 1 : 0) - (_heldMoves.Contains(k.MoveBack) ? 1 : 0);
+        if (right == 0 && up == 0)
+            return null;
+        // ToScreenDirection turned backwards (it is a rotation).
+        double yaw = camera.Yaw * Math.PI / 180, fx = Math.Cos(yaw), fy = Math.Sin(yaw);
+        double wx = -right * fy + up * fx, wy = right * fx + up * fy, l = Math.Sqrt(wx * wx + wy * wy);
+        return (wx / l, wy / l);
     }
 
     internal int StuckSpotCount => _stuckSpots.Count;
@@ -92,13 +164,27 @@ internal sealed partial class Brain
         if (OnOtherLevel(t, me))
             return false;
         _stuckSpots.RemoveAll(s => now - s.When > TimeSpan.FromMilliseconds(StuckForgetMs));
-        return _stuckSpots.Count == 0 || !WayBlocked(_stuckSpots, me, at);
+        if (_stuckSpots.Count > 0 && WayBlocked(_stuckSpots, me, at))
+            return false;
+        // Known trees and rocks of this map right on the way (not the ones we stand at: walking bends around those).
+        var known = KnownObstacles(state);
+        return known.Count == 0 || !WayBlocked(known.Select(o => (o, (Vec3?)null, now)), me, at);
     }
 
     /// <summary>Notes where we are stuck right now (heading for the goal of this tick).</summary>
     private void StuckHere(GameState state)
     {
-        if (state.Position is Vec3 me)
-            RememberStuck(me, _walkGoal, state.Time);
+        if (state.Position is not Vec3 me)
+            return;
+        RememberStuck(me, _walkGoal, state.Time);
+        // For good: the spot just in front of us, the way the keys push (else the way to the goal).
+        if (Obstacles == null || state.MapName.Length == 0)
+            return;
+        (double X, double Y)? way = HeldDirection(state);
+        if (way == null && _walkGoal is Vec3 g && g.DistanceXY(me) > 1)
+            way = ((g.X - me.X) / g.DistanceXY(me), (g.Y - me.Y) / g.DistanceXY(me));
+        if (way is not var (wx, wy))
+            return;
+        Obstacles.Stuck(state.MapName, me.X + wx * ObstacleMap.Ahead, me.Y + wy * ObstacleMap.Ahead, DateTime.Now);
     }
 }
