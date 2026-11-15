@@ -44,6 +44,10 @@ internal sealed class BagCleaner
     public bool Active { get; private set; }
     /// <summary>Items thrown away this time.</summary>
     public int Thrown { get; private set; }
+
+    /// <summary>What was thrown (item, count) since the engine last took the list.</summary>
+    public List<(int Vnum, int Count)> ThrownItems { get; } = [];
+    private int _count;
     /// <summary>Why it ended without throwing everything (null: all went well).</summary>
     public string? Problem { get; private set; }
 
@@ -160,7 +164,10 @@ internal sealed class BagCleaner
                 if (bag.Items.Any(i => i.Slot == _slot && i.Vnum == _vnum))
                     Failed(_slot);
                 else
+                {
                     Thrown++;
+                    ThrownItems.Add((_vnum, Math.Max(1, _count)));
+                }
                 _step = Step.Pick;
                 goto case Step.Pick;
 
@@ -182,6 +189,7 @@ internal sealed class BagCleaner
                     var from = new Point(here.Rect.X + here.Rect.Width / 2, here.Rect.Y + here.Rect.Height / 2);
                     // A new item: try its menu first (faster); the same item after a missing menu: drag.
                     bool sameItem = here.Slot == _slot && here.Vnum == _vnum && _menuTried;
+                    _count = here.Count;
                     _viaMenu = bag.MenuKnown && _menuMisses < 2 && !sameItem;
                     if (_viaMenu)
                     {

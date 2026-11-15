@@ -33,7 +33,10 @@ internal sealed class MainForm : Form
     private readonly Button[] _tabButtons;
     private readonly Panel[] _tabPages;
     private readonly Button _dashButton;
-    private readonly Panel _dashboard;
+    private readonly Panel _dashboard, _dashBottom;
+    private readonly ListView _runItems;
+    private readonly Label _runItemsInfo;
+    private int _runItemsVersion = -1;
     private readonly Card _settingsCard;
     private readonly Label _pageTitle, _pageInfo, _bagState, _events, _identity;
 
@@ -89,7 +92,7 @@ internal sealed class MainForm : Form
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
         Text = "SekoBot";
-        ClientSize = new Size(1180, 760);
+        ClientSize = new Size(1180, 920);
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Theme.Background;
@@ -131,7 +134,7 @@ internal sealed class MainForm : Form
         _status = Theme.Label(bar, "Oyun bekleniyor", new Rectangle(464, 10, 680, 44), 12f, Theme.Muted, FontStyle.Bold);
 
         // ── Side menu: the dashboard and the settings pages ──────
-        var side = new Card { Bounds = new Rectangle(12, 136, 180, 612) };
+        var side = new Card { Bounds = new Rectangle(12, 136, 180, 772) };
         Controls.Add(side);
         _dashButton = SideButton(side, "📊   Panel", 12);
         _dashButton.Click += (_, _) => SelectTab(-1);
@@ -141,9 +144,9 @@ internal sealed class MainForm : Form
         _tabButtons = new Button[tabNames.Length];
         _tabPages = new Panel[tabNames.Length];
         Theme.Label(side, "ETKİNLİK", new Rectangle(16, 440, 150, 18), 8f, Theme.Accent, FontStyle.Bold);
-        _events = Theme.Label(side, "Bot çalışınca görünür.", new Rectangle(16, 460, 152, 140), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+        _events = Theme.Label(side, "Bot çalışınca görünür.", new Rectangle(16, 460, 152, 300), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
 
-        // ── Dashboard: live preview + session stats ──────────────
+        // ── Always on top: live preview + session stats (on every page) ──
         _dashboard = new Panel { Bounds = new Rectangle(202, 136, 966, 400), BackColor = Theme.Background };
         Controls.Add(_dashboard);
         var previewCard = new Card { Bounds = new Rectangle(0, 0, 600, 400) };
@@ -175,38 +178,35 @@ internal sealed class MainForm : Form
         _targetMeter = AddMeter(statsCard, "HEDEF", Theme.Yellow, 340);
 
         // ── Settings pages: one big card, title + what the page is for ──
-        _settingsCard = new Card { Bounds = new Rectangle(202, 136, 966, 400), Visible = false };
+        // Below the live view (the log and this run's items show there on the dashboard).
+        _settingsCard = new Card { Bounds = new Rectangle(202, 544, 966, 364), Visible = false };
         Controls.Add(_settingsCard);
-        _pageTitle = Theme.Label(_settingsCard, "", new Rectangle(24, 14, 600, 30), 14f, Theme.Text, FontStyle.Bold);
-        _pageInfo = Theme.Label(_settingsCard, "", new Rectangle(24, 44, 918, 20), 9f, Theme.Muted);
+        _pageTitle = Theme.Label(_settingsCard, "", new Rectangle(24, 10, 260, 28), 13f, Theme.Text, FontStyle.Bold);
+        _pageInfo = Theme.Label(_settingsCard, "", new Rectangle(290, 14, 652, 22), 9f, Theme.Muted);
         for (int i = 0; i < tabNames.Length; i++)
         {
             int index = i;
             _tabButtons[i] = SideButton(side, tabNames[i], 86 + i * 42);
             _tabButtons[i].Click += (_, _) => SelectTab(index);
-            _tabPages[i] = new Panel { Bounds = new Rectangle(24, 80, 918, 306), BackColor = Theme.Surface, Visible = false };
+            _tabPages[i] = new Panel { Bounds = new Rectangle(24, 58, 918, 296), BackColor = Theme.Surface, Visible = false };
             _settingsCard.Controls.Add(_tabPages[i]);
         }
         // A thin line under the title.
-        _settingsCard.Controls.Add(new Panel { Bounds = new Rectangle(24, 70, 918, 1), BackColor = Theme.Border });
+        _settingsCard.Controls.Add(new Panel { Bounds = new Rectangle(24, 46, 918, 1), BackColor = Theme.Border });
 
         // Saldırı
         var attack = _tabPages[0];
-        NumberRow(attack, "Saldırı mesafesi (%)", 0, 0, 1, 20, Math.Round(_profile.AttackRadius * 100, 1), 1, 0.5m,
-            v => _profile.AttackRadius = v / 100);
-        NumberRow(attack, "Z ile toplama (sn)", 0, 34, 0, 10, _profile.LootEveryMs / 1000.0, 1, 0.5m,
-            v => _profile.LootEveryMs = (int)(v * 1000));
         Check(attack, "Grupları topla (üçlüleri toplayıp birden kes)", 370, 0, 366, _profile.PullGroups,
             v => _profile.PullGroups = v);
         NumberRow(attack, "Toplanacak en fazla mob", 370, 34, 3, 30, _profile.PullMaxMobs, 0, 1,
             v => _profile.PullMaxMobs = (int)v);
         NumberRow(attack, "Toplarken can en az (%)", 370, 68, 10, 100, Math.Round(_profile.PullMinHp * 100), 0, 5,
             v => _profile.PullMinHp = v / 100);
-        NumberRow(attack, "Toplama alanı (m)", 0, 68, 3, 30, _profile.PullAreaMetres, 0, 1,
+        NumberRow(attack, "Toplama alanı (m)", 0, 0, 3, 30, _profile.PullAreaMetres, 0, 1,
             v => _profile.PullAreaMetres = v);
-        Hint(attack, "Saldırı mesafesi bellekteki gerçek menzille hesaplanır; % yalnızca yedek. Gruplar: bot en değerli üçlüden başlar, " +
-            "toplama alanındaki diğer üçlüleri de toplar; sınıra ulaşınca, alan boşalınca ya da can düşünce hepsini birden keser. " +
-            "Z ile toplama yalnız \"yerdeki eşyalara yürüyüp topla\" kapalıyken çalışır (açıkken bot eşyanın üstünde Z'ye basar); 0 = kapalı.", 102);
+        Hint(attack, "Gruplar: bot en değerli üçlüden başlar, toplama alanındaki diğer üçlüleri de toplar (peşinde mob varken yalnız 10 m " +
+            "içindekileri); sınıra ulaşınca, alan boşalınca ya da can düşünce hepsini birden keser. Can %40'ın altına düşen bir dövüşten " +
+            "sonra kendiliğinden daha az mob toplar. Mob menzildeyken yerinde vurur; yürürken yoldaki mobların etrafından dolanır.", 102);
 
         // İksir & Buff
         // Hedef: which mobs to go for, and loot.
@@ -279,10 +279,9 @@ internal sealed class MainForm : Form
             WriteLog($"Eşya listesi: {_profile.LootPick.Count} eşya mutlaka toplanacak, {_profile.LootSkip.Count} eşya alınmayacak, " +
                 $"{_profile.LootThrow.Count} eşya envanter dolunca atılacak.");
         };
-        Hint(items, "Topla işaretli özel eşyalar (ör. okey kartı) 15 m'ye kadar, mob saldırırken bile hemen alınır. " +
-            "Silah / zırh kapalıyken \"en az\" fiyatın altındakiler alınmaz; yine de çantaya girerse yer azalınca atılır " +
-            "(bot başlarken çantada olanlar, giyilenler ve Topla işaretliler atılmaz). Atma: bot sakin bir yere geçer, " +
-            "envanteri açıp eşyaları yere sürükler, sonra alana döner.", 216);
+        Hint(items, "Fiyat = dükkânın verdiği satış fiyatı. Botun yanlışlıkla aldığı istenmeyen eşyalar molada ya da yer azalınca " +
+            "atılır (senin eşyaların, Topla işaretliler, etkinlik ödülleri ve giyilenler hiç atılmaz). Atma: sakin bir yere geçer, " +
+            "eşyaya tıklayıp \"Yere at\" der. Bu turda alınan / atılanlar Panel'de listelenir.", 216);
 
         var potions = _tabPages[3];
         NumberRow(potions, "HP iksiri (% altında)", 0, 0, 5, 95, Math.Round(_profile.PotionHpBelow * 100), 0, 1,
@@ -401,6 +400,7 @@ internal sealed class MainForm : Form
         _record.Click += (_, _) => ToggleRecording();
         _replay = Theme.Button(advanced, "▶  Kaydı oynat", new Rectangle(150, 100, 142, 30), Theme.Secondary, Theme.SecondaryHover);
         _replay.Click += async (_, _) => await ReplayAsync();
+        _replay.Visible = false; // a developer tool
         var reports = Theme.Button(advanced, "📊  Oturum raporları", new Rectangle(0, 60, 180, 30), Theme.Secondary, Theme.SecondaryHover);
         reports.Click += (_, _) =>
         {
@@ -412,23 +412,64 @@ internal sealed class MainForm : Form
             try { Process.Start(new ProcessStartInfo(SessionLog.FilePath) { UseShellExecute = true }); }
             catch (Exception ex) { WriteLog("Rapor açılamadı: " + ex.Message); }
         };
-        var openFolder = Theme.Button(advanced, "📁  Ayar klasörü", new Rectangle(300, 100, 142, 30), Theme.Secondary, Theme.SecondaryHover);
+        var openFolder = Theme.Button(advanced, "📁  Ayar klasörü", new Rectangle(150, 100, 142, 30), Theme.Secondary, Theme.SecondaryHover);
         openFolder.Click += (_, _) => OpenProfileFolder();
         // The mobs the bot sees in memory, listed in the log.
         _scanMobs = Theme.Button(advanced, "🔍  Mobları göster", new Rectangle(450, 100, 180, 30), Theme.Secondary, Theme.SecondaryHover);
+        _scanMobs.Visible = false; // a developer tool (the mobs show in "Moblar ve düşenler")
         _scanMobs.Click += (_, _) =>
         {
             if (_engine == null) { WriteLog("Önce oyun açık olmalı."); return; }
             WriteLog(_engine.DescribeMobs());
         };
 
-        // ── Log ──────────────────────────────────────────────────
-        var logCard = new Card { Bounds = new Rectangle(202, 544, 966, 204) };
-        Controls.Add(logCard);
+        // ── Dashboard bottom: the log and this run's items (the settings pages show here instead) ──
+        _dashBottom = new Panel { Bounds = new Rectangle(202, 544, 966, 364), BackColor = Theme.Background };
+        Controls.Add(_dashBottom);
+        var logCard = new Card { Bounds = new Rectangle(0, 0, 600, 364) };
+        _dashBottom.Controls.Add(logCard);
         Theme.Label(logCard, "GÜNLÜK", new Rectangle(16, 8, 200, 20), 8f, Theme.Accent, FontStyle.Bold);
+        var itemsCard = new Card { Bounds = new Rectangle(610, 0, 356, 364) };
+        _dashBottom.Controls.Add(itemsCard);
+        Theme.Label(itemsCard, "BU TUR EŞYALAR", new Rectangle(16, 8, 200, 20), 8f, Theme.Accent, FontStyle.Bold);
+        var openItems = Theme.Button(itemsCard, "📄", new Rectangle(310, 4, 32, 26), Theme.Surface, Theme.Secondary);
+        openItems.Click += (_, _) =>
+        {
+            try { Process.Start(new ProcessStartInfo(SessionItems.FilePath) { UseShellExecute = true }); }
+            catch { WriteLog("Bu turun eşya listesi henüz yok (bot başlayınca oluşur)."); }
+        };
+        _runItems = new ListView
+        {
+            Bounds = new Rectangle(14, 32, 328, 300),
+            View = View.Details,
+            FullRowSelect = true,
+            HeaderStyle = ColumnHeaderStyle.Nonclickable,
+            BorderStyle = BorderStyle.None,
+            BackColor = Theme.Inset,
+            ForeColor = Theme.Text,
+            Font = new Font("Segoe UI", 8.5f),
+        };
+        // Dark column headers (the default ones are white).
+        _runItems.OwnerDraw = true;
+        _runItems.DrawColumnHeader += (_, e) =>
+        {
+            using var back = new SolidBrush(Theme.Surface);
+            e.Graphics.FillRectangle(back, e.Bounds);
+            var flags = (e.Header?.TextAlign == HorizontalAlignment.Right ? TextFormatFlags.Right : TextFormatFlags.Left) |
+                        TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis;
+            var text = e.Bounds with { X = e.Bounds.X + 4, Width = e.Bounds.Width - 8 };
+            TextRenderer.DrawText(e.Graphics, e.Header?.Text, new Font("Segoe UI", 8f, FontStyle.Bold), text, Theme.Muted, flags);
+        };
+        _runItems.DrawItem += (_, e) => e.DrawDefault = true;
+        _runItems.DrawSubItem += (_, e) => e.DrawDefault = true;
+        _runItems.Columns.Add("Eşya", 200);
+        _runItems.Columns.Add("Alınan", 58, HorizontalAlignment.Right);
+        _runItems.Columns.Add("Atılan", 58, HorizontalAlignment.Right);
+        itemsCard.Controls.Add(_runItems);
+        _runItemsInfo = Theme.Label(itemsCard, "Bot başlayınca dolar; her turda yenilenir.", new Rectangle(16, 336, 326, 20), 8f, Theme.Muted);
         _log = new RichTextBox
         {
-            Bounds = new Rectangle(14, 32, 938, 160),
+            Bounds = new Rectangle(14, 32, 572, 318),
             BorderStyle = BorderStyle.None,
             ReadOnly = true,
             ScrollBars = RichTextBoxScrollBars.Vertical,
@@ -564,7 +605,8 @@ internal sealed class MainForm : Form
     /// <summary>-1: the dashboard (preview, stats); otherwise a settings page.</summary>
     private void SelectTab(int index)
     {
-        _dashboard.Visible = index < 0;
+        // The live view and the stats stay; below them the log (dashboard) or the settings page.
+        _dashBottom.Visible = index < 0;
         _settingsCard.Visible = index >= 0;
         if (index >= 0)
         {
@@ -903,8 +945,29 @@ internal sealed class MainForm : Form
         }
     }
 
+    /// <summary>This run's picked / thrown items, redrawn when they change.</summary>
+    private void UpdateRunItems()
+    {
+        var list = _engine?.SessionItems;
+        if (list == null || list.Version == _runItemsVersion)
+            return;
+        _runItemsVersion = list.Version;
+        var rows = list.Rows();
+        _runItems.BeginUpdate();
+        _runItems.Items.Clear();
+        foreach (var (_, name, picked, thrown) in rows)
+            _runItems.Items.Add(new ListViewItem([name, picked > 0 ? picked.ToString("N0") : "", thrown > 0 ? thrown.ToString("N0") : ""])
+            {
+                ForeColor = thrown > 0 && picked <= thrown ? Theme.Muted : Theme.Text,
+            });
+        _runItems.EndUpdate();
+        _runItemsInfo.Text = rows.Count == 0 ? "Bot başlayınca dolar; her turda yenilenir."
+            : $"{rows.Count} çeşit · alınan {rows.Sum(r => r.Picked):N0} · atılan {rows.Sum(r => r.Thrown):N0}";
+    }
+
     private void UpdateStats()
     {
+        UpdateRunItems();
         string name = _engine?.CharacterName ?? "";
         string identity = "v" + BuildInfo.Version + (Instance.IsFirst ? "" : $"  ·  {Instance.Number}. SekoBot") + (name.Length > 0 ? $"  ·  {name}" : "");
         if (_identity.Text != identity)

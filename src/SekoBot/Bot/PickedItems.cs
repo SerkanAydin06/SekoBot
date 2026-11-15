@@ -37,9 +37,14 @@ internal sealed class PickedItems
     /// <summary>Items that came into the bag at the last read while the bot ran (not moved ones).</summary>
     public IReadOnlyList<InventoryItem> CameIn { get; private set; } = [];
 
+    /// <summary>How many more of each item the bag holds than at the last read, while the bot ran
+    /// (a new stack or a stack grown; items only moved don't count).</summary>
+    public IReadOnlyList<(int Vnum, int Count)> Gained { get; private set; } = [];
+
     public void Update(IReadOnlyList<InventoryItem> inventory, bool botRunning, Func<InventoryItem, bool>? wanted)
     {
         CameIn = [];
+        Gained = [];
         var bag = inventory.Where(i => i.Slot >= CharacterProgress.FirstBagSlot && i.Count > 0)
             .GroupBy(i => (i.Slot, i.Vnum)).ToDictionary(g => g.Key, g => g.Sum(i => i.Count));
         if (_last == null)
@@ -73,6 +78,13 @@ internal sealed class PickedItems
             foreach (var key in gone)
                 if (_picked.Remove(key))
                     Changed = true;
+        }
+        if (botRunning)
+        {
+            var before = _last.GroupBy(kv => kv.Key.Vnum).ToDictionary(g => g.Key, g => g.Sum(kv => kv.Value));
+            Gained = [.. bag.GroupBy(kv => kv.Key.Vnum)
+                .Select(g => (g.Key, g.Sum(kv => kv.Value) - before.GetValueOrDefault(g.Key)))
+                .Where(x => x.Item2 > 0)];
         }
         _last = bag;
         CameIn = cameIn;
