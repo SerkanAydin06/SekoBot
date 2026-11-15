@@ -362,6 +362,8 @@ internal sealed class GameWorldReader : IDisposable
         ("pop_equp_C", "yeret", 0x330),
         ("pop_equp_C", "slotid", 0x508),
         ("UI_C", "dmBox", 0x328),
+        ("UI_C", "duyuruText", 0x350),
+        ("TextBlock", "Text", 0x130),
         ("dmBox_C", "IsOpen", 0x368),
         ("dmBox_C", "boxData", 0x288),
         ("dmBox_C", "textbox", 0x340),
@@ -980,10 +982,24 @@ internal sealed class GameWorldReader : IDisposable
                     BitConverter.ToInt32(eventBytes, 0x10), eventBytes[0x14] != 0, new DateTime(start), new DateTime(end)));
             }
 
+            // The server's announcement box (UI_C.duyuruText): the last text shown there stays in it.
+            // TextBlock.Text is an FText; its text data keeps the string at +0x28 (seen in the game).
+            string announcement = "";
+            if (MemoryReads.IsPointer(uiMain))
+            {
+                long box = Pointer(uiMain + Offset(Pointer(uiMain + ObjClass), "UI_C", "duyuruText"));
+                if (MemoryReads.IsPointer(box))
+                {
+                    long text = Pointer(box + Offset(Pointer(box + ObjClass), "TextBlock", "Text"));
+                    if (MemoryReads.IsPointer(text))
+                        announcement = ReadFString(text + 0x28, 1000).Trim();
+                }
+            }
+
             int stat = Int32(loader + Offset(cls, "loader", "charData.waitstat")) ?? 0;
             int skill = Int32(loader + Offset(cls, "loader", "charData.waitskillstat")) ?? 0;
             return new SocialSnapshot(me, threads, requests, questions, chat, events,
-                stat is >= 0 and < 10_000 ? stat : 0, skill is >= 0 and < 10_000 ? skill : 0);
+                stat is >= 0 and < 10_000 ? stat : 0, skill is >= 0 and < 10_000 ? skill : 0, announcement);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

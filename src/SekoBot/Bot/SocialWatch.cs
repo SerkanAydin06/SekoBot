@@ -37,8 +37,30 @@ internal sealed class SocialWatch
     public IReadOnlySet<int> EventItems => _eventItems;
     private readonly HashSet<int> _eventItems = [];
 
+    /// <summary>From the last update: how many times the game said an item on the ground isn't
+    /// ours ("Kazanmadığın için bu nesneyi toplayamazsın.").</summary>
+    public int NotOurs { get; private set; }
+
+    /// <summary>From the last update: how many times the game said "WAIT!" (a skill pressed before it was ready).</summary>
+    public int SkillWaits { get; private set; }
+
+    private string _announcement = "";
+    private readonly HashSet<string> _toldAnnouncements = [];
+
+    /// <summary>A line written by the game itself (not a player).</summary>
+    internal static bool FromGame(ChatLine line) => line.Sender is -1 or 0 && line.Name.Length == 0;
+
+    internal static bool IsNotOurs(ChatLine line) =>
+        FromGame(line) && line.Message.Contains("toplayamazsın", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsSkillWait(ChatLine line) =>
+        FromGame(line) && line.Message.Trim().TrimEnd('!').Equals("WAIT", StringComparison.OrdinalIgnoreCase);
+
     public void Reset()
     {
+        _announcement = "";
+        _toldAnnouncements.Clear();
+        NotOurs = SkillWaits = 0;
         _threads.Clear();
         _requests.Clear();
         _questions.Clear();
@@ -89,6 +111,19 @@ internal sealed class SocialWatch
             if (_questions.Add(question.Id) && !first && p.NotifyRequests)
                 notices.Add(new("❓ Oyun soruyor: " + question.Text, true));
         _questions.IntersectWith(social.Questions.Select(q => q.Id));
+
+        // The game's own lines the bot acts on.
+        NotOurs = social.NewChat.Count(IsNotOurs);
+        SkillWaits = social.NewChat.Count(IsSkillWait);
+
+        // The server's announcement box: a new text is told (once; the server repeats them).
+        string announcement = social.Announcement.Trim();
+        if (announcement.Length > 0 && announcement != _announcement)
+        {
+            if (_toldAnnouncements.Add(announcement) && !first && p.NotifyEvents)
+                notices.Add(new("📢 Duyuru: " + announcement, false));
+            _announcement = announcement;
+        }
 
         // The chat: our name written by someone else, or a GM writing.
         if (p.NotifyMentions)
