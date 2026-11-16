@@ -194,6 +194,7 @@ internal sealed partial class BotEngine : IDisposable
                             }
                             if (world != null)
                                 TrackPicked(world, now);
+                            WatchMarket(world, now);
                             ReadBagForCleaning();
                             ReadDmForWhisper();
                             var (phase, actions) = TickBot(state);
@@ -494,6 +495,9 @@ internal sealed partial class BotEngine : IDisposable
         _disposed = true;
         StopBot("bağlantı kapandı");
         StopRecording();
+        lock (_marketGate)
+            if (_market is { Changed: true } market)
+                SaveMarket(market);
         _scanCts?.Cancel();
         _marketCts?.Cancel();
         _cts.Cancel();

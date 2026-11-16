@@ -119,7 +119,7 @@ footer { color: var(--muted); font-size: 12px; padding: 0 24px 24px; }
     <div id="detail"><div class="empty">Bir eşyaya tıkla: kimde var, kaça, nerede — haritada da işaretlenir.</div></div>
   </div>
 </main>
-<footer>Fiyatlar bir tanesi için: yığınlar adede bölündü. "Ortalama", en ucuz ve en pahalı onda birler (uç / şaka fiyatlar) çıkarılarak hesaplandı. SekoBot hiçbir şey satın almaz; sadece bakar.</footer>
+<footer>Bir ürünün dükkanına gitmek için: SekoBot'ta Pazar sekmesinde ara, seç ve "🚶 Dükkana götür"e bas. Fiyatlar bir tanesi için: yığınlar adede bölündü. "Ortalama", en ucuz ve en pahalı onda birler (uç / şaka fiyatlar) çıkarılarak hesaplandı. SekoBot hiçbir şey satın almaz; sadece bakar.</footer>
 <div id="tip"></div>
 <div class="overlay" id="ov"><div class="modal" id="modal"></div></div>
 <script>
@@ -130,6 +130,8 @@ const yang = p => p >= 1e9 ? (p / 1e9).toLocaleString('tr-TR', {maximumFractionD
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 const low = s => String(s ?? '').toLocaleLowerCase('tr-TR');
 const unit = i => i.count > 1 ? i.price / i.count : i.price;
+const seen = t => { const d = new Date(t), m = Math.round((Date.now() - d) / 60000);
+  return m < 1 ? 'şimdi' : m < 60 ? m + ' dk önce' : m < 1440 ? Math.round(m / 60) + ' sa önce' : d.toLocaleDateString('tr-TR'); };
 const shopsById = new Map(D.shops.map(s => [s.id, s]));
 const listings = D.shops.flatMap(s => s.items.map(i => ({...i, shop: s, unit: unit(i)})));
 const byName = new Map();
@@ -138,8 +140,7 @@ const stats = D.stats;
 const bonusText = new Map([...byName].map(([n, ls]) => [n, low(ls.map(l => l.bonuses).join(' '))]));
 
 // ── header ──
-const started = new Date(D.started);
-document.getElementById('sub').textContent = `${D.map} · ${started.toLocaleString('tr-TR')} · son kayıt ${new Date(D.saved).toLocaleTimeString('tr-TR')}`;
+document.getElementById('sub').textContent = `${D.map} · son güncelleme ${new Date(D.saved).toLocaleString('tr-TR')} · kapanan dükkanlar listeden çıkarılır`;
 const total = listings.reduce((a, l) => a + l.price, 0);
 const kpi = (v, l) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
 document.getElementById('kpis').innerHTML =
@@ -195,10 +196,11 @@ function select(name, scroll) {
       <div class="chip"><b>${s.shops}</b><span>dükkan</span></div>
       <div class="chip"><b>${tr.format(s.pieces)}</b><span>adet</span></div>
     </div>
-    <div class="tablewrap" style="max-height:40vh"><table><thead><tr><th>Satıcı</th><th class="num">Adet</th><th class="num">Fiyat</th><th class="num">Tanesi</th><th>Yer</th></tr></thead><tbody>
+    <div class="tablewrap" style="max-height:40vh"><table><thead><tr><th>Satıcı</th><th class="num">Adet</th><th class="num">Fiyat</th><th class="num">Tanesi</th><th>Yer</th><th>Okundu</th></tr></thead><tbody>
     ${ls.map((l, k) => `<tr><td><a data-shop="${l.shop.id}">${esc(l.shop.owner)}</a> <span class="muted">Sv ${l.shop.level}</span>${l.bonuses ? `<div class="bon">${esc(l.bonuses)}</div>` : ''}</td>
       <td class="num">${tr.format(l.count)}</td><td class="num">${yang(l.price)}</td><td class="num ${k === 0 ? 'cheap' : ''}">${yang(l.unit)}</td>
-      <td class="muted">${l.shop.x || l.shop.y ? Math.round(l.shop.x / 100) + ', ' + Math.round(l.shop.y / 100) : '—'}</td></tr>`).join('')}
+      <td class="muted">${l.shop.x || l.shop.y ? Math.round(l.shop.x / 100) + ', ' + Math.round(l.shop.y / 100) : '—'}</td>
+      <td class="muted">${seen(l.shop.seen)}</td></tr>`).join('')}
     </tbody></table></div>`;
   document.querySelectorAll('#detail a[data-shop]').forEach(a => a.onclick = () => showShop(+a.dataset.shop));
   if (scroll) document.getElementById('map').scrollIntoView({behavior: 'smooth', block: 'start'});

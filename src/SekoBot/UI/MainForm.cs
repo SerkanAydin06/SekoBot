@@ -319,30 +319,108 @@ internal sealed class MainForm : Form
         _respawnState = Theme.Label(area, "", new Rectangle(0, 140, 918, 22), 8.5f, Theme.Muted);
         _positionState = Theme.Label(area, "", new Rectangle(0, 166, 918, 40), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
 
-        // Pazar: open every shop of the market, write down the prices, find the wanted items.
+        // Pazar: the market list of the map (kept up to date), search it, walk to a shop, scan, wanted items.
         var market = _tabPages[8];
-        _scanMarket = Theme.Button(market, "🛒  Pazarı tara", new Rectangle(0, 0, 200, 32), Theme.Primary, Theme.PrimaryHover);
+        _scanMarket = Theme.Button(market, "🛒  Pazarı tara", new Rectangle(0, 0, 170, 30), Theme.Primary, Theme.PrimaryHover);
         _scanMarket.Click += (_, _) => ToggleMarketScan();
-        var openReport = Theme.Button(market, "📊  Raporu aç", new Rectangle(210, 0, 150, 32), Theme.Secondary, Theme.SecondaryHover);
+        var openReport = Theme.Button(market, "📊  Raporu aç", new Rectangle(178, 0, 130, 30), Theme.Secondary, Theme.SecondaryHover);
         openReport.Click += (_, _) =>
         {
             if (BotEngine.LatestReport is { } report)
                 OpenFile(report);
             else
-                WriteLog("Henüz pazar raporu yok: önce pazar haritasında \"Pazarı tara\"ya bas.");
+                WriteLog("Henüz pazar listesi yok: önce pazar haritasında \"Pazarı tara\"ya bas.");
         };
-        var marketFolder = Theme.Button(market, "📂  Klasör", new Rectangle(370, 0, 120, 32), Theme.Secondary, Theme.SecondaryHover);
+        var marketFolder = Theme.Button(market, "📂  Klasör", new Rectangle(316, 0, 100, 30), Theme.Secondary, Theme.SecondaryHover);
         marketFolder.Click += (_, _) =>
         {
             Directory.CreateDirectory(BotEngine.MarketFolder);
             OpenFile(BotEngine.MarketFolder);
         };
-        _marketState = Theme.Label(market, "Pazar haritasında bas: bot dükkanları sırayla açıp ürünleri, fiyatları ve efsunları okur.",
-            new Rectangle(504, 0, 414, 34), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.MiddleLeft);
-        Theme.Label(market, "ARANAN ÜRÜNLER", new Rectangle(0, 46, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
+        _marketState = Theme.Label(market, "Pazar haritasında liste kendiliğinden güncellenir: açtığın dükkanlar eklenir, kapananlar çıkarılır.",
+            new Rectangle(426, 0, 492, 32), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.MiddleLeft);
+
+        // Left: search the list, pick, walk there.
+        Theme.Label(market, "PAZARDA ARA", new Rectangle(0, 40, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
+        var findBox = new TextBox
+        {
+            Bounds = new Rectangle(0, 62, 380, 26), BackColor = Theme.Inset, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle,
+            Font = new Font("Segoe UI", 9.5f), PlaceholderText = "Eşya ya da efsun yaz (ör. kavrama, kutsama, HP)",
+        };
+        market.Controls.Add(findBox);
+        var goShop = Theme.Button(market, "🚶  Dükkana götür", new Rectangle(388, 62, 156, 26), Theme.Primary, Theme.PrimaryHover);
+        var found = new ListView
+        {
+            Bounds = new Rectangle(0, 94, 544, 200), View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false,
+            BackColor = Theme.Inset, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 9f),
+            HeaderStyle = ColumnHeaderStyle.Nonclickable, OwnerDraw = true,
+        };
+        found.Columns.Add("Eşya", 170);
+        found.Columns.Add("Tanesi", 82, HorizontalAlignment.Right);
+        found.Columns.Add("Adet", 48, HorizontalAlignment.Right);
+        found.Columns.Add("Satıcı", 100);
+        found.Columns.Add("Uzaklık", 58, HorizontalAlignment.Right);
+        found.Columns.Add("Okundu", 64);
+        found.DrawColumnHeader += (_, e) =>
+        {
+            using var back = new SolidBrush(Theme.Secondary);
+            e.Graphics.FillRectangle(back, e.Bounds);
+            TextRenderer.DrawText(e.Graphics, e.Header?.Text, found.Font, Rectangle.Inflate(e.Bounds, -4, 0), Theme.Muted,
+                TextFormatFlags.VerticalCenter | (e.Header?.TextAlign == HorizontalAlignment.Right ? TextFormatFlags.Right : TextFormatFlags.Left));
+        };
+        found.DrawItem += (_, e) => e.DrawDefault = true;
+        found.DrawSubItem += (_, e) => e.DrawDefault = true;
+        market.Controls.Add(found);
+        var foundRows = new List<MarketListing>();
+        void Search()
+        {
+            foundRows = _engine?.MarketFind(findBox.Text) ?? [];
+            var me = _engine?.World?.Player;
+            found.BeginUpdate();
+            found.Items.Clear();
+            foreach (var l in foundRows)
+            {
+                string away = me is { } at && (l.X != 0 || l.Y != 0) ? $"{Math.Sqrt((l.X - at.X) * (l.X - at.X) + (l.Y - at.Y) * (l.Y - at.Y)) / 100:0} m" : "—";
+                int minutes = (int)(DateTime.Now - l.Seen).TotalMinutes;
+                string seen = minutes < 1 ? "şimdi" : minutes < 60 ? $"{minutes} dk" : minutes < 1440 ? $"{minutes / 60} sa" : l.Seen.ToString("dd.MM");
+                found.Items.Add(new ListViewItem([l.Name + (l.Bonuses.Length > 0 ? " ✦" : ""), BotEngine.MarketYang(l.UnitPrice), l.Count.ToString("N0"), l.Owner, away, seen])
+                    { ToolTipText = l.Bonuses });
+            }
+            found.EndUpdate();
+            if (findBox.Text.Trim().Length > 0)
+                _marketState.Text = foundRows.Count == 0
+                    ? (_engine == null ? "Önce oyunu bağla." : "Listede yok (bu haritanın listesi boş olabilir: önce \"Pazarı tara\").")
+                    : $"{foundRows.Count} satış bulundu, en ucuzu üstte. Birini seçip \"🚶 Dükkana götür\"e bas.";
+        }
+        var searchTimer = new System.Windows.Forms.Timer { Interval = 350 };
+        searchTimer.Tick += (_, _) => { searchTimer.Stop(); Search(); };
+        findBox.TextChanged += (_, _) => { searchTimer.Stop(); searchTimer.Start(); };
+        found.ShowItemToolTips = true;
+        void GoToSelected()
+        {
+            if (_engine == null)
+            {
+                WriteLog("Önce oyun açık olmalı.");
+                return;
+            }
+            if (found.SelectedIndices.Count == 0 || found.SelectedIndices[0] >= foundRows.Count)
+            {
+                WriteLog("Önce listeden bir satış seç.");
+                return;
+            }
+            var pick = foundRows[found.SelectedIndices[0]];
+            if (!_engine.StartGoToShop(pick.ShopId, pick.Name, out string error))
+                WriteLog(error);
+            UpdateControls();
+        }
+        goShop.Click += (_, _) => GoToSelected();
+        found.DoubleClick += (_, _) => GoToSelected();
+
+        // Right: wanted items and settings.
+        Theme.Label(market, "ARANAN ÜRÜNLER (taramada haber verilir)", new Rectangle(560, 40, 358, 18), 8f, Theme.Accent, FontStyle.Bold);
         var wantName = new TextBox
         {
-            Bounds = new Rectangle(0, 68, 280, 26), BackColor = Theme.Inset, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle,
+            Bounds = new Rectangle(560, 62, 358, 26), BackColor = Theme.Inset, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle,
             Font = new Font("Segoe UI", 9f), PlaceholderText = "Eşya adı (ör. Kavrama Taşı+4)",
             AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.CustomSource,
         };
@@ -353,24 +431,24 @@ internal sealed class MainForm : Form
                 wantName.AutoCompleteCustomSource.AddRange([.. Memory.ItemBook.All().Select(i => i.Name).Where(n => n.Length > 0).Distinct()]);
         };
         market.Controls.Add(wantName);
-        Theme.Label(market, "tanesi en fazla", new Rectangle(288, 68, 96, 26), 9f, Theme.Muted);
-        var wantMax = Theme.Number(market, new Rectangle(386, 68, 130, 26), 0, 2_000_000_000, 0, 0, 100_000);
+        Theme.Label(market, "tanesi en fazla", new Rectangle(560, 94, 96, 26), 9f, Theme.Muted);
+        var wantMax = Theme.Number(market, new Rectangle(658, 94, 160, 26), 0, 2_000_000_000, 0, 0, 100_000);
         wantMax.ThousandsSeparator = true;
-        var wantAdd = Theme.Button(market, "➕  Ekle", new Rectangle(524, 68, 90, 26), Theme.Primary, Theme.PrimaryHover);
+        var wantAdd = Theme.Button(market, "➕  Ekle", new Rectangle(826, 94, 92, 26), Theme.Primary, Theme.PrimaryHover);
         var wantList = new ListBox
         {
-            Bounds = new Rectangle(0, 102, 514, 124), BackColor = Theme.Inset, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle,
-            Font = new Font("Segoe UI", 9.5f), IntegralHeight = false,
+            Bounds = new Rectangle(560, 126, 358, 74), BackColor = Theme.Inset, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle,
+            Font = new Font("Segoe UI", 9f), IntegralHeight = false,
         };
         market.Controls.Add(wantList);
-        var wantRemove = Theme.Button(market, "Seçileni çıkar", new Rectangle(524, 102, 120, 26), Theme.Secondary, Theme.SecondaryHover);
+        var wantRemove = Theme.Button(market, "Seçileni çıkar", new Rectangle(560, 204, 110, 24), Theme.Secondary, Theme.SecondaryHover);
         void ShowWanted()
         {
             wantList.Items.Clear();
             foreach (var w in _profile.MarketWanted)
-                wantList.Items.Add(w.MaxPrice > 0 ? $"{w.Name}   —   tanesi ≤ {BotEngine.MarketYang(w.MaxPrice)} yang" : $"{w.Name}   —   her fiyat");
+                wantList.Items.Add(w.MaxPrice > 0 ? $"{w.Name}  —  tanesi ≤ {BotEngine.MarketYang(w.MaxPrice)}" : $"{w.Name}  —  her fiyat");
             if (_profile.MarketWanted.Count == 0)
-                wantList.Items.Add("(boş: bütün pazar okunur, raporda her şey aranabilir)");
+                wantList.Items.Add("(boş)");
         }
         void AddWanted()
         {
@@ -396,13 +474,9 @@ internal sealed class MainForm : Form
             ShowWanted();
         };
         ShowWanted();
-        Check(market, "Kamerayı kuş bakışına al (yukarıdan, uzaktan)", 660, 46, 258, _profile.MarketBirdsEye, v => _profile.MarketBirdsEye = v);
-        Check(market, "Aranan bulununca Telegram'a yaz", 660, 76, 258, _profile.MarketNotify, v => _profile.MarketNotify = v);
-        Check(market, "Yarım kalan taramaya devam et", 660, 106, 258, _profile.MarketResume, v => _profile.MarketResume = v);
-        Hint(market, "Pazarı tara: açık pencereler (envanter, menü) kapatılır, kamera kuş bakışına alınır; bot en yakın açılmamış dükkana " +
-            "yürüyüp tezgâhına tıklar, ürünleri okur, Esc ile kapatır ve sıradakine geçer. Aranan ürün uygun fiyata bulununca hemen yazılır. " +
-            "Sonunda rapor tarayıcıda açılır: pazar haritası, arama, her eşyanın en ucuzu, ortalaması ve kimde olduğu. Aynı düğme durdurur; " +
-            "3 saat içinde yeniden basılırsa okunan dükkanlar atlanır.", 234);
+        Check(market, "Telegram'a yaz", 680, 203, 238, _profile.MarketNotify, v => _profile.MarketNotify = v);
+        Check(market, "Kamerayı kuş bakışına al", 560, 236, 358, _profile.MarketBirdsEye, v => _profile.MarketBirdsEye = v);
+        Check(market, "Son 2 saatte okunan dükkanları atla (taramada)", 560, 264, 358, _profile.MarketResume, v => _profile.MarketResume = v);
 
         // Tuşlar
         // Bildirim: messages to the user's own Telegram bot.
@@ -1206,7 +1280,7 @@ internal sealed class MainForm : Form
         string scanText = _engine.ScanningArea ? "■  Taramayı durdur" : _profile.FarmSpot != null ? "🔄  Alanı güncelle" : "📍  En iyi alanı bul";
         if (_findArea.Text != scanText)
             _findArea.Text = scanText;
-        string marketText = _engine.ScanningMarket ? "■  Pazar taramasını durdur" : "🛒  Pazarı tara";
+        string marketText = _engine.ScanningMarket ? "■  Durdur" : "🛒  Pazarı tara";
         if (_scanMarket.Text != marketText)
             _scanMarket.Text = marketText;
         if (_engine.MarketStatus is { Length: > 0 } market && _marketState.Text != market)
