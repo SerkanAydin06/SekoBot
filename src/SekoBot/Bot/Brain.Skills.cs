@@ -9,6 +9,9 @@ namespace SekoBot.Bot;
 /// they do — buffs are kept up (cast again shortly before they run out), area attacks while
 /// hitting with at least AreaSkillMinMobs mobs within 3 m, single attacks while hitting a mob — each after
 /// its cooldown and only with enough MP. Manual: F1–F5 pressed every N seconds.
+/// When the quick slot bar can be read, the game's own clock decides: a skill is ready when its
+/// slot stops cooling down, a press counts only when the slot starts cooling down (else it is tried
+/// again a little later), and buffs already on when the bot starts are known from their slot.
 /// Casting is cut off by walking or attacking, so the bot lets go of W/A/S/D and Space and holds
 /// still for a moment while it casts; one skill at a time with a gap between them.
 /// </summary>
@@ -21,6 +24,18 @@ internal sealed partial class Brain
     private int _lastSkillSlot = -1;
     /// <summary>Learnt from the game's "WAIT!": how much longer each skill key needs than thought.</summary>
     private readonly Dictionary<Keys, TimeSpan> _skillExtra = [];
+    /// <summary>Pressed, and not yet seen cooling down on the quick slot bar.</summary>
+    private readonly Dictionary<Keys, TimeSpan> _skillPressed = [];
+    /// <summary>A press that didn't take: not tried again before this.</summary>
+    private readonly Dictionary<Keys, TimeSpan> _skillRetryAt = [];
+    private readonly Dictionary<Keys, int> _skillMisses = [];
+    private readonly HashSet<Keys> _skillMissTold = [];
+    /// <summary>Buffs found cooling down count as on (cast by the player before the bot started);
+    /// not after a death, when they are gone but their slots still cool down.</summary>
+    private bool _learnBuffs = true;
+
+    /// <summary>A press shows on the quick slot bar within this (else it didn't take).</summary>
+    internal const int SkillTakesMs = 1500;
 
     /// <summary>Each "WAIT!" adds this much to the skill's wait (up to SkillExtraMaxMs).</summary>
     internal const int SkillExtraStepMs = 1000, SkillExtraMaxMs = 20000;
@@ -30,6 +45,11 @@ internal sealed partial class Brain
         Array.Fill(_lastSkill, Never);
         _skillUsed.Clear();
         _skillExtra.Clear();
+        _skillPressed.Clear();
+        _skillRetryAt.Clear();
+        _skillMisses.Clear();
+        _skillMissTold.Clear();
+        _learnBuffs = true;
         _lastAnySkill = Never;
         _lastSkillSlot = -1;
         _skillsTold = "";
@@ -56,6 +76,8 @@ internal sealed partial class Brain
     private bool CastSkills(GameState state, BotProfile p, List<BotAction> actions)
     {
         var now = state.Time;
+        if (p.AutoSkills)
+            WatchSkillSlots(state, actions);
         if (now - _lastAnySkill < Ms(p.SkillGapMs))
             return false;
         if (p.AutoSkills && state.Skills.Count > 0)
@@ -110,7 +132,72 @@ internal sealed partial class Brain
     private void BuffsLost()
     {
         _skillUsed.Clear();
+        _skillPressed.Clear();
+        _learnBuffs = false;
         Array.Fill(_lastSkill, Never);
+    }
+
+    /// <summary>
+    /// What the quick slot bar says since the last look: a pressed skill that started cooling down
+    /// took (its buff is on from the press); one that didn't within SkillTakesMs didn't (cut off,
+    /// too far, not allowed there…), so it is tried again after a short wait that grows with each miss.
+    /// </summary>
+    private void WatchSkillSlots(GameState state, List<BotAction> actions)
+    {
+        var now = state.Time;
+        foreach (var skill in state.Skills)
+        {
+            if (skill.Wait is not double left)
+                continue;
+            if (_skillPressed.TryGetValue(skill.Key, out var pressed))
+            {
+                if (left > 0)
+                {
+                    _skillPressed.Remove(skill.Key);
+                    _skillMisses.Remove(skill.Key);
+                }
+                else if (now - pressed > Ms(SkillTakesMs))
+                {
+                    _skillPressed.Remove(skill.Key);
+                    _skillUsed.Remove(skill.Key);
+                    int misses = _skillMisses.GetValueOrDefault(skill.Key) + 1;
+                    _skillMisses[skill.Key] = misses;
+                    _skillRetryAt[skill.Key] = now + Ms(Math.Min(misses * 2000, 10000));
+                    if (_skillMissTold.Add(skill.Key))
+                        actions.Add(new NoteAction($"{KeyName(skill.Key)} {skill.Name} basıldı ama oyunda kullanılmadı (yarıda kesildi ya da o an olmuyordu); birazdan yeniden denenecek."));
+                }
+            }
+            else if (_learnBuffs && skill.Kind == SkillKind.Buff && left > 0 && !_skillUsed.ContainsKey(skill.Key))
+            {
+                // Cooling down without the bot pressing it: cast (cooldown − left) seconds ago.
+                double ago = Math.Max(0, skill.CooldownSec - left);
+                _skillUsed[skill.Key] = now - Ms(ago * 1000);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether to press a skill now. With the game's clock (Wait): when its slot is not cooling
+    /// down, nothing pressed is still unconfirmed and a buff that took isn't about to run out yet.
+    /// Without it: by the bot's own timers (a buff again a little before it runs out).
+    /// </summary>
+    private bool SkillReady(SkillSlot skill, TimeSpan now)
+    {
+        bool cast = _skillUsed.TryGetValue(skill.Key, out var used);
+        var extra = _skillExtra.GetValueOrDefault(skill.Key);
+        if (_skillRetryAt.TryGetValue(skill.Key, out var retry) && now < retry)
+            return false;
+        if (skill.Wait is double left)
+        {
+            if (left > 0 || _skillPressed.ContainsKey(skill.Key) || cast && now - used < extra)
+                return false;
+            return !(skill.Kind == SkillKind.Buff && cast && skill.DurationSec > skill.CooldownSec &&
+                     now - used < Ms((skill.DurationSec - 5) * 1000.0));
+        }
+        double wait = skill.Kind == SkillKind.Buff && skill.DurationSec > 0
+            ? Math.Max(skill.CooldownSec, skill.DurationSec - 5)
+            : skill.CooldownSec;
+        return !(cast && now - used < Ms((wait + 0.5) * 1000) + extra);
     }
 
     private bool CastAutoSkill(GameState state, BotProfile p, List<BotAction> actions)
@@ -157,16 +244,13 @@ internal sealed partial class Brain
             };
             if (!wanted || state.MpPoints is int mp && mp < skill.Mana)
                 continue;
-            // A buff is cast again a little before it runs out; attacks as soon as they're ready.
-            double wait = skill.Kind == SkillKind.Buff && skill.DurationSec > 0
-                ? Math.Max(skill.CooldownSec, skill.DurationSec - 5)
-                : skill.CooldownSec;
-            if (_skillUsed.TryGetValue(skill.Key, out var used) &&
-                now - used < Ms((wait + 0.5) * 1000) + _skillExtra.GetValueOrDefault(skill.Key))
+            if (!SkillReady(skill, now))
                 continue;
             Cast(skill.Key, state, p, actions);
             _lastSkillSlot = -1;
             _skillUsed[skill.Key] = now;
+            if (skill.Wait != null)
+                _skillPressed[skill.Key] = now;
             return true;
         }
         return false;
