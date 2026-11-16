@@ -109,7 +109,7 @@ internal sealed class MainForm : Form
         Controls.Add(header);
         var title = Theme.Label(header, "◆  SEKOBOT", new Rectangle(14, 8, 150, 30), 13.5f, Theme.Text, FontStyle.Bold);
         var version = _identity = Theme.Label(header, "v" + BuildInfo.Version, new Rectangle(160, 13, 380, 22), 8.5f, Theme.Muted);
-        _connection = Theme.Label(header, "○  Oyun bekleniyor", new Rectangle(560, 12, 380, 22), 9.5f, Theme.Muted,
+        _connection = Theme.Label(header, "○  Oyun bekleniyor", new Rectangle(540, 12, 246, 22), 9.5f, Theme.Muted,
             FontStyle.Bold, ContentAlignment.MiddleRight);
         foreach (Control c in new Control[] { header, title, version, _connection })
         {
@@ -119,6 +119,13 @@ internal sealed class MainForm : Form
         _gameButton = Theme.Button(header, "Oyunu seç  ▾", new Rectangle(950, 7, 110, 32), Theme.Secondary, Theme.SecondaryHover);
         _gameButton.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
         _gameButton.Click += (_, _) => ShowGameMenu();
+        // Many games on one screen: put the games side by side, every bot small under its game.
+        var arrange = Theme.Button(header, "⊞  Diz", new Rectangle(794, 7, 74, 32), Theme.Secondary, Theme.SecondaryHover);
+        arrange.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+        arrange.Click += (_, _) => ArrangeAll();
+        var small = Theme.Button(header, "▭  Mini", new Rectangle(872, 7, 72, 32), Theme.Secondary, Theme.SecondaryHover);
+        small.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+        small.Click += (_, _) => GoMini();
         var minimize = Theme.Button(header, "—", new Rectangle(1068, 7, 36, 32), Theme.Surface, Theme.Secondary);
         minimize.Click += (_, _) => WindowState = FormWindowState.Minimized;
         var close = Theme.Button(header, "×", new Rectangle(1110, 7, 36, 32), Theme.Surface, Theme.Danger);
@@ -686,8 +693,14 @@ internal sealed class MainForm : Form
                 await CheckForUpdatesAsync(startup: true);
             }
         };
+        Shown += (_, _) =>
+        {
+            if (_profile.MiniMode)
+                BeginInvoke(new Action(GoMini));
+        };
         FormClosing += (_, _) =>
         {
+            _mini?.Close();
             foreach (var t in new[] { _scanTimer, _previewTimer, _statsTimer, _updateTimer }) t.Stop();
             _telegramCts.Cancel();
             _engine?.Dispose();
@@ -807,6 +820,70 @@ internal sealed class MainForm : Form
     }
 
     // ── Windows ──────────────────────────────────────────────────
+
+    private MiniBar? _mini;
+
+    /// <summary>The bot as one small bar under its game (the full window hidden).</summary>
+    private void GoMini()
+    {
+        if (IsDisposed)
+            return;
+        _mini ??= new MiniBar(MiniInfoNow, ToggleBot, () => StopBot("kullanıcı durdurdu", byUser: true), GoBig, ArrangeAll);
+        if (!_mini.Visible)
+            _mini.Show();
+        if (Visible)
+            Hide();
+        if (!_profile.MiniMode)
+        {
+            _profile.MiniMode = true;
+            SaveProfile();
+        }
+    }
+
+    /// <summary>The full window again.</summary>
+    private void GoBig()
+    {
+        _mini?.Hide();
+        Show();
+        if (WindowState == FormWindowState.Minimized)
+            WindowState = FormWindowState.Normal;
+        Activate();
+        if (_profile.MiniMode)
+        {
+            _profile.MiniMode = false;
+            SaveProfile();
+        }
+    }
+
+    /// <summary>Every game window side by side (a band left at the bottom), every SekoBot small under its game.</summary>
+    private void ArrangeAll()
+    {
+        int band = MiniBar.HeightAt(DeviceDpi) + 2;
+        var near = _engine != null && Win32.IsWindow(_engine.Window.Handle) ? WindowLayout.Visible(_engine.Window.Handle) : Bounds;
+        int count = WindowLayout.ArrangeGames(near, band);
+        WriteLog(count == 0
+            ? "Açık oyun penceresi bulunamadı."
+            : $"{count} oyun penceresi yan yana dizildi; her SekoBot kendi oyununun altına küçüldü. Büyütmek için şeride çift tıkla.");
+        WindowLayout.TellAllMini();
+    }
+
+    private MiniInfo MiniInfoNow()
+    {
+        Rectangle? game = null;
+        if (_engine is { } engine && Win32.IsWindow(engine.Window.Handle) && !Win32.IsIconic(engine.Window.Handle))
+            game = WindowLayout.Visible(engine.Window.Handle);
+        var state = _engine?.State;
+        return new MiniInfo(_engine?.CharacterName ?? "", _status.Text, _status.ForeColor, state?.Hp, state?.Mp,
+            _statExpRate.Text, _statMobs.Text, _engine?.BotRunning == true, game);
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        // Another SekoBot (or this one) arranged the windows: go small under the game.
+        if (m.Msg == (int)WindowLayout.MiniMessage && m.WParam == 1)
+            BeginInvoke(new Action(GoMini));
+        base.WndProc(ref m);
+    }
 
     private void DragWindow(object? sender, MouseEventArgs e)
     {

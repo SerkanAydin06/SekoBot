@@ -154,6 +154,8 @@ Fısıltı bildirimi artık mesaj penceresinin konuşma listesinden de okunur; m
 
 **İki oyunda aynı anda bot:** iki oyun açıkken SekoBot'u iki kez aç. Her SekoBot başka bir oyuna kendiliğinden bağlanır (önce açılan oyun 1. SekoBot'a). 2. SekoBot kendi ayarlarını (`profile-2.json`, ilk açılışta 1.'nin ayarlarından kopyalanır) ve günlüğünü (`gunluk-2.txt`) kullanır; kısayolları **Ctrl+F10 / Ctrl+F11**. Telegram komutları ve otomatik güncelleme yalnızca 1. SekoBot'ta; bildirimler ikisinden de gelir ve başlarında karakter adı yazar. Pencere başlığında ve üst çubukta kaçıncı SekoBot olduğu ve karakter adı görünür.
 
+**Ekranı düzenleme (çoklu bot):** üst çubuktaki **⊞ Diz** düğmesi bütün oyun pencerelerini ekrana yan yana yerleştirir (2 oyun: yarım ekran; 3-4 oyun: 2×2; daha fazlası ızgara) ve ekranın altında boş bir şerit bırakır. Açık olan her SekoBot kendi oyununun hemen altına **mini şeride** küçülür. **▭ Mini** düğmesi yalnızca o botu küçültür. Şeritte karakter adı, botun ne yaptığı, HP/MP, saatlik EXP ve öldürülen mob sayısı ile ▶ başlat/duraklat, ■ durdur ve ⤢ büyüt düğmeleri vardır. Şerit oyun penceresi taşınınca onunla birlikte gider, oyunun üstünde kalır ama oyundan odağı almaz. Çift tık ya da ⤢ tam pencereyi geri açar, sağ tık menüsünde "Pencereleri diz" de vardır. SekoBot kapatıldığında mini moddaysa bir sonraki açılışta yine mini açılır. Oyun pencereleri yalnızca taşınıp boyutlandırılır, oyunun kendisine dokunulmaz. Kısayollar (F10/F11, Ctrl+F10/Ctrl+F11) mini modda da çalışır.
+
 **Sersemleme:** karakter sersemleyince (bellekte "stuned") bot bekler; o anı takılma ya da ulaşılamayan grup saymaz.
 
 **Komutlar** (Bildirim sekmesinde **Komutlar (durum/dur/başla)**, varsayılan açık): kendi botuna Telegram'dan yaz, SekoBot cevap verir:

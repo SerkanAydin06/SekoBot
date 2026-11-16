@@ -145,6 +145,21 @@ internal static class Win32
     internal const int SW_RESTORE = 9;
     internal const int SW_SHOWNOACTIVATE = 4;
 
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SetWindowPos(nint hwnd, nint after, int x, int y, int width, int height, uint flags);
+
+    internal const uint SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010, SWP_NOOWNERZORDER = 0x0200;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool IsZoomed(nint hwnd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "RegisterWindowMessageW")]
+    internal static extern uint RegisterWindowMessage(string name);
+
+    internal static readonly nint HWND_BROADCAST = 0xFFFF;
+
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool ReleaseCapture();

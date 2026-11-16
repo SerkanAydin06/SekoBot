@@ -184,6 +184,9 @@ internal sealed class BotProfile
     public bool MarketNotify { get; set; } = true;
     /// <summary>A scan stopped half way on the same map within a few hours goes on where it was.</summary>
     public bool MarketResume { get; set; } = true;
+
+    /// <summary>The bot was made small (one bar under its game) when last closed: it opens small again.</summary>
+    public bool MiniMode { get; set; }
     /// <summary>Items always picked up, whatever the other loot choices (names, comma separated,
     /// part of the name is enough), e.g. "Cesaret Pelerini". A message is sent when one drops.</summary>
     public string LootAlways { get; set; } = "";
