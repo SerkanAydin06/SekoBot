@@ -30,7 +30,18 @@ internal sealed class MarketBook
 
     private static readonly CultureInfo Turkish = CultureInfo.GetCultureInfo("tr-TR");
 
-    private static string Name(ShopItem item) => ItemBook.NameOf(item.Vnum);
+    /// <summary>The game's skills by number (a skill book is named by the skill it teaches).</summary>
+    public IReadOnlyDictionary<int, string> Skills { get; init; } = new Dictionary<int, string>();
+
+    /// <summary>Its name; a skill book (or spirit stone) with the skill it is for: all books share one name.</summary>
+    private string Name(ShopItem item)
+    {
+        string name = ItemBook.NameOf(item.Vnum);
+        return (name.Contains("Kitab", StringComparison.OrdinalIgnoreCase) || name.StartsWith("Ruh Taşı", StringComparison.OrdinalIgnoreCase)) &&
+               Skills.TryGetValue(item.Socket, out var skill)
+            ? $"{name}: {skill}"
+            : name;
+    }
 
     private static string Bonuses(ShopItem item) => item.Bonuses.Count == 0 ? "" : ItemBonuses.Describe(item.Bonuses);
 
@@ -70,7 +81,9 @@ internal sealed class MarketBook
         return text.ToString();
     }
 
-    internal static string Yang(double price) => price >= 1_000_000
+    internal static string Yang(double price) => price >= 1_000_000_000
+        ? (price / 1_000_000_000).ToString("0.##", Turkish) + " milyar"
+        : price >= 1_000_000
         ? (price / 1_000_000).ToString("0.##", Turkish) + " milyon"
         : Math.Round(price).ToString("N0", Turkish);
 
