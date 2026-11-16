@@ -26,8 +26,13 @@ internal sealed partial class GameWorldReader
     private readonly Dictionary<long, (List<List<Vec3>> Pieces, bool Rough)> _meshShapes = [];
 
     /// <summary>The obstacles of the map the character is on (empty when it can't be read).</summary>
-    public List<MapBlock> ReadBlocks()
+    public List<MapBlock> ReadBlocks() => ReadBlocks(out _);
+
+    /// <param name="world">The name of the world (level) that was read, e.g. "c2": right after a teleport the
+    /// map's name can already be the new one while the old level is still loaded.</param>
+    public List<MapBlock> ReadBlocks(out string world)
     {
+        world = "";
         var blocks = new List<MapBlock>();
         try
         {
@@ -39,13 +44,14 @@ internal sealed partial class GameWorldReader
                 return blocks;
             long gm = Pointer(instance + Offset(instanceClass, "m2data_C", "gm"));
             long level = Pointer(gm + ObjOuter);
-            long world = Pointer(level + ObjOuter);
+            long worldObject = Pointer(level + ObjOuter);
             if (!MemoryReads.IsPointer(level))
                 return blocks;
             var levels = new List<long> { level };
-            if (MemoryReads.IsPointer(world))
+            if (MemoryReads.IsPointer(worldObject))
             {
-                long list = world + Offset(Pointer(world + ObjClass), "World", "Levels");
+                world = ClassName(worldObject);
+                long list = worldObject + Offset(Pointer(worldObject + ObjClass), "World", "Levels");
                 long data = Pointer(list);
                 int count = Int32(list + 8) ?? 0;
                 for (int i = 0; i < count && i < 200 && MemoryReads.IsPointer(data); i++)

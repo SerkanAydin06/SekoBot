@@ -11,7 +11,7 @@ namespace SekoBot.Bot;
 internal sealed partial class BotEngine
 {
     private readonly TerrainBook _terrain = new();
-    private string _terrainMap = "";
+    private string _terrainMap = "", _terrainLevel = "";
     private readonly HashSet<string> _terrainTold = [];
     private TimeSpan _terrainTriedAt = TimeSpan.FromDays(-1), _terrainWalkedAt, _terrainSavedAt;
 
@@ -35,14 +35,23 @@ internal sealed partial class BotEngine
         if (world == null || world.MapName.Length == 0)
             return;
         string map = world.MapName;
+        // "_none" and the like: between maps (teleporting, loading).
+        if (map.StartsWith('_') || map.Equals("none", StringComparison.OrdinalIgnoreCase))
+            return;
         if (map != _terrainMap && now - _terrainTriedAt >= TimeSpan.FromSeconds(10))
         {
             _terrainTriedAt = now;
             List<MapBlock> read;
+            string level = "";
             lock (_worldGate)
-                read = _world?.ReadBlocks() ?? [];
+                read = _world?.ReadBlocks(out level) ?? [];
+            // Right after a teleport the old map can still be loaded under the new name: the level last read
+            // (named otherwise than the map) is not taken for the new map; it is read again in 10 s.
+            if (level.Length > 0 && !level.Equals(map, StringComparison.OrdinalIgnoreCase) && level == _terrainLevel)
+                read = [];
             if (read.Count > 0)
             {
+                _terrainLevel = level;
                 _terrainMap = map;
                 int before = _terrain.Of(map)?.Blocks.Count ?? -1;
                 var terrain = _terrain.Update(map, read);

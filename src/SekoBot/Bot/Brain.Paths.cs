@@ -25,6 +25,10 @@ internal sealed partial class Brain
     /// <summary>While farming the way round is looked for this far around (world units, 50 m): quick enough every tick.</summary>
     internal const double WayRoom = 5000;
 
+    /// <summary>This run: how often a way round the map's obstacles was taken, how many mobs were left for having no short way.</summary>
+    internal int Detours { get; private set; }
+    internal int NoWayMobs { get; private set; }
+
     private MapTerrain? TerrainHere(GameState state) => state.MapName.Length > 0 ? Terrain?.Of(state.MapName) : null;
 
     /// <summary>The next corner on the way to <paramref name="goal"/> when the straight way is blocked; else null.</summary>
@@ -38,7 +42,12 @@ internal sealed partial class Brain
             return null;
         }
         if (_way is not { } w || w.Goal.DistanceXY(goal) > 150 || state.Time - w.At > Ms(WayRefreshMs))
+        {
+            bool newGoal = _way is not { } old || old.Goal.DistanceXY(goal) > 150;
             _way = w = (goal, state.Time, map.WayTo(me, goal, room: WayRoom));
+            if (newGoal && w.Way is { Count: > 1 })
+                Detours++;
+        }
         return w.Way is { Count: > 0 } way ? map.Aim(way, me) : null;
     }
 
@@ -63,6 +72,8 @@ internal sealed partial class Brain
             _reachable.Clear();
         bool ok = map.LineClear(me, at) ||
                   map.WayTo(me, at, room: WayRoom) is { } way && MapTerrain.Length(me, way) <= DetourMost * me.DistanceXY(at) + 600;
+        if (!ok && !_reachable.ContainsKey(t.Id))
+            NoWayMobs++;
         _reachable[t.Id] = (ok, now + Ms(ReachableKeepMs));
         return ok;
     }
