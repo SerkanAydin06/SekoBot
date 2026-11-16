@@ -108,8 +108,13 @@ internal sealed class InputExecutor : IDisposable
     /// A turn not given back (a bot closed in the middle) is waited for at most 15 s.
     /// </summary>
     private static readonly Semaphore MouseTurn = new(1, 1, @"Local\SekoBot.Mouse");
+    /// <summary>Set by a bot with a short, urgent job (a UI button, throwing items) while it waits for
+    /// the mouse: a long job (the market scan) lets it go first.</summary>
+    private static readonly EventWaitHandle MouseWanted = new(false, EventResetMode.ManualReset, @"Local\SekoBot.MouseWanted");
 
     internal const int MouseTurnWaitMs = 15_000;
+    /// <summary>A long job gives way this long at most (then takes its turn anyway).</summary>
+    internal const int MouseYieldMs = 10_000;
 
     private static bool NeedsMouse(BotAction action) => action is ClickAction { Slow: true } or MouseDragAction or TypeTextAction;
 
@@ -118,8 +123,20 @@ internal sealed class InputExecutor : IDisposable
         bool turn = false;
         if (NeedsMouse(action))
         {
-            for (int waited = 0; waited < MouseTurnWaitMs && !(turn = MouseTurn.WaitOne(0)); waited += 50)
+            bool yields = action is ClickAction { Yield: true };
+            // A long job lets a waiting short one go first.
+            for (int waited = 0; yields && waited < MouseYieldMs && MouseWanted.WaitOne(0); waited += 100)
+                await Task.Delay(100, token);
+            for (int waited = 0; waited < MouseTurnWaitMs; waited += 50)
+            {
+                if (turn = MouseTurn.WaitOne(0))
+                    break;
+                if (!yields)
+                    MouseWanted.Set();
                 await Task.Delay(50, token);
+            }
+            if (!yields)
+                MouseWanted.Reset();
         }
         try
         {

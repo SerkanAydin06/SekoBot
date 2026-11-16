@@ -164,7 +164,7 @@ internal sealed partial class BotEngine
                     tries[next.Id] = tries.GetValueOrDefault(next.Id) + 1;
                     // A real click (the game in front, the cursor on the stall): clicks posted to
                     // the window from the background are ignored on things in the world (seen).
-                    input.Enqueue(new ClickAction(Point.Round(p), Slow: true, Fast: true));
+                    input.Enqueue(new ClickAction(Point.Round(p), Slow: true, Fast: true, Yield: true));
                     // Up to 5 s: the character walks over and the server sends the shop.
                     OpenShop? opened = null;
                     for (int waited = 0; waited < 5000 && opened == null; waited += 200)
