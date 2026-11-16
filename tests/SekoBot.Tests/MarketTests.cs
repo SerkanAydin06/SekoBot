@@ -62,4 +62,25 @@ public class MarketTests
         Assert.Equal(1, book.Items);
         Assert.True(book.Has(143217));
     }
+
+    [Fact]
+    public void Skill_books_are_told_apart_by_the_skill_they_teach()
+    {
+        int book = ItemBook.All().FirstOrDefault(i => i.Name == "Beceri Kitabı")?.Vnum ?? 50300;
+        ItemBook.Learn(new ItemInfo(book, "Beceri Kitabı", "", "", 0));
+        var shop = new OpenShop(1, "Ali", 40, "", [new ShopItem(1, book, 1, 40_000, [], Socket: 4), new ShopItem(2, book, 1, 90_000, [], Socket: 3)]);
+        var market = new MarketBook("shop", DateTime.Now) { Skills = new Dictionary<int, string> { [3] = "Güçlü vuruş", [4] = "Güçlü beden" } };
+        market.Add(shop, null);
+        string summary = market.Summary();
+        Assert.Contains("Beceri Kitabı: Güçlü beden: 1 dükkanda", summary);
+        Assert.Contains("Beceri Kitabı: Güçlü vuruş: 1 dükkanda", summary);
+    }
+
+    [Fact]
+    public void Prices_over_a_billion_are_said_in_billions()
+    {
+        Assert.Equal("1,11 milyar", MarketBook.Yang(1_111_111_111));
+        Assert.Equal("56,5 milyon", MarketBook.Yang(56_500_000));
+        Assert.Equal("249.999", MarketBook.Yang(249_999));
+    }
 }

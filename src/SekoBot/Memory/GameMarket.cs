@@ -5,7 +5,8 @@ namespace SekoBot.Memory;
 internal sealed record MarketShop(int Id, double X, double Y, Vec3? Body);
 
 /// <summary>One item for sale in a shop.</summary>
-internal sealed record ShopItem(int Slot, int Vnum, int Count, long Price, IReadOnlyList<ItemBonus> Bonuses)
+/// <param name="Socket">The item's first socket: on a skill book the skill it teaches, on armour a stone.</param>
+internal sealed record ShopItem(int Slot, int Vnum, int Count, long Price, IReadOnlyList<ItemBonus> Bonuses, int Socket = 0)
 {
     /// <summary>The price of one piece.</summary>
     public double UnitPrice => Count > 1 ? (double)Price / Count : Price;
@@ -26,7 +27,7 @@ internal sealed partial class GameWorldReader
     // TMap<int, xmob> element: key (int, padded to 8), xmob (mover at 0, X at +0x10, Y at +0x14), hash links.
     private const int ShopStride = 0xD8, ShopValue = 0x8, ShopMover = 0x0, ShopX = 0x10, ShopY = 0x14;
     // invItem (0x88): ItemId 0, Count 0x3C, ID (its slot) 0x40, price 0x78.
-    private const int ShopItemStride = 0x88, ShopItemCount = 0x3C, ShopItemSlot = 0x40, ShopItemPrice = 0x78;
+    private const int ShopItemStride = 0x88, ShopItemCount = 0x3C, ShopItemSlot = 0x40, ShopItemPrice = 0x78, ShopItemSocket = 0x2C;
 
     /// <summary>Every shop of the map (empty when the map has none or it can't be read).</summary>
     public List<MarketShop> ReadMarketShops()
@@ -73,6 +74,44 @@ internal sealed partial class GameWorldReader
         return shops;
     }
 
+    /// <summary>Every skill of the game by its number (m2data_C.iskillData, the same skill struct as
+    /// the character's own: the names per grade first), to tell which skill a book teaches.</summary>
+    public Dictionary<int, string> ReadSkillNames()
+    {
+        var names = new Dictionary<int, string>();
+        try
+        {
+            if (!_located)
+                return names;
+            long instance = Pointer(_moduleBase + _gameInstance);
+            long instanceClass = Pointer(instance + ObjClass);
+            if (ClassName(instanceClass) != "m2data_C")
+                return names;
+            long map = instance + Offset(instanceClass, "m2data_C", "iskillData");
+            long data = Pointer(map);
+            int count = Int32(map + 8) ?? 0;
+            if (!MemoryReads.IsPointer(data) || count <= 0 || count > 2000)
+                return names;
+            int maxBits = Int32(map + 0x2C) ?? 0;
+            long bitsAt = maxBits > 128 ? Pointer(map + 0x20) : map + 0x10;
+            var bits = new byte[(count + 7) / 8];
+            if (!MemoryReads.IsPointer(bitsAt) || !_memory.Read(bitsAt, bits, bits.Length))
+                return names;
+            for (int i = 0; i < count; i++)
+            {
+                if ((bits[i / 8] & (1 << (i % 8))) == 0)
+                    continue;
+                long value = data + i * SkillStride + SkillValue;
+                int id = Int32(value) ?? 0;
+                long namesAt = Pointer(value + 0x8);
+                if (id > 0 && (Int32(value + 0x10) ?? 0) > 0 && MemoryReads.IsPointer(namesAt) && ReadFString(namesAt, 64) is { Length: > 0 } name)
+                    names[id] = name;
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException or OverflowException) { }
+        return names;
+    }
+
     /// <summary>The shop whose window is open now, or null.</summary>
     public OpenShop? ReadOpenShop()
     {
@@ -110,7 +149,8 @@ internal sealed partial class GameWorldReader
                         continue;
                     items.Add(new ShopItem(BitConverter.ToInt32(elements, at + ShopItemSlot), vnum,
                         Math.Max(1, BitConverter.ToInt32(elements, at + ShopItemCount)),
-                        (uint)BitConverter.ToInt32(elements, at + ShopItemPrice), Bonuses(elements, at) ?? []));
+                        (uint)BitConverter.ToInt32(elements, at + ShopItemPrice), Bonuses(elements, at) ?? [],
+                        BitConverter.ToInt32(elements, at + ShopItemSocket)));
                 }
             }
             return new OpenShop(id, ReadFString(view + Offset(cls, "PrivateShopView_C", "playername"), 64),

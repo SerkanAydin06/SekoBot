@@ -86,7 +86,10 @@ internal sealed partial class BotEngine
         var shops = MarketShops();
         if (shops.Count == 0)
             return "Bu haritada pazar dükkanı görünmüyor; önce pazar haritasına gir.";
-        var book = new MarketBook(start.MapName, DateTime.Now);
+        Dictionary<int, string> skills;
+        lock (_worldGate)
+            skills = _world?.ReadSkillNames() ?? [];
+        var book = new MarketBook(start.MapName, DateTime.Now) { Skills = skills };
         var tries = new Dictionary<int, int>();
         var random = new Random();
         string saved = "";
@@ -186,9 +189,10 @@ internal sealed partial class BotEngine
             if (book.Shops > 0)
                 Save();
         }
-        int left = shops.Count(s => !book.Has(s.Id));
+        int failed = shops.Count(s => !book.Has(s.Id) && tries.GetValueOrDefault(s.Id) >= ShopTries);
+        int left = shops.Count(s => !book.Has(s.Id)) - failed;
         string result = $"🛒 Pazar taraması {(why.Length > 0 ? $"bitti ({why})" : "bitti")}: {book.Shops} dükkan, {book.Items} ürün okundu" +
-                        (left > 0 ? $", {left} dükkan açılamadı" : "") + ".";
+                        (failed > 0 ? $", {failed} dükkan açılamadı" : "") + (left > 0 ? $", {left} dükkana sıra gelmedi" : "") + ".";
         return book.Shops > 0
             ? result + $" Liste: {saved} (Excel ile açılır), özet: {Path.ChangeExtension(saved, ".txt")}"
             : result;

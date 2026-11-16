@@ -479,6 +479,7 @@ internal sealed partial class GameWorldReader : IDisposable
         ("loader", "charData.attack", 0x770 + 0xA8),
         ("PlayerCameraManager", "CameraCachePrivate", 0x1AF0),
         ("gameManager", "privShops", 0xB80),
+        ("m2data_C", "iskillData", 0x460),
         ("m2data_C", "PrivateShopView", 0x1428),
         ("PrivateShopView_C", "shopId", 0x518),
         ("PrivateShopView_C", "gotData", 0x520),
