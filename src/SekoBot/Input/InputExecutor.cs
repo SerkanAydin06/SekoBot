@@ -374,7 +374,31 @@ internal sealed class InputExecutor : IDisposable
         altUp.u.ki.dwFlags = Win32.KEYEVENTF_KEYUP;
         Win32.SendInput(2, [alt, altUp], Marshal.SizeOf<Win32.INPUT>());
         Win32.SetForegroundWindow(_window.Handle);
-        return Win32.GetForegroundWindow() == _window.Handle;
+        if (Win32.GetForegroundWindow() == _window.Handle)
+            return true;
+        // Refused (another SekoBot just put its game in front, or a window holds the focus): share the
+        // input of the window in front for a moment; then Windows lets the game come forward.
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            nint front = Win32.GetForegroundWindow();
+            uint frontThread = front != 0 ? Win32.GetWindowThreadProcessId(front, out _) : 0;
+            uint me = Win32.GetCurrentThreadId();
+            bool attached = frontThread != 0 && frontThread != me && Win32.AttachThreadInput(me, frontThread, true);
+            try
+            {
+                Win32.BringWindowToTop(_window.Handle);
+                Win32.SetForegroundWindow(_window.Handle);
+            }
+            finally
+            {
+                if (attached)
+                    Win32.AttachThreadInput(me, frontThread, false);
+            }
+            if (Win32.GetForegroundWindow() == _window.Handle)
+                return true;
+            Thread.Sleep(120);
+        }
+        return false;
     }
 
     /// <summary>Left click at a point of the game's client area.</summary>

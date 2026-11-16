@@ -44,12 +44,13 @@ internal sealed partial class Brain
     public void Start(TimeSpan now)
     {
         Cycles = Potions = Deaths = 0;
+        Detours = NoWayMobs = 0;
         _lastAttackDown = Never;
         _hpLowSince = _mpLowSince = _lastEsc = Never;
         ResetSkills();
         ResetRetreat();
         _nextBreak = Never;
-        _random = new Random((int)(now.Ticks % int.MaxValue));
+        _random = new Random(Seed(now));
         _failedSearches = 0;
         _blindFight = false;
         if (_profile().NavigateMode)
@@ -461,5 +462,15 @@ internal sealed partial class Brain
             _blindFight = false;
         Phase = phase;
         _phaseSince = now;
+    }
+
+    /// <summary>A seed of its own for each SekoBot: two bots started a few seconds apart got nearly the same
+    /// numbers from nearby seeds (seen: both took their break in the same second).</summary>
+    internal static int Seed(TimeSpan now, int instance = 0)
+    {
+        ulong z = (ulong)now.Ticks + (ulong)(instance == 0 ? Instance.Number : instance) * 0x9E3779B97F4A7C15UL;
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBUL;
+        return (int)((z ^ (z >> 31)) & int.MaxValue);
     }
 }

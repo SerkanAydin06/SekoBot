@@ -387,6 +387,9 @@ internal sealed partial class BotEngine : IDisposable
         var report = _session.Report(World, _clock.Elapsed);
         _lastSummary = SessionLog.Summary(duration, report, _brain.Deaths);
         _log("Oturum: " + _lastSummary);
+        if (_brain.Detours + _brain.NoWayMobs > 0)
+            _log($"🗺 Harita: {_brain.Detours} kez engelin (duvar, kaya, ağaç) etrafından dolanıldı; " +
+                 $"{_brain.NoWayMobs} moba kısa yol olmadığı için gidilmedi.");
         try
         {
             SessionLog.Append(SessionLog.Line(_sessionStartedAt, DateTime.Now, World?.MapName ?? "", report, _brain.Deaths, reason));
