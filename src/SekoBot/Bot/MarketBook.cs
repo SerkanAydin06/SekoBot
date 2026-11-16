@@ -13,28 +13,42 @@ namespace SekoBot.Bot;
 internal sealed record ItemStats(string Name, int Shops, int Listings, long Pieces, double Min, string MinSeller, int MinShop,
     double Average, double Median, double Max);
 
+/// <summary>One item for sale, found in the market list: what, for how much, in which shop and where.</summary>
+internal sealed record MarketListing(string Name, int Count, long Price, double UnitPrice, string Bonuses,
+    int ShopId, string Owner, double X, double Y, DateTime Seen);
+
 /// <summary>
-/// What a market scan saw: every shop opened, with its items and prices, and where every shop of
-/// the map stands. Saved as data (pazar-….json, also to go on with a scan stopped half way), as a
-/// table of every item (….csv, opens in Excel) and as a report to look at (….html: the market
-/// map, search, the cheapest seller and the prices of each item, the wanted items first).
+/// The market of one map, kept up to date: every shop ever opened with its items and prices and
+/// when it was read, and where every shop of the map stands. One file per map (pazar/[map].json):
+/// every scan, every shop the bot or the player opens updates it, and shops that are gone from the
+/// map are taken out at once. Also written as a table (….csv, Excel) and a report to look at (….html).
 /// </summary>
 internal sealed class MarketBook
 {
     private readonly Dictionary<int, Shop> _shops = [];
-    private Dictionary<int, (double X, double Y)> _all = [];
+    private readonly Dictionary<int, (double X, double Y)> _all = [];
+    private readonly object _gate = new();
 
-    public MarketBook(string map, DateTime started)
+    public MarketBook(string map)
     {
         Map = map;
-        Started = started;
     }
 
     public string Map { get; }
-    public DateTime Started { get; private set; }
-    public int Shops => _shops.Count;
-    public int Items => _shops.Values.Sum(s => s.Items.Count);
-    public bool Has(int shopId) => _shops.ContainsKey(shopId);
+    /// <summary>When something changed last.</summary>
+    public DateTime Updated { get; private set; } = DateTime.Now;
+    public bool Changed { get; private set; }
+
+    public int Shops { get { lock (_gate) return _shops.Count; } }
+    public int Items { get { lock (_gate) return _shops.Values.Sum(s => s.Items.Count); } }
+    public bool Has(int shopId) { lock (_gate) return _shops.ContainsKey(shopId); }
+
+    /// <summary>Read within <paramref name="within"/> (no need to open it again).</summary>
+    public bool Fresh(int shopId, TimeSpan within, DateTime now)
+    {
+        lock (_gate)
+            return _shops.TryGetValue(shopId, out var s) && now - s.Seen < within;
+    }
 
     /// <summary>The game's skills by number (a skill book is named by the skill it teaches).</summary>
     public IReadOnlyDictionary<int, string> Skills { get; set; } = new Dictionary<int, string>();
@@ -42,32 +56,85 @@ internal sealed class MarketBook
     /// <summary>The items looked for (shown first in the report).</summary>
     public IReadOnlyList<MarketWant> Wanted { get; set; } = [];
 
-    /// <summary>Every shop of the map and where it stands (for the map in the report).</summary>
-    public void SetAllShops(IEnumerable<MarketShop> shops)
+    /// <summary>Every shop of the map now (where it stands). Shops gone from the map are taken out
+    /// of the list (closed: what they sold can't be bought any more).</summary>
+    /// <returns>How many known shops were gone.</returns>
+    public int SetAllShops(IReadOnlyCollection<MarketShop> shops)
     {
-        foreach (var s in shops)
-            _all[s.Id] = (s.X, s.Y);
+        if (shops.Count == 0)
+            return 0; // not read (a loading screen): nothing is taken out
+        lock (_gate)
+        {
+            var now = shops.Select(s => s.Id).ToHashSet();
+            int gone = 0;
+            foreach (int id in _shops.Keys.Where(id => !now.Contains(id)).ToList())
+            {
+                _shops.Remove(id);
+                gone++;
+            }
+            _all.Clear();
+            foreach (var s in shops)
+            {
+                _all[s.Id] = (s.X, s.Y);
+                if (_shops.TryGetValue(s.Id, out var known) && known.X == 0 && known.Y == 0)
+                    (known.X, known.Y) = (s.X, s.Y);
+            }
+            if (gone > 0)
+                Touch();
+            return gone;
+        }
     }
 
-    /// <summary>A shop was opened (again: its newest contents count).</summary>
-    public void Add(OpenShop shop, MarketShop? where)
+    /// <summary>Where a shop stands (null: not on the map now).</summary>
+    public (double X, double Y)? Where(int shopId)
     {
-        var at = where is { } w ? (w.X, w.Y) : _all.TryGetValue(shop.Id, out var known) ? known : (0.0, 0.0);
-        _shops[shop.Id] = new Shop
+        lock (_gate)
+            return _all.TryGetValue(shopId, out var at) ? at : _shops.TryGetValue(shopId, out var s) && (s.X != 0 || s.Y != 0) ? (s.X, s.Y) : null;
+    }
+
+    /// <summary>A shop was opened: its newest contents replace what was known.</summary>
+    public void Add(OpenShop shop, DateTime seen)
+    {
+        lock (_gate)
         {
-            Id = shop.Id, Owner = shop.Owner, Level = shop.Level, Title = shop.Title, X = at.Item1, Y = at.Item2,
-            Items = [.. shop.Items.Select(i => new Item
+            var at = _all.TryGetValue(shop.Id, out var known) ? known : _shops.TryGetValue(shop.Id, out var old) ? (old.X, old.Y) : (0.0, 0.0);
+            _shops[shop.Id] = new Shop
             {
-                Name = Name(i), Vnum = i.Vnum, Count = i.Count, Price = i.Price, Socket = i.Socket,
-                Bonuses = i.Bonuses.Count == 0 ? "" : ItemBonuses.Describe(i.Bonuses),
-            })],
-        };
+                Id = shop.Id, Owner = shop.Owner, Level = shop.Level, Title = shop.Title, X = at.Item1, Y = at.Item2, Seen = seen,
+                Items = [.. shop.Items.Select(i => new Item
+                {
+                    Name = Name(i), Vnum = i.Vnum, Count = i.Count, Price = i.Price, Socket = i.Socket,
+                    Bonuses = i.Bonuses.Count == 0 ? "" : ItemBonuses.Describe(i.Bonuses),
+                })],
+            };
+            Touch();
+        }
+    }
+
+    private void Touch()
+    {
+        Changed = true;
+        Updated = DateTime.Now;
     }
 
     /// <summary>The wanted items this shop sells at the wanted price or cheaper.</summary>
     public List<(MarketWant Want, string Item, double UnitPrice)> WantedIn(OpenShop shop) =>
         [.. shop.Items.SelectMany(i => Wanted.Where(w => w.Matches(Name(i)) && (w.MaxPrice <= 0 || i.UnitPrice <= w.MaxPrice))
                                               .Select(w => (w, Name(i), i.UnitPrice)))];
+
+    /// <summary>Every item whose name (or bonuses) holds <paramref name="query"/>, cheapest piece first.</summary>
+    public List<MarketListing> Find(string query, int max = 300)
+    {
+        query = query.Trim();
+        if (query.Length == 0)
+            return [];
+        lock (_gate)
+            return [.. _shops.Values.SelectMany(s => s.Items
+                    .Where(i => i.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
+                                i.Bonuses.Contains(query, StringComparison.CurrentCultureIgnoreCase))
+                    .Select(i => new MarketListing(i.Name, i.Count, i.Price, i.UnitPrice, i.Bonuses, s.Id, s.Owner, s.X, s.Y, s.Seen)))
+                .OrderBy(l => l.UnitPrice).Take(max)];
+    }
 
     private static readonly CultureInfo Turkish = CultureInfo.GetCultureInfo("tr-TR");
 
@@ -84,17 +151,20 @@ internal sealed class MarketBook
     // ── Prices ──
 
     /// <summary>Per item name: who sells it and at what price per piece.</summary>
-    public List<ItemStats> Stats() =>
-        [.. _shops.Values.SelectMany(s => s.Items.Select(i => (Item: i, Shop: s)))
-            .GroupBy(x => x.Item.Name)
-            .Select(g =>
-            {
-                var prices = g.Select(x => x.Item.UnitPrice).Order().ToList();
-                var cheapest = g.MinBy(x => x.Item.UnitPrice);
-                return new ItemStats(g.Key, g.Select(x => x.Shop.Id).Distinct().Count(), prices.Count, g.Sum(x => (long)x.Item.Count),
-                    prices[0], cheapest.Shop.Owner, cheapest.Shop.Id, TrimmedAverage(prices), prices[prices.Count / 2], prices[^1]);
-            })
-            .OrderBy(s => s.Name, StringComparer.Create(Turkish, true))];
+    public List<ItemStats> Stats()
+    {
+        lock (_gate)
+            return [.. _shops.Values.SelectMany(s => s.Items.Select(i => (Item: i, Shop: s)))
+                .GroupBy(x => x.Item.Name)
+                .Select(g =>
+                {
+                    var prices = g.Select(x => x.Item.UnitPrice).Order().ToList();
+                    var cheapest = g.MinBy(x => x.Item.UnitPrice);
+                    return new ItemStats(g.Key, g.Select(x => x.Shop.Id).Distinct().Count(), prices.Count, g.Sum(x => (long)x.Item.Count),
+                        prices[0], cheapest.Shop.Owner, cheapest.Shop.Id, TrimmedAverage(prices), prices[prices.Count / 2], prices[^1]);
+                })
+                .OrderBy(s => s.Name, StringComparer.Create(Turkish, true))];
+    }
 
     /// <summary>The average of sorted prices without a tenth at each end (from 5 prices on).</summary>
     internal static double TrimmedAverage(IReadOnlyList<double> sorted)
@@ -114,13 +184,15 @@ internal sealed class MarketBook
     /// <summary>Every item, one per line (semicolons: Excel opens it as a table).</summary>
     public string Csv()
     {
-        var text = new StringBuilder("Eşya;Adet;Fiyat (yang);Tanesi (yang);Efsunlar;Satıcı;Satıcı Sv;Dükkan;Dükkan başlığı;X (m);Y (m)\r\n");
-        foreach (var shop in _shops.Values.OrderBy(s => s.Owner, StringComparer.Create(Turkish, true)))
-            foreach (var item in shop.Items.OrderBy(i => i.Name, StringComparer.Create(Turkish, true)))
-                text.Append(string.Join(";", Clean(item.Name), item.Count, item.Price, Math.Round(item.UnitPrice), Clean(item.Bonuses),
-                    Clean(shop.Owner), shop.Level, shop.Id, Clean(shop.Title),
-                    shop.X == 0 && shop.Y == 0 ? "" : (shop.X / 100).ToString("0", CultureInfo.InvariantCulture),
-                    shop.X == 0 && shop.Y == 0 ? "" : (shop.Y / 100).ToString("0", CultureInfo.InvariantCulture))).Append("\r\n");
+        var text = new StringBuilder("Eşya;Adet;Fiyat (yang);Tanesi (yang);Efsunlar;Satıcı;Satıcı Sv;Dükkan;Dükkan başlığı;X (m);Y (m);Okundu\r\n");
+        lock (_gate)
+            foreach (var shop in _shops.Values.OrderBy(s => s.Owner, StringComparer.Create(Turkish, true)))
+                foreach (var item in shop.Items.OrderBy(i => i.Name, StringComparer.Create(Turkish, true)))
+                    text.Append(string.Join(";", Clean(item.Name), item.Count, item.Price, Math.Round(item.UnitPrice), Clean(item.Bonuses),
+                        Clean(shop.Owner), shop.Level, shop.Id, Clean(shop.Title),
+                        shop.X == 0 && shop.Y == 0 ? "" : (shop.X / 100).ToString("0", CultureInfo.InvariantCulture),
+                        shop.X == 0 && shop.Y == 0 ? "" : (shop.Y / 100).ToString("0", CultureInfo.InvariantCulture),
+                        shop.Seen.ToString("dd.MM.yyyy HH:mm", CultureInfo.InvariantCulture))).Append("\r\n");
         return text.ToString();
     }
 
@@ -128,26 +200,35 @@ internal sealed class MarketBook
 
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
-    /// <summary>All of it as data (what the report shows; read back to go on with a scan).</summary>
-    public string ToJson() => JsonSerializer.Serialize(new Data
+    /// <summary>All of it as data (what the report shows, and what is read back next time).</summary>
+    public string ToJson()
     {
-        Map = Map, Started = Started, Saved = DateTime.Now,
-        Shops = [.. _shops.Values],
-        All = [.. _all.Select(kv => new[] { kv.Key, Math.Round(kv.Value.X), Math.Round(kv.Value.Y) })],
-        Stats = Stats(),
-        Wanted = [.. Wanted],
-    }, Json);
+        var stats = Stats();
+        lock (_gate)
+            return JsonSerializer.Serialize(new Data
+            {
+                Map = Map, Saved = Updated,
+                Shops = [.. _shops.Values],
+                All = [.. _all.Select(kv => new[] { kv.Key, Math.Round(kv.Value.X), Math.Round(kv.Value.Y) })],
+                Stats = stats,
+                Wanted = [.. Wanted],
+            }, Json);
+    }
 
-    /// <summary>A scan saved before (to go on with it), or null.</summary>
+    /// <summary>A market saved before, or null.</summary>
     public static MarketBook? FromJson(string json)
     {
         try
         {
             if (JsonSerializer.Deserialize<Data>(json, Json) is not { } data)
                 return null;
-            var book = new MarketBook(data.Map, data.Started);
+            var book = new MarketBook(data.Map) { Updated = data.Saved };
             foreach (var shop in data.Shops)
+            {
+                if (shop.Seen == default)
+                    shop.Seen = data.Saved;
                 book._shops[shop.Id] = shop;
+            }
             foreach (var a in data.All.Where(a => a.Length == 3))
                 book._all[(int)a[0]] = (a[1], a[2]);
             return book;
@@ -158,12 +239,17 @@ internal sealed class MarketBook
         }
     }
 
-    /// <summary>Writes the data, the table and the report (pazar-[time].json / .csv / .html); returns the report's path.</summary>
+    /// <summary>The file names of a map's market (one set per map, kept up to date).</summary>
+    public static string Stem(string folder, string map) =>
+        Path.Combine(folder, "pazar-" + string.Concat(map.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)));
+
+    /// <summary>Writes the data, the table and the report; returns the report's path.</summary>
     public string Save(string folder)
     {
         Directory.CreateDirectory(folder);
-        string stem = Path.Combine(folder, $"pazar-{Started:yyyy-MM-dd_HH-mm}");
+        string stem = Stem(folder, Map);
         string json = ToJson();
+        Changed = false;
         File.WriteAllText(stem + ".json", json, new UTF8Encoding(false));
         // With the BOM Excel reads the Turkish letters right.
         File.WriteAllText(stem + ".csv", Csv(), new UTF8Encoding(true));
@@ -171,23 +257,25 @@ internal sealed class MarketBook
         return stem + ".html";
     }
 
-    /// <summary>The newest scan saved in <paramref name="folder"/> for this map, if it isn't older than <paramref name="maxAge"/>.</summary>
-    public static MarketBook? Latest(string folder, string map, TimeSpan maxAge)
+    /// <summary>The map's market as saved, or a new empty one.</summary>
+    public static MarketBook Load(string folder, string map)
     {
-        if (!Directory.Exists(folder))
-            return null;
-        foreach (var file in new DirectoryInfo(folder).GetFiles("pazar-*.json").OrderByDescending(f => f.LastWriteTime))
+        try
         {
-            if (DateTime.Now - file.LastWriteTime > maxAge)
-                return null;
-            try
-            {
-                if (FromJson(File.ReadAllText(file.FullName)) is { } book && book.Map == map)
-                    return book;
-            }
-            catch (IOException) { }
+            string file = Stem(folder, map) + ".json";
+            if (File.Exists(file) && FromJson(File.ReadAllText(file)) is { } book && book.Map == map)
+                return book;
+            // Before the one list per map, every scan had its own file (pazar-[time].json): the newest one of this map starts the list.
+            if (Directory.Exists(folder))
+                foreach (var old in new DirectoryInfo(folder).GetFiles("pazar-2*.json").OrderByDescending(f => f.LastWriteTime))
+                    if (FromJson(File.ReadAllText(old.FullName)) is { } earlier && earlier.Map == map)
+                    {
+                        earlier.Changed = true;
+                        return earlier;
+                    }
         }
-        return null;
+        catch (IOException) { }
+        return new MarketBook(map);
     }
 
     /// <summary>The shop to go to next: the nearest one not seen yet (shops stand in rows, so going
@@ -205,6 +293,8 @@ internal sealed class MarketBook
         public string Title { get; set; } = "";
         public double X { get; set; }
         public double Y { get; set; }
+        /// <summary>When its items were read.</summary>
+        public DateTime Seen { get; set; }
         public List<Item> Items { get; set; } = [];
     }
 
@@ -222,7 +312,6 @@ internal sealed class MarketBook
     private sealed class Data
     {
         public string Map { get; set; } = "";
-        public DateTime Started { get; set; }
         public DateTime Saved { get; set; }
         public List<Shop> Shops { get; set; } = [];
         public List<double[]> All { get; set; } = [];
