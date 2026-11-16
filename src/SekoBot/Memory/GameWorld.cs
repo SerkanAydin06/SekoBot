@@ -338,7 +338,7 @@ internal sealed record WorldSnapshot(Vec3 Player, CameraView? Camera, IReadOnlyL
     IReadOnlyList<DeadMob>? DeadMobs = null, CharacterProgress? Progress = null, IReadOnlyList<OtherPlayer>? Players = null,
     IReadOnlyList<GroundItem>? Drops = null, bool InSafeZone = false, IReadOnlyList<string>? OpenWindows = null,
     double? ReviveIn = null, IReadOnlyList<SkillInfo>? Skills = null, double AttackDistance = 0, int AttackPower = 0,
-    bool Stunned = false)
+    bool Stunned = false, IReadOnlyList<double?>? SkillWaits = null)
 {
     /// <summary>Dead, and "Burada yeniden başla" can be clicked.</summary>
     public bool ReviveReady => Dead && ReviveIn is <= 0;
@@ -421,6 +421,9 @@ internal sealed partial class GameWorldReader : IDisposable
         ("loader", "waitingChats", 0x380),
         ("loader", "eventDatas", 0x620),
         ("m2data_C", "uiMain", 0x1210),
+        ("m2data_C", "quickSlots", 0x13F8),
+        ("slot_C", "skillUsed", 0x580),
+        ("slot_C", "Time", 0x590),
         ("m2data_C", "dropWindow", 0x1440),
         ("UI_C", "pop_weaponArmor", 0x480),
         ("pop_equp_C", "yeret", 0x330),
@@ -713,8 +716,9 @@ internal sealed partial class GameWorldReader : IDisposable
         }
         var windows = _windows;
         double? reviveIn = dead ? ReviveIn(Pointer(instance + Offset(instanceClass, "m2data_C", "uiMain"))) : null;
+        var skillWaits = ReadSkillWaits(instance, instanceClass);
         return new WorldSnapshot(player, camera, mobs, players.Count, mapName, target, stats, dead, characterLevel, deadMobs, progress, players,
-            drops, safe, windows, reviveIn, _skills, attackDistance, attackPower, stunned);
+            drops, safe, windows, reviveIn, _skills, attackDistance, attackPower, stunned, skillWaits);
     }
 
     private (CharacterStats? Stats, int Level) ReadStats(long loader)
@@ -1430,6 +1434,46 @@ internal sealed partial class GameWorldReader : IDisposable
         }
         int end = Int32(loader + Offset(cls, "loader", "charData.invCount")) ?? 0;
         return new CharacterProgress(exp, need, yang, inventory, quick, end is > 0 and < 1000 ? end : 0);
+    }
+
+    // m2data.quickSlots element: the slot number (int, padded to 8), then the slot widget.
+    private const int QuickSlotStride = 0x10, QuickSlotWidget = 0x8;
+
+    /// <summary>
+    /// How long each quick slot's skill still has to wait (seconds; 0 = ready, null = unknown),
+    /// from the quick slot bar itself (m2data.quickSlots → slot_C: skillUsed while it cools down,
+    /// Time = seconds left). The game's own clock: no guessing, and it shows whether a press took.
+    /// </summary>
+    private List<double?>? ReadSkillWaits(long instance, long instanceClass)
+    {
+        long array = instance + Offset(instanceClass, "m2data_C", "quickSlots");
+        long data = Pointer(array);
+        int count = Int32(array + 8) ?? 0;
+        if (!MemoryReads.IsPointer(data) || count is <= 0 or > 32)
+            return null;
+        var slots = new byte[count * QuickSlotStride];
+        if (!_memory.Read(data, slots, slots.Length))
+            return null;
+        var waits = new List<double?>(count);
+        for (int i = 0; i < count; i++)
+        {
+            long widget = BitConverter.ToInt64(slots, i * QuickSlotStride + QuickSlotWidget);
+            if (!MemoryReads.IsPointer(widget))
+            {
+                waits.Add(null);
+                continue;
+            }
+            long cls = Pointer(widget + ObjClass);
+            bool? used = Byte(widget + Offset(cls, "slot_C", "skillUsed")) is byte b ? b != 0 : null;
+            double? left = Float(widget + Offset(cls, "slot_C", "Time"));
+            waits.Add(used switch
+            {
+                null => null,
+                false => 0,
+                true => left is double t and >= 0 and < 3600 ? Math.Max(t, 0.05) : null,
+            });
+        }
+        return waits;
     }
 
     // TMap<int, skill> element: key (int, padded to 8), the skill struct (0xA8), the hash links (8).

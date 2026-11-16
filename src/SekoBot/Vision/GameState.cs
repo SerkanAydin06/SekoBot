@@ -5,7 +5,7 @@ namespace SekoBot.Vision;
 /// <summary>A skill on a quick slot key, with what the game says about it.</summary>
 /// <param name="Range">How far it reaches (world units; 0 = unknown or on oneself).</param>
 internal sealed record SkillSlot(Keys Key, string Name, SkillKind Kind, int Mana, int CooldownSec, int DurationSec,
-    int Range = 0, SkillTraits Traits = SkillTraits.None, int Level = 0)
+    int Range = 0, SkillTraits Traits = SkillTraits.None, int Level = 0, double? Wait = null)
 {
     /// <summary>In words, for the log and the window: what it is, how long, how often, what it costs.</summary>
     public string Describe()

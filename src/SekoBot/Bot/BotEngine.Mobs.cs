@@ -167,7 +167,7 @@ internal sealed partial class BotEngine
             Keys? key = i < 5 ? Keys.D1 + i : i - 5 < profile.Keys.Skills.Length ? profile.Keys.Skills[i - 5] : null;
             if (key is Keys k)
                 slots.Add(new SkillSlot(k, skill.Name, skill.Kind, skill.Mana, skill.CooldownSec, skill.DurationSec,
-                    skill.Distance, skill.Traits, skill.Level));
+                    skill.Distance, skill.Traits, skill.Level, world.SkillWaits is { } waits && i < waits.Count ? waits[i] : null));
         }
         return slots;
     }
