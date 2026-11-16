@@ -26,8 +26,8 @@ internal sealed class MainForm : Form
     private readonly PreviewControl _preview;
     private readonly Label _connection, _status, _calibrationHint, _calibrationState, _technical;
     private readonly Label _statTime, _statMobs, _statRate, _statDeaths, _statPotions, _statExp, _statExpRate, _statLevel, _statYang;
-    private readonly Label _positionState, _skillList, _farmState, _respawnState;
-    private readonly Button _findArea;
+    private readonly Label _positionState, _skillList, _farmState, _respawnState, _marketState;
+    private readonly Button _findArea, _scanMarket;
     private readonly Button _scanMobs;
     private readonly Meter _hpMeter, _mpMeter, _targetMeter;
     private readonly Button[] _tabButtons;
@@ -310,6 +310,16 @@ internal sealed class MainForm : Form
         _findArea.Click += (_, _) => ToggleAreaScan();
         Check(area, "Kayıtlı alanda başla", 560, 1, 176, _profile.UseFarmSpot, v => _profile.UseFarmSpot = v);
         _farmState = Theme.Label(area, "", new Rectangle(370, 32, 366, 40), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+        _scanMarket = Theme.Button(area, "🛒  Pazarı tara", new Rectangle(370, 76, 180, 28), Theme.Secondary, Theme.SecondaryHover);
+        _scanMarket.Click += (_, _) => ToggleMarketScan();
+        var marketFolder = Theme.Button(area, "📂  Pazar listeleri", new Rectangle(560, 76, 176, 28), Theme.Secondary, Theme.SecondaryHover);
+        marketFolder.Click += (_, _) =>
+        {
+            Directory.CreateDirectory(BotEngine.MarketFolder);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(BotEngine.MarketFolder) { UseShellExecute = true });
+        };
+        _marketState = Theme.Label(area, "Pazar haritasında: bot bütün dükkanları sırayla açıp ürünleri ve fiyatları bir listeye yazar (bir şey satın almaz).",
+            new Rectangle(370, 108, 548, 30), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
         Check(area, "GM görünce dur", 0, 34, 180, _profile.StopNearGm, v => _profile.StopNearGm = v);
         Check(area, "Şehre girince dur", 190, 34, 170, _profile.StopInSafeZone, v => _profile.StopInSafeZone = v);
         Check(area, "Ara sıra mola ver", 0, 68, 180, _profile.Breaks, v => _profile.Breaks = v);
@@ -740,6 +750,7 @@ internal sealed class MainForm : Form
                 Disconnect(message);
             });
             engine.AreaScanFinished += _ => PostUi(() => { SaveProfile(); UpdateControls(); UpdateStats(); });
+            engine.MarketScanFinished += _ => PostUi(() => { UpdateControls(); UpdateStats(); });
             engine.BotStopped += reason => PostUi(() => { _stopReason = reason; UpdateControls(); UpdateStats(); });
             _engine = engine;
             Instance.TakeGame(window.ProcessId);
@@ -822,6 +833,24 @@ internal sealed class MainForm : Form
     }
 
     // ── Farm area ──
+
+    private void ToggleMarketScan()
+    {
+        if (_engine == null)
+        {
+            WriteLog("Önce oyun açık olmalı.");
+            return;
+        }
+        if (_engine.ScanningMarket)
+        {
+            _engine.StopMarketScan();
+            return;
+        }
+        if (!_engine.StartMarketScan(out string error))
+            WriteLog(error);
+        UpdateControls();
+        UpdateStats();
+    }
 
     private void ToggleAreaScan()
     {
@@ -1073,6 +1102,11 @@ internal sealed class MainForm : Form
         string scanText = _engine.ScanningArea ? "■  Taramayı durdur" : _profile.FarmSpot != null ? "🔄  Alanı güncelle" : "📍  En iyi alanı bul";
         if (_findArea.Text != scanText)
             _findArea.Text = scanText;
+        string marketText = _engine.ScanningMarket ? "■  Pazar taramasını durdur" : "🛒  Pazarı tara";
+        if (_scanMarket.Text != marketText)
+            _scanMarket.Text = marketText;
+        if (_engine.MarketStatus is { Length: > 0 } market && _marketState.Text != market)
+            _marketState.Text = market;
         _hpMeter.Value = state?.Hp;
         _mpMeter.Value = state?.Mp;
         _targetMeter.Value = state?.TargetHp;
@@ -1264,8 +1298,9 @@ internal sealed class MainForm : Form
         bool connected = _engine != null;
         bool running = _engine?.BotRunning == true;
         _gameButton.Text = connected ? "Bağlantı  ▾" : "Oyunu seç  ▾";
-        _startBot.Enabled = connected && _engine?.ScanningArea != true;
-        _findArea.Enabled = connected && !running;
+        _startBot.Enabled = connected && _engine?.ScanningArea != true && _engine?.ScanningMarket != true;
+        _findArea.Enabled = connected && !running && _engine?.ScanningMarket != true;
+        _scanMarket.Enabled = connected && !running && _engine?.ScanningArea != true;
         _scanMobs.Enabled = connected;
         _startBot.Text = running ? $"❚❚  DURAKLAT   {StartKey}" : $"▶  BAŞLAT   {StartKey}";
         _stopBot.Enabled = running;
