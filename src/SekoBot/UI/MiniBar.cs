@@ -4,14 +4,17 @@ using SekoBot.Native;
 namespace SekoBot.UI;
 
 /// <summary>What the small bar shows (filled by the main window).</summary>
+/// <param name="GameWindow">The game window the bot plays (0 when none): the bar is tied to it.</param>
+/// <param name="HpPotions">HP and MP potions left in the bag (the ones on the potion keys), when known.</param>
 internal sealed record MiniInfo(string Name, string Status, Color StatusColor, double? Hp, double? Mp, string ExpRate, string Mobs,
-    bool Running, Rectangle? Game);
+    bool Running, Rectangle? Game, nint GameWindow = 0, int? HpPotions = null, int? MpPotions = null);
 
 /// <summary>
 /// The bot made small: one bar (420×84) under its own game window, so many bots fit on one screen
 /// next to their games. It shows the character, what the bot is doing, HP/MP and experience per
-/// hour, with start, stop and "big again" buttons. It follows its game window when that moves,
-/// stays on top without taking the focus from the game. Double click (or ⤢): the full window again.
+/// hour and the potions left, with start, stop and "big again" buttons. It is tied to its game
+/// window (owned by it): it comes to the front with the game, goes when the game is minimized and
+/// moves with it at once; it never takes the focus from the game. Double click (or ⤢): the full window again.
 /// </summary>
 internal sealed class MiniBar : Form
 {
@@ -48,7 +51,11 @@ internal sealed class MiniBar : Form
         menu.Items.Add("■  Durdur", null, (_, _) => _stop());
         ContextMenuStrip = menu;
         _timer.Tick += (_, _) => Pull(true);
-        FormClosed += (_, _) => _timer.Dispose();
+        FormClosed += (_, _) =>
+        {
+            _timer.Dispose();
+            Tie(0);
+        };
     }
 
     /// <summary>The bar's height on the screen (pixels) at <paramref name="dpi"/>.</summary>
@@ -78,12 +85,47 @@ internal sealed class MiniBar : Form
             _timer.Stop();
     }
 
+    private nint _tiedTo, _hook;
+    private Win32.WinEventProc? _onMove;
+
+    /// <summary>Ties the bar to the game window: owned by it (above it, hidden with it), told at once when it moves.</summary>
+    private void Tie(nint game)
+    {
+        if (game == _tiedTo || IsDisposed)
+            return;
+        if (_hook != 0)
+            Win32.UnhookWinEvent(_hook);
+        _hook = 0;
+        _tiedTo = game;
+        if (!IsHandleCreated)
+            return;
+        Win32.SetWindowLongPtr(Handle, Win32.GWLP_HWNDPARENT, game);
+        // Tied: above its game only (not above every other program); alone: on top so it can be seen.
+        TopMost = game == 0;
+        if (game == 0)
+            return;
+        Win32.GetWindowThreadProcessId(game, out uint pid);
+        _onMove = (_, _, hwnd, idObject, _, _, _) =>
+        {
+            if (hwnd == _tiedTo && idObject == 0 && Visible)
+                Pull(true);
+        };
+        _hook = Win32.SetWinEventHook(Win32.EVENT_OBJECT_LOCATIONCHANGE, Win32.EVENT_OBJECT_LOCATIONCHANGE, 0, _onMove, pid, 0, Win32.WINEVENT_OUTOFCONTEXT);
+    }
+
     private void Pull(bool place)
     {
         _info = _read();
+        Tie(_info.GameWindow);
         if (place)
         {
             // As wide as its game (the band under it is the bar's), at least the bar's own width.
+            // The game minimized: the bar went with it (Windows hides what a window owns); nothing to place.
+            if (_info.GameWindow != 0 && _info.Game is not { IsEmpty: false })
+            {
+                Invalidate();
+                return;
+            }
             int width = _info.Game is { IsEmpty: false } g
                 ? Math.Clamp(g.Width, (int)(LogicalWidth * S), (int)(MaxWidth * S))
                 : (int)(LogicalWidth * S);
@@ -111,7 +153,7 @@ internal sealed class MiniBar : Form
     private const int MaxWidth = 1100;
 
     /// <summary>The three buttons: start, stop, big.</summary>
-    private Rectangle Button(int i) => new((int)((W - 118 + i * 38) * S), (int)(8 * S), (int)(32 * S), (int)(30 * S));
+    private Rectangle Button(int i) => new((int)((W - 118 + i * 38) * S), (int)(6 * S), (int)(32 * S), (int)(28 * S));
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -132,8 +174,14 @@ internal sealed class MiniBar : Form
         string name = (Instance.IsFirst ? "" : $"{Instance.Number} · ") + (info.Name.Length > 0 ? info.Name : "SekoBot");
         TextRenderer.DrawText(g, "◆ " + name, nameFont, new Rectangle((int)(14 * s), (int)(6 * s), (int)((W - 150) * s), (int)(22 * s)), Theme.Text,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-        TextRenderer.DrawText(g, info.Status, small, new Rectangle((int)(14 * s), (int)(29 * s), (int)((W - 130) * s), (int)(20 * s)), info.StatusColor,
+        TextRenderer.DrawText(g, info.Status, small, new Rectangle((int)(14 * s), (int)(29 * s), (int)((W - 186) * s), (int)(20 * s)), info.StatusColor,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        // The potions left, under the buttons: red when few.
+        string Count(int? n) => n is int c ? c.ToString("N0") : "—";
+        bool low = info.HpPotions is < 20 || info.MpPotions is < 10;
+        TextRenderer.DrawText(g, $"İksir  HP {Count(info.HpPotions)} · MP {Count(info.MpPotions)}", smallBold,
+            new Rectangle((int)((W - 172) * s), (int)(38 * s), (int)(166 * s), (int)(18 * s)), low ? Theme.Red : Theme.Text,
+            TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
         // Wider bar: longer HP and MP bars (the experience stays at the right).
         float hp = Math.Clamp((W - 200) * 0.5f, 110, 300), mp = hp * 0.8f;
