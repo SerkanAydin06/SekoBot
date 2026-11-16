@@ -240,7 +240,7 @@ internal sealed partial class Brain
                     if (!_toHotspot)
                         actions.Add(new NoteAction("Etrafta mob yok; mobların çok olduğu yere gidiliyor."));
                     _toHotspot = true;
-                    SetMoves(Around(state, right / length * 100, -up / length * 100, 38, p), p, actions, refresh);
+                    SetMoves(Around(state, right / length * 100, -up / length * 100, 38, p, to: spot), p, actions, refresh);
                     CheckBlocked(state, p, actions);
                     if (Phase != BotPhase.Searching)
                         Enter(BotPhase.Searching, now);
@@ -326,7 +326,7 @@ internal sealed partial class Brain
         FinishFight(p, actions, now);
         // Around the other mobs on the way (the one gone for doesn't count).
         int goal = chosen?.Id ?? 0;
-        SetMoves(Around(state, dx, dy, radius * 0.5, p, m => m.Id == goal), p, actions, refresh);
+        SetMoves(Around(state, dx, dy, radius * 0.5, p, m => m.Id == goal, chosen?.Position), p, actions, refresh);
         if (Phase != BotPhase.Moving)
         {
             Enter(BotPhase.Moving, now);
@@ -427,7 +427,7 @@ internal sealed partial class Brain
         var (right, up) = camera.ToScreenDirection(spot.X - me.X, spot.Y - me.Y);
         double length = Math.Max(1e-6, Math.Sqrt(right * right + up * up));
         SetAttack(false, p, actions, refresh);
-        SetMoves(Around(state, right / length * 100, -up / length * 100, 38, p), p, actions, refresh);
+        SetMoves(Around(state, right / length * 100, -up / length * 100, 38, p, to: spot), p, actions, refresh);
         if (Phase != BotPhase.Moving)
             Enter(BotPhase.Moving, now);
         _movingSince = Never;
@@ -722,9 +722,11 @@ internal sealed partial class Brain
         return ((ux + sideX) * length, (uy + sideY) * length);
     }
 
-    private HashSet<Keys> Around(GameState state, double dx, double dy, double dead, BotProfile p, Func<TargetInfo, bool>? goingFor = null)
+    private HashSet<Keys> Around(GameState state, double dx, double dy, double dead, BotProfile p, Func<TargetInfo, bool>? goingFor = null, Vec3? to = null)
     {
         var now = state.Time;
+        // A wall, a house or a rock between us and where we go (the map's obstacles): head for the way round.
+        (dx, dy) = TowardsCorner(state, to, dx, dy);
         var (x, y) = AroundMobs(state, dx, dy, goingFor, (id, wanted) =>
         {
             if (_avoidSide.TryGetValue(id, out var kept) && now < kept.Until)

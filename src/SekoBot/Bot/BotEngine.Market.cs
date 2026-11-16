@@ -77,7 +77,7 @@ internal sealed partial class BotEngine
     {
         try
         {
-            return book.Save(MarketFolder);
+            return book.Save(MarketFolder, MapReport.Outlines(_terrain.Of(book.Map)));
         }
         catch (IOException ex)
         {

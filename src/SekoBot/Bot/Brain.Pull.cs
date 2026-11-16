@@ -232,7 +232,7 @@ internal sealed partial class Brain
             SetAttack(false, p, actions, refresh);
             // To the group, around the others (they'd come too early, from the wrong side).
             int pulling = group.Key;
-            SetMoves(Around(state, dx, dy, radius * 0.5, p, m => m.Group == pulling), p, actions, refresh);
+            SetMoves(Around(state, dx, dy, radius * 0.5, p, m => m.Group == pulling, member.Position), p, actions, refresh);
             if (Phase != BotPhase.Moving)
                 Enter(BotPhase.Moving, now);
             _movingSince = Never;

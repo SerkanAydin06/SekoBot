@@ -93,6 +93,8 @@ internal sealed partial class BotEngine
         var started = _clock.Elapsed;
         var lastMove = _clock.Elapsed;
         Vec3? last = null;
+        List<Vec3>? way = null;
+        var wayAt = TimeSpan.Zero;
         try
         {
             while (_clock.Elapsed - started < limit)
@@ -111,7 +113,9 @@ internal sealed partial class BotEngine
                 else if (_clock.Elapsed - lastMove > TimeSpan.FromSeconds(2))
                     break; // stuck: on to the next leg
                 last = world.Player;
-                var (right, up) = camera.ToScreenDirection(target.X - world.Player.X, target.Y - world.Player.Y);
+                // Around the walls, houses and rocks of the map: towards the next corner of the way.
+                var aim = Aim(world, target, ref way, ref wayAt);
+                var (right, up) = camera.ToScreenDirection(aim.X - world.Player.X, aim.Y - world.Player.Y);
                 double length = Math.Max(1e-6, Math.Sqrt(right * right + up * up));
                 double sx = right / length, sy = -up / length;
                 var want = new HashSet<Keys>();

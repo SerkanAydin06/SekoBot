@@ -43,6 +43,8 @@ internal sealed partial class Brain
         _stuckSpots.Clear();
         _walkGoal = null;
         _walkedNotedAt = Never;
+        _way = null;
+        _reachable.Clear();
     }
 
     /// <summary>Walking freely: known obstacles under our feet weren't real (once a second).</summary>
@@ -177,6 +179,9 @@ internal sealed partial class Brain
             return false;
         _stuckSpots.RemoveAll(s => now - s.When > TimeSpan.FromMilliseconds(StuckForgetMs));
         if (_stuckSpots.Count > 0 && WayBlocked(_stuckSpots, me, at))
+            return false;
+        // Walls, houses and rocks of the map (from the game): only by a short way round.
+        if (!ReachableOnMap(t, state, me, at, now))
             return false;
         // Known trees and rocks of this map right on the way (not the ones we stand at: walking bends around those).
         var known = KnownObstacles(state);

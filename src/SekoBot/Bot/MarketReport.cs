@@ -8,7 +8,9 @@ namespace SekoBot.Bot;
 /// </summary>
 internal static class MarketReport
 {
-    public static string Html(string json) => Template.Replace("__DATA__", json.Replace("</", "<\\/"));
+    /// <param name="walls">The map's obstacles to draw under the shops (see <see cref="MapReport.Outlines"/>).</param>
+    public static string Html(string json, string walls = "[]") =>
+        Template.Replace("__WALLS__", walls).Replace("__DATA__", json.Replace("</", "<\\/"));
 
     private const string Template = """
 <!doctype html>
@@ -235,8 +237,19 @@ function place() {
   const ox = (r.width - (maxX - minX) * s) / 2, oy = (r.height - (maxY - minY) * s) / 2;
   return p => [ox + (p.x - minX) * s, oy + (p.y - minY) * s];
 }
+const W = __WALLS__;
 function draw() {
   const at = place(); ctx.clearRect(0, 0, cv.width, cv.height);
+  // The map's walls, houses and rocks (from the game) under the shops.
+  ctx.fillStyle = '#4a5268aa';
+  for (const w of W) {
+    let near = false;
+    for (let i = 0; i < w.length; i += 2) if (w[i] >= minX - 3000 && w[i] <= maxX + 3000 && w[i + 1] >= minY - 3000 && w[i + 1] <= maxY + 3000) { near = true; break; }
+    if (!near) continue;
+    ctx.beginPath();
+    for (let i = 0; i < w.length; i += 2) { const [x, y] = at({x: w[i], y: w[i + 1]}); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.closePath(); ctx.fill();
+  }
   for (const p of pts) { if (!p.x) continue; const [x, y] = at(p); ctx.fillStyle = shopsById.has(p.id) ? '#3a4257' : '#262b38'; ctx.fillRect(x - 1.5, y - 1.5, 3, 3); }
   marks = [];
   const ls = selected ? (byName.get(selected) || []) : [];

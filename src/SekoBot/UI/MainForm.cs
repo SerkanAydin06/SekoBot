@@ -310,6 +310,15 @@ internal sealed class MainForm : Form
         _findArea = Theme.Button(area, "📍  En iyi alanı bul", new Rectangle(370, 0, 180, 28), Theme.Primary, Theme.PrimaryHover);
         _findArea.Click += (_, _) => ToggleAreaScan();
         Check(area, "Kayıtlı alanda başla", 560, 1, 176, _profile.UseFarmSpot, v => _profile.UseFarmSpot = v);
+        // The map's walls, houses, rocks and trees (read from the game when the character comes onto a map).
+        var openMap = Theme.Button(area, "🗺  Haritayı aç", new Rectangle(746, 0, 172, 28), Theme.Secondary, Theme.SecondaryHover);
+        openMap.Click += (_, _) =>
+        {
+            if (_engine?.MapPicture is { } picture)
+                OpenFile(picture);
+            else
+                WriteLog("Henüz kayıtlı harita yok: oyun açıkken karakter bir haritaya girince engeller kendiliğinden okunur.");
+        };
         _farmState = Theme.Label(area, "", new Rectangle(370, 32, 366, 40), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
         Check(area, "GM görünce dur", 0, 34, 180, _profile.StopNearGm, v => _profile.StopNearGm = v);
         Check(area, "Şehre girince dur", 190, 34, 170, _profile.StopInSafeZone, v => _profile.StopInSafeZone = v);
