@@ -32,6 +32,7 @@ internal sealed partial class Brain
         _skillExtra.Clear();
         _lastAnySkill = Never;
         _lastSkillSlot = -1;
+        _skillsTold = "";
     }
 
     /// <summary>The game said "WAIT!": the skill pressed last wasn't ready yet. It waits a little
@@ -58,7 +59,10 @@ internal sealed partial class Brain
         if (now - _lastAnySkill < Ms(p.SkillGapMs))
             return false;
         if (p.AutoSkills && state.Skills.Count > 0)
+        {
+            TellSkills(state, actions);
             return CastAutoSkill(state, p, actions);
+        }
         for (int i = 0; i < BotProfile.SkillSlots; i++)
         {
             int every = i < p.SkillEverySec.Length ? p.SkillEverySec[i] : 0;
@@ -73,8 +77,41 @@ internal sealed partial class Brain
         return false;
     }
 
-    /// <summary>Mobs this close (world units, 3 m) are hit by an area skill.</summary>
+    /// <summary>Mobs this close (world units, 3 m) are hit by an area skill whose reach is unknown.</summary>
     internal const double AreaSkillRange = 300;
+    /// <summary>An area skill's own reach counts up to this far (world units, 4 m).</summary>
+    internal const double AreaSkillMaxRange = 400;
+    /// <summary>Below this HP with two or more mobs on us, a stunning skill is used even on a small group.</summary>
+    internal const double StunBelowHp = 0.5;
+    /// <summary>A healing skill is used below this HP.</summary>
+    internal const double HealBelowHp = 0.6;
+
+    private string _skillsTold = "";
+
+    /// <summary>The skills on the slots changed (first seen, learned, levelled, moved): say what
+    /// each one does and how it will be used, and which learned ones the bot can't press.</summary>
+    private void TellSkills(GameState state, List<BotAction> actions)
+    {
+        string told = string.Join("|", state.Skills.Select(s => $"{s.Key}{s.Name}{s.Level}{s.CooldownSec}{s.DurationSec}{s.Mana}")) +
+                      "#" + string.Join("|", state.SkillsOffSlots);
+        if (told == _skillsTold)
+            return;
+        _skillsTold = told;
+        actions.Add(new NoteAction("Beceriler öğrenildi: " +
+            string.Join(" · ", state.Skills.Select(s => $"{KeyName(s.Key)} {s.Name}{(s.Level > 0 ? $" (Sv {s.Level})" : "")}: {s.Describe()}")) + "."));
+        if (state.SkillsOffSlots.Count > 0)
+            actions.Add(new NoteAction($"Hızlı slotta olmayan beceri: {string.Join(", ", state.SkillsOffSlots)}. " +
+                                       "Bot sadece 1–5 ve F1–F5 slotlarındaki becerileri kullanabilir; kullanılsın istersen boş bir slota koy."));
+    }
+
+    private static string KeyName(Keys key) => key is >= Keys.D0 and <= Keys.D9 ? ((int)(key - Keys.D0)).ToString() : key.ToString();
+
+    /// <summary>The character died: buffs are gone, so they are cast again as soon as possible.</summary>
+    private void BuffsLost()
+    {
+        _skillUsed.Clear();
+        Array.Fill(_lastSkill, Never);
+    }
 
     private bool CastAutoSkill(GameState state, BotProfile p, List<BotAction> actions)
     {
@@ -84,22 +121,39 @@ internal sealed partial class Brain
         // Attack skills only while really hitting (not while walking to a mob, gathering or with
         // mobs still on their way: the skill would hit nothing). Mobs from memory: real distances.
         bool hitting = !p.NavigateMode || _attackHeld && Phase == BotPhase.Fighting && !_pulling;
-        int around = state.Targets.Count > 0
-            ? state.Targets.Count(t => t.Distance <= AreaSkillRange)
-            : state.MobCandidates.Count(m => Distance(m) <= radius * 2.5);
-        bool inReach = state.Targets.Count > 0
-            ? state.Targets.Any(t => t.Distance <= t.Reach * 1.4)
-            : state.MobCandidates.Any(m => Distance(m) <= radius * 1.4);
-        around = hitting ? around : 0;
-        inReach &= hitting;
+        bool fromMemory = state.Targets.Count > 0;
+        // Each skill reaches as far as the game says (area ones up to 4 m around us).
+        int Around(SkillSlot s)
+        {
+            if (!hitting)
+                return 0;
+            double reach = s.Range > 0 ? Math.Min(s.Range, AreaSkillMaxRange) : AreaSkillRange;
+            return fromMemory ? state.Targets.Count(t => t.Distance <= reach) : state.MobCandidates.Count(m => Distance(m) <= radius * 2.5);
+        }
+        bool InReach(SkillSlot s) => hitting && (fromMemory
+            ? state.Targets.Any(t => t.Distance <= Math.Max(t.Reach * 1.4, Math.Min(s.Range, AreaSkillMaxRange)))
+            : state.MobCandidates.Any(m => Distance(m) <= radius * 1.4));
+        // In trouble: HP low and several mobs hitting us. A stunning skill stops them for a moment.
+        int onMe = fromMemory ? state.Targets.Count(t => t.AttacksMe && t.Distance <= AreaSkillMaxRange) : state.Attackers.Count;
+        bool pressed = state.Hp is double hp && hp < StunBelowHp && onMe >= 2;
+        // Stunning ones first when pressed; area attacks before the ones in front, those before single ones.
+        int Order(SkillSlot s) => s.Kind switch
+        {
+            SkillKind.Heal => 0,
+            SkillKind.Buff => 1,
+            _ => (pressed && s.Traits.HasFlag(SkillTraits.Stun) ? 2 : 10) +
+                 (s.Kind == SkillKind.Area ? 0 : s.Traits.HasFlag(SkillTraits.Front) ? 1 : 2),
+        };
 
-        foreach (var skill in state.Skills.OrderBy(s => s.Kind switch { SkillKind.Buff => 0, SkillKind.Area => 1, _ => 2 }))
+        foreach (var skill in state.Skills.OrderBy(Order))
         {
             bool wanted = skill.Kind switch
             {
-                SkillKind.Buff => true,
-                SkillKind.Area => around >= p.AreaSkillMinMobs,
-                _ => inReach,
+                // A buff that slows us is put on in a fight, not while walking or gathering.
+                SkillKind.Buff => !skill.Traits.HasFlag(SkillTraits.SlowsMe) || hitting,
+                SkillKind.Heal => state.Hp is double h && h < HealBelowHp,
+                SkillKind.Area => Around(skill) is var n && (n >= p.AreaSkillMinMobs || pressed && skill.Traits.HasFlag(SkillTraits.Stun) && n >= 2),
+                _ => InReach(skill),
             };
             if (!wanted || state.MpPoints is int mp && mp < skill.Mana)
                 continue;

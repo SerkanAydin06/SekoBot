@@ -3,7 +3,40 @@ using SekoBot.Memory;
 namespace SekoBot.Vision;
 
 /// <summary>A skill on a quick slot key, with what the game says about it.</summary>
-internal sealed record SkillSlot(Keys Key, string Name, SkillKind Kind, int Mana, int CooldownSec, int DurationSec);
+/// <param name="Range">How far it reaches (world units; 0 = unknown or on oneself).</param>
+internal sealed record SkillSlot(Keys Key, string Name, SkillKind Kind, int Mana, int CooldownSec, int DurationSec,
+    int Range = 0, SkillTraits Traits = SkillTraits.None, int Level = 0)
+{
+    /// <summary>In words, for the log and the window: what it is, how long, how often, what it costs.</summary>
+    public string Describe()
+    {
+        var parts = new List<string>
+        {
+            Kind switch
+            {
+                SkillKind.Buff => "güçlendirme",
+                SkillKind.Heal => "can doldurma",
+                SkillKind.Area => Traits.HasFlag(SkillTraits.Ranged) ? "uzaktan alan saldırısı" : "çevreye alan saldırısı",
+                _ => Traits.HasFlag(SkillTraits.Front) ? "öndekilere saldırı" : "tek hedef saldırı",
+            },
+        };
+        if (Range > 0 && Kind is SkillKind.Area or SkillKind.Single)
+            parts.Add($"{Range / 100.0:0.#} m");
+        if (Traits.HasFlag(SkillTraits.Stun))
+            parts.Add("bayıltır");
+        if (Traits.HasFlag(SkillTraits.Knockback))
+            parts.Add("geri iter");
+        if (DurationSec > 0)
+            parts.Add($"{DurationSec} sn sürer");
+        if (CooldownSec > 0)
+            parts.Add($"{CooldownSec} sn'de bir");
+        if (Mana > 0)
+            parts.Add($"{Mana} MP");
+        if (Traits.HasFlag(SkillTraits.SlowsMe))
+            parts.Add("yavaşlatır, dövüşte tazelenir");
+        return string.Join(", ", parts);
+    }
+}
 
 /// <summary>A mob the bot may go for: where it is on screen, how far (world units), from how far
 /// it can be hit, and what killing it is worth.</summary>
@@ -57,6 +90,9 @@ internal sealed record GameState(
 
     /// <summary>The character's skills on quick slot keys (from memory).</summary>
     public IReadOnlyList<SkillSlot> Skills { get; init; } = [];
+
+    /// <summary>Skills the character learned that sit on no quick slot (the bot can't press them).</summary>
+    public IReadOnlyList<string> SkillsOffSlots { get; init; } = [];
 
     /// <summary>MP in points (for skill costs), when known.</summary>
     public int? MpPoints { get; init; }

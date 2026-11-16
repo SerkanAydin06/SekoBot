@@ -166,9 +166,19 @@ internal sealed partial class BotEngine
                 continue;
             Keys? key = i < 5 ? Keys.D1 + i : i - 5 < profile.Keys.Skills.Length ? profile.Keys.Skills[i - 5] : null;
             if (key is Keys k)
-                slots.Add(new SkillSlot(k, skill.Name, skill.Kind, skill.Mana, skill.CooldownSec, skill.DurationSec));
+                slots.Add(new SkillSlot(k, skill.Name, skill.Kind, skill.Mana, skill.CooldownSec, skill.DurationSec,
+                    skill.Distance, skill.Traits, skill.Level));
         }
         return slots;
+    }
+
+    /// <summary>Learned skills that are on no quick slot key.</summary>
+    internal static List<string> SkillsOffSlots(WorldSnapshot? world, BotProfile profile)
+    {
+        if (world?.Skills is not { Count: > 0 } skills)
+            return [];
+        var on = SkillKeys(world, profile).Select(s => s.Name).ToHashSet();
+        return [.. skills.Where(s => !on.Contains(s.Name)).Select(s => s.Name)];
     }
 
     /// <summary>Whether to walk to this item (unknown items: yes, they may be anything).</summary>

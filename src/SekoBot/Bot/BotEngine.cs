@@ -173,6 +173,7 @@ internal sealed partial class BotEngine : IDisposable
                             Hotspot = Hotspot(world, profile, now),
                             FarmSpot = _farmSpot,
                             Skills = SkillKeys(world, profile),
+                            SkillsOffSlots = SkillsOffSlots(world, profile),
                             MpPoints = world?.Stats?.Mp,
                             // What the key can still drink: 0 once the game emptied it (then the bot gets away safely).
                             HpPotionsLeft = world is null ? null : Potion(world, profile.Keys.HpPotion)?.Drinkable ?? 0,
