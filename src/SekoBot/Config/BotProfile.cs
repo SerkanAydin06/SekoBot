@@ -173,6 +173,17 @@ internal sealed class BotProfile
     /// are picked up — a bonus shows only in the bag — and the rest is thrown away again.
     /// </summary>
     public List<BonusWant> LootBonuses { get; set; } = [];
+
+    // ── Pazar taraması ──
+    /// <summary>Items looked for in the market (part of the name is enough), each with the highest
+    /// price per piece worth telling about (0 = any price).</summary>
+    public List<MarketWant> MarketWanted { get; set; } = [];
+    /// <summary>Look straight down and zoom out before the market scan (more stalls on screen).</summary>
+    public bool MarketBirdsEye { get; set; } = true;
+    /// <summary>Send a Telegram message when a wanted item is found at its price or cheaper.</summary>
+    public bool MarketNotify { get; set; } = true;
+    /// <summary>A scan stopped half way on the same map within a few hours goes on where it was.</summary>
+    public bool MarketResume { get; set; } = true;
     /// <summary>Items always picked up, whatever the other loot choices (names, comma separated,
     /// part of the name is enough), e.g. "Cesaret Pelerini". A message is sent when one drops.</summary>
     public string LootAlways { get; set; } = "";
@@ -350,4 +361,15 @@ public sealed class BonusWant
 {
     public int Type { get; set; }
     public int Min { get; set; }
+}
+
+/// <summary>An item looked for in the market.</summary>
+public sealed class MarketWant
+{
+    /// <summary>Its name or a part of it ("Kavrama Taşı" finds +0 to +4).</summary>
+    public string Name { get; set; } = "";
+    /// <summary>Told about only at this price per piece or cheaper (0 = any price).</summary>
+    public long MaxPrice { get; set; }
+
+    public bool Matches(string itemName) => Name.Length > 0 && itemName.Contains(Name.Trim(), StringComparison.CurrentCultureIgnoreCase);
 }
