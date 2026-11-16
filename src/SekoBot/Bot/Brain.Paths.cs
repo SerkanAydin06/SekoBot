@@ -61,6 +61,17 @@ internal sealed partial class Brain
         return length < 1e-6 ? (dx, dy) : (right / length * wanted, -up / length * wanted);
     }
 
+    /// <summary>Whether an item on the ground can be walked to around the map's obstacles (unknown: yes).</summary>
+    private bool DropReachable(GameState state, GroundSpot drop)
+    {
+        if (drop.At is not Vec3 at || state.Position is not Vec3 me || TerrainHere(state) is not { } map || map.LineClear(me, at))
+            return true;
+        var way = map.WayTo(me, at, room: WayRoom);
+        if (way == null)
+            NoWayMobs++;
+        return way != null;
+    }
+
     /// <summary>Whether the mob can be walked to around the map's obstacles (kept a few seconds per mob).</summary>
     private bool ReachableOnMap(TargetInfo t, GameState state, Vec3 me, Vec3 at, TimeSpan now)
     {

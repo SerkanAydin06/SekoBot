@@ -51,7 +51,8 @@ internal sealed record TargetInfo(int Id, Point Spot, double Distance, double Re
 
 /// <summary>An item on the ground and where it is on screen.</summary>
 /// <param name="Special">Ticked "Topla" / on the "always pick up" names: gone for even while mobs attack us.</param>
-internal readonly record struct GroundSpot(long Id, Point Spot, bool Special = false);
+/// <param name="At">Where it lies in the world (from memory), for the way round the map's obstacles.</param>
+internal readonly record struct GroundSpot(long Id, Point Spot, bool Special = false, Vec3? At = null);
 
 /// <summary>Everything the bot knows about one moment. The brain never sees pixels or memory.</summary>
 /// <param name="Hp">The character's HP (0..1), from memory; null when it can't be read.</param>

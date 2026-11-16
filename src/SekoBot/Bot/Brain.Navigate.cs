@@ -586,6 +586,13 @@ internal sealed partial class Brain
         // a special item gets longer (it may be far, mobs may be in the way).
         if (drop.Id != _dropId)
         {
+            // Behind a wall or a rock with no way round (the map's obstacles): not walked to at all.
+            if (!DropReachable(state, drop))
+            {
+                _ignoredDrops[drop.Id] = now + Ms(DropRetryMs);
+                actions.Add(new NoteAction("Yerdeki eşyaya yol yok (duvar ya da kaya arkasında); bırakıldı."));
+                return false;
+            }
             _dropId = drop.Id;
             _dropSince = now;
             _dropTrying = TimeSpan.Zero;
@@ -633,7 +640,7 @@ internal sealed partial class Brain
         }
         else
         {
-            SetMoves(Around(state, dx, dy, radius * 0.25, p), p, actions, refresh);
+            SetMoves(Around(state, dx, dy, radius * 0.25, p, to: drop.At), p, actions, refresh);
         }
         if (Phase != BotPhase.Looting)
             Enter(BotPhase.Looting, now);
