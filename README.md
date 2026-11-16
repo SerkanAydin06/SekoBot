@@ -165,11 +165,14 @@ Kurulum: Telegram'da @BotFather'a `/newbot` yaz, verdiği anahtarı **Bot anahta
 
 ## Pazar taraması
 
-**🛒 Pazarı tara** (Alan sekmesi): pazar haritasında bot bütün dükkanları sırayla açar ve ne sattıklarını yazar. Haritadaki her dükkanın yeri bellekten okunur (bir pazarda ~1.800 dükkan); bot en yakın açılmamış dükkana yürür, tezgâhına bir oyuncu gibi tıklar (oyun karakteri yürütüp pencereyi açar), ürünleri, adetleri, fiyatları ve efsunları bellekten okur, pencereyi Esc ile kapatır ve sıradakine geçer. **Hiçbir şey satın alınmaz.** Bir dükkanın ürünleri ancak açılınca sunucudan gelir; bu yüzden hepsini açmak gerekir (dükkan başına birkaç saniye, bütün pazar birkaç saat). İki kez açılamayan dükkan atlanır. Aynı düğme taramayı durdurur; harita değişirse ya da can %50'nin altına düşerse tarama kendiliğinden biter.
+**🛒 Pazar** sekmesi: pazar haritasında bot bütün dükkanları sırayla açar ve ne sattıklarını yazar. **Hiçbir şey satın alınmaz.**
+- **🛒 Pazarı tara**: önce açık pencereler (envanter, menü, açık kalmış dükkan) Esc ile kapatılır ve kamera kuş bakışına alınır (yukarıdan, uzaktan; kapatılabilir). Haritadaki her dükkanın yeri bellekten okunur (bir pazarda ~1.800 dükkan); bot en yakın açılmamış dükkana yürür, tezgâhına gerçek imleçle tıklar (oyun öne gelir), ürünleri, adetleri, fiyatları ve efsunları bellekten okur, pencereyi Esc ile kapatır ve sıradakine geçer (dükkan başına ~2 sn, bütün pazar ~1 saat). İki kez açılamayan dükkan atlanır; üst üste 8 tıklamada hiçbir dükkan açılmazsa tarama durur. Karakterin üstüne denk gelen tezgâh atlanır. Aynı düğme durdurur; harita değişirse ya da can %50'nin altına düşerse kendiliğinden biter.
+- **Yarım kalan taramaya devam et**: 3 saat içinde aynı haritada yeniden basılırsa okunmuş dükkanlar atlanır.
+- **Aranan ürünler**: ad (bir kısmı yeter; "Kavrama Taşı" +0…+4'ün hepsini bulur) ve istenirse tanesi için en fazla fiyat. Uygun fiyata bulununca günlüğe ve (açıksa) Telegram'a hemen yazılır; raporda en üstte gösterilir.
+- **📊 Raporu aç**: tarama bitince kendiliğinden de açılır. Tarayıcıda (internetsiz) açılan sayfa: okunan dükkan / ürün / toplam değer, aranan ürünlerin kartları (en ucuzu, satıcısı, ortalaması, fiyatı uygun mu), bütün eşyaların aranıp sıralanabilen tablosu (dükkan sayısı, adet, en ucuz, ortalama, en pahalı; efsunlarda da aranabilir), pazar haritası (seçilen eşyayı satan dükkanlar ucuzdan pahalıya yeşil–sarı–kırmızı, en ucuzu altın halkayla; üstüne gelince satıcı ve fiyat) ve eşyanın bütün satışları (satıcıya tıklayınca o dükkanın tamamı). Fiyatlar bir tanesi için; ortalama uç fiyatlar (en ucuz ve en pahalı onda birler) çıkarılarak hesaplanır, şaka fiyatlar ortalamayı bozmasın.
+- Beceri kitaplarının hepsinin adı aynı olduğu için kitaplar öğrettiği beceriyle yazılır ("Beceri Kitabı: Güçlü beden"; oyunun beceri listesinden).
 
-Sonuç `%LOCALAPPDATA%\SekoBot\pazar` klasörüne yazılır (**📂 Pazar listeleri** düğmesi açar), her 25 dükkanda bir ve sonunda:
-- `pazar-[tarih].csv` — her ürün bir satır: eşya, adet, fiyat, tanesinin fiyatı, efsunlar, satıcı, seviyesi, dükkan no, dükkanın yeri. Excel ile açılır, sıralanıp süzülebilir.
-- `pazar-[tarih].txt` — eşya başına özet: kaç dükkanda var, toplam adet, en ucuz tanesi ve satıcısı, orta fiyat, en pahalı.
+Dosyalar `%LOCALAPPDATA%\SekoBot\pazar` klasöründe (**📂 Klasör**), her 25 dükkanda bir ve sonunda yazılır: `pazar-[tarih].html` (rapor), `.csv` (her ürün bir satır, Excel), `.json` (veri; devam etmek için).
 
 ## Grupları topla
 

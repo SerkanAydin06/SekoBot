@@ -25,6 +25,16 @@ internal sealed partial class BotEngine
     /// <summary>Raised from a worker thread when the market scan ended (message for the log).</summary>
     public event Action<string>? MarketScanFinished;
 
+    /// <summary>The report of the last scan (pazar-….html), when there is one.</summary>
+    public static string MarketYang(double price) => MarketBook.Yang(price);
+
+    public static string? LatestReport => Directory.Exists(MarketFolder)
+        ? new DirectoryInfo(MarketFolder).GetFiles("pazar-*.html").OrderByDescending(f => f.LastWriteTime).FirstOrDefault()?.FullName
+        : null;
+
+    /// <summary>A scan on the same map saved this recently is gone on with (its shops aren't opened again).</summary>
+    internal static readonly TimeSpan MarketResumeWithin = TimeSpan.FromHours(3);
+
     /// <summary>Market scans are saved here.</summary>
     public static string MarketFolder => Path.Combine(ProfileStore.Directory, "pazar");
 
@@ -89,13 +99,22 @@ internal sealed partial class BotEngine
         Dictionary<int, string> skills;
         lock (_worldGate)
             skills = _world?.ReadSkillNames() ?? [];
-        var book = new MarketBook(start.MapName, DateTime.Now) { Skills = skills };
+        var profile = Profile;
+        // Stopped half way not long ago on this map: go on, the shops read then aren't opened again.
+        var book = profile.MarketResume ? MarketBook.Latest(MarketFolder, start.MapName, MarketResumeWithin) : null;
+        bool resumed = book != null && book.Shops < shops.Count * 0.98;
+        if (!resumed)
+            book = new MarketBook(start.MapName, DateTime.Now);
+        book!.Skills = skills;
+        book.Wanted = [.. profile.MarketWanted.Where(w => w.Name.Trim().Length > 0)];
+        book.SetAllShops(shops);
         var tries = new Dictionary<int, int>();
         var random = new Random();
         string saved = "";
         void Save() => saved = book.Save(MarketFolder);
-        _log($"🛒 Pazar taraması başladı: {shops.Count} dükkan var. Bot dükkanları sırayla açıp içindekileri yazacak, hiçbir şey satın almaz. " +
-             "Durdurmak için aynı düğmeye bas. Oyuna dokunma.");
+        _log($"🛒 Pazar taraması {(resumed ? $"kaldığı yerden sürüyor ({book.Shops} dükkan okunmuştu)" : "başladı")}: {shops.Count} dükkan var. " +
+             "Bot dükkanları sırayla açıp içindekileri yazacak, hiçbir şey satın almaz. Durdurmak için aynı düğmeye bas. Oyuna dokunma." +
+             (book.Wanted.Count > 0 ? $" Aranan: {string.Join(", ", book.Wanted.Select(w => w.Name.Trim() + (w.MaxPrice > 0 ? $" (≤ {MarketBook.Yang(w.MaxPrice)})" : "")))}." : ""));
         using var input = new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
         bool Done(int id) => book.Has(id) || tries.GetValueOrDefault(id) >= ShopTries;
         string why = "";
@@ -104,6 +123,7 @@ internal sealed partial class BotEngine
         {
             // A window open from before: closed first (its shop is written down too).
             await TakeOpenShop(input, book, shops, token);
+            await PrepareForMarket(input, profile, token);
             while (true)
             {
                 token.ThrowIfCancellationRequested();
@@ -194,7 +214,7 @@ internal sealed partial class BotEngine
         string result = $"🛒 Pazar taraması {(why.Length > 0 ? $"bitti ({why})" : "bitti")}: {book.Shops} dükkan, {book.Items} ürün okundu" +
                         (failed > 0 ? $", {failed} dükkan açılamadı" : "") + (left > 0 ? $", {left} dükkana sıra gelmedi" : "") + ".";
         return book.Shops > 0
-            ? result + $" Liste: {saved} (Excel ile açılır), özet: {Path.ChangeExtension(saved, ".txt")}"
+            ? result + $" Rapor: {saved} (Pazar sekmesinde \"📊 Raporu aç\"), Excel listesi: {Path.ChangeExtension(saved, ".csv")}"
             : result;
     }
 
@@ -218,8 +238,18 @@ internal sealed partial class BotEngine
         bool fresh = !book.Has(shop.Id);
         book.Add(shop, shops.FirstOrDefault(s => s.Id == shop.Id));
         if (fresh)
+        {
             _log($"🛒 {shop.Owner} (Sv {shop.Level}): {shop.Items.Count} ürün" +
                  (shop.Items.Count > 0 ? $", en pahalısı {ItemBook.NameOf(shop.Items.MaxBy(i => i.Price)!.Vnum)} {MarketBook.Yang(shop.Items.Max(i => i.Price))} yang" : "") + ".");
+            // A wanted item at its price (or cheaper): told at once, also on Telegram.
+            foreach (var (_, item, price) in book.WantedIn(shop).GroupBy(f => f.Item).Select(g => g.MinBy(f => f.UnitPrice)))
+            {
+                string text = $"🎯 Pazarda bulundu: {item} — tanesi {MarketBook.Yang(price)} yang, satıcı {shop.Owner}.";
+                _log(text);
+                if (Profile.MarketNotify)
+                    Notify(text);
+            }
+        }
         // Esc only while the shop window is open (with nothing open it would open the game menu).
         for (int i = 0; i < 3 && ShopOpenNow() != null; i++)
         {
@@ -227,5 +257,27 @@ internal sealed partial class BotEngine
             for (int waited = 0; waited < 1500 && ShopOpenNow() != null; waited += 150)
                 await Task.Delay(150, token);
         }
+    }
+
+    /// <summary>Before the scan: windows over the game are closed (inventory, menu, a shop left open)
+    /// and the camera looks straight down from far up, so many stalls show and none hides another.</summary>
+    private async Task PrepareForMarket(InputExecutor input, BotProfile profile, CancellationToken token)
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            var open = (World?.OpenWindows ?? []).Where(KnownWindows.Contains).ToList();
+            if (open.Count == 0 && ShopOpenNow() == null)
+                break;
+            if (i == 0)
+                _log("Açık pencereler kapatılıyor: " + string.Join(", ", open.Count > 0 ? open : ["dükkan"]) + ".");
+            input.Enqueue(new KeyTapAction(profile.Keys.CloseWindow));
+            await Task.Delay(700, token);
+        }
+        if (!profile.MarketBirdsEye)
+            return;
+        _log("Kamera kuş bakışına alınıyor (yukarıdan, uzaktan).");
+        input.Enqueue(new KeyHoldAction(profile.Keys.CameraTop, profile.CameraSetupHoldMs));
+        input.Enqueue(new KeyHoldAction(profile.Keys.ZoomOut, profile.CameraSetupHoldMs));
+        await Task.Delay(2 * profile.CameraSetupHoldMs + 600, token);
     }
 }
