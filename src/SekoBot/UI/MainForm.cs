@@ -1045,8 +1045,9 @@ internal sealed class MainForm : Form
             ? string.Join("   ", skills.Select(sk => $"{KeyPicker.Name(sk.Key)} {sk.Name} ({sk.Kind switch
               {
                   SkillKind.Buff => "güçlendirme",
+                  SkillKind.Heal => "can",
                   SkillKind.Area => "alan",
-                  _ => "tek hedef",
+                  _ => sk.Traits.HasFlag(SkillTraits.Front) ? "önden" : "tek hedef",
               }})"))
             : "Hızlı slotlardaki beceriler oyuna bağlanınca bellekten okunur.";
         _positionState.Text = world != null

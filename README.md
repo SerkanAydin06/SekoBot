@@ -171,10 +171,11 @@ Eski **Kalabalığa git** seçeneği bunun yerine kapatıldı (`PreferCrowds`, v
 
 ## Beceriler (otomatik)
 
-**Becerileri otomatik kullan** (İksir / Beceri sekmesi, varsayılan açık): Bot hızlı slotlardaki (1–5 ve F1–F5) becerilerini ve oyunun onlar hakkında söylediklerini bellekten okur: ad, tür, seviye, mana, bekleme süresi, etki süresi. Sekmede hangi tuşta hangi becerinin olduğu ve ne işe yaradığı yazar.
-- **Güçlendirmeler** (ör. Güçlü beden): süresi bitmeden ~5 sn önce yenilenir.
-- **Alan saldırıları** (ör. Güçlü vuruş, Kılıç darbesi): yalnızca bot **vururken** ve **3 m içinde en az 5 mob** varken (**Alan becerisi: en az mob**, varsayılan 5). Peşindeki moblar henüz gelmemişken, moba yürürken ya da grup toplarken kullanılmaz — boşa gitmesin.
-- **Tek hedef saldırıları** (ör. Şiddetli vuruş): yalnızca bot yanındaki moba vururken.
+**Becerileri otomatik kullan** (İksir / Beceri sekmesi, varsayılan açık): Bot hızlı slotlardaki (1–5 ve F1–F5) becerilerini ve oyunun onlar hakkında yazdıklarını bellekten okur: ad, seviye, mana, bekleme süresi, etki süresi, menzil, açıklama, özellikler ve hasar formülü. Her karakterin (savaşçı, ninja, sura, şaman) becerileri böylece kendiliğinden tanınır: formül düşmandan eksiltiyorsa saldırı ("Alan etkisi" varsa çevreye, "Ön yüzey etkisi" varsa öndekilere), can veriyorsa can doldurma, başka bir şeyi artırıyorsa güçlendirme. Bayıltma, geri itme, uzaktan vurma ve "hareket hızını düşürür" de okunur. Bot başlayınca ve beceriler değişince (yeni beceri, seviye, slot) günlüğe her birinin ne olduğunu ve nasıl kullanılacağını yazar; öğrenilmiş ama hiçbir slotta olmayan becerileri de söyler (bot onları basamaz). Sekmede hangi tuşta hangi becerinin olduğu yazar.
+- **Güçlendirmeler** (ör. Güçlü beden): süresi bitmeden ~5 sn önce yenilenir. Hareketi yavaşlatan güçlendirme yalnızca dövüşürken basılır, yürürken ve grup toplarken değil. Karakter ölünce güçlendirmeler gider: yeniden doğunca hemen tekrar basılır.
+- **Can doldurma** (ör. şamanın iyileştirmesi): can %60'ın altındayken.
+- **Alan saldırıları** (ör. Güçlü vuruş, Kılıç darbesi): yalnızca bot **vururken** ve becerinin **kendi menzilinde (en çok 4 m) en az 5 mob** varken (**Alan becerisi: en az mob**, varsayılan 5). Can %50'nin altındayken ve en az 2 mob saldırıyorsa **bayıltan** beceri 2 mobda bile basılır ve diğerlerinden önce gelir. Peşindeki moblar henüz gelmemişken, moba yürürken ya da grup toplarken kullanılmaz — boşa gitmesin.
+- **Öndekilere / tek hedef saldırıları** (ör. Ruh vuruşu, Şiddetli vuruş): bot vururken, becerinin menzilinde mob varsa.
 - Hepsi bekleme süresi dolunca ve MP yetiyorsa basılır; basarken bot 1 sn durur ki beceri kesilmesin, iki beceri arasında en az 1,5 sn olur. Oyun sohbete "WAIT!" yazarsa (beceri hazır olmadan basıldı) o becerinin tuşu bundan sonra 1 sn daha geç basılır; her yeni "WAIT!" 1 sn daha ekler (en çok 20 sn).
 
 Kapalıyken eski usul F1–F5 "kaç saniyede bir" ayarları (`SkillEverySec`) kullanılır.

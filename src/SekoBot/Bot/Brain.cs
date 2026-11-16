@@ -84,6 +84,7 @@ internal sealed partial class Brain
         if (Phase == BotPhase.Dead)
         {
             actions.Add(new NoteAction("Yeniden doğuldu; can dolduruluyor."));
+            BuffsLost();
             Enter(BotPhase.Recovering, now);
             _recoverSince = now;
         }

@@ -42,12 +42,65 @@ internal enum SkillKind
     Area,
     /// <summary>Strengthens the character for a while (e.g. "Güçlü beden").</summary>
     Buff,
+    /// <summary>Gives HP back (a shaman's healing): used when HP is low.</summary>
+    Heal,
+}
+
+/// <summary>What else the game's description says about a skill.</summary>
+[Flags]
+internal enum SkillTraits
+{
+    None = 0,
+    /// <summary>Hits the enemies in front ("Ön yüzey etkisi"), so several at once when they stand together.</summary>
+    Front = 1,
+    /// <summary>May stun the enemies ("Bayılma"): they stop hitting for a moment.</summary>
+    Stun = 2,
+    /// <summary>Pushes the enemies back ("Geri tepme").</summary>
+    Knockback = 4,
+    /// <summary>Reaches from afar ("uzaktan saldırı").</summary>
+    Ranged = 8,
+    /// <summary>A buff that makes the character walk slower ("Hareket hızını düşürür").</summary>
+    SlowsMe = 16,
 }
 
 /// <summary>One of the character's skills, as the game describes it.</summary>
 /// <param name="CooldownSec">Seconds before it can be used again ("sure").</param>
 /// <param name="DurationSec">How long a buff lasts (0 for attacks).</param>
-internal sealed record SkillInfo(int Id, string Name, int Level, SkillKind Kind, int Mana, int CooldownSec, int DurationSec, int Distance);
+/// <param name="Distance">How far it reaches (world units; 0 for buffs on oneself).</param>
+internal sealed record SkillInfo(int Id, string Name, int Level, SkillKind Kind, int Mana, int CooldownSec, int DurationSec, int Distance,
+    SkillTraits Traits = SkillTraits.None)
+{
+    /// <summary>
+    /// What a skill does, from the game's own texts: its type ("HP", "DEF_GRADE", …), the
+    /// description, the properties and the formula. A formula taking away (−…) hurts the enemy:
+    /// an attack (around us with "Alan etkisi", else one or the ones in front). Otherwise it helps
+    /// us: HP back is a heal, anything else a buff. Every class's skills are told apart this way.
+    /// </summary>
+    public static (SkillKind Kind, SkillTraits Traits) Describe(string type, string description, string properties, string formula)
+    {
+        static bool Has(string text, string word) => text.Contains(word, StringComparison.OrdinalIgnoreCase);
+        formula = formula.Trim();
+        bool hurts = formula.Length > 0
+            ? formula.StartsWith('-') || Has(description, "Negatif")
+            : type == "HP" && !Has(description, "Pozitif");
+        var traits = SkillTraits.None;
+        if (hurts)
+        {
+            if (Has(properties, "Ön yüzey"))
+                traits |= SkillTraits.Front;
+            if (Has(properties, "Bayılma") || Has(properties, "Bayılt") || Has(properties, "Sersem"))
+                traits |= SkillTraits.Stun;
+            if (Has(properties, "Geri tepme") && !Has(properties, "Geri tepme yok"))
+                traits |= SkillTraits.Knockback;
+            if (Has(description, "uzaktan"))
+                traits |= SkillTraits.Ranged;
+            return (Has(properties, "Alan etkisi") ? SkillKind.Area : SkillKind.Single, traits);
+        }
+        if (Has(properties, "Hareket hızını düşürür") || Has(description, "Hareket hızını düşürür"))
+            traits |= SkillTraits.SlowsMe;
+        return (type == "HP" && formula.Length > 0 ? SkillKind.Heal : SkillKind.Buff, traits);
+    }
+}
 
 /// <summary>An item lying on the ground: its item number (1 = yang) and how many (the yang amount).</summary>
 internal readonly record struct GroundItem(long Id, Vec3 Position, int Vnum = 0, int Count = 0)
@@ -1401,12 +1454,11 @@ internal sealed class GameWorldReader : IDisposable
             string type = ReadFString(value + 0x58, 32);
             string properties = ReadFString(value + 0x28, 400);
             string description = ReadFString(value + 0x18, 400);
+            string formula = ReadFString(value + 0x48, 200);
             int duration = BitConverter.ToInt32(elements, at + 0x78);
-            var kind = type != "HP" || description.Contains("Pozitif", StringComparison.OrdinalIgnoreCase) ? SkillKind.Buff
-                : properties.Contains("Alan etkisi", StringComparison.OrdinalIgnoreCase) ? SkillKind.Area
-                : SkillKind.Single;
+            var (kind, traits) = SkillInfo.Describe(type, description, properties, formula);
             skills.Add(new SkillInfo(id, name, level, kind, BitConverter.ToInt32(elements, at + 0x70),
-                BitConverter.ToInt32(elements, at + 0x74), duration, BitConverter.ToInt32(elements, at + 0x6C)));
+                BitConverter.ToInt32(elements, at + 0x74), duration, BitConverter.ToInt32(elements, at + 0x6C), traits));
         }
         return skills;
     }
