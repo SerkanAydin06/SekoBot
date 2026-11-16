@@ -64,10 +64,10 @@ internal sealed partial class BotEngine
                     drops.Add(new GroundSpot(item.Id,
                         camera.ToScreen(item.Position, width, height) is PointF onScreen && OnPlayfield(onScreen, width, height)
                             ? Point.Round(onScreen)
-                            : OffScreenSpot(camera, world.Player, item.Position, width, height), Special: true));
+                            : OffScreenSpot(camera, world.Player, item.Position, width, height), Special: true, At: item.Position));
                 else if (away <= profile.DropRangeMetres * 100 &&
                          camera.ToScreen(item.Position, width, height) is PointF p && OnPlayfield(p, width, height))
-                    drops.Add(new GroundSpot(item.Id, Point.Round(p)));
+                    drops.Add(new GroundSpot(item.Id, Point.Round(p), At: item.Position));
             }
         // Special items first.
         drops = [.. drops.OrderByDescending(d => d.Special)];
