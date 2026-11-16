@@ -34,6 +34,10 @@ internal sealed partial class BotEngine
     internal const double ShopClickHeight = 60;
     /// <summary>A shop whose window didn't open after this many clicks is left out.</summary>
     internal const int ShopTries = 2;
+    /// <summary>A stall drawn this close to the character on screen (pixels) is under it: a click there hits the character.</summary>
+    internal const double ShopOffCharacterPx = 45;
+    /// <summary>This many clicks in a row that opened nothing: clicking doesn't work, the scan stops.</summary>
+    internal const int ShopClicksWithoutOpen = 8;
 
     public bool StartMarketScan(out string error)
     {
@@ -92,6 +96,7 @@ internal sealed partial class BotEngine
         using var input = new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
         bool Done(int id) => book.Has(id) || tries.GetValueOrDefault(id) >= ShopTries;
         string why = "";
+        int missedInARow = 0;
         try
         {
             // A window open from before: closed first (its shop is written down too).
@@ -116,7 +121,14 @@ internal sealed partial class BotEngine
                 }
                 shops = MarketShops();
                 _marketStatus = $"Pazar taranıyor: {book.Shops}/{shops.Count} dükkan, {book.Items} ürün okundu.";
-                var next = MarketBook.Next(shops, world.Player.X, world.Player.Y, Done);
+                // A stall right under the character can't be clicked (the click hits the character).
+                var meOnScreen = camera.ToScreen(world.Player, state.Width, state.Height);
+                bool UnderMe(MarketShop s) => s.Body is Vec3 b && meOnScreen is PointF m &&
+                    camera.ToScreen(b with { Z = b.Z + ShopClickHeight }, state.Width, state.Height) is PointF q &&
+                    Math.Sqrt((q.X - m.X) * (q.X - m.X) + (q.Y - m.Y) * (q.Y - m.Y)) < ShopOffCharacterPx;
+                var next = MarketBook.Next(shops, world.Player.X, world.Player.Y, id => Done(id)) is { } first && UnderMe(first)
+                    ? MarketBook.Next(shops, world.Player.X, world.Player.Y, id => Done(id) || id == first.Id) ?? first
+                    : MarketBook.Next(shops, world.Player.X, world.Player.Y, Done);
                 if (next == null)
                     break;
                 var where = new Vec3(next.X, next.Y, world.Player.Z);
@@ -127,7 +139,9 @@ internal sealed partial class BotEngine
                     OnPlayfield(p, state.Width, state.Height))
                 {
                     tries[next.Id] = tries.GetValueOrDefault(next.Id) + 1;
-                    input.Enqueue(new ClickAction(Point.Round(p)));
+                    // A real click (the game in front, the cursor on the stall): clicks posted to
+                    // the window from the background are ignored on things in the world (seen).
+                    input.Enqueue(new ClickAction(Point.Round(p), Slow: true, Fast: true));
                     // Up to 5 s: the character walks over and the server sends the shop.
                     OpenShop? opened = null;
                     for (int waited = 0; waited < 5000 && opened == null; waited += 200)
@@ -136,7 +150,15 @@ internal sealed partial class BotEngine
                         opened = ShopOpenNow();
                     }
                     if (opened != null)
+                    {
+                        missedInARow = 0;
                         await TakeOpenShop(input, book, shops, token);
+                    }
+                    else if (++missedInARow >= ShopClicksWithoutOpen)
+                    {
+                        why = $"{ShopClicksWithoutOpen} tıklamada hiçbir dükkan açılmadı; oyun penceresi önde mi, karakter dükkanların yanında mı?";
+                        break;
+                    }
                     if (book.Shops > 0 && book.Shops % 25 == 0)
                         Save();
                     await Task.Delay(random.Next(300, 900), token);
