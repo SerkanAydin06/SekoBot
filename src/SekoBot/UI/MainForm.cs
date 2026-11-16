@@ -882,7 +882,7 @@ internal sealed class MainForm : Form
             WriteLog("Önce oyun açık olmalı; açılınca kendiliğinden bağlanır.");
             return;
         }
-        if (_engine.BotRunning)
+        if (_engine.BotRunning || _engine.ScanningMarket || _engine.ScanningArea)
         {
             StopBot("duraklatıldı", byUser: true);
             return;
@@ -904,6 +904,16 @@ internal sealed class MainForm : Form
     /// (minimized game) keep the window as is so the user can see why it stopped.</param>
     private void StopBot(string reason, bool byUser = false)
     {
+        // The stop key and button also stop a market or area scan.
+        if (_engine is { } scanning && (scanning.ScanningMarket || scanning.ScanningArea))
+        {
+            if (scanning.ScanningMarket)
+                scanning.StopMarketScan();
+            if (scanning.ScanningArea)
+                scanning.StopAreaScan();
+            WriteLog("Tarama durduruluyor…");
+            return;
+        }
         if (_engine?.BotRunning != true)
             return;
         _engine.StopBot(reason);
@@ -1392,12 +1402,14 @@ internal sealed class MainForm : Form
         bool connected = _engine != null;
         bool running = _engine?.BotRunning == true;
         _gameButton.Text = connected ? "Bağlantı  ▾" : "Oyunu seç  ▾";
-        _startBot.Enabled = connected && _engine?.ScanningArea != true && _engine?.ScanningMarket != true;
+        _startBot.Enabled = connected;
         _findArea.Enabled = connected && !running && _engine?.ScanningMarket != true;
         _scanMarket.Enabled = connected && !running && _engine?.ScanningArea != true;
         _scanMobs.Enabled = connected;
-        _startBot.Text = running ? $"❚❚  DURAKLAT   {StartKey}" : $"▶  BAŞLAT   {StartKey}";
-        _stopBot.Enabled = running;
+        _startBot.Text = running ? $"❚❚  DURAKLAT   {StartKey}"
+            : _engine?.ScanningMarket == true || _engine?.ScanningArea == true ? $"■  TARAMAYI DURDUR   {StartKey}"
+            : $"▶  BAŞLAT   {StartKey}";
+        _stopBot.Enabled = running || _engine?.ScanningMarket == true || _engine?.ScanningArea == true;
         bool recording = _engine?.IsRecording == true;
         _record.Enabled = connected;
         _record.Text = recording ? "■  Kaydı bitir" : "⏺  Kaydet";

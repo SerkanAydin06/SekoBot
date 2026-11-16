@@ -101,7 +101,38 @@ internal sealed class InputExecutor : IDisposable
         }
     }
 
+    /// <summary>
+    /// One real mouse for every SekoBot on this computer: what moves the real cursor or brings a
+    /// game to the front (UI buttons, stalls, dragging items, typing) waits its turn, so two bots
+    /// (one scanning the market, one throwing items away) never pull the cursor from each other.
+    /// A turn not given back (a bot closed in the middle) is waited for at most 15 s.
+    /// </summary>
+    private static readonly Semaphore MouseTurn = new(1, 1, @"Local\SekoBot.Mouse");
+
+    internal const int MouseTurnWaitMs = 15_000;
+
+    private static bool NeedsMouse(BotAction action) => action is ClickAction { Slow: true } or MouseDragAction or TypeTextAction;
+
     private async Task ExecuteAsync(BotAction action, CancellationToken token)
+    {
+        bool turn = false;
+        if (NeedsMouse(action))
+        {
+            for (int waited = 0; waited < MouseTurnWaitMs && !(turn = MouseTurn.WaitOne(0)); waited += 50)
+                await Task.Delay(50, token);
+        }
+        try
+        {
+            await ExecuteCoreAsync(action, token);
+        }
+        finally
+        {
+            if (turn)
+                MouseTurn.Release();
+        }
+    }
+
+    private async Task ExecuteCoreAsync(BotAction action, CancellationToken token)
     {
         switch (action)
         {
