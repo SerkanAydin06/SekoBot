@@ -873,8 +873,10 @@ internal sealed class MainForm : Form
         if (_engine is { } engine && Win32.IsWindow(engine.Window.Handle) && !Win32.IsIconic(engine.Window.Handle))
             game = WindowLayout.Visible(engine.Window.Handle);
         var state = _engine?.State;
+        var (hpPotions, mpPotions) = _engine?.PotionsLeft() ?? (null, null);
         return new MiniInfo(_engine?.CharacterName ?? "", _status.Text, _status.ForeColor, state?.Hp, state?.Mp,
-            _statExpRate.Text, _statMobs.Text, _engine?.BotRunning == true, game);
+            _statExpRate.Text, _statMobs.Text, _engine?.BotRunning == true, game,
+            _engine is { } e && Win32.IsWindow(e.Window.Handle) ? e.Window.Handle : 0, hpPotions, mpPotions);
     }
 
     protected override void WndProc(ref Message m)

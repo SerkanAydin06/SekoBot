@@ -160,6 +160,22 @@ internal static class Win32
 
     internal static readonly nint HWND_BROADCAST = 0xFFFF;
 
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    internal static extern nint SetWindowLongPtr(nint hwnd, int index, nint value);
+
+    internal const int GWLP_HWNDPARENT = -8;
+
+    internal delegate void WinEventProc(nint hook, uint eventType, nint hwnd, int idObject, int idChild, uint thread, uint time);
+
+    [DllImport("user32.dll")]
+    internal static extern nint SetWinEventHook(uint eventMin, uint eventMax, nint module, WinEventProc callback, uint process, uint thread, uint flags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool UnhookWinEvent(nint hook);
+
+    internal const uint EVENT_OBJECT_LOCATIONCHANGE = 0x800B, WINEVENT_OUTOFCONTEXT = 0;
+
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool ReleaseCapture();
