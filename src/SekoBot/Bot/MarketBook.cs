@@ -244,7 +244,8 @@ internal sealed class MarketBook
         Path.Combine(folder, "pazar-" + string.Concat(map.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)));
 
     /// <summary>Writes the data, the table and the report; returns the report's path.</summary>
-    public string Save(string folder)
+    /// <param name="walls">The map's obstacles to draw on the market map (see <see cref="MapReport.Outlines"/>).</param>
+    public string Save(string folder, string walls = "[]")
     {
         Directory.CreateDirectory(folder);
         string stem = Stem(folder, Map);
@@ -253,7 +254,7 @@ internal sealed class MarketBook
         File.WriteAllText(stem + ".json", json, new UTF8Encoding(false));
         // With the BOM Excel reads the Turkish letters right.
         File.WriteAllText(stem + ".csv", Csv(), new UTF8Encoding(true));
-        File.WriteAllText(stem + ".html", MarketReport.Html(json), new UTF8Encoding(false));
+        File.WriteAllText(stem + ".html", MarketReport.Html(json, walls), new UTF8Encoding(false));
         return stem + ".html";
     }
 

@@ -6,6 +6,8 @@ namespace SekoBot.Memory;
 internal readonly record struct Vec3(double X, double Y, double Z)
 {
     public double DistanceXY(Vec3 other) => Math.Sqrt(Math.Pow(X - other.X, 2) + Math.Pow(Y - other.Y, 2));
+
+    public static Vec3 operator +(Vec3 a, Vec3 b) => new(a.X + b.X, a.Y + b.Y, a.Z + b.Z);
 }
 
 /// <summary>The character's health and mana.</summary>
@@ -487,6 +489,16 @@ internal sealed partial class GameWorldReader : IDisposable
         ("PrivateShopView_C", "playername", 0x558),
         ("PrivateShopView_C", "closed", 0x568),
         ("PrivateShopView_C", "playerLevel", 0x56C),
+        ("World", "Levels", 0x140),
+        ("SceneComponent", "AttachChildren", 0xD8),
+        ("StaticMeshComponent", "StaticMesh", 0x498),
+        ("StaticMeshComponent", "BodyInstance.CollisionEnabled", 0x2F8),
+        ("StaticMeshComponent", "BodyInstance.CollisionResponses.ResponseToChannels.Pawn", 0x352),
+        ("InstancedStaticMeshComponent", "PerInstanceSMData", 0x4F0),
+        ("StaticMesh", "BodySetup", 0xB0),
+        ("StaticMesh", "ExtendedBounds", 0x118),
+        ("BodySetup", "AggGeom", 0x50),
+        ("BodySetup", "CollisionTraceFlag", 0x39),
     ];
 
     private readonly IMemorySource _memory;

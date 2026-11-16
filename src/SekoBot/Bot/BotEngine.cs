@@ -58,7 +58,7 @@ internal sealed partial class BotEngine : IDisposable
         _window = window;
         Profile = profile;
         _log = log;
-        _brain = new Brain(() => Profile) { JunkInBag = JunkInBag, Obstacles = _obstacles };
+        _brain = new Brain(() => Profile) { JunkInBag = JunkInBag, Obstacles = _obstacles, Terrain = _terrain };
         if (ItemBook.FilePath == null)
             ItemBook.Load(Path.Combine(ProfileStore.Directory, "esya-bilgisi.json"));
         _session.PotionsRanOut += kind =>
@@ -195,6 +195,7 @@ internal sealed partial class BotEngine : IDisposable
                             if (world != null)
                                 TrackPicked(world, now);
                             WatchMarket(world, now);
+                            WatchTerrain(world, now);
                             ReadBagForCleaning();
                             ReadDmForWhisper();
                             var (phase, actions) = TickBot(state);
@@ -498,6 +499,7 @@ internal sealed partial class BotEngine : IDisposable
         lock (_marketGate)
             if (_market is { Changed: true } market)
                 SaveMarket(market);
+        SaveTerrainChanges(World);
         _scanCts?.Cancel();
         _marketCts?.Cancel();
         _cts.Cancel();
