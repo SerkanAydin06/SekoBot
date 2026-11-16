@@ -83,6 +83,12 @@ internal sealed class MiniBar : Form
         _info = _read();
         if (place)
         {
+            // As wide as its game (the band under it is the bar's), at least the bar's own width.
+            int width = _info.Game is { IsEmpty: false } g
+                ? Math.Clamp(g.Width, (int)(LogicalWidth * S), (int)(MaxWidth * S))
+                : (int)(LogicalWidth * S);
+            if (Width != width)
+                Width = width;
             var at = _info.Game is { IsEmpty: false } game
                 ? WindowLayout.BarPlace(game, Size, Screen.FromRectangle(game).WorkingArea)
                 : Stacked();
@@ -100,9 +106,12 @@ internal sealed class MiniBar : Form
     }
 
     private float S => DeviceDpi / 96f;
+    /// <summary>The bar's width now, in 96-dpi units.</summary>
+    private float W => ClientSize.Width / S;
+    private const int MaxWidth = 1100;
 
     /// <summary>The three buttons: start, stop, big.</summary>
-    private Rectangle Button(int i) => new((int)((LogicalWidth - 118 + i * 38) * S), (int)(8 * S), (int)(32 * S), (int)(30 * S));
+    private Rectangle Button(int i) => new((int)((W - 118 + i * 38) * S), (int)(8 * S), (int)(32 * S), (int)(30 * S));
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -121,15 +130,18 @@ internal sealed class MiniBar : Form
         using var small = new Font("Segoe UI", 8.5f);
         using var smallBold = new Font("Segoe UI", 8.5f, FontStyle.Bold);
         string name = (Instance.IsFirst ? "" : $"{Instance.Number} · ") + (info.Name.Length > 0 ? info.Name : "SekoBot");
-        TextRenderer.DrawText(g, "◆ " + name, nameFont, new Rectangle((int)(14 * s), (int)(6 * s), (int)(270 * s), (int)(22 * s)), Theme.Text,
+        TextRenderer.DrawText(g, "◆ " + name, nameFont, new Rectangle((int)(14 * s), (int)(6 * s), (int)((W - 150) * s), (int)(22 * s)), Theme.Text,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-        TextRenderer.DrawText(g, info.Status, small, new Rectangle((int)(14 * s), (int)(29 * s), (int)(290 * s), (int)(20 * s)), info.StatusColor,
+        TextRenderer.DrawText(g, info.Status, small, new Rectangle((int)(14 * s), (int)(29 * s), (int)((W - 130) * s), (int)(20 * s)), info.StatusColor,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
-        Bar(g, "HP", info.Hp, Theme.Red, new RectangleF(14 * s, 58 * s, 110 * s, 14 * s), smallBold);
-        Bar(g, "MP", info.Mp, Theme.Accent, new RectangleF(130 * s, 58 * s, 90 * s, 14 * s), smallBold);
+        // Wider bar: longer HP and MP bars (the experience stays at the right).
+        float hp = Math.Clamp((W - 200) * 0.5f, 110, 300), mp = hp * 0.8f;
+        Bar(g, "HP", info.Hp, Theme.Red, new RectangleF(14 * s, 58 * s, hp * s, 14 * s), smallBold);
+        Bar(g, "MP", info.Mp, Theme.Accent, new RectangleF((20 + hp) * s, 58 * s, mp * s, 14 * s), smallBold);
+        float expAt = 28 + hp + mp;
         TextRenderer.DrawText(g, $"{info.ExpRate} EXP/sa · {info.Mobs} mob", small,
-            new Rectangle((int)(228 * s), (int)(54 * s), (int)((LogicalWidth - 234) * s), (int)(22 * s)), Theme.Muted,
+            new Rectangle((int)(expAt * s), (int)(54 * s), (int)((W - expAt - 6) * s), (int)(22 * s)), Theme.Muted,
             TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
         string[] glyphs = [info.Running ? "⏸" : "▶", "■", "⤢"];
