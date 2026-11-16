@@ -304,9 +304,9 @@ internal sealed partial class BotEngine : IDisposable
             error = "Oyunun belleği okunamıyor (" + _memoryStatus + "). SekoBot'u yönetici olarak aç ve karakterle oyuna gir.";
             return false;
         }
-        if (ScanningArea)
+        if (ScanningArea || ScanningMarket)
         {
-            error = "Alan taranıyor; bitmesini bekle.";
+            error = ScanningArea ? "Alan taranıyor; bitmesini bekle." : "Pazar taranıyor; önce onu durdur.";
             return false;
         }
         if (World.InSafeZone && Profile.StopInSafeZone)
@@ -495,6 +495,7 @@ internal sealed partial class BotEngine : IDisposable
         StopBot("bağlantı kapandı");
         StopRecording();
         _scanCts?.Cancel();
+        _marketCts?.Cancel();
         _cts.Cancel();
         _capture?.Dispose();
         try { _loop?.Wait(1500); } catch { }

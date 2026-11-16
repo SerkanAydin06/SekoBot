@@ -356,7 +356,7 @@ internal sealed record WorldSnapshot(Vec3 Player, CameraView? Camera, IReadOnlyL
 /// "dead", …). When a game update moves the fixed pointer or the name table, they are searched for
 /// automatically. Only ever reads; never writes.
 /// </summary>
-internal sealed class GameWorldReader : IDisposable
+internal sealed partial class GameWorldReader : IDisposable
 {
     // ── Fixed places in the tested game build (searched for when they don't fit) ──
     /// <summary>Static pointer to the game instance ("m2data_C").</summary>
@@ -478,6 +478,14 @@ internal sealed class GameWorldReader : IDisposable
         ("playerMove", "attackDistance", 0x75C),
         ("loader", "charData.attack", 0x770 + 0xA8),
         ("PlayerCameraManager", "CameraCachePrivate", 0x1AF0),
+        ("gameManager", "privShops", 0xB80),
+        ("m2data_C", "PrivateShopView", 0x1428),
+        ("PrivateShopView_C", "shopId", 0x518),
+        ("PrivateShopView_C", "gotData", 0x520),
+        ("PrivateShopView_C", "Text", 0x530),
+        ("PrivateShopView_C", "playername", 0x558),
+        ("PrivateShopView_C", "closed", 0x568),
+        ("PrivateShopView_C", "playerLevel", 0x56C),
     ];
 
     private readonly IMemorySource _memory;

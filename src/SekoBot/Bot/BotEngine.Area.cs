@@ -27,6 +27,8 @@ internal sealed partial class BotEngine
             error = "Önce botu durdur.";
         else if (ScanningArea)
             error = "Alan zaten taranıyor.";
+        else if (ScanningMarket)
+            error = "Pazar taranıyor; önce onu durdur.";
         else if (GameMinimized)
             error = "Oyun simge durumunda; önce oyunu aç.";
         else if (World == null)
@@ -84,7 +86,7 @@ internal sealed partial class BotEngine
     }
 
     /// <summary>Walks to a world point with W/A/S/D (directions from the camera), looking around on the way.</summary>
-    private async Task WalkToAsync(InputExecutor input, Vec3 target, TimeSpan limit, CancellationToken token, Action look)
+    private async Task WalkToAsync(InputExecutor input, Vec3 target, TimeSpan limit, CancellationToken token, Action look, double near = 300)
     {
         var held = new HashSet<Keys>();
         var keys = Profile.Keys;
@@ -102,7 +104,7 @@ internal sealed partial class BotEngine
                     await Task.Delay(250, token);
                     continue;
                 }
-                if (world.Player.DistanceXY(target) < 300)
+                if (world.Player.DistanceXY(target) < near)
                     break;
                 if (last is Vec3 l && world.Player.DistanceXY(l) > 30)
                     lastMove = _clock.Elapsed;
