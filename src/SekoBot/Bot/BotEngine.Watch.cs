@@ -127,6 +127,12 @@ internal sealed partial class BotEngine
             return;
         }
         double metres = spot.Position.DistanceXY(world.Player) / 100;
+        MoveFarmSpot(spot, profile, $"👥 {reason}. Yeni alana geçiliyor ({metres:0} m): {spot.Names}.");
+    }
+
+    /// <summary>Farms around another place from now on (the bot walks there); tells the user.</summary>
+    private void MoveFarmSpot(FarmSpot spot, BotProfile profile, string message)
+    {
         lock (_botGate)
         {
             _farmSpot = spot.Position;
@@ -134,7 +140,6 @@ internal sealed partial class BotEngine
             profile.FarmSpot = spot;
             _brain.NewFarmSpot();
         }
-        string message = $"👥 {reason}. Yeni alana geçiliyor ({metres:0} m): {spot.Names}.";
         _log(message);
         Notify(message);
         AreaScanFinished?.Invoke(message); // the UI saves the profile

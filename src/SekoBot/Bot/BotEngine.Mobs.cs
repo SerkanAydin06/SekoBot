@@ -16,7 +16,7 @@ internal sealed partial class BotEngine
     /// <param name="avoid">Where items were just thrown away: its items aren't picked up and its
     /// mobs aren't gone for (only those attacking us), so the bot doesn't take the junk back.</param>
     internal static (List<Point> Mobs, List<Point> Priority, List<GroundSpot> Drops, List<Point> Attackers, List<TargetInfo> Targets, List<Point> Junk)? MemoryView(
-        WorldSnapshot? world, BotProfile profile, int width, int height, Vec3? avoid = null)
+        WorldSnapshot? world, BotProfile profile, int width, int height, Vec3? avoid = null, bool fit = false)
     {
         if (world?.Camera is not CameraView camera)
             return null;
@@ -31,7 +31,7 @@ internal sealed partial class BotEngine
             // never coming: the bot walked out of its area to it). Only one close by really attacks.
             var mob = seenMob.AttacksMe && seenMob.Position.DistanceXY(world.Player) > AttackerRange
                 ? seenMob with { AttacksMe = false } : seenMob;
-            if (!Wanted(mob, profile, world.Level) || !mob.AttacksMe && AtDump(mob.Position))
+            if (!Wanted(mob, profile, world.Level, fit) || !mob.AttacksMe && AtDump(mob.Position))
                 continue;
             var onScreen = camera.ToScreen(mob.Position, width, height) is PointF p && OnPlayfield(p, width, height) ? p : (PointF?)null;
             if (onScreen is PointF seen)
@@ -235,8 +235,12 @@ internal sealed partial class BotEngine
     /// attacking us is always fought back, and a Metin stone set to "first" is always gone for
     /// (the level and name filters are for mobs) — unless it is far below our level.</summary>
     /// <param name="level">The character's level (0: unknown, no level check for stones).</param>
-    internal static bool Wanted(WorldMob mob, BotProfile profile, int level = 0)
+    /// <param name="fit">Leave out mobs too strong for the character (when "Uygun alanı kendisi seç"
+    /// is on and no top level is set by hand).</param>
+    internal static bool Wanted(WorldMob mob, BotProfile profile, int level = 0, bool fit = false)
     {
+        if (fit && profile.AutoArea && profile.MaxMobLevel <= 0 && !mob.AttacksMe && MobFit.TooHard(mob, profile, level))
+            return false;
         if (mob.IsMetin)
             return profile.Metins != MetinMode.Skip && (level <= 0 || mob.Level <= 0 || mob.Level >= level - MetinLevelGap) &&
                    (profile.Metins == MetinMode.Prefer || WantedByFilters(mob, profile));

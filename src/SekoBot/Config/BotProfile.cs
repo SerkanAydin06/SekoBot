@@ -100,6 +100,11 @@ internal sealed class BotProfile
     /// <summary>Learned per map: how many mobs this character can take at once without its HP
     /// falling under 40 % (lowered after a hard fight, raised after easy ones). Kept with the character.</summary>
     public Dictionary<string, int> PullLearned { get; set; } = [];
+    /// <summary>Learned: how the fights with each kind of mob went for this character (see <see cref="Bot.MobFit"/>).</summary>
+    public Dictionary<string, MobFights> MobFights { get; set; } = [];
+    /// <summary>Hunt only mobs that suit the character, and walk to a better place on the map
+    /// when there is one (after a level-up, when this one runs dry). Kept with the character.</summary>
+    public bool AutoArea { get; set; } = true;
     /// <summary>Only gather while HP is at least this (0..1).</summary>
     public double PullMinHp { get; set; } = 0.7;
     /// <summary>A group needs at least this many mobs.</summary>
@@ -399,7 +404,7 @@ internal static class CharacterSettings
         nameof(BotProfile.LootOther), nameof(BotProfile.LootEquipmentMinGold), nameof(BotProfile.LootBonuses),
         nameof(BotProfile.LootAlways), nameof(BotProfile.LootPick), nameof(BotProfile.LootSkip),
         nameof(BotProfile.LootThrow), nameof(BotProfile.DropRangeMetres), nameof(BotProfile.EventLoot),
-        nameof(BotProfile.SkillGapLearnedMs),
+        nameof(BotProfile.SkillGapLearnedMs), nameof(BotProfile.MobFights), nameof(BotProfile.AutoArea),
     ];
 
     public static string Folder { get; set; } = Path.Combine(ProfileStore.Directory, "karakterler");
