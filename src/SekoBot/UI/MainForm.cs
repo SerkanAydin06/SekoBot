@@ -396,18 +396,61 @@ internal sealed class MainForm : Form
         };
         market.Controls.Add(findBox);
         var goShop = Theme.Button(market, "🚶  Dükkana götür", new Rectangle(388, 62, 156, 26), Theme.Primary, Theme.PrimaryHover);
+        // Filters: item group, a bonus of at least a value, and the order (from the bonus book: what the shops showed).
+        ComboBox Pick(Rectangle at)
+        {
+            var box = new ComboBox
+            {
+                Bounds = at, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Theme.Inset, ForeColor = Theme.Text,
+                FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 9f), MaxDropDownItems = 20,
+            };
+            market.Controls.Add(box);
+            return box;
+        }
+        var groupPick = Pick(new Rectangle(0, 94, 104, 26));
+        var bonusPick = Pick(new Rectangle(108, 94, 200, 26));
+        Theme.Label(market, "en az", new Rectangle(312, 94, 36, 26), 8.5f, Theme.Muted);
+        var minValue = Theme.Number(market, new Rectangle(348, 94, 58, 26), -100, 100_000, 0, 0, 1);
+        var sortPick = Pick(new Rectangle(410, 94, 134, 26));
+        sortPick.Items.AddRange(["Sırala: en ucuz", "Sırala: efsun değeri", "Sırala: efsun puanı"]);
+        sortPick.SelectedIndex = 0;
+        var groupKeys = new List<string?>();
+        void FillGroups()
+        {
+            var book = BonusBook.Shared;
+            groupKeys = [null, .. book.Groups()];
+            groupPick.Items.Clear();
+            groupPick.Items.AddRange([.. groupKeys.Select(g => g == null ? "Her eşya" : BonusBook.GroupName(g))]);
+            groupPick.SelectedIndex = 0;
+        }
+        void FillBonuses()
+        {
+            string? group = groupPick.SelectedIndex > 0 ? groupKeys[groupPick.SelectedIndex] : null;
+            string? keep = bonusPick.SelectedIndex > 0 ? bonusPick.SelectedItem as string : null;
+            bonusPick.Items.Clear();
+            bonusPick.Items.Add("Her efsun");
+            bonusPick.Items.AddRange([.. BonusBook.Shared.Names(group)]);
+            bonusPick.SelectedIndex = keep != null && bonusPick.Items.IndexOf(keep) is > 0 and var i ? i : 0;
+        }
+        try
+        {
+            FillGroups();
+            FillBonuses();
+        }
+        catch (IOException) { }
         var found = new ListView
         {
-            Bounds = new Rectangle(0, 94, 544, 200), View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false,
+            Bounds = new Rectangle(0, 124, 544, 170), View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false,
             BackColor = Theme.Inset, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 9f),
             HeaderStyle = ColumnHeaderStyle.Nonclickable, OwnerDraw = true,
         };
-        found.Columns.Add("Eşya", 170);
-        found.Columns.Add("Tanesi", 82, HorizontalAlignment.Right);
-        found.Columns.Add("Adet", 48, HorizontalAlignment.Right);
-        found.Columns.Add("Satıcı", 100);
-        found.Columns.Add("Uzaklık", 58, HorizontalAlignment.Right);
-        found.Columns.Add("Okundu", 64);
+        found.Columns.Add("Eşya", 150);
+        found.Columns.Add("Efsun", 62, HorizontalAlignment.Right);
+        found.Columns.Add("Tanesi", 78, HorizontalAlignment.Right);
+        found.Columns.Add("Adet", 40, HorizontalAlignment.Right);
+        found.Columns.Add("Satıcı", 92);
+        found.Columns.Add("Uzaklık", 54, HorizontalAlignment.Right);
+        found.Columns.Add("Okundu", 52);
         found.DrawColumnHeader += (_, e) =>
         {
             using var back = new SolidBrush(Theme.Secondary);
@@ -419,9 +462,16 @@ internal sealed class MainForm : Form
         found.DrawSubItem += (_, e) => e.DrawDefault = true;
         market.Controls.Add(found);
         var foundRows = new List<MarketListing>();
+        MarketQuery Query() => new(findBox.Text,
+            groupPick.SelectedIndex > 0 ? groupKeys[groupPick.SelectedIndex] : null,
+            bonusPick.SelectedIndex > 0 ? bonusPick.SelectedItem as string : null,
+            (int)minValue.Value,
+            (MarketSort)Math.Max(0, sortPick.SelectedIndex));
         void Search()
         {
-            foundRows = _engine?.MarketFind(findBox.Text) ?? [];
+            var query = Query();
+            foundRows = _engine?.MarketFind(query) ?? [];
+            var bonusBook = BonusBook.Shared;
             var me = _engine?.World?.Player;
             found.BeginUpdate();
             found.Items.Clear();
@@ -430,18 +480,48 @@ internal sealed class MainForm : Form
                 string away = me is { } at && (l.X != 0 || l.Y != 0) ? $"{Math.Sqrt((l.X - at.X) * (l.X - at.X) + (l.Y - at.Y) * (l.Y - at.Y)) / 100:0} m" : "—";
                 int minutes = (int)(DateTime.Now - l.Seen).TotalMinutes;
                 string seen = minutes < 1 ? "şimdi" : minutes < 60 ? $"{minutes} dk" : minutes < 1440 ? $"{minutes / 60} sa" : l.Seen.ToString("dd.MM");
-                found.Items.Add(new ListViewItem([l.Name + (l.Bonuses.Length > 0 ? " ✦" : ""), BotEngine.MarketYang(l.UnitPrice), l.Count.ToString("N0"), l.Owner, away, seen])
-                    { ToolTipText = l.Bonuses });
+                // The chosen bonus's value (★ = the highest seen on such items), else how good all its bonuses are.
+                string bonusCell = "";
+                if (query.Bonus != null && l.BonusValue is int value && BonusBook.GroupOf(l.Vnum) is string group)
+                    bonusCell = (value < 0 ? "-" : "+") + Math.Abs(value) +
+                                (bonusBook.Quality(query.Bonus, group, value) >= 1 ? " ★" : "");
+                else if (l.Score > 0)
+                    bonusCell = $"{l.Score:0.0} ✦";
+                found.Items.Add(new ListViewItem([l.Name, bonusCell, BotEngine.MarketYang(l.UnitPrice), l.Count.ToString("N0"), l.Owner, away, seen])
+                    { ToolTipText = bonusBook.Describe(l.Vnum, l.Bonuses) });
             }
             found.EndUpdate();
-            if (findBox.Text.Trim().Length > 0)
+            if (!query.Empty)
                 _marketState.Text = foundRows.Count == 0
                     ? (_engine == null ? "Önce oyunu bağla." : "Listede yok (bu haritanın listesi boş olabilir: önce \"Pazarı tara\").")
-                    : $"{foundRows.Count} satış bulundu, en ucuzu üstte. Birini seçip \"🚶 Dükkana götür\"e bas.";
+                    : $"{foundRows.Count} satış bulundu ({query.Sort switch { MarketSort.BonusValue => "efsunu en yüksek", MarketSort.Score => "efsun puanı en yüksek", _ => "en ucuzu" }} üstte). " +
+                      "Üstüne gelince bütün efsunlar görünür. Birini seçip \"🚶 Dükkana götür\"e bas.";
         }
         var searchTimer = new System.Windows.Forms.Timer { Interval = 350 };
         searchTimer.Tick += (_, _) => { searchTimer.Stop(); Search(); };
         findBox.TextChanged += (_, _) => { searchTimer.Stop(); searchTimer.Start(); };
+        groupPick.SelectedIndexChanged += (_, _) => { FillBonuses(); Search(); };
+        bonusPick.SelectedIndexChanged += (_, _) =>
+        {
+            // A bonus chosen: by its value from now on (unless another order was picked).
+            if (bonusPick.SelectedIndex > 0 && sortPick.SelectedIndex == 0)
+                sortPick.SelectedIndex = 1;
+            Search();
+        };
+        minValue.ValueChanged += (_, _) => { searchTimer.Stop(); searchTimer.Start(); };
+        sortPick.SelectedIndexChanged += (_, _) => Search();
+        // New bonuses learned meanwhile (a scan, the bag): the lists show them when opened.
+        groupPick.DropDown += (_, _) =>
+        {
+            if (BonusBook.Shared.Groups().Count + 1 != groupPick.Items.Count)
+            {
+                string? was = groupPick.SelectedIndex > 0 ? groupKeys[groupPick.SelectedIndex] : null;
+                FillGroups();
+                if (was != null && groupKeys.IndexOf(was) is > 0 and var i)
+                    groupPick.SelectedIndex = i;
+            }
+        };
+        bonusPick.DropDown += (_, _) => FillBonuses();
         found.ShowItemToolTips = true;
         void GoToSelected()
         {

@@ -37,6 +37,7 @@ internal sealed partial class BotEngine
     /// <summary>The bag items the bot picked up itself (kept across restarts, per character).</summary>
     private readonly PickedItems _pickedItems = new();
     private TimeSpan _pickedSavedAt;
+    private TimeSpan? _bagBonusesAt;
 
     private IReadOnlySet<(int Slot, int Vnum)> BotPicked
     {
@@ -57,6 +58,14 @@ internal sealed partial class BotEngine
             foreach (var (vnum, count) in _pickedItems.Gained)
                 _sessionItems.Picked(vnum, count);
             _sessionItems.Save();
+            // What the character carries teaches the bonus book too (not only the shops).
+            string me = _world?.CharacterName ?? "";
+            if (me.Length > 0 && (_bagBonusesAt is not { } last || now - last > TimeSpan.FromSeconds(10)))
+            {
+                _bagBonusesAt = now;
+                foreach (var item in progress.Inventory)
+                    BonusBook.Shared.LearnBag(me, item);
+            }
             foreach (var item in _pickedItems.CameIn)
                 if (Loot.KindOf(item.Vnum) == LootKind.Equipment && GoodBonus(item, profile))
                 {

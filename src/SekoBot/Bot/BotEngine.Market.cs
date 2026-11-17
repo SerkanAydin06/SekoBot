@@ -104,6 +104,18 @@ internal sealed partial class BotEngine
         return MarketOf(world.MapName).Find(query);
     }
 
+    /// <summary>The market list searched with item group / bonus filters and ordering (see <see cref="MarketQuery"/>).</summary>
+    public List<MarketListing> MarketFind(MarketQuery query)
+    {
+        if (World is not { MapName.Length: > 0 } world)
+            return [];
+        string stem = MarketBook.Stem(MarketFolder, world.MapName);
+        lock (_marketGate)
+            if (_market?.Map != world.MapName && !File.Exists(stem + ".json"))
+                return [];
+        return MarketOf(world.MapName).Find(query, BonusBook.Shared);
+    }
+
     private List<MarketShop> MarketShops()
     {
         lock (_worldGate)
