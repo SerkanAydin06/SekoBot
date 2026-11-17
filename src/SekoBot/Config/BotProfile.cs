@@ -94,6 +94,9 @@ internal sealed class BotProfile
     /// <summary>After the first group, only groups within this many metres of it are gathered
     /// (so the bot gathers one area instead of being led further and further away).</summary>
     public double PullAreaMetres { get; set; } = 8;
+    /// <summary>Learned per map: how many mobs this character can take at once without its HP
+    /// falling under 40 % (lowered after a hard fight, raised after easy ones). Kept with the character.</summary>
+    public Dictionary<string, int> PullLearned { get; set; } = [];
     /// <summary>Only gather while HP is at least this (0..1).</summary>
     public double PullMinHp { get; set; } = 0.7;
     /// <summary>A group needs at least this many mobs.</summary>
@@ -350,12 +353,116 @@ internal static class ProfileStore
         return true;
     }
 
+    private static readonly object SaveLock = new();
+
     public static void Save(BotProfile profile)
     {
-        System.IO.Directory.CreateDirectory(Directory);
-        string temp = ProfilePath + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(profile, Options));
-        File.Move(temp, ProfilePath, true);
+        lock (SaveLock)
+        {
+            System.IO.Directory.CreateDirectory(Directory);
+            string temp = ProfilePath + ".tmp";
+            File.WriteAllText(temp, JsonSerializer.Serialize(profile, Options));
+            File.Move(temp, ProfilePath, true);
+            if (Character.Length > 0)
+                CharacterSettings.Save(Character, profile);
+        }
+    }
+
+    /// <summary>The character this SekoBot plays now: its own settings are saved with it too.</summary>
+    public static string Character { get; set; } = "";
+
+    internal static JsonSerializerOptions JsonOptions => Options;
+}
+
+/// <summary>
+/// Settings that belong to a character, not to a SekoBot window: how it fights (gathering, skills,
+/// potions, fleeing), what it hunts and picks up, where it farms and what it has learned. Kept in
+/// karakterler/NAME.json, so a character plays the same whichever SekoBot (1., 2., ...) it is in.
+/// Keys, Telegram, breaks and window settings stay with the SekoBot.
+/// </summary>
+internal static class CharacterSettings
+{
+    internal static readonly string[] Names =
+    [
+        nameof(BotProfile.AutoSkills), nameof(BotProfile.SkillEverySec), nameof(BotProfile.AreaSkillMinMobs),
+        nameof(BotProfile.RetreatAtPotions), nameof(BotProfile.FleeAtHp), nameof(BotProfile.FleeUntilHp),
+        nameof(BotProfile.PotionHpBelow), nameof(BotProfile.PotionMpBelow), nameof(BotProfile.ReviveOnDeath),
+        nameof(BotProfile.PullGroups), nameof(BotProfile.PullMaxMobs), nameof(BotProfile.PullAreaMetres),
+        nameof(BotProfile.PullMinHp), nameof(BotProfile.PullLearned), nameof(BotProfile.PreferCrowds), nameof(BotProfile.CrowdMinMobs),
+        nameof(BotProfile.FarmSpot), nameof(BotProfile.UseFarmSpot), nameof(BotProfile.LeashMeters),
+        nameof(BotProfile.AttackersFirst), nameof(BotProfile.MaxMobLevel), nameof(BotProfile.OnlyMobs),
+        nameof(BotProfile.SkipMobs), nameof(BotProfile.Metins), nameof(BotProfile.PickUpDrops),
+        nameof(BotProfile.LootYang), nameof(BotProfile.LootPotions), nameof(BotProfile.LootEquipment),
+        nameof(BotProfile.LootOther), nameof(BotProfile.LootEquipmentMinGold), nameof(BotProfile.LootBonuses),
+        nameof(BotProfile.LootAlways), nameof(BotProfile.LootPick), nameof(BotProfile.LootSkip),
+        nameof(BotProfile.LootThrow), nameof(BotProfile.DropRangeMetres), nameof(BotProfile.EventLoot),
+    ];
+
+    public static string Folder { get; set; } = Path.Combine(ProfileStore.Directory, "karakterler");
+
+    private static string PathOf(string character)
+    {
+        var bad = Path.GetInvalidFileNameChars();
+        var name = new string(character.Select(c => bad.Contains(c) ? '_' : c).ToArray()).Trim();
+        return Path.Combine(Folder, (name.Length > 0 ? name : "_") + ".json");
+    }
+
+    public static bool Exists(string character) => File.Exists(PathOf(character));
+
+    /// <summary>The character's part of the profile, as JSON.</summary>
+    internal static string ToJson(BotProfile profile)
+    {
+        var all = JsonSerializer.SerializeToNode(profile, ProfileStore.JsonOptions)!.AsObject();
+        var mine = new System.Text.Json.Nodes.JsonObject();
+        foreach (string name in Names)
+            mine[name] = all[name]?.DeepClone(); // null too: "no farm spot" is a setting
+        return mine.ToJsonString(ProfileStore.JsonOptions);
+    }
+
+    /// <summary>Puts a character's saved settings into the profile (anything it lacks stays as it is).</summary>
+    internal static void Apply(string json, BotProfile profile)
+    {
+        var mine = System.Text.Json.Nodes.JsonNode.Parse(json)?.AsObject();
+        if (mine == null)
+            return;
+        foreach (string name in Names)
+        {
+            if (!mine.TryGetPropertyValue(name, out var value) || typeof(BotProfile).GetProperty(name) is not { } property)
+                continue;
+            try
+            {
+                object? read = value?.Deserialize(property.PropertyType, ProfileStore.JsonOptions);
+                if (read != null || name == nameof(BotProfile.FarmSpot)) // no farm spot is a setting too
+                    property.SetValue(profile, read);
+            }
+            catch (JsonException) { }
+        }
+        ProfileStore.Normalize(profile);
+    }
+
+    public static void Save(string character, BotProfile profile)
+    {
+        System.IO.Directory.CreateDirectory(Folder);
+        string path = PathOf(character), temp = path + ".tmp";
+        File.WriteAllText(temp, ToJson(profile));
+        File.Move(temp, path, true);
+    }
+
+    /// <returns>False when the character has no saved settings yet.</returns>
+    public static bool Load(string character, BotProfile profile)
+    {
+        string path = PathOf(character);
+        if (!File.Exists(path))
+            return false;
+        try
+        {
+            Apply(File.ReadAllText(path), profile);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 }
 

@@ -234,6 +234,12 @@ internal sealed partial class BotEngine : IDisposable
                 return (BotPhase.Stopped, Array.Empty<BotAction>());
             actions = WhisperTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);
             phase = _brain.Phase;
+            if (_brain.ProfileChanged)
+            {
+                // Learned (how many mobs this character takes on this map): kept with the character.
+                _brain.ProfileChanged = false;
+                try { ProfileStore.Save(Profile); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            }
             foreach (var action in actions)
             {
                 if (action is StopAction stop)

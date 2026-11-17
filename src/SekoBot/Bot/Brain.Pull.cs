@@ -51,7 +51,22 @@ internal sealed partial class Brain
 
     /// <summary>How many to gather now (0: not set yet → PullMaxMobs).</summary>
     private int _pullCap;
+    /// <summary>The map _pullCap was taken from (the character's learned number for it).</summary>
+    private string? _pullMap;
     private double _fightLowHp = 1;
+
+    /// <summary>Set when something learned went into the profile (to be saved with the character).</summary>
+    public bool ProfileChanged { get; set; }
+
+    /// <summary>A new number learned for this map: kept in the profile (a new dictionary, as the
+    /// window may be saving the old one at the same time).</summary>
+    private void KeepPullCap(BotProfile p)
+    {
+        if (string.IsNullOrEmpty(_pullMap))
+            return;
+        p.PullLearned = new Dictionary<string, int>(p.PullLearned) { [_pullMap] = _pullCap };
+        ProfileChanged = true;
+    }
     private int _fightMostAttackers;
 
     /// <summary>How many mobs are gathered at most now (lowered after a fight that went badly).</summary>
@@ -64,6 +79,12 @@ internal sealed partial class Brain
     /// </summary>
     private void LearnPullSize(GameState state, BotProfile p, List<BotAction> actions)
     {
+        // What this character learned on this map before (another day, another SekoBot).
+        if (state.MapName.Length > 0 && state.MapName != _pullMap)
+        {
+            _pullMap = state.MapName;
+            _pullCap = p.PullLearned.GetValueOrDefault(state.MapName);
+        }
         int attackers = state.Targets.Count(t => t.AttacksMe);
         if (attackers > 0)
         {
@@ -78,11 +99,13 @@ internal sealed partial class Brain
             if (_fightLowHp < PullDangerHp && cap > PullMinMobs)
             {
                 _pullCap = Math.Max(PullMinMobs, Math.Min(cap, _fightMostAttackers) - 2);
+                KeepPullCap(p);
                 actions.Add(new NoteAction($"{_fightMostAttackers} mobla can %{_fightLowHp * 100:0}'e düştü; bundan sonra en fazla {_pullCap} mob toplanacak."));
             }
             else if (_fightLowHp > PullSafeHp && cap < p.PullMaxMobs && _fightMostAttackers >= cap - 1)
             {
                 _pullCap = cap + 1;
+                KeepPullCap(p);
                 actions.Add(new NoteAction($"Dövüş rahat geçti (can en az %{_fightLowHp * 100:0}); artık en fazla {_pullCap} mob toplanacak."));
             }
         }
@@ -93,6 +116,7 @@ internal sealed partial class Brain
     private void ResetPull()
     {
         _pullCap = 0;
+        _pullMap = null;
         _fightLowHp = 1;
         _fightMostAttackers = 0;
         _pulled.Clear();

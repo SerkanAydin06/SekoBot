@@ -176,6 +176,20 @@ internal sealed partial class Brain
         }
     }
 
+    /// <summary>A buff due within this (seconds) has its MP kept back from attacks.</summary>
+    internal const double BuffReserveSec = 10;
+
+    /// <summary>Seconds until a buff is to be cast again (0 = now; by the game's clock when known).</summary>
+    private double BuffDueIn(SkillSlot skill, TimeSpan now)
+    {
+        double due = skill.Wait ?? 0;
+        if (_skillUsed.TryGetValue(skill.Key, out var used) && skill.DurationSec > 0)
+            due = Math.Max(due, (used + Ms((skill.DurationSec - 5) * 1000.0) - now).TotalSeconds);
+        else if (skill.Wait == null && _skillUsed.TryGetValue(skill.Key, out used))
+            due = Math.Max(due, (used + Ms(skill.CooldownSec * 1000.0) - now).TotalSeconds);
+        return Math.Max(0, due);
+    }
+
     /// <summary>
     /// Whether to press a skill now. With the game's clock (Wait): when its slot is not cooling
     /// down, nothing pressed is still unconfirmed and a buff that took isn't about to run out yet.
@@ -224,13 +238,19 @@ internal sealed partial class Brain
         int onMe = fromMemory ? state.Targets.Count(t => t.AttacksMe && t.Distance <= AreaSkillMaxRange) : state.Attackers.Count;
         bool pressed = state.Hp is double hp && hp < StunBelowHp && onMe >= 2;
         // Stunning ones first when pressed; area attacks before the ones in front, those before single ones.
+        // One that pushes the mobs back scatters a gathered group (the next area attack hits fewer):
+        // after the other attacks, unless pressed (then it buys room).
         int Order(SkillSlot s) => s.Kind switch
         {
             SkillKind.Heal => 0,
             SkillKind.Buff => 1,
             _ => (pressed && s.Traits.HasFlag(SkillTraits.Stun) ? 2 : 10) +
-                 (s.Kind == SkillKind.Area ? 0 : s.Traits.HasFlag(SkillTraits.Front) ? 1 : 2),
+                 (s.Kind == SkillKind.Area ? 0 : s.Traits.HasFlag(SkillTraits.Front) ? 1 : 2) +
+                 (!pressed && s.Traits.HasFlag(SkillTraits.Knockback) ? 5 : 0),
         };
+        // MP kept for a buff due within BuffReserveSec: attacks don't spend it.
+        int reserve = state.Skills.Where(s => s.Kind == SkillKind.Buff && BuffDueIn(s, now) is > 0 and <= BuffReserveSec)
+                                  .Select(s => s.Mana).DefaultIfEmpty(0).Max();
 
         foreach (var skill in state.Skills.OrderBy(Order))
         {
@@ -242,7 +262,8 @@ internal sealed partial class Brain
                 SkillKind.Area => Around(skill) is var n && (n >= p.AreaSkillMinMobs || pressed && skill.Traits.HasFlag(SkillTraits.Stun) && n >= 2),
                 _ => InReach(skill),
             };
-            if (!wanted || state.MpPoints is int mp && mp < skill.Mana)
+            int keep = skill.Kind is SkillKind.Area or SkillKind.Single ? reserve : 0;
+            if (!wanted || state.MpPoints is int mp && mp < skill.Mana + keep)
                 continue;
             if (!SkillReady(skill, now))
                 continue;
