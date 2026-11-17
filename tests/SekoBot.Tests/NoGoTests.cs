@@ -78,4 +78,37 @@ public class NoGoTests
         Assert.Null(WalksTo(noGo, false));             // the place it couldn't get to: left alone
         Assert.NotNull(WalksTo(noGo, true));           // it attacks us: fought
     }
+
+    [Fact]
+    public void SekoBots_running_at_the_same_time_learn_from_each_other()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "sekobot-shared-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            string noGo = Path.Combine(dir, "ulasilamaz.json"), trees = Path.Combine(dir, "engeller.json");
+            var unicorn = NoGoMap.Load(noGo);
+            var medusa = NoGoMap.Load(noGo);                         // both started with nothing
+            unicorn.GaveUp("c2", new Vec3(100, 100, 0), DateTime.Now);
+            unicorn.GaveUp("c2", new Vec3(100, 100, 0), DateTime.Now);
+            medusa.GaveUp("c2", new Vec3(9000, 9000, 0), DateTime.Now);
+            unicorn.Save(noGo);
+            medusa.Save(noGo);                                       // shares its own, takes Unicorn's
+            Assert.True(medusa.Blocked("c2", new Vec3(100, 100, 0), DateTime.Now.AddDays(1)));
+            unicorn.Save(noGo);
+            Assert.Equal(2, unicorn.Count("c2"));                    // and Unicorn gets Medusa's
+
+            var a = ObstacleMap.Load(trees);
+            var b = ObstacleMap.Load(trees);
+            a.Stuck("c2", 500, 500, DateTime.Now);
+            a.Stuck("c2", 500, 500, DateTime.Now);                   // a tree, for sure
+            b.Stuck("c2", 3000, 3000, DateTime.Now);
+            a.Save(trees);
+            b.Save(trees);
+            Assert.Single(b.Near("c2", new Vec3(500, 500, 0), 300)); // B knows A's tree
+            a.Save(trees);
+            Assert.Equal(2, a.Noted("c2"));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
 }

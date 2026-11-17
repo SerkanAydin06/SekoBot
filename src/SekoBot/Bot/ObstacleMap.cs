@@ -10,6 +10,8 @@ namespace SekoBot.Bot;
 /// held, not moving) the spot right in front of it is noted. A spot run into twice is an obstacle
 /// for good: the way to a mob through it is not taken and walking bends around it. Walking freely
 /// over a spot later (a mob or a player stood there, not a tree) wears it off again.
+/// Shared by every SekoBot (one per game): each one's news goes into the file and it takes the
+/// others' (<see cref="Save"/>, every half minute), so a tree one ran into is known to all.
 /// </summary>
 internal sealed class ObstacleMap
 {
@@ -32,8 +34,10 @@ internal sealed class ObstacleMap
     public const double Ahead = 70;
     private const int KeepPerMap = 3000;
 
-    private readonly Dictionary<string, List<Spot>> _maps;
+    private Dictionary<string, List<Spot>> _maps;
     private readonly object _gate = new();
+    /// <summary>What this SekoBot learned since it last shared (replayed onto the file).</summary>
+    private readonly List<Action<Dictionary<string, List<Spot>>>> _news = [];
 
     public ObstacleMap(Dictionary<string, List<Spot>>? maps = null) => _maps = maps ?? [];
 
@@ -46,8 +50,17 @@ internal sealed class ObstacleMap
             return;
         lock (_gate)
         {
-            if (!_maps.TryGetValue(map, out var spots))
-                _maps[map] = spots = [];
+            StuckIn(_maps, map, x, y, now);
+            _news.Add(d => StuckIn(d, map, x, y, now));
+            Changed = true;
+        }
+    }
+
+    private static void StuckIn(Dictionary<string, List<Spot>> maps, string map, double x, double y, DateTime now)
+    {
+        {
+            if (!maps.TryGetValue(map, out var spots))
+                maps[map] = spots = [];
             var near = spots.Where(s => Dist(s, x, y) < SameSpot).MinBy(s => Dist(s, x, y));
             if (near != null)
             {
@@ -63,7 +76,6 @@ internal sealed class ObstacleMap
                 if (spots.Count > KeepPerMap)
                     spots.Remove(spots.MinBy(s => s.Last)!);
             }
-            Changed = true;
         }
     }
 
@@ -72,15 +84,26 @@ internal sealed class ObstacleMap
     {
         lock (_gate)
         {
-            if (!_maps.TryGetValue(map, out var spots))
-                return;
-            foreach (var s in spots.Where(s => Dist(s, at.X, at.Y) < WalkedOver).ToList())
+            if (WalkedIn(_maps, map, at))
             {
-                if (--s.Hits <= 0)
-                    spots.Remove(s);
+                _news.Add(d => WalkedIn(d, map, at));
                 Changed = true;
             }
         }
+    }
+
+    private static bool WalkedIn(Dictionary<string, List<Spot>> maps, string map, Vec3 at)
+    {
+        if (!maps.TryGetValue(map, out var spots))
+            return false;
+        bool any = false;
+        foreach (var s in spots.Where(s => Dist(s, at.X, at.Y) < WalkedOver).ToList())
+        {
+            if (--s.Hits <= 0)
+                spots.Remove(s);
+            any = true;
+        }
+        return any;
     }
 
     /// <summary>The sure obstacles on a map within <paramref name="range"/> of <paramref name="me"/>.</summary>
@@ -124,20 +147,30 @@ internal sealed class ObstacleMap
         return new ObstacleMap();
     }
 
+    /// <summary>Shares: this SekoBot's news go into the file, and what the others learned comes back
+    /// (every SekoBot uses the same file while they run).</summary>
     public void Save(string? path = null)
     {
-        try
+        List<Action<Dictionary<string, List<Spot>>>> news;
+        lock (_gate)
         {
-            string json;
-            lock (_gate)
-            {
-                json = JsonSerializer.Serialize(_maps);
-                Changed = false;
-            }
-            path ??= FilePath;
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, json);
+            news = [.. _news];
+            _news.Clear();
+            Changed = false;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        var all = SharedFile.Update<Dictionary<string, List<Spot>>>(path ?? FilePath, d => news.ForEach(n => n(d)));
+        lock (_gate)
+        {
+            if (all == null)
+            {
+                _news.InsertRange(0, news); // not reached: kept for the next time
+                Changed = true;
+                return;
+            }
+            // What came meanwhile is played onto the shared state too.
+            foreach (var n in _news)
+                n(all);
+            _maps = all;
+        }
     }
 }

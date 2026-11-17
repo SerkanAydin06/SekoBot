@@ -31,10 +31,10 @@ internal sealed class NoGoMap
     /// <summary>Standing near a place right when giving up on it (the mob was just out of reach) doesn't count.</summary>
     public static readonly TimeSpan Settle = TimeSpan.FromMinutes(1);
 
-    private readonly Dictionary<string, List<Spot>> _maps;
+    private Dictionary<string, List<Spot>> _maps;
     private readonly object _gate = new();
-    /// <summary>Maps this SekoBot learned something new on (the others' are taken from the file when saving).</summary>
-    private readonly HashSet<string> _touched = [];
+    /// <summary>What this SekoBot learned since it last shared (replayed onto the file).</summary>
+    private readonly List<Action<Dictionary<string, List<Spot>>>> _news = [];
 
     public NoGoMap(Dictionary<string, List<Spot>>? maps = null) => _maps = maps ?? [];
 
@@ -47,8 +47,17 @@ internal sealed class NoGoMap
             return;
         lock (_gate)
         {
-            if (!_maps.TryGetValue(map, out var spots))
-                _maps[map] = spots = [];
+            GaveUpIn(_maps, map, at, now);
+            _news.Add(d => GaveUpIn(d, map, at, now));
+            Changed = true;
+        }
+    }
+
+    private static void GaveUpIn(Dictionary<string, List<Spot>> maps, string map, Vec3 at, DateTime now)
+    {
+        {
+            if (!maps.TryGetValue(map, out var spots))
+                maps[map] = spots = [];
             var near = spots.FirstOrDefault(s => Math.Abs(s.X - at.X) < Radius * 0.6 && Math.Abs(s.Y - at.Y) < Radius * 0.6);
             if (near == null)
                 spots.Add(new Spot { X = at.X, Y = at.Y, Hits = 1, Last = now });
@@ -57,8 +66,6 @@ internal sealed class NoGoMap
                 near.Hits++;
                 near.Last = now;
             }
-            _touched.Add(map);
-            Changed = true;
         }
     }
 
@@ -82,14 +89,17 @@ internal sealed class NoGoMap
             return;
         lock (_gate)
         {
-            if (_maps.TryGetValue(map, out var spots) &&
-                spots.RemoveAll(s => now - s.Last > Settle && (s.X - me.X) * (s.X - me.X) + (s.Y - me.Y) * (s.Y - me.Y) <= Reached * Reached) > 0)
+            if (WalkedIn(_maps, map, me, now))
             {
-                _touched.Add(map);
+                _news.Add(d => WalkedIn(d, map, me, now));
                 Changed = true;
             }
         }
     }
+
+    private static bool WalkedIn(Dictionary<string, List<Spot>> maps, string map, Vec3 me, DateTime now) =>
+        maps.TryGetValue(map, out var spots) &&
+        spots.RemoveAll(s => now - s.Last > Settle && (s.X - me.X) * (s.X - me.X) + (s.Y - me.Y) * (s.Y - me.Y) <= Reached * Reached) > 0;
 
     public int Count(string map)
     {
@@ -111,32 +121,30 @@ internal sealed class NoGoMap
         return new NoGoMap();
     }
 
+    /// <summary>Shares: this SekoBot's news go into the file, and what the others learned comes back
+    /// (every SekoBot uses the same file while they run).</summary>
     public void Save(string? path = null)
     {
-        path ??= FilePath;
-        try
+        List<Action<Dictionary<string, List<Spot>>>> news;
+        lock (_gate)
         {
-            // Other SekoBots (other games) write the same file: their maps are kept.
-            Dictionary<string, List<Spot>>? onDisk = null;
-            try
-            {
-                if (File.Exists(path))
-                    onDisk = JsonSerializer.Deserialize<Dictionary<string, List<Spot>>>(File.ReadAllText(path));
-            }
-            catch (JsonException) { }
-            string json;
-            lock (_gate)
-            {
-                // Maps this one didn't change: as the file has them (another SekoBot may have learned there).
-                foreach (var (map, spots) in onDisk ?? [])
-                    if (!_touched.Contains(map))
-                        _maps[map] = spots;
-                json = JsonSerializer.Serialize(_maps);
-                Changed = false;
-            }
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, json);
+            news = [.. _news];
+            _news.Clear();
+            Changed = false;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        var all = SharedFile.Update<Dictionary<string, List<Spot>>>(path ?? FilePath, d => news.ForEach(n => n(d)));
+        lock (_gate)
+        {
+            if (all == null)
+            {
+                _news.InsertRange(0, news); // not reached: kept for the next time
+                Changed = true;
+                return;
+            }
+            // What came meanwhile is played onto the shared state too.
+            foreach (var n in _news)
+                n(all);
+            _maps = all;
+        }
     }
 }
