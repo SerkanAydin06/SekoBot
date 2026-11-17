@@ -157,7 +157,7 @@ internal sealed partial class BotEngine : IDisposable
                         if (profile.ClosePopups && BotRunning && !state.Dead)
                             // While throwing items the bag and its menu are ours (not windows to close or tell).
                             state = state with { PopupOpen = !_cleaner.Active && !_brain.ReadyToClean && PopupOpen(world) };
-                        var view = MemoryView(world, profile, frame.Width, frame.Height, DumpSpot(now));
+                        var view = MemoryView(world, profile, frame.Width, frame.Height, DumpSpot(now), fit: !_fitRelaxed);
                         var mobs = view?.Mobs ?? [];
                         if (!profile.NavigateMode)
                             mobs = mobs.Where(m => !RecentlyMissed(m, now)).ToList();
@@ -189,6 +189,7 @@ internal sealed partial class BotEngine : IDisposable
                                 CheckSafety(world, profile);
                                 CheckPotionKeys(world, profile);
                                 WatchTick(world, profile, now);
+                                FitTick(world, profile, now);
                                 SocialTick(world, profile, now);
                                 NotifyEvents(world);
                             }
@@ -344,6 +345,7 @@ internal sealed partial class BotEngine : IDisposable
                 _social.Reset();
             _session.Reset(_clock.Elapsed);
             _players.Reset();
+            ResetFit();
             _sessionStartedAt = DateTime.Now;
             _farmSpot = UsableFarmSpot(World, Profile, out string? why);
             if (why != null)

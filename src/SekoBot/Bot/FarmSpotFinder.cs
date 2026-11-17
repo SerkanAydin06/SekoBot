@@ -45,33 +45,45 @@ internal static class FarmSpotFinder
     /// <summary>Walking with stops, in world units a second (as in the target choice).</summary>
     private const double WalkSpeed = 200;
 
-    public static FarmSpot? Best(IReadOnlyCollection<WorldMob> mobs, BotProfile profile, Vec3 from, string map,
-        int attackPower, double maxDistance = 8000, Func<int, double?>? respawn = null, Func<Vec3, bool>? allowed = null, int level = 0)
+    /// <summary>Experience an hour farming around one spot (the mobs within <see cref="Radius"/>).</summary>
+    public static double Score(IReadOnlyCollection<WorldMob> mobs, BotProfile profile, Vec3 spot, int attackPower,
+        Func<int, double?>? respawn = null, int level = 0, bool fit = false) =>
+        PerHourAround(mobs.Where(m => BotEngine.Wanted(m, profile, level, fit) && m.Position.DistanceXY(spot) <= Radius).ToList(),
+            profile, attackPower, respawn);
+
+    private static double PerHourAround(List<WorldMob> around, BotProfile profile, int attackPower, Func<int, double?>? respawn)
     {
-        var wanted = mobs.Where(m => BotEngine.Wanted(m, profile, level)).ToList();
-        if (wanted.Count == 0)
-            return null;
+        if (around.Count == 0)
+            return 0;
         double dps = Math.Max(50, attackPower);
         double Exp(WorldMob m)
         {
             double exp = m.Exp > 0 ? m.Exp : m.MaxHp * 0.3;
             return m.IsMetin && profile.Metins == MetinMode.Prefer ? exp * 3 : exp;
         }
+        double spacing = Math.Sqrt(Math.PI * Radius * Radius / around.Count); // between two mobs
+        double seconds = around.Sum(m => m.MaxHp / dps + 1 + spacing / WalkSpeed);
+        var waits = around.Select(m => respawn?.Invoke(m.Level) ?? RespawnSec).OrderBy(w => w).ToList();
+        return around.Sum(Exp) / Math.Max(seconds, waits[waits.Count / 2]) * 3600;
+    }
+
+    public static FarmSpot? Best(IReadOnlyCollection<WorldMob> mobs, BotProfile profile, Vec3 from, string map,
+        int attackPower, double maxDistance = 8000, Func<int, double?>? respawn = null, Func<Vec3, bool>? allowed = null, int level = 0,
+        bool fit = false) => Best(mobs, profile, from, map, attackPower, out _, maxDistance, respawn, allowed, level, fit);
+
+    public static FarmSpot? Best(IReadOnlyCollection<WorldMob> mobs, BotProfile profile, Vec3 from, string map,
+        int attackPower, out double bestScore, double maxDistance = 8000, Func<int, double?>? respawn = null,
+        Func<Vec3, bool>? allowed = null, int level = 0, bool fit = false)
+    {
+        bestScore = 0;
+        var wanted = mobs.Where(m => BotEngine.Wanted(m, profile, level, fit)).ToList();
+        if (wanted.Count == 0)
+            return null;
         // Experience an hour from a group of mobs farmed together.
-        double PerHour(List<WorldMob> around)
-        {
-            if (around.Count == 0)
-                return 0;
-            double spacing = Math.Sqrt(Math.PI * Radius * Radius / around.Count); // between two mobs
-            double seconds = around.Sum(m => m.MaxHp / dps + 1 + spacing / WalkSpeed);
-            // How long they take to come back: measured for their level when known (the median).
-            var waits = around.Select(m => respawn?.Invoke(m.Level) ?? RespawnSec).OrderBy(w => w).ToList();
-            return around.Sum(Exp) / Math.Max(seconds, waits[waits.Count / 2]) * 3600;
-        }
+        double PerHour(List<WorldMob> around) => PerHourAround(around, profile, attackPower, respawn);
         double minX = wanted.Min(m => m.Position.X), maxX = wanted.Max(m => m.Position.X);
         double minY = wanted.Min(m => m.Position.Y), maxY = wanted.Max(m => m.Position.Y);
         Vec3? best = null;
-        double bestScore = 0;
         for (double x = Math.Floor(minX / Grid) * Grid; x <= maxX; x += Grid)
         for (double y = Math.Floor(minY / Grid) * Grid; y <= maxY; y += Grid)
         {
