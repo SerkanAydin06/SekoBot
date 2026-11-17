@@ -29,10 +29,10 @@ internal sealed partial class BotEngine
     /// <summary>Nothing seen on the map suits the character: every mob is gone for (better than standing).</summary>
     private bool _fitRelaxed;
     private string _fitToldMap = "";
-    private TimeSpan _fitCheckedAt = TimeSpan.MinValue, _movedAt = TimeSpan.MinValue;
+    private TimeSpan? _fitCheckedAt, _movedAt;
     private int _fitLevel;
 
-    private void FitTick(WorldSnapshot world, BotProfile profile, TimeSpan now)
+    internal void FitTick(WorldSnapshot world, BotProfile profile, TimeSpan now)
     {
         if (_fights.Update(world.Mobs, world.Stats?.HpFraction, now) is { } fight)
         {
@@ -47,7 +47,7 @@ internal sealed partial class BotEngine
         bool levelUp = _fitLevel > 0 && world.Level > _fitLevel;
         if (world.Level > 0)
             _fitLevel = world.Level;
-        if (!levelUp && now - _fitCheckedAt < AreaCheckEvery)
+        if (!levelUp && _fitCheckedAt is { } checkedAt && now - checkedAt < AreaCheckEvery)
             return;
         _fitCheckedAt = now;
 
@@ -79,7 +79,7 @@ internal sealed partial class BotEngine
             _log($"Bu karaktere uygun moblar görüldü; çok güçlü olanlara artık gidilmiyor.");
         }
 
-        if (now - _movedAt < MoveRest)
+        if (_movedAt is { } movedAt && now - movedAt < MoveRest)
             return;
         var here = _botHome ?? world.Player;
         double hereScore = FarmSpotFinder.Score(seen, profile, here, world.AttackPower, RespawnSeconds, world.Level, fit: true);
@@ -103,7 +103,7 @@ internal sealed partial class BotEngine
     {
         _fights.Reset();
         _fitRelaxed = false;
-        _fitCheckedAt = TimeSpan.MinValue;
+        _fitCheckedAt = null;
         _fitLevel = 0;
     }
 }
