@@ -206,6 +206,7 @@ internal sealed partial class Brain
                         Lore.CastMs(beforeName) < SkillLore.CastMaxMs)
                     {
                         // The skill before is still being cast: that skill takes longer (for everyone using it).
+                        int had = Lore.CastMs(beforeName);
                         int cast = beforeName.Length > 0
                             ? Lore.CutOffAfter(beforeName, (int)(pressed - before).TotalMilliseconds)
                             : 0;
@@ -214,6 +215,13 @@ internal sealed partial class Brain
                             p.SkillGapLearnedMs = Math.Min(SkillGapLearnedMaxMs, p.SkillGapLearnedMs + SkillGapStepMs);
                             ProfileChanged = true;
                         }
+                        if (beforeName.Length > 0 && cast <= had)
+                        {
+                            // Took at this gap before: something else (no MP, the mob gone); nothing learned.
+                            if (_skillMissTold.Add(skill.Key))
+                                actions.Add(new NoteAction($"{KeyName(skill.Key)} {skill.Name} basıldı ama oyunda kullanılmadı (yarıda kesildi ya da o an olmuyordu); birazdan yeniden denenecek."));
+                        }
+                        else
                         actions.Add(new NoteAction($"{KeyName(skill.Key)} {skill.Name} bir önceki becerinin hemen ardından basılınca tutmadı; " +
                             (beforeName.Length > 0
                                 ? $"{beforeName} sonrası {cast / 1000.0:0.#} sn beklenecek (bütün karakterler ve botlar için öğrenildi)."
