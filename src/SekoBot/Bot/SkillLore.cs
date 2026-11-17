@@ -15,6 +15,10 @@ internal sealed class SkillLore
     {
         /// <summary>After this skill, the next one waits at least this long (ms; 0 = not learned).</summary>
         public int CastMs { get; set; }
+        /// <summary>The longest gap after it at which the next skill was cut off (ms).</summary>
+        public int CutMs { get; set; }
+        /// <summary>The shortest gap after it at which the next skill took (ms; 0 = not seen).</summary>
+        public int OkMs { get; set; }
         /// <summary>Pressed again this much later than its cooldown says (ms).</summary>
         public int ExtraMs { get; set; }
     }
@@ -44,7 +48,8 @@ internal sealed class SkillLore
             return name.Length > 0 && _skills.TryGetValue(name, out var e) ? e.ExtraMs : 0;
     }
 
-    /// <summary>A skill pressed <paramref name="afterMs"/> after <paramref name="name"/> was cut off by its casting.</summary>
+    /// <summary>A skill pressed <paramref name="afterMs"/> after <paramref name="name"/> didn't take: cut off by its
+    /// casting, unless one took at that gap before (then it was something else: no MP, the mob gone, stunned).</summary>
     /// <returns>The casting time now known for it.</returns>
     public int CutOffAfter(string name, int afterMs)
     {
@@ -62,7 +67,43 @@ internal sealed class SkillLore
     {
         if (!skills.TryGetValue(name, out var e))
             skills[name] = e = new Entry();
-        e.CastMs = Math.Min(CastMaxMs, Math.Max(e.CastMs, afterMs) + CastStepMs);
+        if (e.OkMs > 0 && afterMs >= e.OkMs)
+            return;
+        e.CutMs = Math.Max(e.CutMs, afterMs);
+        Settle(e);
+    }
+
+    /// <summary>The wait after it: a little more than the longest cut-off, never more than a gap that worked.</summary>
+    private static void Settle(Entry e)
+    {
+        int wait = e.CutMs > 0 ? e.CutMs + CastStepMs : 0;
+        if (e.OkMs > 0)
+            wait = Math.Min(wait, e.OkMs);
+        e.CastMs = Math.Min(CastMaxMs, wait);
+    }
+
+    /// <summary>A skill pressed <paramref name="afterMs"/> after <paramref name="name"/> took: its casting is shorter than that.</summary>
+    public void TookAfter(string name, int afterMs)
+    {
+        if (name.Length == 0 || afterMs <= 0 || afterMs > CastMaxMs + 2000)
+            return;
+        lock (_gate)
+        {
+            if (_skills.TryGetValue(name, out var e) && e.OkMs > 0 && e.OkMs <= afterMs)
+                return; // nothing new
+            Took(_skills, name, afterMs);
+            _news.Add(d => Took(d, name, afterMs));
+        }
+    }
+
+    private static void Took(Dictionary<string, Entry> skills, string name, int afterMs)
+    {
+        if (!skills.TryGetValue(name, out var e))
+            skills[name] = e = new Entry();
+        e.OkMs = e.OkMs > 0 ? Math.Min(e.OkMs, afterMs) : afterMs;
+        if (e.CutMs >= e.OkMs)
+            e.CutMs = 0; // a "cut-off" at a gap that works wasn't one
+        Settle(e);
     }
 
     /// <summary>The game said "WAIT!" to this skill: it needs a little longer than its cooldown.</summary>
