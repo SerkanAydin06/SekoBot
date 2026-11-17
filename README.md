@@ -207,6 +207,10 @@ Alan sekmesindeki "Güçlü moblara gitme" (varsayılan açık, karaktere ait) i
 - **Harita uygun değilse söyler:** Haritada gördüğü moblardan hiçbiri karaktere uymuyorsa ("Sv 9 için c2'deki moblar Sv 18–21") seni günlükte ve Telegram'da uyarır; bot haritayı kendisi değiştirmez, buradakilerle devam eder.
 - Hedef sekmesinde en yüksek mob seviyesini elle yazarsan bot onu kullanır.
 
+## Bot fareyi kullanırken senin faren durur
+
+Bot gerçek fareyi kullanırken (oyundaki bir düğmeye tıklarken, eşya sürüklerken, eşya atarken) senin farenin hareketleri ve tıklamaları yok sayılır; böylece seninkilerle botunkiler karışmaz. Bot işini bitirince fare hemen serbest kalır; güvenlik için kilit en çok 6 saniye sürer. Klavye hiç kilitlenmez, acil durdurma (F11) her zaman çalışır. Bot oyunu arka planda oynarken (tuşlarla) fare hiç kilitlenmez.
+
 ## Ortak hafıza (bütün botlar ve karakterler)
 
 Aynı bilgisayarda açık bütün SekoBot'lar öğrendiklerini ortak dosyalarda toplar ve her 30 saniyede birbirleriyle paylaşır. Her bot kendi yeni öğrendiğini dosyaya ekler, diğerlerinin öğrendiklerini alır; kimse kimsenin öğrendiğini silmez:
