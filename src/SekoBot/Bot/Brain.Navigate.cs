@@ -631,6 +631,25 @@ internal sealed partial class Brain
     internal const int DropGiveUpMs = 8000, DropRetryMs = 20000;
     /// <summary>An item the game said isn't ours is left this long (by then it is everyone's, or gone).</summary>
     internal const int NotOursMs = 180_000;
+    /// <summary>Gathering only (attack off): someone else's item (the group's killer) is free for everyone
+    /// after a while in the game; tried again this long after it fell, then every <see cref="NotOursRetryMs"/>,
+    /// for at most <see cref="NotOursWaitMaxMs"/>.</summary>
+    internal const int NotOursFreeMs = 32_000, NotOursRetryMs = 10_000, NotOursWaitMaxMs = 180_000;
+    /// <summary>When each item on the ground was first seen (its age tells when it is free).</summary>
+    private readonly Dictionary<long, TimeSpan> _dropSeenAt = [];
+    private readonly HashSet<long> _waitTold = [];
+
+    private void NoteDropAges(GameState state)
+    {
+        foreach (var d in state.Drops)
+            _dropSeenAt.TryAdd(d.Id, state.Time);
+        if (_dropSeenAt.Count > 200)
+            foreach (var id in _dropSeenAt.Keys.Where(id => !state.Drops.Any(d => d.Id == id)).ToList())
+            {
+                _dropSeenAt.Remove(id);
+                _waitTold.Remove(id);
+            }
+    }
 
     /// <summary>The game's own chat lines since the last tick (set from the memory loop).</summary>
     private int _notOursHeard, _skillWaitsHeard;
@@ -656,10 +675,23 @@ internal sealed partial class Brain
                 .OrderBy(d => Math.Pow(d.Spot.X - cx, 2) + Math.Pow(d.Spot.Y - cy, 2)).FirstOrDefault();
             if (theirs.Id != 0)
             {
-                _ignoredDrops[theirs.Id] = now + Ms(NotOursMs);
                 if (theirs.Id == _dropId)
                     _dropId = 0;
-                actions.Add(new NoteAction("Yerdeki eşya başkasının (oyun \"toplayamazsın\" dedi); bırakıldı."));
+                var fell = _dropSeenAt.TryGetValue(theirs.Id, out var seen) ? seen : now;
+                if (!_profile().Attack && now - fell < Ms(NotOursWaitMaxMs))
+                {
+                    // Gathering behind the group's killer: wait until it is free, then take it.
+                    var free = fell + Ms(NotOursFreeMs);
+                    _ignoredDrops[theirs.Id] = free > now + Ms(2000) ? free : now + Ms(NotOursRetryMs);
+                    if (_waitTold.Add(theirs.Id))
+                        actions.Add(new NoteAction($"Yerdeki eşya kesenin (oyun \"toplayamazsın\" dedi); herkese açılınca " +
+                                                   $"(yaklaşık {Math.Max(2, (free - now).TotalSeconds):0} sn) alınacak."));
+                }
+                else
+                {
+                    _ignoredDrops[theirs.Id] = now + Ms(NotOursMs);
+                    actions.Add(new NoteAction("Yerdeki eşya başkasının (oyun \"toplayamazsın\" dedi); bırakıldı."));
+                }
             }
         }
         if (Interlocked.Exchange(ref _skillWaitsHeard, 0) > 0)
