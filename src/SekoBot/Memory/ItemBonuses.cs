@@ -95,7 +95,7 @@ internal static class ItemBonuses
         return a == b || a > 0 && b > 0 && a < codes.Length && b < codes.Length && codes[a].Length > 0 && codes[a] == codes[b];
     }
 
-    /// <summary>"Orklara karşı güçlü +10" for a log line.</summary>
+    /// <summary>"Orklara karşı güçlü +10" (a weapon's lowered damage: "Ortalama zarar -12") for a log line.</summary>
     public static string Describe(IEnumerable<ItemBonus> bonuses) =>
-        string.Join(", ", bonuses.Where(b => b.Type > 0).Select(b => $"{NameOf(b.Type)} +{b.Value}"));
+        string.Join(", ", bonuses.Where(b => b.Type > 0).Select(b => $"{NameOf(b.Type)} {(b.Value < 0 ? "-" : "+")}{Math.Abs(b.Value)}"));
 }

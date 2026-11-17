@@ -77,7 +77,13 @@ internal sealed partial class BotEngine
     {
         try
         {
-            return book.Save(MarketFolder, MapReport.Outlines(_terrain.Of(book.Map)));
+            string report = book.Save(MarketFolder, MapReport.Outlines(_terrain.Of(book.Map)));
+            // The bonuses seen go into the bonus book (which bonus on which items, which values), shared by all SekoBots.
+            var bonuses = BonusBook.Shared;
+            bonuses.LearnFrom(book.ToJson());
+            bonuses.Save();
+            File.WriteAllText(Path.Combine(MarketFolder, "efsun-rehberi.html"), bonuses.Html(), new System.Text.UTF8Encoding(false));
+            return report;
         }
         catch (IOException ex)
         {
