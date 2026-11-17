@@ -195,4 +195,18 @@ public class SkillClockTests
         Assert.All(presses.Zip(presses.Skip(1), (a, b) => b - a), gap => Assert.True(gap >= 11_500));
         Assert.True(lore.ExtraMs("Ruh vuruşu") < 2000);         // each press that took eased it
     }
+
+    [Fact]
+    public void A_miss_for_another_reason_does_not_make_the_casting_longer_and_longer()
+    {
+        var lore = new SkillLore();
+        lore.CutOffAfter("Güçlü vuruş", 1500);                 // cut off at 1.5 s: wait 2 s after it
+        Assert.Equal(2000, lore.CastMs("Güçlü vuruş"));
+        lore.TookAfter("Güçlü vuruş", 2000);                   // took at 2 s
+        for (int i = 0; i < 10; i++)
+            lore.CutOffAfter("Güçlü vuruş", 2000 + i * 100);   // misses later on: no MP, the mob gone…
+        Assert.Equal(2000, lore.CastMs("Güçlü vuruş"));        // not up to 4 s
+        lore.TookAfter("Güçlü vuruş", 1400);                   // even 1.4 s works: the 1.5 s "cut-off" was something else
+        Assert.True(lore.CastMs("Güçlü vuruş") <= 1400);
+    }
 }

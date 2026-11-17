@@ -186,6 +186,9 @@ internal sealed partial class Brain
                     _skillMisses.Remove(skill.Key);
                     // Taken without "WAIT!": what was learned about it eases off a little (a wrong lesson wears off).
                     Lore.TookFine(skill.Name);
+                    // And it took this soon after the skill before: that one's casting is shorter.
+                    if (_skillBefore.TryGetValue(skill.Key, out var prev) && prev != Never)
+                        Lore.TookAfter(_skillBeforeName.GetValueOrDefault(skill.Key, ""), (int)(pressed - prev).TotalMilliseconds);
                 }
                 else if (now - pressed > Ms(SkillTakesMs))
                 {
