@@ -235,7 +235,7 @@ internal sealed partial class BotEngine
     /// attacking us is always fought back, and a Metin stone set to "first" is always gone for
     /// (the level and name filters are for mobs) — unless it is far below our level.</summary>
     /// <param name="level">The character's level (0: unknown, no level check for stones).</param>
-    /// <param name="fit">Leave out mobs too strong for the character (when "Uygun alanı kendisi seç"
+    /// <param name="fit">Leave out mobs too strong for the character (when "Güçlü moblara gitme"
     /// is on and no top level is set by hand).</param>
     internal static bool Wanted(WorldMob mob, BotProfile profile, int level = 0, bool fit = false)
     {

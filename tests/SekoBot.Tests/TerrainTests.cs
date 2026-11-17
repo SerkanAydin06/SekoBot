@@ -21,6 +21,8 @@ public class TerrainTests
         Assert.False(Brain.OnOtherLevel(Mob(1, 400, dz: -120), Me));      // a slope (seen: −118 at 4 m)
         Assert.True(Brain.OnOtherLevel(Mob(1, 500, dz: 600), Me));        // 6 m up a ledge, 5 m away
         Assert.True(Brain.OnOtherLevel(Mob(1, 300, dz: -500), Me));       // down a cliff
+        Assert.True(Brain.OnOtherLevel(Mob(1, 2500, dz: -1100), Me));    // 11 m down a steep slope, 25 m away
+        Assert.False(Brain.OnOtherLevel(Mob(1, 2500, dz: -500), Me));     // 5 m lower 25 m away: walkable
     }
 
     [Fact]

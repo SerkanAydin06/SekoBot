@@ -7,6 +7,7 @@ using Xunit;
 namespace SekoBot.Tests;
 
 /// <summary>Each character keeps its own settings and what it learned, whichever SekoBot it plays in.</summary>
+[Collection("CharacterFolder")]
 public class CharacterTests
 {
     [Fact]

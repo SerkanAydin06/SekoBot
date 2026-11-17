@@ -112,7 +112,8 @@ internal sealed partial class BotEngine
             if (now - seen > TimeSpan.FromMinutes(3))
                 _seenMobs.Remove(id);
 
-        var players = world.Players ?? [];
+        // The user's own characters (in another game next to this one) aren't strangers taking our place.
+        var players = (world.Players ?? []).Where(p => !OwnCharacter(p.Name)).ToList();
         string? reason = _players.Update(now, _session.Exp, world.Player, players, profile.AvoidPlayerMinutes, profile.AvoidPlayerExpDrop);
         if (reason == null)
             return;
@@ -143,6 +144,13 @@ internal sealed partial class BotEngine
         _log(message);
         Notify(message);
         AreaScanFinished?.Invoke(message); // the UI saves the profile
+    }
+
+    /// <summary>One of the user's own characters: a SekoBot has played it (it has its settings file).</summary>
+    internal static bool OwnCharacter(string name)
+    {
+        try { return name.Length > 0 && CharacterSettings.Exists(name); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { return false; }
     }
 
     private bool _respawnHooked;

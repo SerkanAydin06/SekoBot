@@ -154,9 +154,9 @@ internal sealed partial class Brain
         return false;
     }
 
-    /// <summary>A mob far above or below us for its distance (a ledge, a cliff): not walkable to.</summary>
+    /// <summary>A mob far above or below us for its distance (a ledge, a cliff, the bottom of a steep slope): not walkable to.</summary>
     internal static bool OnOtherLevel(TargetInfo t, Vec3 me) =>
-        t.Position is Vec3 at && Math.Abs(at.Z - me.Z - MobHeightOffset) > Math.Max(250, 0.5 * t.Distance);
+        t.Position is Vec3 at && Math.Abs(at.Z - me.Z - MobHeightOffset) > Math.Max(250, 0.4 * t.Distance);
 
     /// <summary>An archer this much higher or lower than us (world units, 1.5 m; a quarter of its
     /// distance when further) shoots from a ledge the character can't climb (the user saw it: archers
