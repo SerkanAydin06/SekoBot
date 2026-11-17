@@ -5,8 +5,8 @@ using SekoBot.Native;
 namespace SekoBot.UI;
 
 /// <summary>
-/// Puts several games on one screen tidily: the game windows side by side (a grid for three or
-/// more), a band left free under every row for each bot's small bar under its game. Only moves and
+/// Puts several games on one screen tidily: the game windows in a grid, each made smaller in its
+/// own shape (never squeezed), a band left free under each game for its bot's small bar. Only moves and
 /// sizes windows (as dragging them would); nothing in the game is touched. Every SekoBot open is
 /// told to turn into its small bar (a window message to all of them).
 /// </summary>
@@ -18,23 +18,66 @@ internal static class WindowLayout
     /// <summary>Tells every SekoBot open (this one too) to go small.</summary>
     public static void TellAllMini() => Win32.PostMessage(Win32.HWND_BROADCAST, MiniMessage, 1, 0);
 
-    /// <summary>The cells of <paramref name="count"/> windows on <paramref name="area"/>: side by side for two, else a grid
-    /// (2×2 for three or four, 3×2 for five or six, …). Each row leaves <paramref name="band"/> pixels free under it (the bars).</summary>
-    public static List<Rectangle> Grid(Rectangle area, int count, int band = 0)
+    /// <summary>The usual shape of a game picture (width / height), when nothing better is known.</summary>
+    public const double DefaultAspect = 16 / 9.0;
+    /// <summary>The space left between two games (pixels).</summary>
+    public const int Gap = 6;
+    private static readonly double[] CommonAspects = [4 / 3.0, 16 / 10.0, 16 / 9.0, 21 / 9.0];
+
+    /// <summary>
+    /// Where <paramref name="count"/> games go on <paramref name="area"/>, each kept in its own shape
+    /// (<paramref name="aspect"/>, the picture without the title bar: never squeezed or stretched).
+    /// The grid that gives the largest games is taken (2 side by side, 3 as two over one, 4 as 2×2,
+    /// 6 as 3×2, …), rows centred, the whole centred on the area; under every game
+    /// <paramref name="band"/> pixels stay free for its bot's bar.
+    /// </summary>
+    /// <param name="frame">What the window adds to the picture (title bar, borders), in pixels.</param>
+    /// <returns>The windows as they are seen (with their title bars).</returns>
+    public static List<Rectangle> Grid(Rectangle area, int count, int band = 0, double aspect = DefaultAspect, Size frame = default, int gap = Gap)
     {
         var cells = new List<Rectangle>();
-        if (count <= 0)
+        if (count <= 0 || area.Width <= 0 || area.Height <= 0)
             return cells;
-        int columns = count <= 2 ? count : (int)Math.Ceiling(Math.Sqrt(count));
+        if (aspect <= 0)
+            aspect = DefaultAspect;
+        int columns = 1;
+        double width = -1;
+        for (int c = 1; c <= count; c++)
+        {
+            int r = (int)Math.Ceiling(count / (double)c);
+            double cellW = (area.Width - gap * (c - 1)) / (double)c - frame.Width;
+            double cellH = (area.Height - gap * (r - 1)) / (double)r - band - frame.Height;
+            double w = Math.Min(cellW, cellH * aspect);
+            if (w > width + 0.5)
+            {
+                width = w;
+                columns = c;
+            }
+        }
         int rows = (int)Math.Ceiling(count / (double)columns);
+        int picW = Math.Max(1, (int)Math.Floor(width)), picH = Math.Max(1, (int)Math.Round(picW / aspect));
+        int winW = picW + frame.Width, winH = picH + frame.Height;
+        int totalH = rows * (winH + band) + (rows - 1) * gap;
+        int top = area.Top + Math.Max(0, (area.Height - totalH) / 2);
         for (int i = 0; i < count; i++)
         {
-            int c = i % columns, r = i / columns;
-            int x0 = area.Left + area.Width * c / columns, x1 = area.Left + area.Width * (c + 1) / columns;
-            int y0 = area.Top + area.Height * r / rows, y1 = area.Top + area.Height * (r + 1) / rows - band;
-            cells.Add(Rectangle.FromLTRB(x0, y0, x1, y1));
+            int r = i / columns, c = i % columns;
+            int inRow = Math.Min(columns, count - r * columns);
+            int rowW = inRow * winW + (inRow - 1) * gap;
+            int left = area.Left + Math.Max(0, (area.Width - rowW) / 2);
+            cells.Add(new Rectangle(left + c * (winW + gap), top + r * (winH + band + gap), winW, winH));
         }
         return cells;
+    }
+
+    /// <summary>The shape the games' pictures have: the common shape (4:3, 16:10, 16:9, 21:9) most of them are near,
+    /// else 16:9 (a window once squeezed out of shape doesn't count).</summary>
+    public static double Aspect(IEnumerable<Size> pictures)
+    {
+        var near = pictures.Where(p => p.Width > 0 && p.Height > 0)
+            .Select(p => CommonAspects.Cast<double?>().FirstOrDefault(a => Math.Abs(p.Width / (double)p.Height / a!.Value - 1) < 0.025))
+            .Where(a => a != null).GroupBy(a => a!.Value).OrderByDescending(g => g.Count()).FirstOrDefault();
+        return near?.Key ?? DefaultAspect;
     }
 
     /// <summary>Where a bot's bar goes: just under its game, else over the game's bottom edge; always on the screen.</summary>
@@ -79,10 +122,18 @@ internal static class WindowLayout
         if (games.Count == 0)
             return 0;
         var work = Screen.FromRectangle(near).WorkingArea;
-        var area = work;
         // Keep their order from left to right (then top to bottom), so nothing swaps places.
         var ordered = games.Select(g => (g, at: Visible(g.Handle))).OrderBy(p => p.at.Top / 200).ThenBy(p => p.at.Left).Select(p => p.g).ToList();
-        var cells = Grid(area, ordered.Count, band);
+        var pictures = ordered.Select(g => Win32.GetClientRect(g.Handle, out var c) ? new Size(c.Right - c.Left, c.Bottom - c.Top) : Size.Empty).ToList();
+        // The title bar and borders around the picture (the same for all of them).
+        var frame = Size.Empty;
+        for (int i = 0; i < ordered.Count && frame.IsEmpty; i++)
+        {
+            var seen = Visible(ordered[i].Handle);
+            if (!seen.IsEmpty && !pictures[i].IsEmpty && !Win32.IsIconic(ordered[i].Handle))
+                frame = new Size(Math.Max(0, seen.Width - pictures[i].Width), Math.Max(0, seen.Height - pictures[i].Height));
+        }
+        var cells = Grid(work, ordered.Count, band, Aspect(pictures), frame);
         for (int i = 0; i < ordered.Count; i++)
             MoveVisible(ordered[i].Handle, cells[i]);
         return ordered.Count;

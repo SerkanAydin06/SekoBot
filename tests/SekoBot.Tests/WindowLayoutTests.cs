@@ -7,42 +7,58 @@ namespace SekoBot.Tests;
 /// <summary>Several games on one screen: where the game windows and the bots' bars go.</summary>
 public class WindowLayoutTests
 {
-    private static readonly Rectangle Screen = new(0, 0, 1920, 1032 - 86);
+    private static readonly Rectangle Work = new(0, 0, 1920, 1032);
+    private static readonly Size Frame = new(2, 32);   // title bar and borders
+    private const int Band = 86;                        // the bot's bar under each game
 
-    [Fact]
-    public void Two_games_go_side_by_side()
+    private static void Tidy(List<Rectangle> cells, int games)
     {
-        var cells = WindowLayout.Grid(Screen, 2);
-        Assert.Equal([new Rectangle(0, 0, 960, 946), new Rectangle(960, 0, 960, 946)], cells);
+        Assert.Equal(games, cells.Count);
+        Assert.All(cells, c => Assert.True(Work.Contains(new Rectangle(c.X, c.Y, c.Width, c.Height + Band))));
+        // Never squeezed: the picture (without the title bar) keeps 16:9.
+        Assert.All(cells, c => Assert.InRange((c.Width - Frame.Width) / (double)(c.Height - Frame.Height), 16 / 9.0 - 0.01, 16 / 9.0 + 0.01));
+        Assert.Single(cells.Select(c => c.Size).Distinct());
+        // Nothing on anything else, the bars included.
+        var withBars = cells.Select(c => new Rectangle(c.X, c.Y, c.Width, c.Height + Band)).ToList();
+        for (int i = 0; i < withBars.Count; i++)
+            for (int j = i + 1; j < withBars.Count; j++)
+                Assert.False(withBars[i].IntersectsWith(withBars[j]));
     }
 
     [Theory]
-    [InlineData(1, 1)]
-    [InlineData(3, 2)]
-    [InlineData(4, 2)]
-    [InlineData(6, 2)]
-    public void More_games_make_a_grid_that_fills_the_screen(int games, int rows)
+    [InlineData(1, 1, 1)]
+    [InlineData(2, 2, 1)]
+    [InlineData(3, 2, 2)]
+    [InlineData(4, 2, 2)]
+    [InlineData(5, 3, 2)]
+    [InlineData(6, 3, 2)]
+    [InlineData(9, 3, 3)]
+    public void Games_make_a_grid_in_their_own_shape(int games, int columns, int rows)
     {
-        var cells = WindowLayout.Grid(Screen, games);
-        Assert.Equal(games, cells.Count);
+        var cells = WindowLayout.Grid(Work, games, Band, 16 / 9.0, Frame);
+        Tidy(cells, games);
         Assert.Equal(rows, cells.Select(c => c.Top).Distinct().Count());
-        Assert.All(cells, c => Assert.True(Screen.Contains(c)));
-        for (int i = 0; i < cells.Count; i++)
-            for (int j = i + 1; j < cells.Count; j++)
-                Assert.False(cells[i].IntersectsWith(cells[j]));
-        Assert.Empty(WindowLayout.Grid(Screen, 0));
+        Assert.Equal(columns, cells.Count(c => c.Top == cells[0].Top));
+        Assert.Empty(WindowLayout.Grid(Work, 0, Band));
     }
 
     [Fact]
-    public void Six_games_make_three_by_two_with_room_for_the_bars_under_every_row()
+    public void Three_games_are_two_over_one_the_last_in_the_middle()
     {
-        var work = new Rectangle(0, 0, 1920, 1032);
-        var cells = WindowLayout.Grid(work, 6, 86);
-        Assert.Equal(new Rectangle(0, 0, 640, 430), cells[0]);
-        Assert.Equal(new Rectangle(1280, 516, 640, 430), cells[5]);
-        // Every game's bar fits under it, on nothing else.
-        var bars = cells.Select(c => new Rectangle(WindowLayout.BarPlace(c, new Size(c.Width, 84), work), new Size(c.Width, 84))).ToList();
-        Assert.All(bars, b => Assert.DoesNotContain(cells, c => c.IntersectsWith(b)));
+        var cells = WindowLayout.Grid(Work, 3, Band, 16 / 9.0, Frame);
+        Assert.True(cells[0].Width > 680);                     // larger than three side by side (640)
+        int middle = cells[2].Left + cells[2].Width / 2;
+        Assert.InRange(middle, 955, 965);
+        Assert.Equal(cells[0].Top, cells[1].Top);
+    }
+
+    [Fact]
+    public void The_shape_is_the_one_the_games_have_not_a_squeezed_one()
+    {
+        Assert.Equal(16 / 9.0, WindowLayout.Aspect([new Size(1204, 688), new Size(958, 398), new Size(756, 432)]), 3);
+        Assert.Equal(4 / 3.0, WindowLayout.Aspect([new Size(1024, 768), new Size(800, 600)]), 3);
+        Assert.Equal(16 / 9.0, WindowLayout.Aspect([new Size(958, 398)]), 3);
+        Assert.Equal(16 / 9.0, WindowLayout.Aspect([]), 3);
     }
 
     [Fact]
