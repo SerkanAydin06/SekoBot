@@ -1487,6 +1487,7 @@ internal sealed class MainForm : Form
         UpdateRunItems();
         string name = _engine?.CharacterName ?? "";
         UseCharacter(name);
+        ShareStatus(name);
         string identity = "v" + BuildInfo.Version + (Instance.IsFirst ? "" : $"  ·  {Instance.Number}. SekoBot") + (name.Length > 0 ? $"  ·  {name}" : "");
         if (_identity.Text != identity)
         {
@@ -1675,7 +1676,7 @@ internal sealed class MainForm : Form
         switch (command)
         {
             case "durum" or "status":
-                return TelegramStatus();
+                return AllStatuses();
             case "dur" or "stop":
                 if (_engine?.BotRunning != true)
                     return "Bot zaten duruyor.";
@@ -1695,6 +1696,47 @@ internal sealed class MainForm : Form
             default:
                 return "Komutlar: durum · dur · başla · yaz İsim mesaj\nFısıltıya cevap: bildirime \"Yanıtla\" ile yaz.";
         }
+    }
+
+    private DateTime _statusSharedAt;
+
+    /// <summary>This SekoBot's status for "durum" on Telegram: every SekoBot writes it (durum-N.txt) every
+    /// 10 s, the first one (the one Telegram talks to) puts them all together.</summary>
+    private void ShareStatus(string name)
+    {
+        if (DateTime.UtcNow - _statusSharedAt < TimeSpan.FromSeconds(10))
+            return;
+        _statusSharedAt = DateTime.UtcNow;
+        try
+        {
+            Directory.CreateDirectory(ProfileStore.Directory);
+            File.WriteAllText(StatusFile(Instance.Number), StatusTitle(name) + "\n" + TelegramStatus());
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
+    private static string StatusFile(int number) => Path.Combine(ProfileStore.Directory, $"durum-{number}.txt");
+
+    private static string StatusTitle(string name) =>
+        $"👤 {(name.Length > 0 ? name : "karakter bilinmiyor")}" + (Instance.IsFirst ? "" : $" ({Instance.Number}. SekoBot)");
+
+    /// <summary>"durum": this SekoBot's status and every other SekoBot's open now (written within the last minute).</summary>
+    private string AllStatuses()
+    {
+        var parts = new List<string> { StatusTitle(_engine?.CharacterName ?? "") + "\n" + TelegramStatus() };
+        for (int n = 1; n <= 6; n++)
+        {
+            if (n == Instance.Number)
+                continue;
+            try
+            {
+                var file = new FileInfo(StatusFile(n));
+                if (file.Exists && DateTime.UtcNow - file.LastWriteTimeUtc < TimeSpan.FromMinutes(1))
+                    parts.Add(File.ReadAllText(file.FullName).Trim());
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+        return string.Join("\n\n", parts);
     }
 
     private string TelegramStatus()
