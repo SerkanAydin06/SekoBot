@@ -7,7 +7,7 @@ namespace SekoBot.UI;
 /// <param name="GameWindow">The game window the bot plays (0 when none): the bar is tied to it.</param>
 /// <param name="HpPotions">HP and MP potions left in the bag (the ones on the potion keys), when known.</param>
 internal sealed record MiniInfo(string Name, string Status, Color StatusColor, double? Hp, double? Mp, string ExpRate, string Mobs,
-    bool Running, Rectangle? Game, nint GameWindow = 0, int? HpPotions = null, int? MpPotions = null);
+    bool Running, Rectangle? Game, nint GameWindow = 0, int? HpPotions = null, int? MpPotions = null, bool Attack = true);
 
 /// <summary>
 /// The bot made small: one bar (420×84) under its own game window, so many bots fit on one screen
@@ -21,14 +21,15 @@ internal sealed class MiniBar : Form
     public const int LogicalWidth = 420, LogicalHeight = 84;
 
     private readonly Func<MiniInfo> _read;
-    private readonly Action _start, _stop, _big, _arrange;
+    private readonly Action _start, _stop, _big, _arrange, _attack;
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 300 };
     private MiniInfo _info = new("", "", Theme.Muted, null, null, "—", "—", false, null);
     private int _hover = -1;
     private readonly ToolTip _tip = new();
 
-    public MiniBar(Func<MiniInfo> read, Action start, Action stop, Action big, Action arrange)
+    public MiniBar(Func<MiniInfo> read, Action start, Action stop, Action big, Action arrange, Action attack)
     {
+        _attack = attack;
         _read = read;
         _start = start;
         _stop = stop;
@@ -49,6 +50,7 @@ internal sealed class MiniBar : Form
         menu.Items.Add("⊞  Pencereleri diz", null, (_, _) => _arrange());
         menu.Items.Add("▶  Başlat / duraklat", null, (_, _) => _start());
         menu.Items.Add("■  Durdur", null, (_, _) => _stop());
+        menu.Items.Add("⚔  Saldırı aç / sadece eşya topla", null, (_, _) => _attack());
         ContextMenuStrip = menu;
         _timer.Tick += (_, _) => Pull(true);
         FormClosed += (_, _) =>
@@ -154,8 +156,9 @@ internal sealed class MiniBar : Form
     /// <summary>Narrowest the bar gets (small games in a big grid): still everything readable.</summary>
     private const int MinWidth = 340;
 
-    /// <summary>The three buttons: start, stop, big.</summary>
-    private Rectangle Button(int i) => new((int)((W - 118 + i * 38) * S), (int)(6 * S), (int)(32 * S), (int)(28 * S));
+    private const int Buttons = 4;
+    /// <summary>The buttons: attack on/off, start, stop, big.</summary>
+    private Rectangle Button(int i) => new((int)((W - 156 + i * 38) * S), (int)(6 * S), (int)(32 * S), (int)(28 * S));
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -174,9 +177,10 @@ internal sealed class MiniBar : Form
         using var small = new Font("Segoe UI", 8.5f);
         using var smallBold = new Font("Segoe UI", 8.5f, FontStyle.Bold);
         string name = (Instance.IsFirst ? "" : $"{Instance.Number} · ") + (info.Name.Length > 0 ? info.Name : "SekoBot");
-        TextRenderer.DrawText(g, "◆ " + name, nameFont, new Rectangle((int)(14 * s), (int)(6 * s), (int)((W - 150) * s), (int)(22 * s)), Theme.Text,
+        TextRenderer.DrawText(g, "◆ " + name, nameFont, new Rectangle((int)(14 * s), (int)(6 * s), (int)((W - 188) * s), (int)(22 * s)), Theme.Text,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-        TextRenderer.DrawText(g, info.Status, small, new Rectangle((int)(14 * s), (int)(29 * s), (int)((W - 186) * s), (int)(20 * s)), info.StatusColor,
+        string status = info.Attack ? info.Status : "✋ Sadece eşya · " + info.Status;
+        TextRenderer.DrawText(g, status, small, new Rectangle((int)(14 * s), (int)(29 * s), (int)((W - 186) * s), (int)(20 * s)), info.Attack ? info.StatusColor : Theme.Accent,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         // The potions left, under the buttons: red when few.
         string Count(int? n) => n is int c ? c.ToString("N0") : "—";
@@ -194,9 +198,9 @@ internal sealed class MiniBar : Form
             new Rectangle((int)(expAt * s), (int)(54 * s), (int)((W - expAt - 6) * s), (int)(22 * s)), Theme.Muted,
             TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
-        string[] glyphs = [info.Running ? "⏸" : "▶", "■", "⤢"];
-        Color[] backs = [Theme.Primary, Theme.Danger, Theme.Secondary];
-        for (int i = 0; i < 3; i++)
+        string[] glyphs = [info.Attack ? "⚔" : "✋", info.Running ? "⏸" : "▶", "■", "⤢"];
+        Color[] backs = [info.Attack ? Theme.Secondary : Theme.Accent, Theme.Primary, Theme.Danger, Theme.Secondary];
+        for (int i = 0; i < Buttons; i++)
         {
             var r = Button(i);
             using var back = new SolidBrush(_hover == i ? ControlPaint.Light(backs[i], 0.25f) : backs[i]);
@@ -232,7 +236,7 @@ internal sealed class MiniBar : Form
 
     private int HitButton(Point p)
     {
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < Buttons; i++)
             if (Button(i).Contains(p))
                 return i;
         return -1;
@@ -248,9 +252,10 @@ internal sealed class MiniBar : Form
             Cursor = hit >= 0 ? Cursors.Hand : Cursors.Default;
             _tip.SetToolTip(this, hit switch
             {
-                0 => _info.Running ? "Duraklat (F10)" : "Başlat (F10)",
-                1 => "Durdur (F11)",
-                2 => "Büyüt (çift tık da olur)",
+                0 => _info.Attack ? "Saldırı açık. Tıkla: sadece yerdeki eşyaları topla" : "Sadece eşya topluyor. Tıkla: saldırıyı aç",
+                1 => _info.Running ? "Duraklat (F10)" : "Başlat (F10)",
+                2 => "Durdur (F11)",
+                3 => "Büyüt (çift tık da olur)",
                 _ => "Sağ tık: pencereleri diz, büyüt",
             });
             Invalidate();
@@ -271,9 +276,10 @@ internal sealed class MiniBar : Form
             return;
         switch (HitButton(e.Location))
         {
-            case 0: _start(); break;
-            case 1: _stop(); break;
-            case 2: _big(); break;
+            case 0: _attack(); break;
+            case 1: _start(); break;
+            case 2: _stop(); break;
+            case 3: _big(); break;
         }
         Pull(false);
     }

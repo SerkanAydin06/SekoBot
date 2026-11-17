@@ -20,7 +20,7 @@ internal sealed class MainForm : Form
     private const int CsDropShadow = 0x00020000;
 
     private readonly BotProfile _profile = ProfileStore.Load();
-    private readonly Button _gameButton, _startBot, _stopBot, _record, _replay;
+    private readonly Button _gameButton, _startBot, _stopBot, _record, _replay, _attackButton;
     private readonly ContextMenuStrip _gameMenu = new();
     private readonly CheckBox _dryRun;
     private readonly PreviewControl _preview;
@@ -141,7 +141,12 @@ internal sealed class MainForm : Form
         _stopBot = Theme.Button(bar, $"■  DURDUR   {StopKey}", new Rectangle(242, 10, 200, 44), Theme.Danger, Theme.DangerHover);
         _stopBot.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
         _stopBot.Click += (_, _) => StopBot("kullanıcı durdurdu", byUser: true);
-        _status = Theme.Label(bar, "Oyun bekleniyor", new Rectangle(464, 10, 680, 44), 12f, Theme.Muted, FontStyle.Bold);
+        _attackButton = Theme.Button(bar, "", new Rectangle(452, 10, 196, 44), Theme.Secondary, Theme.SecondaryHover);
+        _attackButton.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
+        _attackButton.Click += (_, _) => ToggleAttack();
+        ShowAttack();
+        _reloads.Add(ShowAttack);
+        _status = Theme.Label(bar, "Oyun bekleniyor", new Rectangle(660, 10, 484, 44), 12f, Theme.Muted, FontStyle.Bold);
 
         // ── Side menu: the dashboard and the settings pages ──────
         var side = new Card { Bounds = new Rectangle(12, 136, 180, 772) };
@@ -212,6 +217,11 @@ internal sealed class MainForm : Form
             v => _profile.PullMaxMobs = (int)v);
         NumberRow(attack, "Toplarken can en az (%)", 370, 68, 10, 100, () => Math.Round(_profile.PullMinHp * 100), 0, 5,
             v => _profile.PullMinHp = v / 100);
+        Check(attack, "Saldırı açık (kapalıyken sadece yerdeki eşyaları toplar)", 0, 34, 366, () => _profile.Attack, v =>
+        {
+            _profile.Attack = v;
+            ShowAttack();
+        });
         NumberRow(attack, "Toplama alanı (m)", 0, 0, 3, 30, () => _profile.PullAreaMetres, 0, 1,
             v => _profile.PullAreaMetres = v);
         Hint(attack, "Gruplar: bot en değerli üçlüden başlar, toplama alanındaki diğer üçlüleri de toplar (peşinde mob varken yalnız 10 m " +
@@ -746,6 +756,25 @@ internal sealed class MainForm : Form
     private readonly List<Action> _reloads = [];
     private bool _reloading;
 
+    /// <summary>Attack on or off ("Sadece eşya topla"): for this character, at once (also while the bot runs).</summary>
+    private void ToggleAttack()
+    {
+        _profile.Attack = !_profile.Attack;
+        SaveProfile();
+        ReloadSettings();
+        WriteLog(_profile.Attack
+            ? "⚔ Saldırı açıldı: bot yeniden moblara saldırıyor."
+            : "✋ Saldırı kapatıldı: bot hiçbir moba vurmuyor, sadece yerdeki eşyaları topluyor.");
+    }
+
+    private void ShowAttack()
+    {
+        bool on = _profile.Attack;
+        _attackButton.Text = on ? "⚔  Saldırı: AÇIK" : "✋  Sadece eşya topla";
+        _attackButton.BackColor = on ? Theme.Secondary : Theme.Accent;
+        _attackButton.FlatAppearance.MouseOverBackColor = on ? Theme.SecondaryHover : ControlPaint.Light(Theme.Accent, 0.2f);
+    }
+
     private void ReloadSettings()
     {
         _reloading = true;
@@ -845,7 +874,7 @@ internal sealed class MainForm : Form
     {
         if (IsDisposed)
             return;
-        _mini ??= new MiniBar(MiniInfoNow, ToggleBot, () => StopBot("kullanıcı durdurdu", byUser: true), GoBig, ArrangeAll);
+        _mini ??= new MiniBar(MiniInfoNow, ToggleBot, () => StopBot("kullanıcı durdurdu", byUser: true), GoBig, ArrangeAll, ToggleAttack);
         if (!_mini.Visible)
             _mini.Show();
         if (Visible)
@@ -893,7 +922,7 @@ internal sealed class MainForm : Form
         var (hpPotions, mpPotions) = _engine?.PotionsLeft() ?? (null, null);
         return new MiniInfo(_engine?.CharacterName ?? "", _status.Text, _status.ForeColor, state?.Hp, state?.Mp,
             _statExpRate.Text, _statMobs.Text, _engine?.BotRunning == true, game,
-            _engine is { } e && Win32.IsWindow(e.Window.Handle) ? e.Window.Handle : 0, hpPotions, mpPotions);
+            _engine is { } e && Win32.IsWindow(e.Window.Handle) ? e.Window.Handle : 0, hpPotions, mpPotions, Attack: _profile.Attack);
     }
 
     protected override void WndProc(ref Message m)

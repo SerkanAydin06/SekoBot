@@ -275,3 +275,49 @@ public class ItemListGroupTests
         Assert.Equal("Ayı Safrası+", SekoBot.UI.ItemListForm.BaseName("Ayı Safrası+"));   // a different item, no level
     }
 }
+
+/// <summary>Attack off: the character only gathers what lies around (someone else kills).</summary>
+public class LootOnlyTests
+{
+    private static readonly Point Center = new(960, 540);
+
+    private static List<BotAction> Run(BotProfile p, Func<double, GameState, GameState> scene, double ms = 3000)
+    {
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        var actions = new List<BotAction>();
+        for (double t = 0; t < ms; t += 100)
+            actions.AddRange(brain.Tick(scene(t, new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1) { Walking = true, AttackPower = 189, MpPoints = 1000 })));
+        return actions;
+    }
+
+    [Fact]
+    public void Nothing_is_hit_not_even_a_mob_that_attacks()
+    {
+        var p = new BotProfile { Attack = false, LeashMeters = 0, PickUpDrops = true };
+        TargetInfo[] mobs = [new(5, new Point(Center.X + 45, Center.Y), 90, 130, 365, 600, 600, 50, false, AttacksMe: true),
+                             new(6, new Point(Center.X + 300, Center.Y), 600, 130, 365, 600, 600, 50, false, false, 20)];
+        var skill = new SkillSlot(Keys.F1, "Hava kılıcı", SkillKind.Buff, 168, 49, 94, Wait: 0);
+        var actions = Run(p, (_, s) => s with { Targets = mobs, Skills = [skill] });
+        Assert.DoesNotContain(actions, a => a is KeyDownAction d && d.Key == p.Keys.Attack);
+        Assert.DoesNotContain(actions, a => a is KeyTapAction k && k.Key == Keys.F1);
+        Assert.Contains(actions.OfType<NoteAction>(), n => n.Text.Contains("Saldırı kapalı"));
+    }
+
+    [Fact]
+    public void What_lies_around_is_walked_to_and_picked_up()
+    {
+        var p = new BotProfile { Attack = false, LeashMeters = 0, PickUpDrops = true };
+        var actions = Run(p, (t, s) => s with { Drops = t < 1500 ? [new GroundSpot(7, new Point(Center.X - 300, Center.Y))] : [new GroundSpot(7, Center)] });
+        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.MoveLeft);
+        Assert.Contains(actions, a => a is KeyTapAction k && k.Key == p.Keys.Pickup);
+    }
+
+    [Fact]
+    public void Nothing_on_the_ground_it_stands_still_instead_of_looking_for_mobs()
+    {
+        var p = new BotProfile { Attack = false, LeashMeters = 0, PickUpDrops = true };
+        var actions = Run(p, (_, s) => s, 5000);
+        Assert.DoesNotContain(actions, a => a is KeyDownAction d && (d.Key == p.Keys.MoveForward || d.Key == p.Keys.MoveLeft || d.Key == p.Keys.MoveRight));
+    }
+}
