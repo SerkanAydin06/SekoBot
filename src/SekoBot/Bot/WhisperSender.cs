@@ -13,6 +13,8 @@ internal sealed class WhisperSender
 {
     public static readonly TimeSpan GiveUpAfter = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan AfterClick = TimeSpan.FromMilliseconds(1800);
+    /// <summary>After the held keys are let go, before the first click.</summary>
+    internal static readonly TimeSpan KeysSettle = TimeSpan.FromMilliseconds(1000);
 
     private enum Step { Open, Select, Focus, Type, Send, Check, Close }
 
@@ -34,7 +36,10 @@ internal sealed class WhisperSender
         To = to.Trim();
         Text = text.Trim();
         _step = Step.Open;
-        _started = _waitUntil = now;
+        _started = now;
+        // The keys were just let go: a moment for what is still on its way to the game to arrive
+        // before anything is clicked or typed.
+        _waitUntil = now + KeysSettle;
         _opens = _selects = _checks = _closes = 0;
         _openedByUs = Sent = false;
         Problem = null;
@@ -113,7 +118,7 @@ internal sealed class WhisperSender
                 break;
 
             case Step.Type:
-                actions.Add(new TypeTextAction(Text));
+                actions.Add(new TypeTextAction(Text, ClearFirst: true));
                 _step = Step.Send;
                 _waitUntil = now + TimeSpan.FromMilliseconds(800 + Text.Length * 60);
                 break;
