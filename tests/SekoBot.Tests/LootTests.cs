@@ -436,3 +436,22 @@ public class FollowGuardTests
         Assert.DoesNotContain(actions, a => a is KeyDownAction d && d.Key == p.Keys.Attack);
     }
 }
+
+/// <summary>The game says whose an item on the ground is (read from memory).</summary>
+public class DropOwnerTests
+{
+    [Fact]
+    public void Someone_elses_item_is_not_walked_to_until_it_is_free()
+    {
+        var p = new BotProfile { LootYang = true, LootOther = true, PickUpDrops = true };
+        var me = new Vec3(10000, 10000, 1800);
+        var camera = new CameraView(me with { Z = me.Z + 1000 }, -90, 0, 0, 90);
+        var world = new WorldSnapshot(me, camera, [], 0, "c3",
+            Drops: [new GroundItem(1, new Vec3(10100, 10000, 1800), 1, 50, Takeable: true),                     // ours
+                    new GroundItem(2, new Vec3(10000, 10100, 1800), 1, 80, Takeable: false, Owner: "Ismira16"), // theirs
+                    new GroundItem(3, new Vec3(9900, 10000, 1800), 1, 30)]);                                   // not known
+        var view = BotEngine.MemoryView(world, p, 1920, 1080)!.Value;
+        Assert.Equal([1L, 3L], view.Drops.Select(d => d.Id).Order());
+        Assert.Single(view.Junk);                                        // theirs: the pickup key must not take it
+    }
+}

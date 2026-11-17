@@ -105,7 +105,9 @@ internal sealed record SkillInfo(int Id, string Name, int Level, SkillKind Kind,
 }
 
 /// <summary>An item lying on the ground: its item number (1 = yang) and how many (the yang amount).</summary>
-internal readonly record struct GroundItem(long Id, Vec3 Position, int Vnum = 0, int Count = 0)
+/// <param name="Takeable">The game lets us pick it up: ours, or free for everyone (null: not known).</param>
+/// <param name="Owner">Whose it is while it isn't free ("" when free or not known).</param>
+internal readonly record struct GroundItem(long Id, Vec3 Position, int Vnum = 0, int Count = 0, bool? Takeable = null, string Owner = "")
 {
     public LootKind Kind => Loot.KindOf(Vnum);
 }
@@ -640,8 +642,8 @@ internal sealed partial class GameWorldReader : IDisposable
                 // Lying on the ground (a picked-up item is removed from the world).
                 if (Pointer(actor + ActorRoot) is long itemRoot && TryVec3(itemRoot + ComponentWorldLocation, out var at))
                 {
-                    var (vnum, amount) = DropInfo(gm, gmClass, actor);
-                    drops.Add(new GroundItem(actor, at, vnum, amount));
+                    var (vnum, amount, takeable, owner) = DropInfo(gm, gmClass, actor);
+                    drops.Add(new GroundItem(actor, at, vnum, amount, takeable, owner));
                 }
             }
             else
@@ -1372,16 +1374,18 @@ internal sealed partial class GameWorldReader : IDisposable
         return Math.Max(0, wait) + timer;
     }
 
-    private readonly Dictionary<long, (int Vnum, int Count)> _dropInfo = [];
+    private readonly Dictionary<long, (int Vnum, int Count, bool? Takeable, string Owner)> _dropInfo = [];
     private long _dropInfoGm;
     private DateTime _dropInfoAt = DateTime.MinValue;
 
     /// <summary>
     /// What a ground item is. The game keeps its drops in gameManager.drops (TMap id → dropItem:
     /// the item actor at +0, then id, item number at +0xC and count at +0x10 — seen in the game:
-    /// yang is item 1 with the amount as count). Read once per tick at most.
+    /// yang is item 1 with the amount as count). Read once per tick at most. After them (seen in the
+    /// game, not in the reflection): the owner's name (FString at +0x20: the killer's name, "null"
+    /// once the item is free for everyone) and at +0x30 a byte that is 1 when it is ours.
     /// </summary>
-    private (int Vnum, int Count) DropInfo(long gm, long gmClass, long actor)
+    private (int Vnum, int Count, bool? Takeable, string Owner) DropInfo(long gm, long gmClass, long actor)
     {
         if (gm != _dropInfoGm || DateTime.UtcNow - _dropInfoAt > TimeSpan.FromMilliseconds(200))
         {
@@ -1403,12 +1407,34 @@ internal sealed partial class GameWorldReader : IDisposable
                         if ((bits[i / 8] & (1 << (i % 8))) != 0)
                         {
                             int at = i * stride + 8;
+                            bool mine = elements[at + DropMine] != 0;
+                            string? owner = mine ? "" : DropOwner(data + at + DropOwnerName);
+                            bool? takeable = mine ? true : owner == null ? null : owner.Length == 0 || owner == "null";
                             _dropInfo[BitConverter.ToInt64(elements, at)] =
-                                (BitConverter.ToInt32(elements, at + 0xC), BitConverter.ToInt32(elements, at + 0x10));
+                                (BitConverter.ToInt32(elements, at + 0xC), BitConverter.ToInt32(elements, at + 0x10), takeable,
+                                 takeable == false ? owner! : "");
                         }
             }
         }
-        return _dropInfo.TryGetValue(actor, out var info) ? info : (0, 0);
+        return _dropInfo.TryGetValue(actor, out var info) ? info : (0, 0, null, "");
+    }
+
+    private const int DropOwnerName = 0x20, DropMine = 0x30;
+
+    /// <summary>The owner's name of a ground item; null when it can't be read (then nothing is assumed).</summary>
+    private string? DropOwner(long address)
+    {
+        long text = Pointer(address);
+        int length = Int32(address + 8) ?? -1;
+        if (length == 0 && text == 0)
+            return "";
+        if (!MemoryReads.IsPointer(text) || length is <= 0 or > 40)
+            return null;
+        var bytes = new byte[length * 2];
+        if (!_memory.Read(text, bytes, bytes.Length))
+            return null;
+        string name = System.Text.Encoding.Unicode.GetString(bytes, 0, (length - 1) * 2);
+        return name.All(c => c >= ' ' && c < 0x2000) ? name : null;
     }
 
     private CharacterProgress? ReadProgress(long loader)

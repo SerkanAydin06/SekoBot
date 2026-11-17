@@ -98,7 +98,7 @@ internal sealed partial class BotEngine
         // A special item on the ground ("always pick up"): tell the user, once per item.
         // The game makes a new object for an item when we come back near it: told once per item and place.
         foreach (var drop in world.Drops ?? [])
-            if (AlwaysLoot(drop.Vnum, profile) &&
+            if (AlwaysLoot(drop.Vnum, profile) && drop.Takeable != false &&
                 _announcedDrops.Add($"{drop.Vnum}:{Math.Round(drop.Position.X / 200)}:{Math.Round(drop.Position.Y / 200)}"))
             {
                 string found = $"🎁 Yere düştü: {ItemBook.NameOf(drop.Vnum)} ({drop.Position.DistanceXY(world.Player) / 100:0} m) — alınıyor.";

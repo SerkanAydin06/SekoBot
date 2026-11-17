@@ -53,8 +53,9 @@ internal sealed partial class BotEngine
         }
         var drops = new List<GroundSpot>();
         if (profile.PickUpDrops)
-            // What can't go into the bag any more isn't walked to (a full bag: only yang and items adding to a stack).
-            foreach (var item in (world.Drops ?? []).Where(d => WantedLoot(d, profile) && world.Progress?.Fits(d.Vnum) != false && !AtDump(d.Position))
+            // What can't go into the bag any more isn't walked to (a full bag: only yang and items adding to a stack),
+            // nor what is someone else's still (the game says whose; it is gone for once it is free).
+            foreach (var item in (world.Drops ?? []).Where(d => WantedLoot(d, profile) && d.Takeable != false && world.Progress?.Fits(d.Vnum) != false && !AtDump(d.Position))
                          .OrderBy(d => d.Position.DistanceXY(world.Player)))
             {
                 double away = item.Position.DistanceXY(world.Player);
@@ -76,7 +77,7 @@ internal sealed partial class BotEngine
         var junk = new List<Point>();
         if (profile.PickUpDrops)
             foreach (var item in world.Drops ?? [])
-                if ((!(WantedLoot(item, profile) && world.Progress?.Fits(item.Vnum) != false) || AtDump(item.Position)) &&
+                if ((!(WantedLoot(item, profile) && item.Takeable != false && world.Progress?.Fits(item.Vnum) != false) || AtDump(item.Position)) &&
                     item.Position.DistanceXY(world.Player) <= profile.DropRangeMetres * 100 + 300 &&
                     camera.ToScreen(item.Position, width, height) is PointF j)
                     junk.Add(Point.Round(j));
