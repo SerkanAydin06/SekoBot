@@ -133,6 +133,10 @@ internal sealed record GameState(
     /// <summary>A window covers the game (e.g. the advert after a level-up).</summary>
     public bool PopupOpen { get; init; }
 
+    /// <summary>The game's message window is open: someone may be typing in it, so no key is pressed
+    /// (they would end up in the text: "ggggg").</summary>
+    public bool Typing { get; init; }
+
     /// <summary>Where the selected mob is on screen (client pixels), if known.</summary>
     public Point? TargetSpot { get; init; }
 }

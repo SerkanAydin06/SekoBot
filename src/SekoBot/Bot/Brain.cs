@@ -64,6 +64,8 @@ internal sealed partial class Brain
 
     public void Stop() => Phase = BotPhase.Stopped;
 
+    private bool _typingTold;
+
     public IReadOnlyList<BotAction> Tick(GameState state)
     {
         if (Phase == BotPhase.Stopped)
@@ -76,6 +78,28 @@ internal sealed partial class Brain
         HearGame(state, actions);
         NoteWalking(state);
         _wantedDropsAround = state.Drops.Any(d => !JunkCloser(state, d.Spot));
+
+        // The message window is open (the user writing a message): no key at all, held ones let go.
+        if (state.Typing)
+        {
+            if (!_typingTold)
+            {
+                _typingTold = true;
+                actions.Add(new NoteAction("Oyunda mesaj penceresi açık: bot tuşa basmıyor (yazdıkların karışmasın). Pencere kapanınca devam eder."));
+            }
+            if (p.NavigateMode)
+            {
+                SetMoves([], p, actions, refresh: false);
+                SetAttack(false, p, actions, refresh: false);
+                ReleaseTimedKeys(actions);
+            }
+            return actions;
+        }
+        if (_typingTold)
+        {
+            _typingTold = false;
+            actions.Add(new NoteAction("Mesaj penceresi kapandı; bot devam ediyor."));
+        }
 
         // Dead: wait for "Burada yeniden başla", click it; then heal before fighting again.
         if (p.ReviveOnDeath && state.Dead)

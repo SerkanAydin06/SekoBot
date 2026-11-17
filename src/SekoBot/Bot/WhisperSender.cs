@@ -145,13 +145,17 @@ internal sealed class WhisperSender
                 break;
 
             case Step.Close:
-                // Leave the window as it was: closed again when we opened it.
-                if (!_openedByUs || !dm.Open || _closes >= 2 || dm.Opener is not Point button)
+                // The window is closed afterwards (it stayed open: the bot then pressed no keys): its
+                // "Mesaj" button first, then Esc.
+                if (!dm.Open || _closes >= 3)
                 {
                     Active = false;
                     break;
                 }
-                actions.Add(new ClickAction(button, Slow: true));
+                if (_closes < 2 && dm.Opener is Point button)
+                    actions.Add(new ClickAction(button, Slow: true));
+                else
+                    actions.Add(new KeyTapAction(Keys.Escape));
                 _closes++;
                 _waitUntil = now + AfterClick;
                 break;

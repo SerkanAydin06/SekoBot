@@ -156,7 +156,11 @@ internal sealed partial class BotEngine : IDisposable
                             state = state with { ReviveReady = world.ReviveReady };
                         if (profile.ClosePopups && BotRunning && !state.Dead)
                             // While throwing items the bag and its menu are ours (not windows to close or tell).
-                            state = state with { PopupOpen = !_cleaner.Active && !_brain.ReadyToClean && PopupOpen(world) };
+                            state = state with
+                            {
+                                PopupOpen = !_cleaner.Active && !_brain.ReadyToClean && PopupOpen(world),
+                                Typing = world?.OpenWindows?.Contains(GameWorldReader.MessageWindow) == true,
+                            };
                         var view = MemoryView(world, profile, frame.Width, frame.Height, DumpSpot(now), fit: !_fitRelaxed);
                         var mobs = view?.Mobs ?? [];
                         if (!profile.NavigateMode)

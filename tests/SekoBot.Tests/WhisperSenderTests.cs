@@ -37,6 +37,23 @@ public class WhisperSenderTests
     }
 
     [Fact]
+    public void The_window_is_closed_afterwards_also_when_it_was_already_open()
+    {
+        var sender = new WhisperSender();
+        sender.Start(S(0), "oxyygen", "tamam");
+        sender.Tick(S(0), Open());                                   // the conversation (window already open)
+        sender.Tick(S(2), Open());                                   // the text box
+        sender.Tick(S(4), Open());                                   // typed
+        sender.Tick(S(7), Open());                                   // Gönder
+        Assert.Equal([new ClickAction(Opener, Slow: true)], sender.Tick(S(9), Open(new DmShown("KAiZER06", "tamam", true))));
+        Assert.Equal([new ClickAction(Opener, Slow: true)], sender.Tick(S(11), Open()));      // still open: again
+        Assert.Equal([new KeyTapAction(Keys.Escape)], sender.Tick(S(13), Open()));           // then Esc
+        Assert.Empty(sender.Tick(S(15), Closed));
+        Assert.False(sender.Active);
+        Assert.True(sender.Sent);
+    }
+
+    [Fact]
     public void A_player_without_a_conversation_is_not_written_to()
     {
         var sender = new WhisperSender();
