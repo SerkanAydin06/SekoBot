@@ -13,6 +13,7 @@ internal sealed partial class BotEngine
     private readonly RespawnTracker _respawn = RespawnTracker.Load();
     /// <summary>Trees and rocks run into, per map (kept between sessions, see <see cref="ObstacleMap"/>).</summary>
     private readonly ObstacleMap _obstacles = ObstacleMap.Load();
+    private readonly NoGoMap _noGo = NoGoMap.Load();
     private TimeSpan _obstaclesSavedAt;
     private readonly PlayerWatch _players = new();
     private static string JournalPath => Path.Combine(ProfileStore.Directory, "dusme-kaydi.json");
@@ -69,8 +70,10 @@ internal sealed partial class BotEngine
                 ItemBook.SaveIfChanged();
                 _itemsSavedAt = now;
             }
-            if (_obstacles.Changed && now - _obstaclesSavedAt > TimeSpan.FromSeconds(60))
+            if ((_obstacles.Changed || _noGo.Changed) && now - _obstaclesSavedAt > TimeSpan.FromSeconds(60))
             {
+                if (_noGo.Changed)
+                    _noGo.Save();
                 _obstacles.Save();
                 _obstaclesSavedAt = now;
             }
@@ -119,7 +122,7 @@ internal sealed partial class BotEngine
             return;
         var others = players.Where(p => !p.IsGm).Select(p => p.Position).ToList();
         var old = _farmSpot ?? world.Player;
-        var spot = FarmSpotFinder.Best(_seenMobs.Values.Select(s => s.Mob).ToList(), profile, world.Player, world.MapName,
+        var spot = FarmSpotFinder.Best(_seenMobs.Values.Select(s => s.Mob).Where(m => !_noGo.Blocked(world.MapName, m.Position, DateTime.Now)).ToList(), profile, world.Player, world.MapName,
             world.AttackPower, respawn: RespawnSeconds,
             allowed: v => v.DistanceXY(old) > 1500 && others.All(o => o.DistanceXY(v) > 2500), level: world.Level);
         if (spot == null)

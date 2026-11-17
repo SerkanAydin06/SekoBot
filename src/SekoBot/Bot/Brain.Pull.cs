@@ -252,6 +252,7 @@ internal sealed partial class Brain
                 // tried again and again): its mobs are left for 5 minutes unless they come to us.
                 foreach (var t in group)
                     _unreachable[t.Id] = now + Ms(PullUnreachableMs);
+                GaveUpAt(state, member.Position);
                 _pullGroup = 0;
                 _pullHitSince = _pullWalkSince = _pullWalkStarted = Never;
                 actions.Add(new NoteAction("Gruba ulaşılamadı; bırakıldı."));

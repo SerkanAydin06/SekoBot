@@ -290,7 +290,7 @@ internal sealed partial class Brain
                 _unreachable.Remove(id);
         if (fromMemory)
             state = state with { Targets = state.Targets.Where(t => InArea(t, p) && Walkable(t, state, now) &&
-                                                                    (t.AttacksMe && !t.Ranged || t.Distance <= t.Reach || !_unreachable.ContainsKey(t.Id))).ToList() };
+                                                                    (t.AttacksMe && !t.Ranged || t.Distance <= t.Reach || !_unreachable.ContainsKey(t.Id) && !AtNoGo(state, t))).ToList() };
         var chosen = state.Targets.Count > 0 ? ChooseTarget(state) : null;
         if (chosen != null)
         {
@@ -442,6 +442,7 @@ internal sealed partial class Brain
         if (chosen != null && !chosen.AttacksMe && NotGettingCloser(chosen, now))
         {
             _unreachable[chosen.Id] = now + Ms(UnreachableForMs);
+            GaveUpAt(state, chosen.Position);
             StuckHere(state);
             actions.Add(new NoteAction($"{(chosen.Priority ? "Metin taşına" : "Moba")} {ApproachGiveUpMs / 1000} sn'dir yaklaşılamıyor; bir süre bırakıldı."));
             return;
@@ -465,6 +466,8 @@ internal sealed partial class Brain
         {
             // The mob can't be reached: walk the other way for a moment and look elsewhere.
             StuckHere(state);
+            if (chosen != null)
+                GaveUpAt(state, chosen.Position);
             var away = Towards(-dx, -dy, radius * 0.5, p);
             actions.Add(new NoteAction("Moba ulaşılamıyor; başka yere bakılıyor."));
             StepAside(away, now, 1000);
