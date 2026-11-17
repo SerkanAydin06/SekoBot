@@ -1490,6 +1490,7 @@ internal sealed class MainForm : Form
         string name = _engine?.CharacterName ?? "";
         UseCharacter(name);
         ShareStatus(name);
+        CheckWhisperInbox();
         string identity = "v" + BuildInfo.Version + (Instance.IsFirst ? "" : $"  ·  {Instance.Number}. SekoBot") + (name.Length > 0 ? $"  ·  {name}" : "");
         if (_identity.Text != identity)
         {
@@ -1660,17 +1661,50 @@ internal sealed class MainForm : Form
     private string TelegramMessage(string text, string replyTo)
     {
         if (WhisperSender.WhisperFrom(replyTo) is string player)
-            return _engine?.QueueWhisper(player, text.Trim()) ?? "Oyun bağlı değil.";
+            return Whisper(WhisperInbox.CharacterOf(replyTo), player, text.Trim());
         string command = TelegramNotifier.Command(text);
         if (command is "yaz" or "cevap")
         {
             string rest = text.Trim().TrimStart('/');
             rest = rest[(rest.IndexOf(' ') is int space and > 0 ? space + 1 : rest.Length)..];
+            // Answering a notice of another character ("Yanıtla" + "yaz Ali …"): written from that character.
             return WhisperSender.Parse(rest) is (string to, string message)
-                ? _engine?.QueueWhisper(to, message) ?? "Oyun bağlı değil."
+                ? Whisper(WhisperInbox.CharacterOf(replyTo), to, message)
                 : "Kullanım: yaz İsim mesaj  (ya da fısıltı bildirimine \"Yanıtla\" ile cevap yaz)";
         }
         return TelegramCommand(command);
+    }
+
+    /// <summary>
+    /// A message to a player from <paramref name="character"/>'s game: this one's when it plays it (or none
+    /// is named), else handed to the SekoBot that plays it (only the first SekoBot reads Telegram).
+    /// </summary>
+    private string Whisper(string? character, string to, string text)
+    {
+        string mine = _engine?.CharacterName ?? "";
+        if (character == null || character.Equals(mine, StringComparison.OrdinalIgnoreCase))
+            return _engine?.QueueWhisper(to, text) ?? "Oyun bağlı değil.";
+        if (WhisperInbox.SekoBotOf(character) is int other && other != Instance.Number)
+            return WhisperInbox.Send(other, to, text)
+                ? $"✉ {character} ({other}. SekoBot) {to} kişisine yazacak: \"{text}\". Gidince ondan haber gelir."
+                : "Mesaj öbür SekoBot'a iletilemedi; birazdan tekrar dene.";
+        return $"{character} şu an açık bir SekoBot'ta görünmüyor; mesaj gönderilemedi.";
+    }
+
+    /// <summary>Answers the first SekoBot handed to this one (its character was whispered to): written in this game.</summary>
+    private void CheckWhisperInbox()
+    {
+        if (_engine is not { } engine)
+            return;
+        List<WhisperInbox.Letter> letters;
+        try { letters = WhisperInbox.Take(Instance.Number); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return; }
+        foreach (var letter in letters)
+        {
+            string result = engine.QueueWhisper(letter.To, letter.Text);
+            WriteLog(result);
+            engine.Notify(result);
+        }
     }
 
     private string TelegramCommand(string command)
