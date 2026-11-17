@@ -73,6 +73,7 @@ public class CharacterTests
     public void How_many_mobs_it_can_take_is_kept_per_map_for_the_next_start()
     {
         var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PullGroups = true, PullMaxMobs = 15 };
+        p.PullLearned["c2"] = 12;     // learned earlier
         var brain = new Brain(() => p);
         brain.Start(TimeSpan.Zero);
         void Run(double from, double to, int attackers, double hp, string map = "c2")
@@ -86,13 +87,50 @@ public class CharacterTests
         Assert.Equal(7, p.PullLearned["c2"]);
         Assert.True(brain.ProfileChanged);
 
-        // Next time (a new start, maybe in the other SekoBot): 7 from the start on c2, 15 elsewhere.
+        // Next time (a new start, maybe in the other SekoBot): 7 from the start on c2; a map not
+        // learned yet starts safe.
         var again = new Brain(() => p);
         again.Start(TimeSpan.Zero);
         again.Tick(Fight(0, 0, 1, "c2"));
         Assert.Equal(7, again.PullCap(p));
         again.Tick(Fight(100, 0, 1, "c3"));
-        Assert.Equal(15, again.PullCap(p));
+        Assert.Equal(Brain.PullStartMobs, again.PullCap(p));
+    }
+
+    [Fact]
+    public void A_strong_character_climbs_quickly_from_the_safe_start()
+    {
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PullGroups = true, PullMaxMobs = 15 };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        double t = 0;
+        for (int fight = 0; fight < 5; fight++)
+        {
+            int cap = brain.PullCap(p);
+            for (double end = t + 1500; t < end; t += 100)
+                brain.Tick(Fight(t, cap, 0.95, "c3"));      // all of them on us, HP hardly moves
+            for (double end = t + 500; t < end; t += 100)
+                brain.Tick(Fight(t, 0, 0.95, "c3"));
+        }
+        Assert.Equal(15, brain.PullCap(p));               // 6 → 8 → 10 → 12 → 14 → 15
+        Assert.Equal(15, p.PullLearned["c3"]);
+    }
+
+    [Fact]
+    public void A_new_character_starts_fresh_but_keeps_what_the_player_picks_up()
+    {
+        var other = new BotProfile { PullMaxMobs = 6, PotionHpBelow = 0.7, OnlyMobs = "Ayı", LootYang = false, LootPick = [5] };
+        other.PullLearned["c2"] = 4;
+        other.FarmSpot = new FarmSpot { MapName = "c2" };
+        CharacterSettings.Fresh(other);
+        var defaults = new BotProfile();
+        Assert.Equal(defaults.PullMaxMobs, other.PullMaxMobs);
+        Assert.Equal(defaults.PotionHpBelow, other.PotionHpBelow);
+        Assert.Equal("", other.OnlyMobs);
+        Assert.Empty(other.PullLearned);
+        Assert.Null(other.FarmSpot);
+        Assert.False(other.LootYang);                      // the player's choice stays
+        Assert.Equal([5], other.LootPick);
     }
 }
 
