@@ -1,4 +1,5 @@
 using System.Data;
+using SekoBot.Bot;
 using SekoBot.Config;
 using SekoBot.Memory;
 
@@ -20,8 +21,8 @@ internal sealed class BonusListForm : Form
         _profile = profile;
         Text = "Efsun listesi — bu efsunlu silah / zırhlar alınır";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(560, 600);
-        MinimumSize = new Size(460, 400);
+        ClientSize = new Size(760, 600);
+        MinimumSize = new Size(600, 400);
         BackColor = Theme.Background;
         ForeColor = Theme.Text;
         Font = new Font("Segoe UI", 9f);
@@ -30,23 +31,27 @@ internal sealed class BonusListForm : Form
         _table.Columns.Add("Efsun", typeof(string));
         _table.Columns.Add("En az", typeof(int));
         _table.Columns.Add("Tür", typeof(int));
+        _table.Columns.Add("Hangi eşyalarda · değerler", typeof(string));
+        BonusBook? book = null;
+        try { book = BonusBook.Shared; }
+        catch (IOException) { }
         var wanted = profile.LootBonuses.ToDictionary(w => w.Type, w => w.Min);
         foreach (var (type, name) in ItemBonuses.All().OrderBy(b => b.Name, StringComparer.CurrentCulture))
         {
             var known = wanted.FirstOrDefault(w => ItemBonuses.Same(w.Key, type));
             bool on = known.Key != 0;
-            _table.Rows.Add(on, name, on ? known.Value : 1, type);
+            _table.Rows.Add(on, name, on ? known.Value : 1, type, book?.WhereText(name) ?? "");
         }
 
         Theme.Label(this, "Bir efsunu işaretle ve en az değerini yaz (ör. EXP bonusu, en az 10: +10 ve üstü alınır). " +
-            "Liste boş değilken bütün silah ve zırhlar alınır (efsun ancak çantada görünür); işaretli bir efsunu olmayan " +
-            "ve satış fiyatı sınırın altında kalan geri atılır. İşaretli efsunlu eşya alınınca Telegram'a yazılır.",
-            new Rectangle(12, 8, 536, 58), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft).Anchor =
+            "Yerde efsun görünmez: bot yalnız o efsunun gelebildiği eşyaları alır (pazardan öğrendi; ör. EXP için kolye, ayakkabı, kalkan), " +
+            "çantada bakar, işaretli efsunu olmayanı geri atar. İşaretli efsunlu eşya alınınca Telegram'a yazılır.",
+            new Rectangle(12, 8, 736, 58), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft).Anchor =
             AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
         _grid = new DataGridView
         {
-            Bounds = new Rectangle(12, 70, 536, 476),
+            Bounds = new Rectangle(12, 70, 736, 476),
             Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
             DataSource = _table,
             AllowUserToAddRows = false,
@@ -67,10 +72,12 @@ internal sealed class BonusListForm : Form
         _grid.ColumnHeadersDefaultCellStyle.ForeColor = Theme.Muted;
         _grid.DataBindingComplete += (_, _) =>
         {
-            _grid.Columns["Al"]!.FillWeight = 12;
-            _grid.Columns["Efsun"]!.FillWeight = 70;
+            _grid.Columns["Al"]!.FillWeight = 10;
+            _grid.Columns["Efsun"]!.FillWeight = 45;
             _grid.Columns["Efsun"]!.ReadOnly = true;
-            _grid.Columns["En az"]!.FillWeight = 18;
+            _grid.Columns["En az"]!.FillWeight = 14;
+            _grid.Columns["Hangi eşyalarda · değerler"]!.FillWeight = 70;
+            _grid.Columns["Hangi eşyalarda · değerler"]!.ReadOnly = true;
             _grid.Columns["Tür"]!.Visible = false;
         };
         _grid.CurrentCellDirtyStateChanged += (_, _) =>
@@ -81,7 +88,7 @@ internal sealed class BonusListForm : Form
         _grid.DataError += (_, e) => e.ThrowException = false; // a value that isn't a number: kept as it was
         Controls.Add(_grid);
 
-        var close = Theme.Button(this, "Kaydet ve kapat", new Rectangle(408, 556, 140, 30), Theme.Primary, Theme.PrimaryHover);
+        var close = Theme.Button(this, "Kaydet ve kapat", new Rectangle(608, 556, 140, 30), Theme.Primary, Theme.PrimaryHover);
         close.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
         close.Click += (_, _) => Close();
         var clear = Theme.Button(this, "Hepsini kaldır", new Rectangle(12, 556, 130, 30), Theme.Secondary, Theme.SecondaryHover);

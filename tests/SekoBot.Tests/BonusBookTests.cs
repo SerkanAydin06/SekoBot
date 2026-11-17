@@ -1,4 +1,5 @@
 using SekoBot.Bot;
+using SekoBot.Config;
 using SekoBot.Memory;
 using Xunit;
 
@@ -102,5 +103,38 @@ public class BonusBookTests
         Assert.Equal(2, best[0].Score, 3);
         Assert.Empty(market.Find(new MarketQuery(""), learned));                      // nothing asked: nothing listed
         Assert.Contains("★ en yüksek", learned.Describe(Necklace, "EXP bonusu +15"));
+    }
+
+    [Fact]
+    public void With_EXP_on_the_bonus_list_only_items_EXP_comes_on_are_picked_up()
+    {
+        var book = Book();
+        int n = 0;
+        foreach (var v in new[] { 6, 8, 10, 12, 15 })
+            for (int k = 0; k < 3; k++)
+            {
+                book.Learn("n" + n++, Necklace, $"EXP bonusu +{v}");
+                book.Learn("n" + n++, Shoes, $"EXP bonusu +{v}");
+            }
+        book.Learn("w1", Sword, "Ortalama zarar +5");                            // swords are known, never with EXP
+        book.Learn("w2", Sword, "Ortalama zarar +9");
+        Assert.True(book.CanCarry(Necklace, "EXP bonusu", 10));
+        Assert.False(book.CanCarry(Sword, "EXP bonusu", 10));                     // EXP never comes on swords
+        Assert.False(book.CanCarry(Necklace, "EXP bonusu", 20));                  // never that high
+        Assert.True(book.CanCarry(Sword, "Kritik vuruş şansı", 5));               // nothing known about it: picked up
+        Assert.True(book.CanCarry(990199, "EXP bonusu", 10));                     // an item not known: picked up
+        Assert.Contains("Kolye", book.WhereText("EXP bonusu"));
+        Assert.Contains("6 / 8 / 10 / 12 / 15", book.WhereText("EXP bonusu"));
+
+        var p = new BotProfile { LootEquipment = false, LootBonuses = [new BonusWant { Type = 47, Min = 10 }] };  // EXP ≥ 10
+        var was = BotEngine.BonusKnowledge;
+        try
+        {
+            BotEngine.BonusKnowledge = book;
+            Assert.True(BotEngine.WantedLoot(new GroundItem(1, default, Necklace, 1), p));
+            Assert.True(BotEngine.WantedLoot(new GroundItem(2, default, Shoes, 1), p));
+            Assert.False(BotEngine.WantedLoot(new GroundItem(3, default, Sword, 1), p));  // not even walked to
+        }
+        finally { BotEngine.BonusKnowledge = was; }
     }
 }

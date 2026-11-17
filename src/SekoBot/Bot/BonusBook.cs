@@ -196,6 +196,39 @@ internal sealed partial class BonusBook
             Learn("çanta:" + character, item.Vnum, ItemBonuses.Describe(bonuses));
     }
 
+    /// <summary>
+    /// Whether an item can carry a bonus of at least <paramref name="min"/>, by what was seen: false when
+    /// the bonus is known but never came on the item's group, or never that high there; true when it did,
+    /// and when nothing is known yet (the item or the bonus not seen: it may well be).
+    /// </summary>
+    public bool CanCarry(int vnum, string bonus, int min)
+    {
+        if (GroupOf(vnum) is not string group)
+            return true;
+        lock (_gate)
+        {
+            if (!_data.Bonuses.TryGetValue(bonus, out var groups) || groups.Values.Sum(v => v.Values.Sum()) < 10)
+                return true; // too little known about it
+            if (!groups.TryGetValue(group, out var values))
+                return false;
+            return values.Keys.Max() >= min;
+        }
+    }
+
+    /// <summary>"Kolye, Ayakkabı, Kalkan · 6 / 8 / 10 / 12 / 15" — where a bonus comes and with which values.</summary>
+    public string WhereText(string bonus)
+    {
+        lock (_gate)
+        {
+            if (!_data.Bonuses.TryGetValue(bonus, out var groups) || groups.Count == 0)
+                return "henüz görülmedi";
+            var values = groups.Values.SelectMany(v => v.Where(x => x.Value >= Enough).Select(x => x.Key)).Distinct().Order().ToList();
+            string where = string.Join(", ", groups.OrderByDescending(g => g.Value.Values.Sum()).Select(g => GroupName(g.Key)));
+            return values.Count is > 0 and <= 8 ? $"{where} · {string.Join(" / ", values)}" :
+                   values.Count > 8 ? $"{where} · {values[0]} … {values[^1]}" : where;
+        }
+    }
+
     /// <summary>How many listings were counted.</summary>
     public int Listings
     {
