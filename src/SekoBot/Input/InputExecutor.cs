@@ -56,6 +56,45 @@ internal sealed class InputExecutor : IDisposable
 
     public void Enqueue(BotAction action) => _queue.Writer.TryWrite(action);
 
+    private volatile bool _holdFront;
+    private nint _heldBefore;
+
+    /// <summary>
+    /// Several clicks in a row (throwing items away): the game is brought to the front once and
+    /// stays there until this is set back to false; only then is the window that was in front put
+    /// back (seen: the window flipped front and back for every click, slow and odd).
+    /// </summary>
+    public bool HoldFront
+    {
+        get => _holdFront;
+        set
+        {
+            if (_holdFront == value)
+                return;
+            _holdFront = value;
+            if (!value)
+            {
+                nint before = Interlocked.Exchange(ref _heldBefore, 0);
+                if (before != 0 && Win32.GetForegroundWindow() == _window.Handle)
+                    Win32.SetForegroundWindow(before);
+            }
+        }
+    }
+
+    /// <summary>After an action with the game brought to the front: the window that was in front
+    /// goes back, unless the game is held in front (then it goes back at the end).</summary>
+    private void PutBack(nint before)
+    {
+        if (before == _window.Handle || before == 0)
+            return;
+        if (_holdFront)
+        {
+            Interlocked.CompareExchange(ref _heldBefore, before, 0);
+            return;
+        }
+        Win32.SetForegroundWindow(before);
+    }
+
     private async Task RunAsync()
     {
         try
@@ -269,8 +308,8 @@ internal sealed class InputExecutor : IDisposable
         finally
         {
             Win32.SetCursorPos(previous.X, previous.Y);
-            if (front && before != _window.Handle && before != 0)
-                Win32.SetForegroundWindow(before);
+            if (front)
+                PutBack(before);
         }
         if (!front)
             _log("Oyun penceresi öne getirilemedi; tıklama arka plandan gönderildi.");
@@ -324,8 +363,7 @@ internal sealed class InputExecutor : IDisposable
             if (down)
                 SendMouse(Win32.MOUSEEVENTF_LEFTUP);
             Win32.SetCursorPos(previous.X, previous.Y);
-            if (before != _window.Handle && before != 0)
-                Win32.SetForegroundWindow(before);
+            PutBack(before);
         }
     }
 
