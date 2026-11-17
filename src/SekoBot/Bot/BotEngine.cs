@@ -189,7 +189,8 @@ internal sealed partial class BotEngine : IDisposable
                                 CheckSafety(world, profile);
                                 CheckPotionKeys(world, profile);
                                 WatchTick(world, profile, now);
-                                FitTick(world, profile, now);
+                                if (profile.Attack)
+                                    FitTick(world, profile, now);
                                 SocialTick(world, profile, now);
                                 NotifyEvents(world);
                             }

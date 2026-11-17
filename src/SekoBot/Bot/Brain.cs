@@ -149,7 +149,7 @@ internal sealed partial class Brain
             return actions;
 
         // How the last fight went decides how many are gathered next (also while running away).
-        if (p.NavigateMode)
+        if (p.NavigateMode && p.Attack)
             LearnPullSize(state, p, actions);
 
         // HP low with several mobs on us: get away from them for a moment.
@@ -163,6 +163,18 @@ internal sealed partial class Brain
         // Now and then a short break, like a person would.
         if (BreakTick(state, p, actions))
             return actions;
+
+        // Attack off: only what lies on the ground is picked up.
+        if (!p.Attack)
+        {
+            LootOnly(state, p, actions);
+            return actions;
+        }
+        if (_lootOnly)
+        {
+            _lootOnly = false;
+            actions.Add(new NoteAction("Saldırı açıldı: moblara yeniden saldırılıyor."));
+        }
 
         CastSkills(state, p, actions);
 

@@ -106,6 +106,63 @@ internal sealed partial class Brain
         _lastCameraSetup = now;
     }
 
+    private bool _lootOnly;
+
+    /// <summary>
+    /// Attack off ("Sadece eşya topla"): nothing is hit (mobs that attack included) and no skill
+    /// used; the bot stays in its area and walks to the items lying around and picks them up
+    /// (the loot choices apply), else stands still. Potions, fleeing and the area limit still work.
+    /// </summary>
+    private void LootOnly(GameState state, BotProfile p, List<BotAction> actions)
+    {
+        var now = state.Time;
+        _tickTime = now;
+        bool refresh = now - _lastKeyRefresh >= Ms(1000);
+        if (refresh)
+            _lastKeyRefresh = now;
+        if (!_lootOnly)
+        {
+            _lootOnly = true;
+            actions.Add(new NoteAction("Saldırı kapalı: hiçbir moba vurulmuyor, sadece yerdeki eşyalar toplanıyor."));
+        }
+        SetAttack(false, p, actions, refresh);
+        FinishFight(p, actions, now);
+        _pulling = false;
+        bool tapAround = !p.PickUpDrops || !p.NavigateMode;
+        if (tapAround && p.LootEveryMs > 0 && now - _lastLootTap >= Ms(p.LootEveryMs * _lootJitter))
+        {
+            actions.Add(new KeyTapAction(p.Keys.Pickup));
+            _lastLootTap = now;
+            _lootJitter = 0.8 + 0.4 * _random.NextDouble();
+        }
+        if (!p.NavigateMode)
+            return;
+        if (Phase == BotPhase.Setup)
+        {
+            ScheduleCamera(p, now);
+            Enter(BotPhase.Searching, now);
+        }
+        RunTimedKeys(now, actions, refresh);
+        if (now < _sidestepUntil)
+        {
+            SetMoves(_sidestepKeys, p, actions, refresh);
+            return;
+        }
+        if (TravelTick(state, p, actions, refresh))
+            return;
+        if (LeashTick(state, p, actions, refresh, mobNextToUs: false))
+            return;
+        double radius = p.AttackRadius * state.Height;
+        var special = state.Drops.FirstOrDefault(d => d.Special && !_ignoredDrops.ContainsKey(d.Id));
+        if (special.Id != 0 && GoForDrop(state, p, actions, refresh, radius, special))
+            return;
+        if (GoForDrop(state, p, actions, refresh, radius))
+            return;
+        SetMoves([], p, actions, refresh);
+        if (Phase != BotPhase.Searching)
+            Enter(BotPhase.Searching, now);
+    }
+
     private void Navigate(GameState state, BotProfile p, List<BotAction> actions)
     {
         var now = state.Time;
