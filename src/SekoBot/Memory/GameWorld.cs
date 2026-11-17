@@ -766,7 +766,9 @@ internal sealed partial class GameWorldReader : IDisposable
             long cls = Pointer(widget + ObjClass);
             if (!ClassName(cls).EndsWith("_C", StringComparison.Ordinal) || !IsWidget(cls))
                 continue;
-            if (Byte(widget + Offset(cls, "Widget", "Visibility")) is byte visibility and not (1 or 2))
+            // The message window's frame is always "visible" (seen: Visibility 4 while closed); whether it
+            // is open is its IsOpen flag, read below.
+            if (name != MessageWindow && Byte(widget + Offset(cls, "Widget", "Visibility")) is byte visibility and not (1 or 2))
                 open.Add(name);
         }
         // The message (DM) window: its own IsOpen flag (it isn't hidden like the others).
