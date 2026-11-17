@@ -380,3 +380,37 @@ public class FollowTests
         Assert.DoesNotContain(near, a => a is KeyDownAction d && (d.Key == keys.MoveForward || d.Key == keys.MoveBack || d.Key == keys.MoveLeft || d.Key == keys.MoveRight));
     }
 }
+
+/// <summary>Gathering behind the group's killer: its items are taken once the game frees them.</summary>
+public class NotOursWaitTests
+{
+    [Fact]
+    public void The_killers_item_is_taken_once_it_is_free()
+    {
+        var p = new BotProfile { Attack = false, LeashMeters = 0, PickUpDrops = true };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        var center = new Point(960, 540);
+        var taps = new List<double>();
+        var notes = new List<string>();
+        bool told = false;
+        for (double t = 0; t < 40_000; t += 100)
+        {
+            var actions = brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
+                { Walking = true, Drops = [new GroundSpot(7, center)] });
+            notes.AddRange(actions.OfType<NoteAction>().Select(n => n.Text));
+            if (actions.Any(a => a is KeyTapAction k && k.Key == p.Keys.Pickup))
+            {
+                taps.Add(t);
+                if (t < 30_000 && !told)
+                {
+                    brain.GameSaid(1, 0);       // "toplayamazsın": the killer's
+                    told = true;
+                }
+            }
+        }
+        Assert.Contains(notes, n => n.Contains("herkese açılınca"));
+        Assert.DoesNotContain(taps, t => t > 2000 && t < 30_000);  // left alone meanwhile
+        Assert.Contains(taps, t => t >= 32_000);                     // then taken
+    }
+}
