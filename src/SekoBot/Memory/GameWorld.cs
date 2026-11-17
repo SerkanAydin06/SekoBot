@@ -1019,7 +1019,12 @@ internal sealed partial class GameWorldReader : IDisposable
                     if (known < 0)
                         threads.Add(thread);
                     else if (thread.Count > threads[known].Count)
-                        threads[known] = threads[known] with { Count = thread.Count, Level = thread.Level };
+                        threads[known] = threads[known] with
+                        {
+                            Count = thread.Count, Level = thread.Level,
+                            // The window's messages have the texts (the loader's list may not).
+                            Last = thread.Last.Any(m => m.Message.Length > 0) ? thread.Last : threads[known].Last,
+                        };
                 }
 
             var requests = new List<PlayerRequest>();
@@ -1099,8 +1104,10 @@ internal sealed partial class GameWorldReader : IDisposable
 
     // ── The private message (DM) window, for answering from Telegram ──
 
-    /// <summary>The conversations of the DM window (dmBox.dmDatass, a blueprint struct of 0x50:
-    /// messages count +0x10, name +0x18, level +0x28 — seen in the game).</summary>
+    /// <summary>The conversations of the DM window (dmBox.dmDatass, a blueprint struct of 0x4C:
+    /// its messages TArray&lt;newDm&gt; at +0x8 (count +0x10; each 0x60 like loader.dmDatas: level +0x8,
+    /// sender +0x10, text +0x20), name +0x18, level +0x28 — seen in the game: the texts are here even
+    /// when the loader's list doesn't have them).</summary>
     private List<WhisperThread> ReadDmThreads(long ui)
     {
         var threads = new List<WhisperThread>();
@@ -1117,9 +1124,18 @@ internal sealed partial class GameWorldReader : IDisposable
         {
             long thread = data + i * 0x50L;
             string name = ReadFString(thread + 0x18, 64);
+            long list = Pointer(thread + 0x8);
             int messages = Int32(thread + 0x10) ?? 0;
-            if (name.Length > 0 && messages is >= 0 and < 100_000)
-                threads.Add(new WhisperThread(name, messages, [], Int32(thread + 0x28) ?? 0));
+            if (name.Length == 0 || messages is < 0 or >= 100_000)
+                continue;
+            var last = new List<Whisper>();
+            if (MemoryReads.IsPointer(list))
+                for (int k = Math.Max(0, messages - 5); k < messages; k++)
+                {
+                    long message = list + (long)k * DmMessageSize;
+                    last.Add(new Whisper(ReadFString(message + 0x10, 64), Int32(message + 0x8) ?? 0, ReadFString(message + 0x20, 512)));
+                }
+            threads.Add(new WhisperThread(name, messages, last, Int32(thread + 0x28) ?? 0));
         }
         return threads;
     }
