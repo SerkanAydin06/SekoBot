@@ -229,6 +229,41 @@ internal sealed partial class BonusBook
         }
     }
 
+    /// <summary>Every value a bonus was seen with (often enough), on any item, smallest first: what can be asked for.</summary>
+    public List<int> AllValues(string bonus)
+    {
+        lock (_gate)
+            return _data.Bonuses.TryGetValue(bonus, out var groups)
+                ? [.. groups.Values.SelectMany(v => v).GroupBy(x => x.Key).Where(g => g.Sum(x => x.Value) >= Enough).Select(g => g.Key).Order()]
+                : [];
+    }
+
+    /// <summary>The item groups a bonus was seen on, most often first.</summary>
+    public List<string> GroupsOf(string bonus)
+    {
+        lock (_gate)
+            return _data.Bonuses.TryGetValue(bonus, out var groups)
+                ? [.. groups.OrderByDescending(g => g.Value.Values.Sum()).Select(g => g.Key)]
+                : [];
+    }
+
+    /// <summary>"Deri Ayakkabı+7" → "Deri Ayakkabı": one name for every level of an item.</summary>
+    public static string BaseName(string name) => PlusLevel().Replace(name, "").Trim();
+
+    [GeneratedRegex(@"\s*\+\s*\d*\s*$")]
+    private static partial Regex PlusLevel();
+
+    /// <summary>The items (one name for all their levels) of the groups a bonus comes on, by group: what can be picked for it.</summary>
+    public List<(string Group, string Name)> ItemsFor(string bonus)
+    {
+        var groups = GroupsOf(bonus);
+        return [.. ItemBook.All().Where(i => groups.Contains(i.SubType) && i.Name.Length > 0)
+            .Select(i => (Group: i.SubType, Name: BaseName(i.Name)))
+            .Where(i => i.Name.Length > 1)
+            .Distinct()
+            .OrderBy(i => groups.IndexOf(i.Group)).ThenBy(i => i.Name, StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("tr-TR"), true))];
+    }
+
     /// <summary>How many listings were counted.</summary>
     public int Listings
     {

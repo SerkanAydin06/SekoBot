@@ -158,4 +158,26 @@ public class BonusBookTests
         Assert.False(BotEngine.KeepPicked(new InventoryItem(21, 990110, 1, [new ItemBonus(47, 8)]), p));  // too low
         Assert.False(BotEngine.KeepPicked(new InventoryItem(22, Shoes, 1, [new ItemBonus(47, 15)]), p));  // not that item
     }
+
+    [Fact]
+    public void The_bonus_list_offers_only_real_values_and_the_items_a_bonus_comes_on()
+    {
+        var book = Book();
+        ItemBook.Learn(new ItemInfo(990120, "Test Deri Çizme+0", "ITEM_ARMOR", "ARMOR_FOOTS", 100));
+        ItemBook.Learn(new ItemInfo(990121, "Test Deri Çizme+7", "ITEM_ARMOR", "ARMOR_FOOTS", 100));
+        int n = 0;
+        foreach (var v in new[] { 6, 8, 10, 12, 15 })
+        {
+            book.Learn("a" + n++, Necklace, $"EXP bonusu +{v}");
+            book.Learn("a" + n++, Shoes, $"EXP bonusu +{v}");
+        }
+        book.Learn("b", Shoes, "EXP bonusu +3");                 // a value seen once (maybe misread): not offered yet
+        book.Learn("c", Necklace, "EXP bonusu +3");              // seen twice: offered
+        Assert.Equal([3, 6, 8, 10, 12, 15], book.AllValues("EXP bonusu"));
+        Assert.Equal("Test Deri Çizme", BonusBook.BaseName("Test Deri Çizme+7"));
+        var items = book.ItemsFor("EXP bonusu");
+        Assert.Contains(("ARMOR_FOOTS", "Test Deri Çizme"), items);
+        Assert.Single(items, i => i.Name == "Test Deri Çizme");   // every level once
+        Assert.DoesNotContain(items, i => i.Group == "WEAPON_SWORD");
+    }
 }
