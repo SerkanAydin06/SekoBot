@@ -305,6 +305,9 @@ internal sealed partial class BotEngine : IDisposable
 
     public bool StartBot(bool dryRun, bool background, out string error)
     {
+        // What the shops taught about bonuses: which weapons / armour are worth picking up for the bonus list.
+        try { BonusKnowledge = BonusBook.Shared; }
+        catch (IOException) { }
         error = "";
         if (GameMinimized)
         {

@@ -188,11 +188,27 @@ internal sealed partial class BotEngine
     {
         LootKind.Yang => profile.LootYang,
         LootKind.Potion => profile.LootPotions,
-        LootKind.Equipment => profile.LootEquipment || profile.LootBonuses.Count > 0 ||
+        LootKind.Equipment => profile.LootEquipment || MayCarryWantedBonus(item.Vnum, profile) ||
                               profile.LootEquipmentMinGold > 0 && ItemBook.Get(item.Vnum)?.Sell >= profile.LootEquipmentMinGold,
         LootKind.Other => profile.LootOther,
         _ => true,
     });
+
+    /// <summary>What was learned about which bonuses come on which items (set when the bot starts; null: nothing known).</summary>
+    internal static BonusBook? BonusKnowledge { get; set; }
+
+    /// <summary>
+    /// A weapon or armour on the ground that could have a bonus of the bonus list (its bonuses show
+    /// only in the bag): with "EXP bonusu ≥ 10" only necklaces, shoes and shields are picked up — the
+    /// groups EXP comes on — not every sword. Nothing known yet about the item or the bonus: picked up.
+    /// </summary>
+    internal static bool MayCarryWantedBonus(int vnum, BotProfile profile)
+    {
+        if (profile.LootBonuses.Count == 0)
+            return false;
+        var book = BonusKnowledge;
+        return book == null || profile.LootBonuses.Any(w => book.CanCarry(vnum, ItemBonuses.NameOf(w.Type), w.Min));
+    }
 
     /// <summary>Around the spot where items were thrown away (world units, 10 m).</summary>
     internal const double DumpRange = 1000;
