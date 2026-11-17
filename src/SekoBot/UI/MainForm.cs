@@ -642,7 +642,7 @@ internal sealed class MainForm : Form
             v => _profile.TelegramCommands = v);
         Hint(notify, "Kurulum: Telegram'da @BotFather'a /newbot yaz, verdiği anahtarı buraya yapıştır. Sonra kendi botuna " +
             "\"merhaba\" yaz ve 'Sohbeti bul'a bas. Botuna \"durum\", \"dur\", \"başla\" yazınca cevap verir (yalnız bu sohbete). " +
-            "Fısıltı, istek, adının geçmesi ve GM yazması uyarı sesiyle de bildirilir; hepsi günlüğe de yazılır.", 190);
+            "Fısıltı, istek, adının geçmesi ve GM yazması uyarı sesiyle de bildirilir; hepsi günlüğe de yazılır.", 214);
         Theme.Label(notify, "NELER BİLDİRİLSİN", new Rectangle(0, 108, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
         Check(notify, "Fısıltı (özel mesaj)", 0, 128, 170, () => _profile.NotifyWhispers, v => _profile.NotifyWhispers = v);
         Check(notify, "Takas / grup / arkadaş isteği", 176, 128, 220, () => _profile.NotifyRequests, v => _profile.NotifyRequests = v);
@@ -651,6 +651,8 @@ internal sealed class MainForm : Form
         Check(notify, "Etkinlik başlayınca", 0, 156, 170, () => _profile.NotifyEvents, v => _profile.NotifyEvents = v);
         Check(notify, "Tüm etkinlik ödüllerini her zaman topla", 176, 156, 380, () => _profile.EventLoot, v => _profile.EventLoot = v);
         Check(notify, "Topla eşyası düşünce", 562, 156, 200, () => _profile.NotifyDrops, v => _profile.NotifyDrops = v);
+        Check(notify, "Efsun listesindeki efsunlu eşya alınınca (✨ Efsun listesi'nde seçtiklerin)", 0, 184, 560,
+            () => _profile.NotifyBonusItems, v => _profile.NotifyBonusItems = v);
 
         var keys = _tabPages[6];
         var k = _profile.Keys;

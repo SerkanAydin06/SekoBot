@@ -227,6 +227,8 @@ internal sealed class BotProfile
     public bool NotifyRequests { get; set; } = true;
     /// <summary>Tell when our name (or a GM) shows up in the chat.</summary>
     public bool NotifyMentions { get; set; } = true;
+    /// <summary>Tell when an item with a bonus of the bonus list comes into the bag (the items chosen there).</summary>
+    public bool NotifyBonusItems { get; set; } = true;
     /// <summary>Tell when a drop event starts.</summary>
     public bool NotifyEvents { get; set; } = true;
     /// <summary>Tell when there are stat / skill points to spend.</summary>

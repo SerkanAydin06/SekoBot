@@ -69,9 +69,14 @@ internal sealed partial class BotEngine
             foreach (var item in _pickedItems.CameIn)
                 if (Loot.KindOf(item.Vnum) == LootKind.Equipment && GoodBonus(item, profile))
                 {
-                    string text = $"⭐ Efsunlu eşya alındı: {ItemBook.NameOf(item.Vnum)} — {ItemBonuses.Describe(item.Bonuses ?? [])}";
+                    // The bonuses asked for are marked ✔ (the others are told too: they make its worth).
+                    var wanted = profile.LootBonuses;
+                    string bonuses = string.Join(", ", (item.Bonuses ?? []).Where(b => b.Type > 0).Select(b =>
+                        ItemBonuses.Describe([b]) + (wanted.Any(w => ItemBonuses.Same(w.Type, b.Type) && b.Value >= w.Min && w.Applies(item.Vnum)) ? " ✔" : "")));
+                    string text = $"⭐ Efsunlu eşya alındı: {ItemBook.NameOf(item.Vnum)} — {bonuses}";
                     _log(text);
-                    Notify(text);
+                    if (profile.NotifyBonusItems)
+                        Notify(text);
                 }
             if (_pickedItems.Changed && now - _pickedSavedAt > TimeSpan.FromSeconds(5))
             {
