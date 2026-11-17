@@ -119,7 +119,7 @@ internal sealed class MiniBar : Form
         Tie(_info.GameWindow);
         if (place)
         {
-            // As wide as its game (the band under it is the bar's), at least the bar's own width.
+            // Exactly as wide as its game (the band under it is the bar's), so it never reaches over the next one.
             // The game minimized: the bar went with it (Windows hides what a window owns); nothing to place.
             if (_info.GameWindow != 0 && _info.Game is not { IsEmpty: false })
             {
@@ -127,7 +127,7 @@ internal sealed class MiniBar : Form
                 return;
             }
             int width = _info.Game is { IsEmpty: false } g
-                ? Math.Clamp(g.Width, (int)(LogicalWidth * S), (int)(MaxWidth * S))
+                ? Math.Clamp(g.Width, (int)(MinWidth * S), (int)(MaxWidth * S))
                 : (int)(LogicalWidth * S);
             if (Width != width)
                 Width = width;
@@ -151,6 +151,8 @@ internal sealed class MiniBar : Form
     /// <summary>The bar's width now, in 96-dpi units.</summary>
     private float W => ClientSize.Width / S;
     private const int MaxWidth = 1100;
+    /// <summary>Narrowest the bar gets (small games in a big grid): still everything readable.</summary>
+    private const int MinWidth = 340;
 
     /// <summary>The three buttons: start, stop, big.</summary>
     private Rectangle Button(int i) => new((int)((W - 118 + i * 38) * S), (int)(6 * S), (int)(32 * S), (int)(28 * S));

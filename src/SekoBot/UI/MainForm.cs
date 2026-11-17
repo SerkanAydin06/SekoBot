@@ -880,7 +880,7 @@ internal sealed class MainForm : Form
         int count = WindowLayout.ArrangeGames(near, band);
         WriteLog(count == 0
             ? "Açık oyun penceresi bulunamadı."
-            : $"{count} oyun penceresi yan yana dizildi; her SekoBot kendi oyununun altına küçüldü. Büyütmek için şeride çift tıkla.");
+            : $"{count} oyun penceresi ızgaraya dizildi (her biri kendi oranında küçüldü, sıkıştırılmadı); her SekoBot kendi oyununun altına küçüldü. Büyütmek için şeride çift tıkla.");
         WindowLayout.TellAllMini();
     }
 
