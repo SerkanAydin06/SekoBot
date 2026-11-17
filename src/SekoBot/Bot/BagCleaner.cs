@@ -28,7 +28,7 @@ internal sealed class BagCleaner
     public const int TriesPerItem = 2;
     /// <summary>The item's menu shows a moment after the click; not there after this: dragged instead.</summary>
     public static readonly TimeSpan MenuTimeout = TimeSpan.FromMilliseconds(2500);
-    public static readonly TimeSpan AfterItemClick = TimeSpan.FromMilliseconds(700);
+    public static readonly TimeSpan AfterItemClick = TimeSpan.FromMilliseconds(500);
 
     private enum Step { Open, Pick, Menu, Dragged, Confirmed, Close }
     private TimeSpan _clickedAt;

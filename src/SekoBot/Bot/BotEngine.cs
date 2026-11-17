@@ -237,6 +237,8 @@ internal sealed partial class BotEngine : IDisposable
                 return (BotPhase.Stopped, Array.Empty<BotAction>());
             actions = WhisperTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);
             phase = _brain.Phase;
+            // Throwing items away: the game stays in front for all the clicks, not back and forth for each.
+            _input.HoldFront = _cleaner.Active;
             if (_brain.ProfileChanged)
             {
                 // Learned (how many mobs this character takes on this map): kept with the character.
@@ -384,6 +386,7 @@ internal sealed partial class BotEngine : IDisposable
         }
         if (input == null)
             return;
+        input.HoldFront = false;
         input.Dispose();
         _log("Bot durdu: " + reason);
         WriteSessionReport(reason);
