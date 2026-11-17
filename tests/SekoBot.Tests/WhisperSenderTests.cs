@@ -22,11 +22,11 @@ public class WhisperSenderTests
     public void Opens_the_window_picks_the_player_types_sends_checks_and_closes_it_again()
     {
         var sender = new WhisperSender();
-        sender.Start(S(0), "oxyygen", "selam, birazdan dönerim");
+        sender.Start(S(-1), "oxyygen", "selam, birazdan dönerim");
         Assert.Equal([new ClickAction(Opener, Slow: true)], sender.Tick(S(0), Closed));
         Assert.Equal([new ClickAction(new Point(70, 213), Slow: true)], sender.Tick(S(2), Open()));      // the conversation
         Assert.Equal([new ClickAction(new Point(246, 306), Slow: true)], sender.Tick(S(4), Open()));     // the text box
-        Assert.Equal([new TypeTextAction("selam, birazdan dönerim")], sender.Tick(S(6), Open()));
+        Assert.Equal([new TypeTextAction("selam, birazdan dönerim", ClearFirst: true)], sender.Tick(S(6), Open()));
         Assert.Equal([new ClickAction(new Point(390, 306), Slow: true)], sender.Tick(S(9), Open()));     // Gönder
         // It shows up as ours: close the window (we opened it).
         Assert.Equal([new ClickAction(Opener, Slow: true)], sender.Tick(S(11), Open(new DmShown("KAiZER06", "selam, birazdan dönerim", true))));
@@ -40,7 +40,7 @@ public class WhisperSenderTests
     public void The_window_is_closed_afterwards_also_when_it_was_already_open()
     {
         var sender = new WhisperSender();
-        sender.Start(S(0), "oxyygen", "tamam");
+        sender.Start(S(-1), "oxyygen", "tamam");
         sender.Tick(S(0), Open());                                   // the conversation (window already open)
         sender.Tick(S(2), Open());                                   // the text box
         sender.Tick(S(4), Open());                                   // typed
@@ -54,10 +54,22 @@ public class WhisperSenderTests
     }
 
     [Fact]
+    public void Nothing_is_clicked_until_the_keys_let_go_have_arrived_and_the_box_is_emptied_first()
+    {
+        var sender = new WhisperSender();
+        sender.Start(S(0), "oxyygen", "As");
+        Assert.Empty(sender.Tick(S(0.5), Closed));                                   // keys still on their way
+        Assert.Equal([new ClickAction(Opener, Slow: true)], sender.Tick(S(1), Closed));
+        sender.Tick(S(3), Open());
+        sender.Tick(S(5), Open());
+        Assert.Equal([new TypeTextAction("As", ClearFirst: true)], sender.Tick(S(7), Open()));   // a stray "s" goes first
+    }
+
+    [Fact]
     public void A_player_without_a_conversation_is_not_written_to()
     {
         var sender = new WhisperSender();
-        sender.Start(S(0), "Bilinmeyen", "merhaba");
+        sender.Start(S(-1), "Bilinmeyen", "merhaba");
         sender.Tick(S(0), Open());
         Assert.False(sender.Sent);
         Assert.Contains("konuşma yok", sender.Problem);

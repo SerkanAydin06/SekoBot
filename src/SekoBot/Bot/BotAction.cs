@@ -20,8 +20,9 @@ internal sealed record MouseDragAction(Point From, Point To) : BotAction
 }
 
 /// <summary>Types text into the game (the box that has the focus), letter by letter; the game is
-/// brought to the front for it.</summary>
-internal sealed record TypeTextAction(string Text) : BotAction
+/// brought to the front for it. <paramref name="ClearFirst"/>: whatever is in the box goes first (Ctrl+A,
+/// Backspace) — a movement key still on its way can land in it (seen: "sAs" for "As").</summary>
+internal sealed record TypeTextAction(string Text, bool ClearFirst = false) : BotAction
 {
     public override string ToString() => $"Yaz \"{Text}\"";
 }

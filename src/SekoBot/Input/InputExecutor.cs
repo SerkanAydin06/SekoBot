@@ -202,7 +202,7 @@ internal sealed class InputExecutor : IDisposable
                 await DragAsync(drag.From, drag.To, token);
                 break;
             case TypeTextAction type:
-                await TypeAsync(type.Text, token);
+                await TypeAsync(type.Text, token, type.ClearFirst);
                 break;
             case KeyTapAction tap:
                 SendKey(tap.Key, down: true);
@@ -373,7 +373,16 @@ internal sealed class InputExecutor : IDisposable
     /// Types text the way a keyboard does, one letter at a time (Unicode input, so Turkish letters
     /// work), with the game in front. The window that was in front is put back afterwards.
     /// </summary>
-    private async Task TypeAsync(string text, CancellationToken token)
+    /// <summary>One virtual key down or up, as a real keyboard event (the game in front).</summary>
+    private static void VirtualKey(ushort vk, bool down)
+    {
+        var input = new Win32.INPUT { type = Win32.INPUT_KEYBOARD };
+        input.u.ki.wVk = vk;
+        input.u.ki.dwFlags = down ? 0u : Win32.KEYEVENTF_KEYUP;
+        Win32.SendInput(1, [input], Marshal.SizeOf<Win32.INPUT>());
+    }
+
+    private async Task TypeAsync(string text, CancellationToken token, bool clearFirst = false)
     {
         nint before = Win32.GetForegroundWindow();
         bool front = before == _window.Handle || BringGameToFront();
@@ -386,6 +395,18 @@ internal sealed class InputExecutor : IDisposable
             await Task.Delay(300, token);
         try
         {
+            if (clearFirst)
+            {
+                // Empty the box first: Ctrl+A selects what is in it, Backspace removes it.
+                VirtualKey(0x11, true);
+                VirtualKey(0x41, true);
+                VirtualKey(0x41, false);
+                VirtualKey(0x11, false);
+                await Task.Delay(60, token);
+                VirtualKey(0x08, true);
+                VirtualKey(0x08, false);
+                await Task.Delay(80, token);
+            }
             foreach (char c in text)
             {
                 var down = new Win32.INPUT { type = Win32.INPUT_KEYBOARD };
