@@ -113,3 +113,28 @@ public class FitTickTests
         engine.FitTick(world, engine.Profile, TimeSpan.FromMinutes(4));
     }
 }
+
+[Collection("CharacterFolder")]
+public class OwnCharacterTests
+{
+    [Fact]
+    public void The_users_own_characters_are_not_strangers()
+    {
+        string old = CharacterSettings.Folder;
+        string dir = Path.Combine(Path.GetTempPath(), "sekobot-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            CharacterSettings.Folder = dir;
+            File.WriteAllText(Path.Combine(dir, "IMEDUSA06.json"), "{}");
+            Assert.True(BotEngine.OwnCharacter("IMEDUSA06"));
+            Assert.False(BotEngine.OwnCharacter("Yabanci"));
+            Assert.False(BotEngine.OwnCharacter(""));
+        }
+        finally
+        {
+            CharacterSettings.Folder = old;
+            Directory.Delete(dir, true);
+        }
+    }
+}

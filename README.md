@@ -199,12 +199,11 @@ Ayarlar karaktere aittir, SekoBot penceresine değil. Bot oyundaki karakteri gö
 
 Bot her haritada bu karakterin bir seferde kaç mobu kaldırabildiğini öğrenir: öğrenmediği haritada güvenli 6 mobla başlar, can %40'ın altına düşerse 2 az, can %70'in üstünde kalırsa 1, %85'in üstünde kalırsa 2 fazla toplar (en çok "Toplanacak en fazla mob", varsayılan 15). Güçlü bir karakter birkaç dövüşte en verimli sayısına çıkar, zayıf olan zorlanmadan kalır ve bunu karakterle birlikte saklar. Bir sonraki açılışta o haritada öğrendiği sayıyla başlar, her seferinde tehlikeye girip yeniden öğrenmez.
 
-## Uygun alanı kendisi seç
+## Güçlü moblara gitme
 
-Alan sekmesindeki "Uygun alanı kendisi seç" (varsayılan açık, karaktere ait) ile bot her karakter için kendi gücüne uygun mobları ve yeri seçer:
+Alan sekmesindeki "Güçlü moblara gitme" (varsayılan açık, karaktere ait) ile bot her karakter için kendi gücüne uygun mobları seçer. Bulunduğu alanı kendisi değiştirmez; yeri sen seçersin:
 - **Hangi mob uygun:** Bot her dövüşü karakterin dosyasına yazar: hangi moblar vardı, can en az ne oldu. Az mobla (en çok 4) bile canı %40'ın altına düşüren bir mob türü (en az 3 dövüşte) bu karaktere fazla güçlüdür; rahat (%70 üstü) dövüşülen tür ise seviyesi yüksek de olsa uygundur. Henüz dövüşülmemiş mobda ilk tahmin seviyedir: karakterden en çok 5 seviye yukarısı. Karakter güçlendikçe eski dövüşler yarıya iner, yeni sonuçlar ağır basar.
-- **Güçlü mobun üstüne gitmez:** Fazla güçlü moblar hedef seçilmez ve alan puanında sayılmaz; saldırırlarsa yine dövüşülür.
-- **Daha iyi alana yürür:** 3 dakikada bir ve her seviye atlayınca bulunduğu yer, son dakikalarda haritada gördüğü diğer yerlerle karşılaştırılır (uygun moblardan saatte gelecek EXP). En az %30 daha iyi ve 15 m'den uzak bir yer varsa günlüğe nedenini yazıp oraya yürür (sonra 5 dk yer değiştirmez). Başka oyuncuların yanına gitmez.
+- **Güçlü mobun üstüne gitmez:** Fazla güçlü moblar hedef seçilmez; saldırırlarsa yine dövüşülür.
 - **Harita uygun değilse söyler:** Haritada gördüğü moblardan hiçbiri karaktere uymuyorsa ("Sv 9 için c2'deki moblar Sv 18–21") seni günlükte ve Telegram'da uyarır; bot haritayı kendisi değiştirmez, buradakilerle devam eder.
 - Hedef sekmesinde en yüksek mob seviyesini elle yazarsan bot onu kullanır.
 
