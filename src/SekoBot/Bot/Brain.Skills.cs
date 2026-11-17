@@ -184,6 +184,8 @@ internal sealed partial class Brain
                 {
                     _skillPressed.Remove(skill.Key);
                     _skillMisses.Remove(skill.Key);
+                    // Taken without "WAIT!": what was learned about it eases off a little (a wrong lesson wears off).
+                    Lore.TookFine(skill.Name);
                 }
                 else if (now - pressed > Ms(SkillTakesMs))
                 {
@@ -254,7 +256,8 @@ internal sealed partial class Brain
             return false;
         if (skill.Wait is double left)
         {
-            if (left > 0 || _skillPressed.ContainsKey(skill.Key) || cast && now - used < extra)
+            // The learned extra counts from when its cooldown ended (counted from the press it did nothing).
+            if (left > 0 || _skillPressed.ContainsKey(skill.Key) || cast && extra > TimeSpan.Zero && now - used < Ms(skill.CooldownSec * 1000.0) + extra)
                 return false;
             return !(skill.Kind == SkillKind.Buff && cast && skill.DurationSec > skill.CooldownSec &&
                      now - used < Ms((skill.DurationSec - 5) * 1000.0));

@@ -85,6 +85,26 @@ internal sealed class SkillLore
         e.ExtraMs = Math.Min(ExtraMaxMs, e.ExtraMs + ExtraStepMs);
     }
 
+    /// <summary>Taken by the game without "WAIT!": the extra learned for it eases off a little.</summary>
+    public const int EaseMs = 100;
+
+    public void TookFine(string name)
+    {
+        lock (_gate)
+        {
+            if (name.Length == 0 || !_skills.TryGetValue(name, out var e) || e.ExtraMs <= 0)
+                return;
+            Ease(_skills, name);
+            _news.Add(d => Ease(d, name));
+        }
+    }
+
+    private static void Ease(Dictionary<string, Entry> skills, string name)
+    {
+        if (skills.TryGetValue(name, out var e))
+            e.ExtraMs = Math.Max(0, e.ExtraMs - EaseMs);
+    }
+
     public static string FilePath => Path.Combine(ProfileStore.Directory, "beceri-bilgisi.json");
 
     public static SkillLore Load(string? path = null)
