@@ -1767,7 +1767,7 @@ internal sealed class MainForm : Form
     private static string Short(long value) => Math.Abs(value) switch
     {
         < 100_000 => value.ToString("N0"),
-        < 10_000_000 => (value / 1000.0).ToString("0.#") + " B",
+        < 1_000_000 => (value / 1000.0).ToString("0") + " B",
         _ => (value / 1_000_000.0).ToString("0.##") + " Mn",
     };
 
