@@ -222,11 +222,14 @@ internal sealed class MainForm : Form
             _profile.Attack = v;
             ShowAttack();
         });
+        TextRow(attack, "Takip edilecek", 0, 68, () => _profile.FollowName, v => _profile.FollowName = v.Trim());
         NumberRow(attack, "Toplama alanı (m)", 0, 0, 3, 30, () => _profile.PullAreaMetres, 0, 1,
             v => _profile.PullAreaMetres = v);
         Hint(attack, "Gruplar: bot en değerli üçlüden başlar, toplama alanındaki diğer üçlüleri de toplar (peşinde mob varken yalnız 10 m " +
             "içindekileri); sınıra ulaşınca, alan boşalınca ya da can düşünce hepsini birden keser. Can %40'ın altına düşen bir dövüşten " +
-            "sonra kendiliğinden daha az mob toplar. Mob menzildeyken yerinde vurur; yürürken yoldaki mobların etrafından dolanır.", 102);
+            "sonra kendiliğinden daha az mob toplar. Mob menzildeyken yerinde vurur; yürürken yoldaki mobların etrafından dolanır.\n\n" +
+            "Saldırı kapalıyken bot \"Takip edilecek\" karakterin peşinden gider ve onun kestiklerinden düşenleri toplar. Boş bırakırsan " +
+            "yakındaki kendi karakterlerinden birini (SekoBot'ta açtığın) takip eder; birden fazla ad virgülle yazılabilir.", 102);
 
         // İksir & Buff
         // Hedef: which mobs to go for, and loot.

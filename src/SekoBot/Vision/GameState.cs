@@ -80,6 +80,9 @@ internal sealed record GameState(
     /// <summary>The saved farm spot to walk to before starting, when it is used.</summary>
     public Vec3? FarmSpot { get; init; }
 
+    /// <summary>Attack off: the character followed (it kills, we pick up) and where it is.</summary>
+    public (string Name, Vec3 Position)? Follow { get; init; }
+
     /// <summary>Where the mobs were seen most (world), to walk to when none is on screen.</summary>
     public Vec3? Hotspot { get; init; }
 
