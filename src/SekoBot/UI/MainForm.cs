@@ -369,8 +369,23 @@ internal sealed class MainForm : Form
             Directory.CreateDirectory(BotEngine.MarketFolder);
             OpenFile(BotEngine.MarketFolder);
         };
+        var bonusGuide = Theme.Button(market, "📚  Efsun rehberi", new Rectangle(424, 0, 150, 30), Theme.Secondary, Theme.SecondaryHover);
+        bonusGuide.Click += (_, _) =>
+        {
+            try
+            {
+                // Which bonus comes on which items with which values, learned from every scan (built from the old ones the first time).
+                var book = BonusBook.Shared;
+                Directory.CreateDirectory(BotEngine.MarketFolder);
+                string page = Path.Combine(BotEngine.MarketFolder, "efsun-rehberi.html");
+                File.WriteAllText(page, book.Html(), new System.Text.UTF8Encoding(false));
+                OpenFile(page);
+                WriteLog($"📚 Efsun rehberi: pazarda görülen {book.Listings:N0} efsunlu ilandan hangi efsunun hangi eşyalarda, hangi değerlerle geldiği.");
+            }
+            catch (IOException ex) { WriteLog("Efsun rehberi yazılamadı: " + ex.Message); }
+        };
         _marketState = Theme.Label(market, "Pazar haritasında liste kendiliğinden güncellenir: açtığın dükkanlar eklenir, kapananlar çıkarılır.",
-            new Rectangle(426, 0, 492, 32), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.MiddleLeft);
+            new Rectangle(582, 0, 336, 32), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.MiddleLeft);
 
         // Left: search the list, pick, walk there.
         Theme.Label(market, "PAZARDA ARA", new Rectangle(0, 40, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
