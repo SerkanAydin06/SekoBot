@@ -48,6 +48,11 @@ internal sealed partial class Brain
     internal const double PullSafeHp = 0.70;
     /// <summary>Never fewer than this.</summary>
     internal const int PullMinMobs = 3;
+    /// <summary>A map this character hasn't learned yet starts with this many (safe for a weak
+    /// character; a strong one is up to its best within a few easy fights).</summary>
+    internal const int PullStartMobs = 6;
+    /// <summary>A fight that kept HP above this: two more next time.</summary>
+    internal const double PullVerySafeHp = 0.85;
 
     /// <summary>How many to gather now (0: not set yet → PullMaxMobs).</summary>
     private int _pullCap;
@@ -83,7 +88,7 @@ internal sealed partial class Brain
         if (state.MapName.Length > 0 && state.MapName != _pullMap)
         {
             _pullMap = state.MapName;
-            _pullCap = p.PullLearned.GetValueOrDefault(state.MapName);
+            _pullCap = p.PullLearned.TryGetValue(state.MapName, out int learned) ? learned : Math.Min(PullStartMobs, p.PullMaxMobs);
         }
         int attackers = state.Targets.Count(t => t.AttacksMe);
         if (attackers > 0)
@@ -104,7 +109,7 @@ internal sealed partial class Brain
             }
             else if (_fightLowHp > PullSafeHp && cap < p.PullMaxMobs && _fightMostAttackers >= cap - 1)
             {
-                _pullCap = cap + 1;
+                _pullCap = Math.Min(p.PullMaxMobs, cap + (_fightLowHp > PullVerySafeHp ? 2 : 1));
                 KeepPullCap(p);
                 actions.Add(new NoteAction($"Dövüş rahat geçti (can en az %{_fightLowHp * 100:0}); artık en fazla {_pullCap} mob toplanacak."));
             }

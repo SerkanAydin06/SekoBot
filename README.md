@@ -193,9 +193,9 @@ Kurulum: Telegram'da @BotFather'a `/newbot` yaz, verdiği anahtarı **Bot anahta
 
 ## Her karakterin kendi ayarları
 
-Ayarlar karaktere aittir, SekoBot penceresine değil. Bot oyundaki karakteri görünce onun ayarlarını `karakterler\<ad>.json` dosyasından yükler ve sekmelere koyar: toplanacak mob sayısı, iksir ve kaçma sınırları, beceriler, hedef mobları, toplanacak eşyalar, eşya listeleri, farm alanı. Böylece bir karakter 1. SekoBot'ta da 2. SekoBot'ta da aynı ayarlarla oynar. İlk kez görülen karakterin ayarları o botun ayarlarından başlatılır; sonra yapılan her değişiklik o karaktere kaydedilir. Tuşlar, Telegram, molalar ve pencere ayarları SekoBot'a aittir.
+Ayarlar karaktere aittir, SekoBot penceresine değil. Bot oyundaki karakteri görünce onun ayarlarını `karakterler\<ad>.json` dosyasından yükler ve sekmelere koyar: toplanacak mob sayısı, iksir ve kaçma sınırları, beceriler, hedef mobları, toplanacak eşyalar, eşya listeleri, farm alanı. Böylece bir karakter 1. SekoBot'ta da 2. SekoBot'ta da aynı ayarlarla oynar. İlk kez görülen karakter başka bir karakterin ayarlarını almaz: dövüş, hedef ve alan ayarları varsayılandan başlar; yalnız toplanacak eşya seçimlerin (yang, iksir, eşya listeleri) korunur. Sonra yapılan her değişiklik o karaktere kaydedilir. Tuşlar, Telegram, molalar ve pencere ayarları SekoBot'a aittir.
 
-Bot her haritada bu karakterin bir seferde kaç mobu kaldırabildiğini öğrenir (can %40'ın altına düşerse 2 az, rahat geçerse 1 fazla) ve bunu karakterle birlikte saklar. Bir sonraki açılışta o haritada öğrendiği sayıyla başlar, her seferinde tehlikeye girip yeniden öğrenmez.
+Bot her haritada bu karakterin bir seferde kaç mobu kaldırabildiğini öğrenir: öğrenmediği haritada güvenli 6 mobla başlar, can %40'ın altına düşerse 2 az, can %70'in üstünde kalırsa 1, %85'in üstünde kalırsa 2 fazla toplar (en çok "Toplanacak en fazla mob", varsayılan 15). Güçlü bir karakter birkaç dövüşte en verimli sayısına çıkar, zayıf olan zorlanmadan kalır ve bunu karakterle birlikte saklar. Bir sonraki açılışta o haritada öğrendiği sayıyla başlar, her seferinde tehlikeye girip yeniden öğrenmez.
 
 ## Grupları topla
 

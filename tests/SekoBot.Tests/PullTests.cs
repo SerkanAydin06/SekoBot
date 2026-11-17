@@ -247,8 +247,8 @@ public class PullSizeTests
         Assert.Equal(7, brain.PullCap(p));
         Assert.Contains(notes, n => n.Contains("en fazla 7 mob"));
 
-        Run(3500, 5000, 7, 0.9);        // 7 on us, HP stayed high
-        Run(5000, 5500, 0, 0.9);
+        Run(3500, 5000, 7, 0.8);        // 7 on us, HP stayed high
+        Run(5000, 5500, 0, 0.8);
         Assert.Equal(8, brain.PullCap(p));
         Run(5500, 6000, 2, 0.2);        // a small fight going badly doesn't count (fewer than 3)
         Run(6000, 6500, 0, 0.5);

@@ -90,7 +90,7 @@ internal sealed class BotProfile
     /// fight them all together.</summary>
     public bool PullGroups { get; set; } = true;
     /// <summary>Stop gathering once this many mobs are after us.</summary>
-    public int PullMaxMobs { get; set; } = 12;
+    public int PullMaxMobs { get; set; } = 15;
     /// <summary>After the first group, only groups within this many metres of it are gathered
     /// (so the bot gathers one area instead of being led further and further away).</summary>
     public double PullAreaMetres { get; set; } = 8;
@@ -408,6 +408,29 @@ internal static class CharacterSettings
     }
 
     public static bool Exists(string character) => File.Exists(PathOf(character));
+
+    /// <summary>What a newly seen character keeps from the SekoBot it was opened in: the player's
+    /// own choices about what to pick up. How it fights, hunts and where starts fresh: it learns
+    /// its own (how many mobs it can take on each map) instead of playing like another character.</summary>
+    internal static readonly string[] Kept =
+    [
+        nameof(BotProfile.PickUpDrops), nameof(BotProfile.LootYang), nameof(BotProfile.LootPotions),
+        nameof(BotProfile.LootEquipment), nameof(BotProfile.LootOther), nameof(BotProfile.LootEquipmentMinGold),
+        nameof(BotProfile.LootBonuses), nameof(BotProfile.LootAlways), nameof(BotProfile.LootPick),
+        nameof(BotProfile.LootSkip), nameof(BotProfile.LootThrow), nameof(BotProfile.EventLoot), nameof(BotProfile.AutoSkills),
+    ];
+
+    /// <summary>A new character: everything but <see cref="Kept"/> back to the defaults.</summary>
+    internal static void Fresh(BotProfile profile)
+    {
+        var defaults = new BotProfile();
+        foreach (string name in Names.Except(Kept))
+            if (typeof(BotProfile).GetProperty(name) is { } property)
+                property.SetValue(profile, JsonSerializer.Deserialize(
+                    JsonSerializer.Serialize(property.GetValue(defaults), property.PropertyType, ProfileStore.JsonOptions),
+                    property.PropertyType, ProfileStore.JsonOptions));
+        ProfileStore.Normalize(profile);
+    }
 
     /// <summary>The character's part of the profile, as JSON.</summary>
     internal static string ToJson(BotProfile profile)

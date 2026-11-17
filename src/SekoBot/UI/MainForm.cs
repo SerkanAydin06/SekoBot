@@ -1328,17 +1328,20 @@ internal sealed class MainForm : Form
         if (name.Length == 0 || name == ProfileStore.Character)
             return;
         bool known = CharacterSettings.Load(name, _profile);
+        if (!known)
+            CharacterSettings.Fresh(_profile);
         ProfileStore.Character = name;
         SaveProfile();
+        ReloadSettings();
         if (known)
         {
-            ReloadSettings();
             WriteLog($"👤 {name}: bu karakterin kendi ayarları yüklendi (toplanacak mob {_profile.PullMaxMobs}, HP iksiri %{_profile.PotionHpBelow * 100:0}" +
                      (_profile.PullLearned.Count > 0 ? ", öğrenilen: " + string.Join(", ", _profile.PullLearned.Select(l => $"{l.Key} haritasında en fazla {l.Value} mob")) : "") + ").");
         }
         else
-            WriteLog($"👤 {name}: ilk kez görüldü; ayarları bu botun ayarlarından başlatıldı. Bundan sonra yapılan değişiklikler bu karaktere ait " +
-                     "(hangi SekoBot'ta açılırsa açılsın aynı ayarlarla oynar).");
+            WriteLog($"👤 {name}: ilk kez görüldü; dövüş ayarları baştan (her haritada {Brain.PullStartMobs} mobla başlar, rahat geçen " +
+                     "dövüşlerle kendi kaldırabileceği kadar artar, zorlananlarla azalır; öğrendiği karakterle saklanır). " +
+                     "Toplanacak eşya seçimlerin korundu. Bundan sonra yapılan değişiklikler bu karaktere ait.");
     }
 
     private void UpdateStats()
