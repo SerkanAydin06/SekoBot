@@ -1,3 +1,4 @@
+using SekoBot.Bot;
 using System.Collections.Concurrent;
 using System.Text.Json;
 
@@ -66,13 +67,20 @@ internal static class ItemBook
     {
         if (!_dirty || FilePath == null)
             return;
-        try
+        // Shared with the other SekoBots: ours added to the file, theirs taken (the items are the same in every game).
+        var ours = Items.Values.ToList();
+        var all = SharedFile.Update<List<ItemInfo>>(FilePath, list =>
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(Items.Values.OrderBy(i => i.Vnum).ToList(),
-                new JsonSerializerOptions { WriteIndented = true }));
-            _dirty = false;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            var byVnum = list.ToDictionary(i => i.Vnum);
+            foreach (var info in ours)
+                byVnum[info.Vnum] = info;
+            list.Clear();
+            list.AddRange(byVnum.Values.OrderBy(i => i.Vnum));
+        });
+        if (all == null)
+            return;
+        foreach (var info in all)
+            Items.TryAdd(info.Vnum, info);
+        _dirty = false;
     }
 }

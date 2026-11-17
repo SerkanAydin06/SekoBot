@@ -29,6 +29,20 @@ internal sealed partial class Brain
     internal const int SkillGapStepMs = 500, SkillGapLearnedMaxMs = 2500, SkillCutOffWithinMs = 1000;
 
     private static TimeSpan SkillGap(BotProfile p) => Ms(p.SkillGapMs + Math.Clamp(p.SkillGapLearnedMs, 0, SkillGapLearnedMaxMs));
+
+    /// <summary>What every bot learned about each skill (shared by all SekoBots and characters).</summary>
+    internal SkillLore Lore { get; set; } = new();
+    /// <summary>The skill pressed last (by name) and, for each key, the one pressed before it.</summary>
+    private string _lastSkillName = "";
+    private readonly Dictionary<Keys, string> _skillBeforeName = [];
+
+    /// <summary>The wait after the skill pressed last: the usual gap, longer when its casting is known to take longer.</summary>
+    private TimeSpan GapAfterLast(BotProfile p) => Max(SkillGap(p), Ms(Lore.CastMs(_lastSkillName)));
+
+    private static TimeSpan Max(TimeSpan a, TimeSpan b) => a > b ? a : b;
+
+    private static string SkillName(GameState state, Keys key) => state.Skills.FirstOrDefault(s => s.Key == key)?.Name ?? "";
+
     private Keys _lastSkillKey;
     private int _lastSkillSlot = -1;
     /// <summary>Learnt from the game's "WAIT!": how much longer each skill key needs than thought.</summary>
@@ -59,6 +73,8 @@ internal sealed partial class Brain
         _skillMisses.Clear();
         _skillMissTold.Clear();
         _skillBefore.Clear();
+        _skillBeforeName.Clear();
+        _lastSkillName = "";
         _learnBuffs = true;
         _lastAnySkill = Never;
         _lastSkillSlot = -1;
@@ -74,6 +90,9 @@ internal sealed partial class Brain
         var extra = _skillExtra.GetValueOrDefault(_lastSkillKey) + Ms(SkillExtraStepMs);
         if (extra > Ms(SkillExtraMaxMs))
             extra = Ms(SkillExtraMaxMs);
+        // Kept for that skill, for every character and SekoBot.
+        if (_lastSkillName.Length > 0)
+            extra = Max(extra, Ms(Lore.TooSoon(_lastSkillName)));
         if (!_skillExtra.ContainsKey(_lastSkillKey))
             actions.Add(new NoteAction($"Oyun \"WAIT!\" dedi: {_lastSkillKey} becerisi hazır olmadan basılmış; artık biraz daha seyrek basılacak."));
         _skillExtra[_lastSkillKey] = extra;
@@ -88,7 +107,7 @@ internal sealed partial class Brain
         var now = state.Time;
         if (p.AutoSkills)
             WatchSkillSlots(state, actions);
-        if (now - _lastAnySkill < SkillGap(p))
+        if (now - _lastAnySkill < GapAfterLast(p))
             return false;
         if (p.AutoSkills && state.Skills.Count > 0)
         {
@@ -176,13 +195,24 @@ internal sealed partial class Brain
                     // Pressed right after another skill: that one's casting cut it off. This
                     // character needs a longer gap between skills.
                     var p = _profile();
+                    string beforeName = _skillBeforeName.GetValueOrDefault(skill.Key, "");
                     if (_skillBefore.TryGetValue(skill.Key, out var before) && before != Never &&
-                        pressed - before <= SkillGap(p) + Ms(SkillCutOffWithinMs) && p.SkillGapLearnedMs < SkillGapLearnedMaxMs)
+                        pressed - before <= Max(SkillGap(p), Ms(Lore.CastMs(beforeName))) + Ms(SkillCutOffWithinMs) &&
+                        Lore.CastMs(beforeName) < SkillLore.CastMaxMs)
                     {
-                        p.SkillGapLearnedMs = Math.Min(SkillGapLearnedMaxMs, p.SkillGapLearnedMs + SkillGapStepMs);
-                        ProfileChanged = true;
+                        // The skill before is still being cast: that skill takes longer (for everyone using it).
+                        int cast = beforeName.Length > 0
+                            ? Lore.CutOffAfter(beforeName, (int)(pressed - before).TotalMilliseconds)
+                            : 0;
+                        if (beforeName.Length == 0)
+                        {
+                            p.SkillGapLearnedMs = Math.Min(SkillGapLearnedMaxMs, p.SkillGapLearnedMs + SkillGapStepMs);
+                            ProfileChanged = true;
+                        }
                         actions.Add(new NoteAction($"{KeyName(skill.Key)} {skill.Name} bir önceki becerinin hemen ardından basılınca tutmadı; " +
-                            $"bu karakterde beceriler arası {(p.SkillGapMs + p.SkillGapLearnedMs) / 1000.0:0.#} sn beklenecek."));
+                            (beforeName.Length > 0
+                                ? $"{beforeName} sonrası {cast / 1000.0:0.#} sn beklenecek (bütün karakterler ve botlar için öğrenildi)."
+                                : $"bu karakterde beceriler arası {(p.SkillGapMs + p.SkillGapLearnedMs) / 1000.0:0.#} sn beklenecek.")));
                     }
                     else if (_skillMissTold.Add(skill.Key))
                         actions.Add(new NoteAction($"{KeyName(skill.Key)} {skill.Name} basıldı ama oyunda kullanılmadı (yarıda kesildi ya da o an olmuyordu); birazdan yeniden denenecek."));
@@ -219,7 +249,7 @@ internal sealed partial class Brain
     private bool SkillReady(SkillSlot skill, TimeSpan now)
     {
         bool cast = _skillUsed.TryGetValue(skill.Key, out var used);
-        var extra = _skillExtra.GetValueOrDefault(skill.Key);
+        var extra = Max(_skillExtra.GetValueOrDefault(skill.Key), Ms(Lore.ExtraMs(skill.Name)));
         if (_skillRetryAt.TryGetValue(skill.Key, out var retry) && now < retry)
             return false;
         if (skill.Wait is double left)
@@ -309,7 +339,9 @@ internal sealed partial class Brain
         }
         actions.Add(new KeyTapAction(key));
         _skillBefore[key] = _lastAnySkill;
+        _skillBeforeName[key] = _lastSkillName;
         _lastAnySkill = now;
         _lastSkillKey = key;
+        _lastSkillName = SkillName(state, key);
     }
 }

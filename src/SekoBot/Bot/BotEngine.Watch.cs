@@ -75,9 +75,10 @@ internal sealed partial class BotEngine
             {
                 _noGo.Save();
                 _obstacles.Save();
+                _brain.Lore.Save();
                 _obstaclesSavedAt = now;
             }
-            if (_respawnDirty && now - _respawnSavedAt > TimeSpan.FromSeconds(60))
+            if (now - _respawnSavedAt > TimeSpan.FromSeconds(30))
             {
                 _respawn.Save();
                 _respawnDirty = false;

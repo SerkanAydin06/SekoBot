@@ -35,6 +35,8 @@ internal sealed class DropJournal
     public Dictionary<string, Dictionary<int, MobDrops>> Maps { get; private set; } = [];
 
     public bool Changed { get; set; }
+    /// <summary>What was seen since the last share (replayed onto the file every SekoBot fills).</summary>
+    private readonly List<Action<Dictionary<string, Dictionary<int, MobDrops>>>> _news = [];
 
     public MobDrops? For(string map, int mob) =>
         Maps.TryGetValue(map, out var mobs) && mobs.TryGetValue(mob, out var drops) ? drops : null;
@@ -56,7 +58,9 @@ internal sealed class DropJournal
             if (vnum > 0 && at.DistanceXY(me) <= DeathRange)
             {
                 _deaths.Add(new Death(vnum, at, now));
-                Entry(world.MapName, vnum).Kills++;
+                string map = world.MapName;
+                Entry(Maps, map, vnum).Kills++;
+                _news.Add(d => Entry(d, map, vnum).Kills++);
                 Changed = true;
             }
         }
@@ -70,11 +74,18 @@ internal sealed class DropJournal
                 .MinBy(d => d.At.DistanceXY(drop.Position));
             if (death == null)
                 continue;
-            var entry = Entry(world.MapName, death.Vnum);
-            if (drop.Vnum == 1)
-                entry.Yang += drop.Count;
-            else
-                entry.Items[drop.Vnum] = entry.Items.GetValueOrDefault(drop.Vnum) + 1;
+            string at = world.MapName;
+            int mob = death.Vnum, item = drop.Vnum, count = drop.Count;
+            void Add(Dictionary<string, Dictionary<int, MobDrops>> maps)
+            {
+                var entry = Entry(maps, at, mob);
+                if (item == 1)
+                    entry.Yang += count;
+                else
+                    entry.Items[item] = entry.Items.GetValueOrDefault(item) + 1;
+            }
+            Add(Maps);
+            _news.Add(Add);
             Changed = true;
         }
         // Items already lying around when the bot started aren't anyone's drops.
@@ -83,10 +94,10 @@ internal sealed class DropJournal
             _seenDrops.Clear();
     }
 
-    private MobDrops Entry(string map, int mob)
+    private static MobDrops Entry(Dictionary<string, Dictionary<int, MobDrops>> maps, string map, int mob)
     {
-        if (!Maps.TryGetValue(map, out var mobs))
-            Maps[map] = mobs = [];
+        if (!maps.TryGetValue(map, out var mobs))
+            maps[map] = mobs = [];
         if (!mobs.TryGetValue(mob, out var drops))
             mobs[mob] = drops = new MobDrops();
         return drops;
@@ -111,14 +122,18 @@ internal sealed class DropJournal
         return journal;
     }
 
+    /// <summary>Shares with the other SekoBots: what we saw drop goes into the file, theirs comes back.</summary>
     public void Save(string path)
     {
-        try
+        var news = _news.ToList();
+        _news.Clear();
+        var all = SharedFile.Update<Dictionary<string, Dictionary<int, MobDrops>>>(path, d => news.ForEach(n => n(d)));
+        if (all == null)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, JsonSerializer.Serialize(Maps, new JsonSerializerOptions { WriteIndented = true }));
-            Changed = false;
+            _news.InsertRange(0, news);
+            return;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        Maps = all;
+        Changed = false;
     }
 }

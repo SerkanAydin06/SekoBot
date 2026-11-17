@@ -207,6 +207,16 @@ Alan sekmesindeki "Güçlü moblara gitme" (varsayılan açık, karaktere ait) i
 - **Harita uygun değilse söyler:** Haritada gördüğü moblardan hiçbiri karaktere uymuyorsa ("Sv 9 için c2'deki moblar Sv 18–21") seni günlükte ve Telegram'da uyarır; bot haritayı kendisi değiştirmez, buradakilerle devam eder.
 - Hedef sekmesinde en yüksek mob seviyesini elle yazarsan bot onu kullanır.
 
+## Ortak hafıza (bütün botlar ve karakterler)
+
+Aynı bilgisayarda açık bütün SekoBot'lar öğrendiklerini ortak dosyalarda toplar ve her 30 saniyede birbirleriyle paylaşır. Her bot kendi yeni öğrendiğini dosyaya ekler, diğerlerinin öğrendiklerini alır; kimse kimsenin öğrendiğini silmez:
+- **Engeller** (`engeller.json`): takılınan ağaç, kaya, duvar. Bir bot c2'de bir ağaca takılırsa c2'deki diğer botlar da oradan dolanır.
+- **Ulaşılamayan yerler** (`ulasilamaz.json`): göl, uçurum, dik bayır.
+- **Beceri bilgisi** (`beceri-bilgisi.json`, becerinin adıyla): bir becerinin kullanılması ne kadar sürüyor (hemen ardından basılan beceri yarıda kesildiyse), oyun "WAIT!" dediyse ne kadar geç basılmalı. Örneğin 4. botta bir ninja açıp onun becerilerini öğrenirsen, 1. botta açtığın başka bir ninja da bunları bilir. Becerinin bekleme süresi, etki süresi ve MP'si zaten oyundan okunur.
+- **Mobların yeniden doğma süreleri** (`dogma-sureleri.json`), **hangi mobdan ne düştüğü** (`dusme-kaydi.json`) ve **eşya bilgileri** (`esya-bilgisi.json`).
+
+Karaktere özgü olanlar (kaç mob kaldırabildiği, hangi mobların ona fazla güçlü olduğu, ayarlar) karakterin kendi dosyasında kalır, çünkü bunlar karakterin gücüne bağlıdır.
+
 ## Ulaşılamayan yerler (göl, uçurum, bayır)
 
 Bot bir moba ya da gruba ulaşamayıp vazgeçtiğinde (gölün içi, uçurumun altı ya da üstü, dik bayır) o yeri haritayla birlikte hatırlar (`ulasilamaz.json`). O yerin 5 m çevresindeki moblara gitmez ve "mobların çok olduğu yer" hesabına onları katmaz. Bir kez vazgeçilen yer 10 dakika, iki kez vazgeçilen yer kalıcı olarak bırakılır. Oradaki moblar bota saldırırsa yine kesilir. Karakter bir gün o yere kendisi yürüyüp durursa (demek ki ulaşılabiliyormuş) yer unutulur. Bütün SekoBot'lar aynı dosyayı kullanır; birinin öğrendiğini diğerleri de bilir.
