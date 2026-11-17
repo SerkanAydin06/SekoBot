@@ -97,6 +97,30 @@ internal sealed partial class Brain
         _timed.Clear();
     }
 
+    /// <summary>How the camera looked once it was set (angle, distance to the character); null until known.</summary>
+    private (double Pitch, double Distance)? _cameraSet;
+    /// <summary>The camera counts as moved beyond this much (degrees, share of the distance).</summary>
+    internal const double CameraPitchTolerance = 8, CameraDistanceTolerance = 0.15;
+
+    /// <summary>A moment after the camera keys were let go: how it looks now is how it should look.</summary>
+    private void NoteCamera(GameState state, TimeSpan now)
+    {
+        if (_cameraSet != null || _timed.Count > 0 || now - _lastCameraSetup < Ms(4000) ||
+            state.Camera is not CameraView camera || state.Position is not Vec3 me)
+            return;
+        _cameraSet = (camera.Pitch, camera.Location.DistanceXY(me) + Math.Abs(camera.Location.Z - me.Z));
+    }
+
+    /// <summary>The camera isn't as it was set any more (turned, tilted, zoomed in). Not known: yes, set it.</summary>
+    private bool CameraMoved(GameState state)
+    {
+        if (_cameraSet is not { } set || state.Camera is not CameraView camera || state.Position is not Vec3 me)
+            return true;
+        double distance = camera.Location.DistanceXY(me) + Math.Abs(camera.Location.Z - me.Z);
+        return Math.Abs(camera.Pitch - set.Pitch) > CameraPitchTolerance ||
+               set.Distance > 0 && Math.Abs(distance - set.Distance) / set.Distance > CameraDistanceTolerance;
+    }
+
     /// <summary>Look straight down (G), then zoom out (F) — while the bot keeps walking and fighting.</summary>
     private void ScheduleCamera(BotProfile p, TimeSpan now)
     {
@@ -104,6 +128,7 @@ internal sealed partial class Brain
         PressFor(p.Keys.CameraTop, now, p.CameraSetupHoldMs);
         PressFor(p.Keys.ZoomOut, now + Ms(p.CameraSetupHoldMs), p.CameraSetupHoldMs);
         _lastCameraSetup = now;
+        _cameraSet = null; // noted again once it is set
     }
 
     private bool _lootOnly;
@@ -250,8 +275,14 @@ internal sealed partial class Brain
         }
         else if (p.CameraRefreshMs > 0 && now - _lastCameraSetup >= Ms(p.CameraRefreshMs))
         {
-            ScheduleCamera(p, now); // the camera can drift (a stray key, a cutscene)
+            // The camera can drift (a stray key, a cutscene): set again only when it really did (read
+            // from memory), not every half minute (the keys ended up in the message box: "ggggg").
+            if (CameraMoved(state))
+                ScheduleCamera(p, now);
+            else
+                _lastCameraSetup = now;
         }
+        NoteCamera(state, now);
         RunTimedKeys(now, actions, refresh);
         // Z every few seconds picks up anything around (also what the loot choices leave out), so
         // only when the bot doesn't walk to the items itself: then Z is pressed on the item.

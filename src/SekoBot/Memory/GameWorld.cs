@@ -743,6 +743,9 @@ internal sealed partial class GameWorldReader : IDisposable
     private DateTime _skillsReadAt = DateTime.MinValue;
     private DateTime _windowsReadAt = DateTime.MinValue;
 
+    /// <summary>The message window's name in the open windows: someone may be typing in it.</summary>
+    public const string MessageWindow = "dmBox";
+
     /// <summary>
     /// The game's own windows (the "_C" widgets held by the main UI, e.g. "EscMenu", "inventory",
     /// "settings") that are showing. Unreal's ESlateVisibility: 1 Collapsed and 2 Hidden are not showing.
@@ -766,6 +769,12 @@ internal sealed partial class GameWorldReader : IDisposable
             if (Byte(widget + Offset(cls, "Widget", "Visibility")) is byte visibility and not (1 or 2))
                 open.Add(name);
         }
+        // The message (DM) window: its own IsOpen flag (it isn't hidden like the others).
+        long dmBox = Pointer(ui + Offset(uiClass, "UI_C", "dmBox"));
+        long dmClass = Pointer(dmBox + ObjClass);
+        if (MemoryReads.IsPointer(dmBox) && ClassName(dmClass) == "dmBox_C" &&
+            Byte(dmBox + Offset(dmClass, "dmBox_C", "IsOpen")) is byte dmOpen && dmOpen != 0)
+            open.Add(MessageWindow);
         // Windows put on the screen later (seen in the game: the advert after a level-up is a
         // "popup_C" in UI_C.canvasAdds); named by their class.
         long adds = ui + Offset(uiClass, "UI_C", "canvasAdds");

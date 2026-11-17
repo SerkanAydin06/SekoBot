@@ -98,7 +98,8 @@ internal sealed partial class BotEngine
     private bool PopupOpen(WorldSnapshot? world)
     {
         var givenUp = new List<string>();
-        var open = _popups.Update(world?.OpenWindows ?? [], _clock.Elapsed, givenUp);
+        // The message window isn't closed with Esc: someone may be writing in it (see GameState.Typing).
+        var open = _popups.Update((world?.OpenWindows ?? []).Where(w => w != GameWorldReader.MessageWindow).ToList(), _clock.Elapsed, givenUp);
         foreach (string window in givenUp)
             _log($"'{window}' penceresi Esc ile kapanmıyor; yok sayıldı, bot devam ediyor.");
         string seen = string.Join(", ", open);
