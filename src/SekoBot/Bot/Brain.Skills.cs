@@ -20,6 +20,15 @@ internal sealed partial class Brain
     private readonly TimeSpan[] _lastSkill = new TimeSpan[BotProfile.SkillSlots];
     private readonly Dictionary<Keys, TimeSpan> _skillUsed = [];
     private TimeSpan _lastAnySkill = Never;
+    /// <summary>For each key: when the skill pressed before it was pressed (to tell a press cut
+    /// off by the one before from one that failed for another reason).</summary>
+    private readonly Dictionary<Keys, TimeSpan> _skillBefore = [];
+
+    /// <summary>A missed press this soon after the one before: the gap between skills grows by
+    /// SkillGapStepMs (up to SkillGapLearnedMaxMs), learned for the character.</summary>
+    internal const int SkillGapStepMs = 500, SkillGapLearnedMaxMs = 2500, SkillCutOffWithinMs = 1000;
+
+    private static TimeSpan SkillGap(BotProfile p) => Ms(p.SkillGapMs + Math.Clamp(p.SkillGapLearnedMs, 0, SkillGapLearnedMaxMs));
     private Keys _lastSkillKey;
     private int _lastSkillSlot = -1;
     /// <summary>Learnt from the game's "WAIT!": how much longer each skill key needs than thought.</summary>
@@ -49,6 +58,7 @@ internal sealed partial class Brain
         _skillRetryAt.Clear();
         _skillMisses.Clear();
         _skillMissTold.Clear();
+        _skillBefore.Clear();
         _learnBuffs = true;
         _lastAnySkill = Never;
         _lastSkillSlot = -1;
@@ -78,7 +88,7 @@ internal sealed partial class Brain
         var now = state.Time;
         if (p.AutoSkills)
             WatchSkillSlots(state, actions);
-        if (now - _lastAnySkill < Ms(p.SkillGapMs))
+        if (now - _lastAnySkill < SkillGap(p))
             return false;
         if (p.AutoSkills && state.Skills.Count > 0)
         {
@@ -163,7 +173,18 @@ internal sealed partial class Brain
                     int misses = _skillMisses.GetValueOrDefault(skill.Key) + 1;
                     _skillMisses[skill.Key] = misses;
                     _skillRetryAt[skill.Key] = now + Ms(Math.Min(misses * 2000, 10000));
-                    if (_skillMissTold.Add(skill.Key))
+                    // Pressed right after another skill: that one's casting cut it off. This
+                    // character needs a longer gap between skills.
+                    var p = _profile();
+                    if (_skillBefore.TryGetValue(skill.Key, out var before) && before != Never &&
+                        pressed - before <= SkillGap(p) + Ms(SkillCutOffWithinMs) && p.SkillGapLearnedMs < SkillGapLearnedMaxMs)
+                    {
+                        p.SkillGapLearnedMs = Math.Min(SkillGapLearnedMaxMs, p.SkillGapLearnedMs + SkillGapStepMs);
+                        ProfileChanged = true;
+                        actions.Add(new NoteAction($"{KeyName(skill.Key)} {skill.Name} bir önceki becerinin hemen ardından basılınca tutmadı; " +
+                            $"bu karakterde beceriler arası {(p.SkillGapMs + p.SkillGapLearnedMs) / 1000.0:0.#} sn beklenecek."));
+                    }
+                    else if (_skillMissTold.Add(skill.Key))
                         actions.Add(new NoteAction($"{KeyName(skill.Key)} {skill.Name} basıldı ama oyunda kullanılmadı (yarıda kesildi ya da o an olmuyordu); birazdan yeniden denenecek."));
                 }
             }
@@ -287,6 +308,7 @@ internal sealed partial class Brain
             _pauseUntil = now + Ms(p.SkillCastMs); // stand still while casting
         }
         actions.Add(new KeyTapAction(key));
+        _skillBefore[key] = _lastAnySkill;
         _lastAnySkill = now;
         _lastSkillKey = key;
     }

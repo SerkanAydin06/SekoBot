@@ -90,6 +90,42 @@ public class SkillClockTests
     }
 
     [Fact]
+    public void A_skill_cut_off_by_the_casting_before_it_means_a_longer_gap_for_this_character()
+    {
+        var p = new BotProfile { LeashMeters = 0 };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        // The game: a buff pressed less than 2.5 s after the other one is cut off (long casting).
+        double zirhAt = double.NegativeInfinity, keskinAt = double.NegativeInfinity, lastPress = double.NegativeInfinity;
+        int cutOff = 0;
+        var notes = new List<string>();
+        for (double t = 0; t < 30_000; t += 100)
+        {
+            double Wait(double at, int cd) => Math.Max(0, cd - (t - at) / 1000);
+            SkillSlot[] skills =
+            [
+                new(Keys.F1, "Büyülü zırh", SkillKind.Buff, 78, 40, 72, Wait: Wait(zirhAt, 40)),
+                new(Keys.F2, "Büyülü keskinlik", SkillKind.Buff, 44, 20, 120, Wait: Wait(keskinAt, 20)),
+            ];
+            var actions = brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), W, H, 1, 1, 0, 1) { Skills = skills, MpPoints = 1000, Walking = true });
+            notes.AddRange(actions.OfType<NoteAction>().Select(n => n.Text));
+            foreach (var key in actions.OfType<KeyTapAction>().Select(k => k.Key))
+            {
+                if (key is not (Keys.F1 or Keys.F2))
+                    continue;
+                bool cut = t - lastPress < 2500;
+                lastPress = t;
+                if (cut) { cutOff++; continue; }
+                if (key == Keys.F1) zirhAt = t; else keskinAt = t;
+            }
+        }
+        Assert.True(keskinAt > 0 && zirhAt >= 0);         // both on in the end
+        Assert.True(p.SkillGapLearnedMs >= Brain.SkillGapStepMs);   // learned: 1.5 s wasn't enough
+        Assert.Contains(notes, n => n.Contains("beceriler arası"));
+        Assert.True(cutOff <= 3);
+    }
+
+    [Fact]
     public void Quick_slot_waits_reach_the_skill_keys()
     {
         var world = new WorldSnapshot(new Vec3(0, 0, 0), null, [], 0, "c2",
