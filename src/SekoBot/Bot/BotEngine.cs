@@ -58,7 +58,7 @@ internal sealed partial class BotEngine : IDisposable
         _window = window;
         Profile = profile;
         _log = log;
-        _brain = new Brain(() => Profile) { JunkInBag = JunkInBag, Obstacles = _obstacles, Terrain = _terrain };
+        _brain = new Brain(() => Profile) { JunkInBag = JunkInBag, Obstacles = _obstacles, Terrain = _terrain, NoGo = _noGo };
         if (ItemBook.FilePath == null)
             ItemBook.Load(Path.Combine(ProfileStore.Directory, "esya-bilgisi.json"));
         _session.PotionsRanOut += kind =>
@@ -370,6 +370,8 @@ internal sealed partial class BotEngine : IDisposable
         _sessionItems.Save(force: true);
         if (_obstacles.Changed)
             _obstacles.Save();
+        if (_noGo.Changed)
+            _noGo.Save();
         lock (_journal)
             if (_journal.Changed)
                 _journal.Save(JournalPath);

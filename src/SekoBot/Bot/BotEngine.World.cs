@@ -125,7 +125,10 @@ internal sealed partial class BotEngine
             _hotspots.Clear(); // another map
             _hotspotMap = world.MapName;
         }
-        _hotspots.Observe(world.Player, world.Mobs.Where(m => Wanted(m, profile, world.Level, fit: !_fitRelaxed)), now);
+        // Mobs in a lake or on a cliff the character couldn't get to don't make a place "where the mobs are".
+        var noGoNow = DateTime.Now;
+        _hotspots.Observe(world.Player, world.Mobs.Where(m => Wanted(m, profile, world.Level, fit: !_fitRelaxed) &&
+                                                            !_noGo.Blocked(world.MapName, m.Position, noGoNow)), now);
         return BotRunning ? _hotspots.Best(world.Player, now, _botHome, profile.LeashMeters * 100) : null;
     }
 

@@ -32,6 +32,18 @@ internal sealed partial class Brain
 
     /// <summary>The obstacles of every map, kept between sessions (set by the engine; null in tests that don't need it).</summary>
     internal ObstacleMap? Obstacles { get; set; }
+    /// <summary>Places the character couldn't get to (a lake, a cliff): mobs there are left alone.</summary>
+    internal NoGoMap? NoGo { get; set; }
+
+    /// <summary>Gave up on a mob there: the place is remembered (see <see cref="NoGoMap"/>).</summary>
+    private void GaveUpAt(GameState state, Vec3? at)
+    {
+        if (NoGo != null && at is Vec3 v)
+            NoGo.GaveUp(state.MapName, v, DateTime.Now);
+    }
+
+    /// <summary>A mob at a place the character couldn't get to before (it can still come to us).</summary>
+    private bool AtNoGo(GameState state, TargetInfo t) => NoGo?.Blocked(state.MapName, t.Position, DateTime.Now) == true;
     private TimeSpan _walkedNotedAt = Never;
     /// <summary>Known obstacles this far around us are looked at (world units, 15 m).</summary>
     internal const double ObstacleLook = 1500;
@@ -55,6 +67,7 @@ internal sealed partial class Brain
             return;
         _walkedNotedAt = state.Time;
         Obstacles.Walked(state.MapName, me);
+        NoGo?.Walked(state.MapName, me);
     }
 
     /// <summary>
@@ -210,6 +223,7 @@ internal sealed partial class Brain
             at.DistanceXY(goal) < 50 && Math.Abs(at.Z - me.Z - MobHeightOffset) > SlopeHeight)
         {
             _unreachable[mob.Id] = state.Time + Ms(UnreachableForMs);
+            GaveUpAt(state, at);
             return;
         }
         // For good: the spot just in front of us, the way the keys push (else the way to the goal).
