@@ -67,7 +67,7 @@ internal sealed partial class Brain
             return;
         _walkedNotedAt = state.Time;
         Obstacles.Walked(state.MapName, me);
-        NoGo?.Walked(state.MapName, me);
+        NoGo?.Walked(state.MapName, me, DateTime.Now);
     }
 
     /// <summary>

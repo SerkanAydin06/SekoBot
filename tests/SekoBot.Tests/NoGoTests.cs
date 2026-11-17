@@ -23,7 +23,9 @@ public class NoGoTests
         Assert.False(map.Blocked("c3", lake, T0.AddMinutes(11)));                    // once: forgotten after 10 min
         map.GaveUp("c3", new Vec3(5100, 5000, 0), T0.AddMinutes(12));
         Assert.True(map.Blocked("c3", lake, T0.AddDays(3)));                          // twice: for good
-        map.Walked("c3", new Vec3(5050, 5000, 0));                                   // we stood there: reachable
+        map.Walked("c3", new Vec3(5050, 5000, 0), T0.AddMinutes(12.5));   // just given up: still kept
+        Assert.True(map.Blocked("c3", lake, T0.AddDays(3)));
+        map.Walked("c3", new Vec3(5050, 5000, 0), T0.AddDays(3));                                   // we stood there: reachable
         Assert.False(map.Blocked("c3", lake, T0.AddDays(3)));
     }
 
@@ -43,6 +45,11 @@ public class NoGoTests
             var loaded = NoGoMap.Load(path);
             Assert.True(loaded.Blocked("c3", new Vec3(1, 2, 0), T0.AddDays(1)));
             Assert.Equal(1, loaded.Count("c2"));
+            // A third one started before c3 was learned (its copy of c3 is empty): it doesn't wipe it.
+            var third = new NoGoMap(new() { ["c3"] = [] });
+            third.GaveUp("c5", new Vec3(5, 5, 0), T0);
+            third.Save(path);
+            Assert.True(NoGoMap.Load(path).Blocked("c3", new Vec3(1, 2, 0), T0.AddDays(1)));
         }
         finally { File.Delete(path); }
     }
