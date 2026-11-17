@@ -28,9 +28,13 @@ internal sealed class NoGoMap
     public static readonly TimeSpan Once = TimeSpan.FromMinutes(10);
     /// <summary>The character this close to a spot: it is reachable (3 m).</summary>
     public const double Reached = 300;
+    /// <summary>Standing near a place right when giving up on it (the mob was just out of reach) doesn't count.</summary>
+    public static readonly TimeSpan Settle = TimeSpan.FromMinutes(1);
 
     private readonly Dictionary<string, List<Spot>> _maps;
     private readonly object _gate = new();
+    /// <summary>Maps this SekoBot learned something new on (the others' are taken from the file when saving).</summary>
+    private readonly HashSet<string> _touched = [];
 
     public NoGoMap(Dictionary<string, List<Spot>>? maps = null) => _maps = maps ?? [];
 
@@ -53,6 +57,7 @@ internal sealed class NoGoMap
                 near.Hits++;
                 near.Last = now;
             }
+            _touched.Add(map);
             Changed = true;
         }
     }
@@ -71,15 +76,18 @@ internal sealed class NoGoMap
     }
 
     /// <summary>The character stands here: places right here were reachable after all.</summary>
-    public void Walked(string map, Vec3 me)
+    public void Walked(string map, Vec3 me, DateTime now)
     {
         if (map.Length == 0)
             return;
         lock (_gate)
         {
             if (_maps.TryGetValue(map, out var spots) &&
-                spots.RemoveAll(s => (s.X - me.X) * (s.X - me.X) + (s.Y - me.Y) * (s.Y - me.Y) <= Reached * Reached) > 0)
+                spots.RemoveAll(s => now - s.Last > Settle && (s.X - me.X) * (s.X - me.X) + (s.Y - me.Y) * (s.Y - me.Y) <= Reached * Reached) > 0)
+            {
+                _touched.Add(map);
                 Changed = true;
+            }
         }
     }
 
@@ -119,8 +127,10 @@ internal sealed class NoGoMap
             string json;
             lock (_gate)
             {
+                // Maps this one didn't change: as the file has them (another SekoBot may have learned there).
                 foreach (var (map, spots) in onDisk ?? [])
-                    _maps.TryAdd(map, spots);
+                    if (!_touched.Contains(map))
+                        _maps[map] = spots;
                 json = JsonSerializer.Serialize(_maps);
                 Changed = false;
             }
