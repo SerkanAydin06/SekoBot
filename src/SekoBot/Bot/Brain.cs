@@ -154,7 +154,9 @@ internal sealed partial class Brain
             LearnPullSize(state, p, actions);
 
         // HP low with several mobs on us: get away from them for a moment.
-        if (FleeTick(state, p, actions))
+        // Gathering behind someone: running away from them is what got the character killed (seen:
+        // IMEDUSA06 died twice fleeing alone); it runs to them instead (LootOnly).
+        if ((p.Attack || state.Follow == null) && FleeTick(state, p, actions))
             return actions;
 
         // Bag full with items to throw away: get to a quiet spot (the engine then throws them).

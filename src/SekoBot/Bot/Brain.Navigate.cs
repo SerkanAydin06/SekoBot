@@ -159,7 +159,7 @@ internal sealed partial class Brain
         if (special.Id != 0 && GoForDrop(state, p, actions, refresh, radius, special))
             return;
         // Their drops first, unless they have walked off: then after them (the items stay a while).
-        bool farBehind = FollowDistance(state) is double away && away > FollowFar;
+        bool farBehind = FollowDistance(state) is double away && (away > FollowFar || state.Targets.Any(t => t.AttacksMe) && away > FollowGuard);
         if (!farBehind && GoForDrop(state, p, actions, refresh, radius))
             return;
         if (FollowTick(state, p, actions, refresh))
@@ -175,6 +175,9 @@ internal sealed partial class Brain
     internal const double FollowStart = 500, FollowNear = 250;
     /// <summary>This far behind (15 m), catching up comes before the items.</summary>
     internal const double FollowFar = 1500;
+    /// <summary>Mobs on us: this close to the one followed (1.5 m).</summary>
+    internal const double FollowGuard = 150;
+    private bool _guardTold;
     private bool _following;
     private string? _followTold;
 
@@ -190,10 +193,19 @@ internal sealed partial class Brain
             return false;
         }
         double away = f.Position.DistanceXY(me);
-        if (away > FollowStart)
+        // Mobs on us: right next to the one followed, who kills them (we don't hit back).
+        bool hit = state.Targets.Any(t => t.AttacksMe);
+        if (away > (hit ? FollowGuard : FollowStart))
             _following = true;
-        else if (away < FollowNear)
+        else if (away < (hit ? FollowGuard * 0.6 : FollowNear))
             _following = false;
+        if (hit && _following && !_guardTold)
+        {
+            _guardTold = true;
+            actions.Add(new NoteAction($"Moblar saldırıyor; {f.Name}'ın yanına gidiliyor (o kessin)."));
+        }
+        else if (!hit)
+            _guardTold = false;
         if (!_following)
             return false;
         var (right, up) = camera.ToScreenDirection(f.Position.X - me.X, f.Position.Y - me.Y);

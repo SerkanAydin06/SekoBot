@@ -414,3 +414,25 @@ public class NotOursWaitTests
         Assert.Contains(taps, t => t >= 32_000);                     // then taken
     }
 }
+
+public class FollowGuardTests
+{
+    [Fact]
+    public void Attacked_while_gathering_it_runs_to_the_killer_not_away()
+    {
+        var p = new BotProfile { Attack = false, LeashMeters = 30, PickUpDrops = true };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        var camera = new CameraView(new Vec3(0, 0, 1000), -90, 0, 0, 90);
+        // The killer 3 m away (close enough without mobs); a mob on us, HP low.
+        TargetInfo[] mob = [new(5, new Point(1005, 540), 90, 130, 365, 600, 600, 50, false, AttacksMe: true) { Position = new Vec3(90, 0, 0) }];
+        var actions = new List<BotAction>();
+        for (double t = 0; t < 2000; t += 100)
+            actions.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 0.25, 1, 0, 1)
+            {
+                Walking = true, Position = new Vec3(0, 0, 0), Camera = camera, Follow = ("UNiCORN06", new Vec3(-300, 0, 0)), Targets = mob,
+            }));
+        Assert.Contains(actions.OfType<NoteAction>(), n => n.Text.Contains("yanına gidiliyor"));
+        Assert.DoesNotContain(actions, a => a is KeyDownAction d && d.Key == p.Keys.Attack);
+    }
+}
