@@ -141,6 +141,24 @@ public class PopupWatchTests
         // The chat history never counts; known windows always do.
         Assert.Empty(watch.Update(["chatHistoryWindow_C"], S(31)));
         Assert.Equal(["popup_C"], watch.Update(["popup_C"], S(60)));
-        Assert.Equal(["popup_C"], watch.Update(["popup_C"], S(90)));
+        Assert.Equal(["popup_C"], watch.Update(["popup_C"], S(70)));
+    }
+
+    [Fact]
+    public void Adverts_esc_does_not_close_are_let_be_but_a_new_one_is_closed_again()
+    {
+        // Seen: a freshly opened game with two adverts Esc didn't close; the bot pressed Esc for ever.
+        var watch = new PopupWatch();
+        watch.Start([]);
+        Assert.Equal(["popup_C", "popup_C"], watch.Update(["popup_C", "popup_C"], S(0)));
+        Assert.Equal(["popup_C", "popup_C", "EscMenu"], watch.Update(["popup_C", "popup_C", "EscMenu"], S(6)));
+        var givenUp = new List<string>();
+        Assert.Equal(["EscMenu"], watch.Update(["popup_C", "popup_C", "EscMenu"], S(13), givenUp));   // the menu still closed
+        Assert.Equal(["popup_C"], givenUp);
+        Assert.Empty(watch.Update(["popup_C", "popup_C"], S(14)));
+        Assert.Equal(["popup_C"], watch.Update(["popup_C", "popup_C", "popup_C"], S(600)));          // a new advert (level up)
+        Assert.Empty(watch.Update(["popup_C", "popup_C"], S(601)));                                   // it closed
+        Assert.Empty(watch.Update([], S(602)));                                                       // the old ones went too
+        Assert.Equal(["popup_C"], watch.Update(["popup_C"], S(700)));
     }
 }
