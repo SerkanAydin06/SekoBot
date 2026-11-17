@@ -27,7 +27,10 @@ internal sealed class RespawnTracker
     private readonly Dictionary<int, (WorldMob Mob, TimeSpan Seen)> _alive = [];
     private readonly HashSet<int> _known = [];
     private readonly List<Death> _deaths = [];
-    private readonly Dictionary<int, List<double>> _samples;
+    private Dictionary<int, List<double>> _samples;
+    /// <summary>Measured since the last share (added to the file, which every SekoBot fills).</summary>
+    private readonly List<(int Level, double Seconds)> _news = [];
+    private readonly object _gate = new();
     private TimeSpan _started = TimeSpan.MinValue;
 
     public RespawnTracker(Dictionary<int, List<double>>? samples = null) => _samples = samples ?? [];
@@ -77,19 +80,31 @@ internal sealed class RespawnTracker
         double seconds = (now - death.When).TotalSeconds;
         if (seconds < MinSeconds)
             return;
-        if (!_samples.TryGetValue(death.Level, out var list))
-            _samples[death.Level] = list = [];
-        list.Add(Math.Round(seconds, 1));
+        lock (_gate)
+        {
+            Add(_samples, death.Level, Math.Round(seconds, 1));
+            _news.Add((death.Level, Math.Round(seconds, 1)));
+        }
+        Measured?.Invoke(death.Level, seconds);
+    }
+
+    private static void Add(Dictionary<int, List<double>> samples, int level, double seconds)
+    {
+        if (!samples.TryGetValue(level, out var list))
+            samples[level] = list = [];
+        list.Add(seconds);
         if (list.Count > KeepSamples)
             list.RemoveAt(0);
-        Measured?.Invoke(death.Level, seconds);
     }
 
     /// <summary>The usual wait for mobs of a level (the median), from that level or the nearest
     /// measured one within 3 levels; null when nothing near was measured.</summary>
     public double? Seconds(int level)
     {
-        var near = _samples.Where(s => s.Value.Count >= 2 && Math.Abs(s.Key - level) <= 3)
+        Dictionary<int, List<double>> samples;
+        lock (_gate)
+            samples = _samples;
+        var near = samples.Where(s => s.Value.Count >= 2 && Math.Abs(s.Key - level) <= 3)
             .OrderBy(s => Math.Abs(s.Key - level)).ThenByDescending(s => s.Value.Count).FirstOrDefault();
         if (near.Value is not { } list)
             return null;
@@ -112,13 +127,26 @@ internal sealed class RespawnTracker
         return new RespawnTracker();
     }
 
+    /// <summary>Shares with the other SekoBots: our measurements go into the file, theirs come back.</summary>
     public void Save()
     {
-        try
+        List<(int Level, double Seconds)> news;
+        lock (_gate)
         {
-            Directory.CreateDirectory(ProfileStore.Directory);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(_samples, new JsonSerializerOptions { WriteIndented = true }));
+            news = [.. _news];
+            _news.Clear();
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        var all = SharedFile.Update<Dictionary<int, List<double>>>(FilePath, d => news.ForEach(n => Add(d, n.Level, n.Seconds)));
+        lock (_gate)
+        {
+            if (all == null)
+            {
+                _news.InsertRange(0, news);
+                return;
+            }
+            foreach (var n in _news)
+                Add(all, n.Level, n.Seconds);
+            _samples = all;
+        }
     }
 }

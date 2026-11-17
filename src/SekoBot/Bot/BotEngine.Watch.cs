@@ -70,14 +70,15 @@ internal sealed partial class BotEngine
                 ItemBook.SaveIfChanged();
                 _itemsSavedAt = now;
             }
-            if ((_obstacles.Changed || _noGo.Changed) && now - _obstaclesSavedAt > TimeSpan.FromSeconds(60))
+            // Shared with the other SekoBots every half minute: our news out, theirs in.
+            if (now - _obstaclesSavedAt > TimeSpan.FromSeconds(30))
             {
-                if (_noGo.Changed)
-                    _noGo.Save();
+                _noGo.Save();
                 _obstacles.Save();
+                _brain.Lore.Save();
                 _obstaclesSavedAt = now;
             }
-            if (_respawnDirty && now - _respawnSavedAt > TimeSpan.FromSeconds(60))
+            if (now - _respawnSavedAt > TimeSpan.FromSeconds(30))
             {
                 _respawn.Save();
                 _respawnDirty = false;
