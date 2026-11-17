@@ -137,4 +137,25 @@ public class BonusBookTests
         }
         finally { BotEngine.BonusKnowledge = was; }
     }
+
+    [Fact]
+    public void A_bonus_can_be_wanted_on_one_item_only()
+    {
+        var book = Book();
+        ItemBook.Learn(new ItemInfo(990110, "Test Çizme+3", "ITEM_ARMOR", "ARMOR_FOOTS", 100));
+        // EXP ≥ 10, but only on "Test Çizme" (any level).
+        var p = new BotProfile { LootEquipment = false, LootBonuses = [new BonusWant { Type = 47, Min = 10, Items = "test çizme" }] };
+        var was = BotEngine.BonusKnowledge;
+        try
+        {
+            BotEngine.BonusKnowledge = book;
+            Assert.True(BotEngine.WantedLoot(new GroundItem(1, default, 990110, 1), p));
+            Assert.False(BotEngine.WantedLoot(new GroundItem(2, default, Shoes, 1), p));     // other shoes: no
+            Assert.False(BotEngine.WantedLoot(new GroundItem(3, default, Necklace, 1), p));  // EXP could come, not wanted here
+        }
+        finally { BotEngine.BonusKnowledge = was; }
+        Assert.True(BotEngine.KeepPicked(new InventoryItem(20, 990110, 1, [new ItemBonus(47, 12)]), p));
+        Assert.False(BotEngine.KeepPicked(new InventoryItem(21, 990110, 1, [new ItemBonus(47, 8)]), p));  // too low
+        Assert.False(BotEngine.KeepPicked(new InventoryItem(22, Shoes, 1, [new ItemBonus(47, 15)]), p));  // not that item
+    }
 }

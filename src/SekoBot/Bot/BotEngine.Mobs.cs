@@ -207,7 +207,8 @@ internal sealed partial class BotEngine
         if (profile.LootBonuses.Count == 0)
             return false;
         var book = BonusKnowledge;
-        return book == null || profile.LootBonuses.Any(w => book.CanCarry(vnum, ItemBonuses.NameOf(w.Type), w.Min));
+        // A line with item names is only about those items ("EXP on Deri Çizme": only Deri Çizme is picked up).
+        return profile.LootBonuses.Any(w => w.Applies(vnum) && (book == null || book.CanCarry(vnum, ItemBonuses.NameOf(w.Type), w.Min)));
     }
 
     /// <summary>Around the spot where items were thrown away (world units, 10 m).</summary>
@@ -216,7 +217,7 @@ internal sealed partial class BotEngine
     /// <summary>A bonus of the item is on the bonus list, at least as big as wanted there.</summary>
     internal static bool GoodBonus(InventoryItem item, BotProfile profile) =>
         item.Bonuses is { Length: > 0 } bonuses && profile.LootBonuses.Count > 0 &&
-        bonuses.Any(b => profile.LootBonuses.Any(w => ItemBonuses.Same(w.Type, b.Type) && b.Value >= w.Min));
+        bonuses.Any(b => profile.LootBonuses.Any(w => ItemBonuses.Same(w.Type, b.Type) && b.Value >= w.Min && w.Applies(item.Vnum)));
 
     /// <summary>
     /// Whether an item that just came into the bag is one the loot choices want (else the bot took

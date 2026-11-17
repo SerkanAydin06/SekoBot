@@ -504,11 +504,28 @@ internal static class CharacterSettings
     }
 }
 
-/// <summary>One line of the bonus list: the game's bonus kind and the least value wanted (10 = +10 %).</summary>
+/// <summary>One line of the bonus list: the game's bonus kind and the least value wanted (10 = +10 %),
+/// and, when given, only for these items (names or parts of them, comma separated: "Deri Çizme, Keşiş Plaka Zırh").</summary>
 public sealed class BonusWant
 {
     public int Type { get; set; }
     public int Min { get; set; }
+    public string Items { get; set; } = "";
+
+    /// <summary>The item names asked for (empty: every item).</summary>
+    public string[] ItemNames() => Items.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+    /// <summary>Whether this line is about the item: any item when no names are given, else one whose name holds one of them
+    /// (any level: "Keşiş Plaka Zırh" is +0 to +9).</summary>
+    public bool Applies(int vnum)
+    {
+        var names = ItemNames();
+        if (names.Length == 0)
+            return true;
+        string name = Memory.ItemBook.NameOf(vnum);
+        var tr = System.Globalization.CultureInfo.GetCultureInfo("tr-TR").CompareInfo;
+        return names.Any(n => tr.IndexOf(name, n, System.Globalization.CompareOptions.IgnoreCase) >= 0);
+    }
 }
 
 /// <summary>An item looked for in the market.</summary>

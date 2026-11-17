@@ -293,8 +293,18 @@ internal sealed class MainForm : Form
             SaveProfile();
             WriteLog(_profile.LootBonuses.Count == 0
                 ? "Efsun listesi boş: silah / zırh sadece fiyatına göre alınır."
-                : "Efsun listesi: " + string.Join(", ", _profile.LootBonuses.Select(w => $"{Memory.ItemBonuses.NameOf(w.Type)} ≥ {w.Min}")) +
-                  ". Bütün silah / zırhlar alınır, bu efsunlardan biri olmayan ucuzlar geri atılır.");
+                : "Efsun listesi: " + string.Join(", ", _profile.LootBonuses.Select(w =>
+                      $"{Memory.ItemBonuses.NameOf(w.Type)} ≥ {w.Min}" + (w.ItemNames().Length > 0 ? $" (sadece {w.Items})" : ""))) +
+                  ". Yalnız bu efsunların gelebildiği eşyalar alınır, efsunu tutmayanlar geri atılır.");
+            // A name typed that is no item the game has (a typo): said at once.
+            if (Memory.ItemBook.Count > 0)
+            {
+                var tr = System.Globalization.CultureInfo.GetCultureInfo("tr-TR").CompareInfo;
+                var names = Memory.ItemBook.All().Select(i => i.Name).ToList();
+                foreach (var unknown in _profile.LootBonuses.SelectMany(w => w.ItemNames())
+                             .Where(n => !names.Any(i => tr.IndexOf(i, n, System.Globalization.CompareOptions.IgnoreCase) >= 0)).Distinct())
+                    WriteLog($"⚠ Efsun listesinde \"{unknown}\" adlı eşya oyunda bulunamadı; adı kontrol et (ör. \"Deri Çizme\").");
+            }
         };
         itemList.Click += (_, _) =>
         {

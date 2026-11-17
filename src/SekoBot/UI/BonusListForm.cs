@@ -32,20 +32,23 @@ internal sealed class BonusListForm : Form
         _table.Columns.Add("En az", typeof(int));
         _table.Columns.Add("Tür", typeof(int));
         _table.Columns.Add("Hangi eşyalarda · değerler", typeof(string));
+        _table.Columns.Add("Sadece bu eşyalar", typeof(string));
         BonusBook? book = null;
         try { book = BonusBook.Shared; }
         catch (IOException) { }
         var wanted = profile.LootBonuses.ToDictionary(w => w.Type, w => w.Min);
+        var only = profile.LootBonuses.ToDictionary(w => w.Type, w => w.Items);
         foreach (var (type, name) in ItemBonuses.All().OrderBy(b => b.Name, StringComparer.CurrentCulture))
         {
             var known = wanted.FirstOrDefault(w => ItemBonuses.Same(w.Key, type));
             bool on = known.Key != 0;
-            _table.Rows.Add(on, name, on ? known.Value : 1, type, book?.WhereText(name) ?? "");
+            _table.Rows.Add(on, name, on ? known.Value : 1, type, book?.WhereText(name) ?? "", on ? only.GetValueOrDefault(known.Key, "") : "");
         }
 
         Theme.Label(this, "Bir efsunu işaretle ve en az değerini yaz (ör. EXP bonusu, en az 10: +10 ve üstü alınır). " +
             "Yerde efsun görünmez: bot yalnız o efsunun gelebildiği eşyaları alır (pazardan öğrendi; ör. EXP için kolye, ayakkabı, kalkan), " +
-            "çantada bakar, işaretli efsunu olmayanı geri atar. İşaretli efsunlu eşya alınınca Telegram'a yazılır.",
+            "çantada bakar, işaretli efsunu olmayanı geri atar. \"Sadece bu eşyalar\"a ad yazarsan o efsun yalnız o eşyalar için " +
+            "(ör. EXP bonusu ≥ 10, sadece \"Deri Çizme\"). İşaretli efsunlu eşya alınınca Telegram'a yazılır.",
             new Rectangle(12, 8, 736, 58), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft).Anchor =
             AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
@@ -76,8 +79,11 @@ internal sealed class BonusListForm : Form
             _grid.Columns["Efsun"]!.FillWeight = 45;
             _grid.Columns["Efsun"]!.ReadOnly = true;
             _grid.Columns["En az"]!.FillWeight = 14;
-            _grid.Columns["Hangi eşyalarda · değerler"]!.FillWeight = 70;
+            _grid.Columns["Hangi eşyalarda · değerler"]!.FillWeight = 60;
             _grid.Columns["Hangi eşyalarda · değerler"]!.ReadOnly = true;
+            _grid.Columns["Sadece bu eşyalar"]!.FillWeight = 50;
+            _grid.Columns["Sadece bu eşyalar"]!.ToolTipText = "Boş: bu efsunun gelebildiği her eşya. Ad yazarsan yalnız o eşyalar " +
+                "(ör. \"Deri Çizme\" ya da \"Keşiş Plaka Zırh, Kale Kask\"; +0…+9 hepsi). Virgülle birden fazla.";
             _grid.Columns["Tür"]!.Visible = false;
         };
         _grid.CurrentCellDirtyStateChanged += (_, _) =>
@@ -105,6 +111,10 @@ internal sealed class BonusListForm : Form
     {
         _grid.EndEdit();
         _profile.LootBonuses = [.. _table.Rows.Cast<DataRow>().Where(r => (bool)r["Al"])
-            .Select(r => new BonusWant { Type = (int)r["Tür"], Min = Math.Max(0, r["En az"] is int min ? min : 0) })];
+            .Select(r => new BonusWant
+            {
+                Type = (int)r["Tür"], Min = Math.Max(0, r["En az"] is int min ? min : 0),
+                Items = r["Sadece bu eşyalar"] is string items ? items.Trim() : "",
+            })];
     }
 }
