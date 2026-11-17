@@ -61,6 +61,9 @@ internal sealed class BotProfile
     public double FleeUntilHp { get; set; } = 0.60;
     /// <summary>At least this long between two skill presses.</summary>
     public int SkillGapMs { get; set; } = 1500;
+    /// <summary>Learned for the character: how much longer than SkillGapMs its skills need between
+    /// presses (a long casting animation cuts off the next skill). Kept with the character.</summary>
+    public int SkillGapLearnedMs { get; set; }
     /// <summary>Stand still this long while a skill is cast.</summary>
     public int SkillCastMs { get; set; } = 1000;
 
@@ -396,6 +399,7 @@ internal static class CharacterSettings
         nameof(BotProfile.LootOther), nameof(BotProfile.LootEquipmentMinGold), nameof(BotProfile.LootBonuses),
         nameof(BotProfile.LootAlways), nameof(BotProfile.LootPick), nameof(BotProfile.LootSkip),
         nameof(BotProfile.LootThrow), nameof(BotProfile.DropRangeMetres), nameof(BotProfile.EventLoot),
+        nameof(BotProfile.SkillGapLearnedMs),
     ];
 
     public static string Folder { get; set; } = Path.Combine(ProfileStore.Directory, "karakterler");
