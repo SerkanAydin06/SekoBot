@@ -321,3 +321,62 @@ public class LootOnlyTests
         Assert.DoesNotContain(actions, a => a is KeyDownAction d && (d.Key == p.Keys.MoveForward || d.Key == p.Keys.MoveLeft || d.Key == p.Keys.MoveRight));
     }
 }
+
+/// <summary>Gathering behind the character that kills (same group).</summary>
+[Collection("CharacterFolder")]
+public class FollowTests
+{
+    private static readonly Point Center = new(960, 540);
+
+    [Fact]
+    public void The_one_named_or_else_the_nearest_own_character_is_followed()
+    {
+        string old = CharacterSettings.Folder;
+        string dir = Path.Combine(Path.GetTempPath(), "sekobot-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            CharacterSettings.Folder = dir;
+            File.WriteAllText(Path.Combine(dir, "KAiZER06.json"), "{}");
+            File.WriteAllText(Path.Combine(dir, "IMEDUSA06.json"), "{}");
+            var me = new Vec3(0, 0, 0);
+            OtherPlayer[] players = [new("Yabanci", false, new Vec3(100, 0, 0)), new("KAiZER06", false, new Vec3(900, 0, 0)),
+                                     new("IMEDUSA06", false, new Vec3(50, 0, 0))];
+            Assert.Equal("KAiZER06", BotEngine.FollowWho(players, me, "IMEDUSA06", "")?.Name);   // not itself, not a stranger
+            Assert.Equal("Yabanci", BotEngine.FollowWho(players, me, "IMEDUSA06", "yabanci")?.Name);
+            Assert.Null(BotEngine.FollowWho(players, me, "IMEDUSA06", "Baskasi"));
+            Assert.Null(BotEngine.FollowWho([], me, "IMEDUSA06", ""));
+        }
+        finally
+        {
+            CharacterSettings.Folder = old;
+            Directory.Delete(dir, true);
+        }
+    }
+
+    private static List<BotAction> Run(Vec3 leader, double ms = 2000, GroundSpot[]? drops = null)
+    {
+        var p = new BotProfile { Attack = false, LeashMeters = 30, PickUpDrops = true };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        var camera = new CameraView(new Vec3(0, 0, 1000), -90, 0, 0, 90);
+        var actions = new List<BotAction>();
+        for (double t = 0; t < ms; t += 100)
+            actions.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
+            {
+                Walking = true, Position = new Vec3(0, 0, 0), Camera = camera, Follow = ("KAiZER06", leader), Drops = drops ?? [],
+            }));
+        return actions;
+    }
+
+    [Fact]
+    public void It_walks_after_the_killer_and_stays_with_it()
+    {
+        var far = Run(new Vec3(1200, 0, 0));
+        Assert.Contains(far, a => a is KeyDownAction);
+        Assert.Contains(far.OfType<NoteAction>(), n => n.Text.Contains("KAiZER06 takip ediliyor"));
+        var near = Run(new Vec3(150, 0, 0));
+        var keys = new BotProfile().Keys;
+        Assert.DoesNotContain(near, a => a is KeyDownAction d && (d.Key == keys.MoveForward || d.Key == keys.MoveBack || d.Key == keys.MoveLeft || d.Key == keys.MoveRight));
+    }
+}

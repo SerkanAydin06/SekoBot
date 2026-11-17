@@ -171,6 +171,7 @@ internal sealed partial class BotEngine : IDisposable
                             Targets = view?.Targets ?? [],
                             AttackPower = world?.AttackPower ?? 0,
                             Hotspot = Hotspot(world, profile, now),
+                            Follow = profile.Attack ? null : FollowWho(world?.Players, world?.Player, CharacterName, profile.FollowName),
                             FarmSpot = _farmSpot,
                             Skills = SkillKeys(world, profile),
                             SkillsOffSlots = SkillsOffSlots(world, profile),

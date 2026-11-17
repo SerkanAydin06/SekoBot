@@ -141,6 +141,9 @@ internal sealed class BotProfile
     /// <summary>Off: the bot attacks nothing (not even mobs that attack it), uses no skills and only picks up
     /// what lies on the ground around it (someone else kills, this character gathers). Kept per character.</summary>
     public bool Attack { get; set; } = true;
+    /// <summary>Attack off: the character followed to pick up what it kills drop (empty: the nearest of the
+    /// user's own characters in sight). Kept per character.</summary>
+    public string FollowName { get; set; } = "";
     /// <summary>Mobs that are after the character are fought first.</summary>
     public bool AttackersFirst { get; set; } = true;
     /// <summary>Leave mobs above this level alone (0 = no limit); ones that attack us are still fought.</summary>
@@ -407,7 +410,7 @@ internal static class CharacterSettings
         nameof(BotProfile.LootOther), nameof(BotProfile.LootEquipmentMinGold), nameof(BotProfile.LootBonuses),
         nameof(BotProfile.LootAlways), nameof(BotProfile.LootPick), nameof(BotProfile.LootSkip),
         nameof(BotProfile.LootThrow), nameof(BotProfile.DropRangeMetres), nameof(BotProfile.EventLoot),
-        nameof(BotProfile.SkillGapLearnedMs), nameof(BotProfile.MobFights), nameof(BotProfile.AutoArea), nameof(BotProfile.Attack),
+        nameof(BotProfile.SkillGapLearnedMs), nameof(BotProfile.MobFights), nameof(BotProfile.AutoArea), nameof(BotProfile.Attack), nameof(BotProfile.FollowName),
     ];
 
     public static string Folder { get; set; } = Path.Combine(ProfileStore.Directory, "karakterler");

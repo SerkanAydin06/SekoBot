@@ -153,6 +153,20 @@ internal sealed partial class BotEngine
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { return false; }
     }
 
+    /// <summary>Who an item-gathering character follows: the one named, else the nearest of the
+    /// user's own characters in sight (not itself).</summary>
+    internal static (string Name, Vec3 Position)? FollowWho(IReadOnlyList<OtherPlayer>? players, Vec3? me, string self, string wanted)
+    {
+        if (players == null || players.Count == 0)
+            return null;
+        var names = wanted.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var pick = names.Length > 0
+            ? players.Where(p => names.Any(n => p.Name.Equals(n, StringComparison.OrdinalIgnoreCase)))
+            : players.Where(p => !p.Name.Equals(self, StringComparison.OrdinalIgnoreCase) && OwnCharacter(p.Name));
+        var leader = me is Vec3 at ? pick.OrderBy(p => p.Position.DistanceXY(at)).FirstOrDefault() : pick.FirstOrDefault();
+        return leader == null ? null : (leader.Name, leader.Position);
+    }
+
     private bool _respawnHooked;
     private readonly HashSet<string> _announcedDrops = [];
 }

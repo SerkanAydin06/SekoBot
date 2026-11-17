@@ -148,19 +148,77 @@ internal sealed partial class Brain
             SetMoves(_sidestepKeys, p, actions, refresh);
             return;
         }
-        if (TravelTick(state, p, actions, refresh))
+        FollowNotes(state, actions);
+        if (state.Follow == null && TravelTick(state, p, actions, refresh))
             return;
-        if (LeashTick(state, p, actions, refresh, mobNextToUs: false))
+        // Following someone: they decide where we are, not the start area.
+        if (state.Follow == null && LeashTick(state, p, actions, refresh, mobNextToUs: false))
             return;
         double radius = p.AttackRadius * state.Height;
         var special = state.Drops.FirstOrDefault(d => d.Special && !_ignoredDrops.ContainsKey(d.Id));
         if (special.Id != 0 && GoForDrop(state, p, actions, refresh, radius, special))
+            return;
+        // Their drops first, unless they have walked off: then after them (the items stay a while).
+        bool farBehind = FollowDistance(state) is double away && away > FollowFar;
+        if (!farBehind && GoForDrop(state, p, actions, refresh, radius))
+            return;
+        if (FollowTick(state, p, actions, refresh))
             return;
         if (GoForDrop(state, p, actions, refresh, radius))
             return;
         SetMoves([], p, actions, refresh);
         if (Phase != BotPhase.Searching)
             Enter(BotPhase.Searching, now);
+    }
+
+    /// <summary>Following: walk up when further than this (world units, 5 m), stop within <see cref="FollowNear"/>.</summary>
+    internal const double FollowStart = 500, FollowNear = 250;
+    /// <summary>This far behind (15 m), catching up comes before the items.</summary>
+    internal const double FollowFar = 1500;
+    private bool _following;
+    private string? _followTold;
+
+    private static double? FollowDistance(GameState state) =>
+        state.Follow is { } f && state.Position is Vec3 me ? f.Position.DistanceXY(me) : null;
+
+    /// <summary>Walks after the character followed when it got away (it kills, we pick up behind it).</summary>
+    private bool FollowTick(GameState state, BotProfile p, List<BotAction> actions, bool refresh)
+    {
+        if (state.Follow is not { } f || state.Position is not Vec3 me || state.Camera is not CameraView camera)
+        {
+            _following = false;
+            return false;
+        }
+        double away = f.Position.DistanceXY(me);
+        if (away > FollowStart)
+            _following = true;
+        else if (away < FollowNear)
+            _following = false;
+        if (!_following)
+            return false;
+        var (right, up) = camera.ToScreenDirection(f.Position.X - me.X, f.Position.Y - me.Y);
+        double sx = right, sy = -up; // screen y grows downwards
+        double length = Math.Sqrt(sx * sx + sy * sy);
+        if (length <= 0)
+            return false;
+        SetMoves(Around(state, sx, sy, length * 0.38, p, to: f.Position), p, actions, refresh);
+        if (Phase != BotPhase.Moving)
+            Enter(BotPhase.Moving, state.Time);
+        _movingSince = Never;
+        CheckBlocked(state, p, actions);
+        return true;
+    }
+
+    private void FollowNotes(GameState state, List<BotAction> actions)
+    {
+        string? now = state.Follow?.Name;
+        if (now == _followTold)
+            return;
+        if (now != null)
+            actions.Add(new NoteAction($"{now} takip ediliyor; onun kestiklerinden düşenler toplanıyor."));
+        else if (_followTold != null)
+            actions.Add(new NoteAction($"{_followTold} görünmüyor; bulunulan yerde yerdeki eşyalar toplanıyor."));
+        _followTold = now;
     }
 
     private void Navigate(GameState state, BotProfile p, List<BotAction> actions)
