@@ -165,4 +165,34 @@ public class SkillClockTests
         var slots = BotEngine.SkillKeys(world, new BotProfile());
         Assert.Equal([(Keys.F1, (double?)12.5), (Keys.F2, 0)], slots.Select(s => (s.Key, s.Wait)));
     }
+
+    [Fact]
+    public void A_learned_wait_after_the_cooldown_is_kept_and_wears_off_when_not_needed()
+    {
+        var lore = new SkillLore();
+        for (int i = 0; i < 4; i++)
+            lore.TooSoon("Ruh vuruşu");                         // 2 s after its cooldown
+        var p = new BotProfile { LeashMeters = 0 };
+        var brain = new Brain(() => p) { Lore = lore };
+        brain.Start(TimeSpan.Zero);
+        // An attack skill, 10 s cooldown, read from the game's clock.
+        double castAt = double.NegativeInfinity;
+        var presses = new List<double>();
+        for (double t = 0; t < 40_000; t += 100)
+        {
+            double wait = Math.Max(0, 10 - (t - castAt) / 1000);
+            var skill = new SkillSlot(Keys.F3, "Ruh vuruşu", SkillKind.Area, 50, 10, 0, Wait: wait);
+            TargetInfo[] mobs = [.. Enumerable.Range(1, 6).Select(i => new TargetInfo(i, new Point(970 + i, 540), 60, 130, 365, 600, 600, 50, false, AttacksMe: true))];
+            var actions = brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), W, H, 1, 1, 0, 1) { Skills = [skill], MpPoints = 1000, Walking = true, Targets = mobs, AttackPower = 189 });
+            if (actions.OfType<KeyTapAction>().Any(k => k.Key == Keys.F3))
+            {
+                presses.Add(t);
+                castAt = t;
+            }
+        }
+        Assert.True(presses.Count >= 2);
+        // Pressed again not when the slot is ready (10 s) but about 2 s after.
+        Assert.All(presses.Zip(presses.Skip(1), (a, b) => b - a), gap => Assert.True(gap >= 11_500));
+        Assert.True(lore.ExtraMs("Ruh vuruşu") < 2000);         // each press that took eased it
+    }
 }
