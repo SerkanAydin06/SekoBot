@@ -1,4 +1,5 @@
 using SekoBot.Bot;
+using SekoBot.Capture;
 using SekoBot.Config;
 using SekoBot.Memory;
 using Xunit;
@@ -98,5 +99,17 @@ public class MobFitTests
         Assert.Equal(0.35, fight.Value.LowestHp);
         Assert.Contains(("Kaplan", 18), fight.Value.Kinds);
         Assert.Null(watch.Update([], 0.6, s(9)));
+    }
+}
+
+public class FitTickTests
+{
+    [Fact]
+    public void The_first_check_right_after_the_start_does_not_fail()
+    {
+        var engine = new BotEngine(new WindowInfo(0, 0, "test", 1920, 1080, false), new BotProfile(), _ => { });
+        var world = new WorldSnapshot(new Vec3(0, 0, 0), null, [], 9, "c2");
+        engine.FitTick(world, engine.Profile, TimeSpan.FromSeconds(1));
+        engine.FitTick(world, engine.Profile, TimeSpan.FromMinutes(4));
     }
 }
