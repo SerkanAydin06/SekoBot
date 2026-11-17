@@ -275,6 +275,7 @@ internal sealed class InputExecutor : IDisposable
     /// </summary>
     private async Task ClickButtonAsync(Point client, CancellationToken token, bool fast = false)
     {
+        using var guard = MouseGuard.Hold(); // the user's mouse can't mix in meanwhile
         Win32.GetCursorPos(out var previous);
         nint before = Win32.GetForegroundWindow();
         bool front = before == _window.Handle || BringGameToFront();
@@ -322,6 +323,7 @@ internal sealed class InputExecutor : IDisposable
     /// </summary>
     private async Task DragAsync(Point from, Point to, CancellationToken token)
     {
+        using var guard = MouseGuard.Hold(); // the user's mouse can't mix in meanwhile
         Win32.GetCursorPos(out var previous);
         nint before = Win32.GetForegroundWindow();
         bool front = before == _window.Handle || BringGameToFront();
@@ -454,6 +456,7 @@ internal sealed class InputExecutor : IDisposable
             Win32.PostMessage(_window.Handle, Win32.WM_LBUTTONUP, 0, lParam);
             return;
         }
+        using var guard = MouseGuard.Hold();
         MoveMouse(WindowService.ClientToScreen(_window, client));
         await Task.Delay(_random.Next(settleMin, settleMax), token);
         SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);

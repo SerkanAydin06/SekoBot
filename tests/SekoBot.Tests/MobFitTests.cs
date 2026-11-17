@@ -107,6 +107,8 @@ public class FitTickTests
     [Fact]
     public void The_first_check_right_after_the_start_does_not_fail()
     {
+        // Not the user's real item file (it would fill the item book other tests rely on).
+        ItemBook.FilePath ??= Path.Combine(Path.GetTempPath(), "sekobot-test-items-" + Guid.NewGuid().ToString("N") + ".json");
         var engine = new BotEngine(new WindowInfo(0, 0, "test", 1920, 1080, false), new BotProfile(), _ => { });
         var world = new WorldSnapshot(new Vec3(0, 0, 0), null, [], 9, "c2");
         engine.FitTick(world, engine.Profile, TimeSpan.FromSeconds(1));
