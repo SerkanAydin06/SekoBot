@@ -76,6 +76,7 @@ internal sealed partial class BotEngine
                 _noGo.Save();
                 _obstacles.Save();
                 _brain.Lore.Save();
+                BonusBook.Shared.Save();
                 _obstaclesSavedAt = now;
             }
             if (now - _respawnSavedAt > TimeSpan.FromSeconds(30))

@@ -15,7 +15,18 @@ internal sealed record ItemStats(string Name, int Shops, int Listings, long Piec
 
 /// <summary>One item for sale, found in the market list: what, for how much, in which shop and where.</summary>
 internal sealed record MarketListing(string Name, int Count, long Price, double UnitPrice, string Bonuses,
-    int ShopId, string Owner, double X, double Y, DateTime Seen);
+    int ShopId, string Owner, double X, double Y, DateTime Seen, int Vnum = 0, double Score = 0, int? BonusValue = null);
+
+/// <summary>How the market list is ordered.</summary>
+internal enum MarketSort { Cheapest, BonusValue, Score }
+
+/// <summary>A search of the market list: words (in the name or the bonuses), and, when given, only items of an
+/// item group, only those with a bonus of at least a value; ordered as asked.</summary>
+internal sealed record MarketQuery(string Text, string? Group = null, string? Bonus = null, int MinValue = 0,
+    MarketSort Sort = MarketSort.Cheapest)
+{
+    public bool Empty => Text.Trim().Length == 0 && Group == null && Bonus == null;
+}
 
 /// <summary>
 /// The market of one map, kept up to date: every shop ever opened with its items and prices and
@@ -121,6 +132,33 @@ internal sealed class MarketBook
     public List<(MarketWant Want, string Item, double UnitPrice)> WantedIn(OpenShop shop) =>
         [.. shop.Items.SelectMany(i => Wanted.Where(w => w.Matches(Name(i)) && (w.MaxPrice <= 0 || i.UnitPrice <= w.MaxPrice))
                                               .Select(w => (w, Name(i), i.UnitPrice)))];
+
+    /// <summary>The items matching the search: name / bonus words, item group, a bonus of at least a value; ordered as asked.</summary>
+    public List<MarketListing> Find(MarketQuery query, BonusBook bonuses, int max = 300)
+    {
+        if (query.Empty)
+            return [];
+        string text = query.Text.Trim();
+        List<MarketListing> all;
+        lock (_gate)
+            all = [.. _shops.Values.SelectMany(s => s.Items
+                    .Where(i => text.Length == 0 ||
+                                i.Name.Contains(text, StringComparison.CurrentCultureIgnoreCase) ||
+                                i.Bonuses.Contains(text, StringComparison.CurrentCultureIgnoreCase))
+                    .Where(i => query.Group == null || BonusBook.GroupOf(i.Vnum) == query.Group)
+                    .Select(i => new MarketListing(i.Name, i.Count, i.Price, i.UnitPrice, i.Bonuses, s.Id, s.Owner, s.X, s.Y, s.Seen, i.Vnum)))];
+        if (query.Bonus != null)
+            all = [.. all.Select(l => l with { BonusValue = BonusBook.ValueOf(l.Bonuses, query.Bonus) })
+                         .Where(l => l.BonusValue is int v && v >= query.MinValue)];
+        all = [.. all.Select(l => l with { Score = bonuses.Score(l.Vnum, l.Bonuses) })];
+        IEnumerable<MarketListing> ordered = query.Sort switch
+        {
+            MarketSort.BonusValue when query.Bonus != null => all.OrderByDescending(l => l.BonusValue).ThenBy(l => l.UnitPrice),
+            MarketSort.Score or MarketSort.BonusValue => all.OrderByDescending(l => l.Score).ThenBy(l => l.UnitPrice),
+            _ => all.OrderBy(l => l.UnitPrice),
+        };
+        return [.. ordered.Take(max)];
+    }
 
     /// <summary>Every item whose name (or bonuses) holds <paramref name="query"/>, cheapest piece first.</summary>
     public List<MarketListing> Find(string query, int max = 300)
