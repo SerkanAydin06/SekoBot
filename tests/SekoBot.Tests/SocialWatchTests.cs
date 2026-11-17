@@ -161,4 +161,20 @@ public class PopupWatchTests
         Assert.Empty(watch.Update([], S(602)));                                                       // the old ones went too
         Assert.Equal(["popup_C"], watch.Update(["popup_C"], S(700)));
     }
+
+    [Fact]
+    public void Adverts_let_be_stay_let_be_when_the_bot_is_started_again()
+    {
+        var watch = new PopupWatch();
+        watch.Start(["popup_C", "popup_C"]);
+        watch.Update(["popup_C", "popup_C"], S(0));
+        watch.Update(["popup_C", "popup_C"], S(13));                    // given up
+        watch.Start(["popup_C", "popup_C"]);                            // stopped and started again
+        Assert.Empty(watch.Update(["popup_C", "popup_C"], S(20)));
+        Assert.Equal(["popup_C"], watch.Update(["popup_C", "popup_C", "popup_C"], S(30)));   // a new one still is closed
+        // A fresh SekoBot doesn't know them: tries Esc first.
+        var fresh = new PopupWatch();
+        fresh.Start(["popup_C"]);
+        Assert.Equal(["popup_C"], fresh.Update(["popup_C"], S(0)));
+    }
 }

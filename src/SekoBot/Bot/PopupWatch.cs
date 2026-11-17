@@ -21,13 +21,20 @@ internal sealed class PopupWatch
     /// <summary>Since when there have been more of a window than are let be.</summary>
     private readonly Dictionary<string, TimeSpan> _since = [];
 
-    /// <summary>The windows already showing when the bot starts belong to the screen.</summary>
+    /// <summary>The windows already showing when the bot starts belong to the screen. Known ones
+    /// Esc didn't close before (since this SekoBot opened) and still there stay let be: no 12 s of
+    /// Esc again at every start.</summary>
     public void Start(IEnumerable<string> showing)
     {
+        var before = new Dictionary<string, int>(_ignored);
         _ignored.Clear();
         foreach (var group in showing.GroupBy(w => w))
+        {
             if (!BotEngine.KnownWindows.Contains(group.Key))
                 _ignored[group.Key] = group.Count();
+            else if (before.TryGetValue(group.Key, out int letBe) && letBe > 0)
+                _ignored[group.Key] = Math.Min(letBe, group.Count());
+        }
         _since.Clear();
     }
 
