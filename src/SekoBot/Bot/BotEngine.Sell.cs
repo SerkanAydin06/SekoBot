@@ -28,21 +28,24 @@ internal sealed partial class BotEngine
     /// <summary>The item types never sold (quest items, skill books, boxes, stones…).</summary>
     private static readonly HashSet<string> KeptTypes = ["ITEM_QUEST", "ITEM_SKILLBOOK", "ITEM_GIFTBOX", "ITEM_UNIQUE", "ITEM_METIN", "ITEM_POLYMORPH", "ITEM_TREASURE_BOX", "ITEM_TREASURE_KEY"];
 
-    /// <summary>Whether to sell this bag item at a market NPC: something the bot picked up that wasn't asked
-    /// for (or ticked "At"), worth something in a shop; never what is kept (see the class).</summary>
+    /// <summary>
+    /// Whether to sell this bag item at a market NPC: a weapon or armour the bot picked up only for its
+    /// price (weapons / armour not all picked up, "≥" set, worth that much in a shop) without a bonus of
+    /// the bonus list. Never what was asked for (ticked "Topla", the "always pick up" names), event, quest
+    /// and other special items, the user's own things. What is to be thrown (ticked "At", cheaper junk) is
+    /// still thrown away, not sold.
+    /// </summary>
     internal static bool ShouldSell(InventoryItem item, BotProfile profile, IReadOnlySet<(int Slot, int Vnum)>? botPicked)
     {
-        if (item.Slot < CharacterProgress.FirstBagSlot || item.Vnum <= 1)
+        if (item.Slot < CharacterProgress.FirstBagSlot || item.Vnum <= 1 || profile.LootEquipment || profile.LootEquipmentMinGold <= 0)
+            return false;
+        if (botPicked == null || !botPicked.Contains((item.Slot, item.Vnum)) || profile.LootThrow.Contains(item.Vnum))
             return false;
         if (AlwaysLoot(item.Vnum, profile) || Array.IndexOf(Loot.AllEventItems, item.Vnum) >= 0 || GoodBonus(item, profile))
             return false;
-        if (ItemBook.Get(item.Vnum) is not { Gold: > 0 } info || KeptTypes.Contains(info.Type))
+        if (Loot.KindOf(item.Vnum) != LootKind.Equipment || ItemBook.Get(item.Vnum) is not { Gold: > 0 } info || KeptTypes.Contains(info.Type))
             return false;
-        if (profile.LootThrow.Contains(item.Vnum))
-            return true;
-        if (botPicked == null || !botPicked.Contains((item.Slot, item.Vnum)))
-            return false;
-        return Loot.KindOf(item.Vnum) is LootKind.Equipment or LootKind.Other;
+        return info.Sell >= profile.LootEquipmentMinGold;
     }
 
     /// <summary>The market NPC known on this map nearest to the character, within reach.</summary>

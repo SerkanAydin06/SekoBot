@@ -154,7 +154,7 @@ internal sealed partial class BotEngine
             return "Önce botu başlat; atma bot çalışırken yapılır.";
         bool sell = world != null && CanSellNear(world, Profile);
         if (world == null || !sell && !HasThrowables(world, Profile))
-            return "Çantada atılacak ya da satılacak eşya yok ('At' işaretli, botun yanlışlıkla aldığı ya da botun toplayıp istenmeyen eşya)." +
+            return "Çantada atılacak ya da satılacak eşya yok (atılacak: 'At' işaretli ya da botun istemeden aldığı; satılacak: sadece fiyatı için alınan efsunsuz silah / zırh)." +
                    (world != null && Profile.SellToNpc && NearShop(world) == null ? " (Yakında bilinen market NPC'si de yok.)" : "");
         lock (_botGate)
         {
@@ -163,9 +163,9 @@ internal sealed partial class BotEngine
             _cleanTries = 0;
             _brain.WantsClean = true;
         }
-        return sell
-            ? "Satılacak eşyalar market NPC'sine götürülüyor: önce moblardan uzak, sakin bir yere geçiliyor."
-            : "'At' işaretli eşyalar atılacak: önce moblardan uzak, sakin bir yere geçiliyor.";
+        return HasThrowables(world, Profile)
+            ? "Atılacak eşyalar atılacak" + (sell ? ", sonra fiyatı için alınanlar market NPC'sine satılacak" : "") + ": önce moblardan uzak, sakin bir yere geçiliyor."
+            : "Fiyatı için alınan eşyalar market NPC'sine götürülüyor: önce moblardan uzak, sakin bir yere geçiliyor.";
     }
 
     /// <summary>The bag is full: throw items away when possible. False when the bot should stop instead.</summary>
@@ -198,8 +198,8 @@ internal sealed partial class BotEngine
         {
             if (!_brain.WantsClean || !_brain.ReadyToClean)
                 return null;
-            // A market NPC known near: sold there instead of thrown away.
-            if (TryStartSellTrip(p) is { } letGo)
+            // What is to be thrown goes first, here; then what was picked for its price is taken to a market NPC.
+            if ((World is not { } w || !HasThrowables(w, p)) && TryStartSellTrip(p) is { } letGo)
                 return letGo;
             _cleaner.Start(state.Time);
             _log("Sakin bir yerdeyiz; envanter açılıp 'At' işaretli eşyalar atılıyor.");
@@ -248,6 +248,9 @@ internal sealed partial class BotEngine
             }
             _log($"🗑 {_cleaner.Thrown} eşya atıldı" + (_cleaner.Problem is { } p ? $" ({p})" : "") +
                  "; avlanmaya devam. Atılan yığının 10 m çevresine 1 dakika yaklaşılmıyor.");
+            // Then off to sell what was picked for its price (only once nothing is left to throw).
+            if (World is { } w && !HasThrowables(w, Profile) && CanSellNear(w, Profile))
+                _brain.WantsClean = true;
         }
         else
         {
