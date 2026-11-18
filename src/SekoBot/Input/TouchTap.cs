@@ -9,7 +9,7 @@ internal enum TouchResult
 {
     /// <summary>Touched.</summary>
     Done,
-    /// <summary>Another window covers the point (or the game is minimized): not touched.</summary>
+    /// <summary>The game is minimized: not touched.</summary>
     Covered,
     /// <summary>The user kept using the mouse the whole time: not touched.</summary>
     Busy,
@@ -18,10 +18,15 @@ internal enum TouchResult
 }
 
 /// <summary>
-/// A finger tap on the screen (the game is a mobile game and takes touches): a market stall opens
-/// with the game behind other windows, without taking the mouse. Windows puts the cursor on the
-/// tapped point for a moment; it is put back at once (about 15 ms). The point must show the game
-/// (not covered by another window). Only taps when the user isn't moving the mouse or holding a button.
+/// Opens a market stall without the game in front and without taking the mouse:
+/// <list type="bullet">
+/// <item>The stall shows on the screen: a finger tap there (the game is a mobile game and takes
+/// touches). Windows puts the cursor on the tapped point for a moment; it is put back at once (~15 ms).</item>
+/// <item>Another window covers it: the click is posted to the game window itself, with the cursor put
+/// on the stall's place for ~90 ms (the game looks where the cursor is; seen: under 55 ms the click
+/// is lost), then back. What lies over the game doesn't matter then.</item>
+/// </list>
+/// Only when the user isn't moving the mouse or holding a button (their click never goes astray).
 /// </summary>
 internal static class TouchTap
 {
@@ -37,9 +42,9 @@ internal static class TouchTap
     {
         if (!Ready())
             return TouchResult.Unavailable;
-        var screen = WindowService.ClientToScreen(window, client);
-        if (!Shows(window, screen))
+        if (Win32.IsIconic(window.Handle))
             return TouchResult.Covered;
+        var screen = WindowService.ClientToScreen(window, client);
         // Wait until the user's mouse is still and no button is held (their click never goes astray).
         Win32.GetCursorPos(out var last);
         int still = 0;
@@ -53,8 +58,13 @@ internal static class TouchTap
             still = now.X == last.X && now.Y == last.Y && !held ? still + 50 : 0;
             last = now;
         }
-        if (!Shows(window, screen))
+        if (Win32.IsIconic(window.Handle))
             return TouchResult.Covered;
+        if (!Shows(window, screen))
+        {
+            PostedClick(window, client, screen);
+            return TouchResult.Done;
+        }
         lock (Gate)
         {
             Win32.GetCursorPos(out var before);
@@ -83,6 +93,34 @@ internal static class TouchTap
             }
         }
         return TouchResult.Done;
+    }
+
+    /// <summary>The cursor stays on the stall's place this long around the posted click (ms: move, down, up).</summary>
+    internal static readonly int[] PostedClickGaps = [15, 25, 20];
+
+    /// <summary>A click posted to the game window (covered by another one): the cursor is put where the
+    /// stall is for a moment, as the game reads it from there, then back where the user had it.</summary>
+    private static void PostedClick(WindowInfo window, Point client, Point screen)
+    {
+        lock (Gate)
+        {
+            Win32.GetCursorPos(out var before);
+            nint at = (client.Y << 16) | (client.X & 0xFFFF);
+            try
+            {
+                Win32.SetCursorPos(screen.X, screen.Y);
+                Win32.PostMessage(window.Handle, 0x200, 0, at); // WM_MOUSEMOVE
+                Thread.Sleep(PostedClickGaps[0]);
+                Win32.PostMessage(window.Handle, 0x201, 1, at); // WM_LBUTTONDOWN
+                Thread.Sleep(PostedClickGaps[1]);
+                Win32.PostMessage(window.Handle, 0x202, 0, at); // WM_LBUTTONUP
+                Thread.Sleep(PostedClickGaps[2]);
+            }
+            finally
+            {
+                Win32.SetCursorPos(before.X, before.Y);
+            }
+        }
     }
 
     /// <summary>Whether the game itself is seen at this screen point (not minimized, no window over it).</summary>
