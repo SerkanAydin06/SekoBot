@@ -68,6 +68,27 @@ public class MapTerrainTests
     }
 
     [Fact]
+    public void The_way_keeps_off_round_places_to_avoid()
+    {
+        var map = new MapTerrain("t", [Box(5000, 5000, 5100, 5100)], DateTime.Now);
+        var goal = new Vec3(3000, 0, 90);
+        Assert.Equal([goal], map.WayTo(Me, goal));
+        // A mob in the middle of the way: walked round, 3 m off.
+        var avoid = new List<MapTerrain.Circle> { new(1500, 0, 300) };
+        var way = map.WayTo(Me, goal, avoid: avoid);
+        Assert.NotNull(way);
+        Assert.True(way!.Count > 1);
+        var from = Me;
+        foreach (var p in way)
+        {
+            Assert.False(avoid[0].Crosses(from, p, 0));
+            from = p;
+        }
+        // One the goal stands in doesn't count.
+        Assert.Equal([goal], map.WayTo(Me, goal, avoid: [new(3000, 0, 300)]));
+    }
+
+    [Fact]
     public void A_place_closed_all_round_has_no_way()
     {
         var map = new MapTerrain("t", [Box(-500, -500, 500, -400), Box(-500, 400, 500, 500), Box(-500, -500, -400, 500), Box(400, -500, 500, 500)], DateTime.Now);
