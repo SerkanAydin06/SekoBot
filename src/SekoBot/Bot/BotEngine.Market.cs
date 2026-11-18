@@ -22,6 +22,12 @@ internal sealed partial class BotEngine
     private volatile string _marketStatus = "";
     private readonly object _marketGate = new();
     private MarketBook? _market;
+    private MarketHistory? _history;
+    private Dictionary<string, ItemStats> _marketStats = new(StringComparer.CurrentCultureIgnoreCase);
+    private DateTime _marketStatsAt = DateTime.MinValue;
+    /// <summary>What was told already (shop, item, price, bonuses): a continuous watch reads the same
+    /// shops again and again, a find is told once.</summary>
+    private readonly HashSet<string> _marketTold = [];
 
     /// <summary>A market scan or a walk to a shop is going on.</summary>
     public bool ScanningMarket => _marketTask is { IsCompleted: false };
@@ -67,6 +73,8 @@ internal sealed partial class BotEngine
                 if (_market is { Changed: true } old)
                     SaveMarket(old);
                 _market = MarketBook.Load(MarketFolder, map);
+                _history = MarketHistory.Load(MarketFolder, map);
+                _marketStatsAt = DateTime.MinValue;
                 lock (_worldGate)
                     _market.Skills = _world?.ReadSkillNames() ?? [];
             }
@@ -80,6 +88,13 @@ internal sealed partial class BotEngine
         try
         {
             string report = book.Save(MarketFolder, MapReport.Outlines(_terrain.Of(book.Map)));
+            // Today's prices into the price history.
+            var history = _history;
+            if (history != null && _market == book)
+            {
+                history.Record(book.Stats(), DateTime.Now);
+                history.Save(MarketFolder, book.Map);
+            }
             // The bonuses seen go into the bonus book (which bonus on which items, which values), shared by all SekoBots.
             var bonuses = BonusBook.Shared;
             bonuses.LearnFrom(book.ToJson());
@@ -93,6 +108,61 @@ internal sealed partial class BotEngine
             return "";
         }
     }
+
+    // ── For the market window ──
+
+    /// <summary>The market list to show: the map the character is on when it has one, else the market
+    /// read last (the window works away from the market too). Null: no market read yet.</summary>
+    public MarketBook? CurrentMarket()
+    {
+        if (World is { MapName.Length: > 0 } world)
+        {
+            lock (_marketGate)
+                if (_market?.Map == world.MapName)
+                    return _market;
+            if (File.Exists(MarketBook.Stem(MarketFolder, world.MapName) + ".json"))
+                return MarketOf(world.MapName);
+        }
+        lock (_marketGate)
+            if (_market != null)
+                return _market;
+        return LatestMarketMap() is string map ? MarketOf(map) : null;
+    }
+
+    /// <summary>The map of the market list written last (pazar-[map].json).</summary>
+    internal static string? LatestMarketMap()
+    {
+        if (!Directory.Exists(MarketFolder))
+            return null;
+        var file = new DirectoryInfo(MarketFolder).GetFiles("pazar-*.json")
+            .Where(f => !f.Name.StartsWith("pazar-gecmis-", StringComparison.Ordinal) && !System.Text.RegularExpressions.Regex.IsMatch(f.Name, @"^pazar-\d{4}-"))
+            .OrderByDescending(f => f.LastWriteTime).FirstOrDefault();
+        return file == null ? null : Path.GetFileNameWithoutExtension(file.Name)["pazar-".Length..];
+    }
+
+    /// <summary>The price history of the market shown (null: none).</summary>
+    public MarketHistory? CurrentHistory()
+    {
+        CurrentMarket();
+        lock (_marketGate)
+            return _history;
+    }
+
+    /// <summary>Per item name: how many sell it, the cheapest, the average (refreshed every 2 minutes at most).</summary>
+    public IReadOnlyDictionary<string, ItemStats> MarketStats()
+    {
+        if (DateTime.Now - _marketStatsAt < TimeSpan.FromMinutes(2))
+            return _marketStats;
+        if (CurrentMarket() is not { } book)
+            return _marketStats;
+        _marketStats = book.Stats().ToDictionary(s => s.Name, StringComparer.CurrentCultureIgnoreCase);
+        _marketStatsAt = DateTime.Now;
+        return _marketStats;
+    }
+
+    /// <summary>The market list shown, searched (the window: an empty search gives everything).</summary>
+    public List<MarketListing> MarketSearch(MarketQuery query, int max) =>
+        CurrentMarket()?.Find(query, BonusBook.Shared, max, allowEmpty: true) ?? [];
 
     /// <summary>Items of the market list of the map the character is on (cheapest first).</summary>
     public List<MarketListing> MarketFind(string query)
@@ -259,23 +329,30 @@ internal sealed partial class BotEngine
             try { message = await work(cts.Token); }
             catch (OperationCanceledException) { message = "Durduruldu."; }
             catch (Exception ex) { message = failure + ex.Message; }
+            MarketWatching = false;
             _marketStatus = message;
             _log(message);
             MarketScanFinished?.Invoke(message);
         });
     }
 
-    public bool StartMarketScan(out string error)
+    /// <param name="continuous">The market is watched all the time: when every shop was read the round
+    /// starts again (new shops first, the others once their reading is older than the set minutes).</param>
+    public bool StartMarketScan(out string error, bool continuous = false)
     {
         if (!CanUseMarket(out error))
             return false;
-        RunMarketTask(ScanMarketAsync, "Pazar taraması hatası: ");
+        MarketWatching = continuous;
+        RunMarketTask(token => ScanMarketAsync(continuous, token), "Pazar taraması hatası: ");
         return true;
     }
 
+    /// <summary>The scan going on is the continuous watch.</summary>
+    public bool MarketWatching { get; private set; }
+
     public void StopMarketScan() => _marketCts?.Cancel();
 
-    private async Task<string> ScanMarketAsync(CancellationToken token)
+    private async Task<string> ScanMarketAsync(bool continuous, CancellationToken token)
     {
         var start = World!;
         var shops = MarketShops();
@@ -285,12 +362,18 @@ internal sealed partial class BotEngine
         var book = MarketOf(start.MapName);
         int gone = book.SetAllShops(shops);
         var scanStarted = DateTime.Now;
+        // The continuous watch reads a shop again once its reading is older than the set minutes.
+        var refresh = TimeSpan.FromMinutes(Math.Clamp(profile.MarketRefreshMinutes, 5, 24 * 60));
         // With "skip fresh": shops read in the last two hours aren't opened again (new and old ones are).
-        bool Read(int id) => book.Fresh(id, profile.MarketResume ? MarketFreshFor : DateTime.Now - scanStarted, DateTime.Now);
+        bool Read(int id) => book.Fresh(id, continuous ? refresh : profile.MarketResume ? MarketFreshFor : DateTime.Now - scanStarted, DateTime.Now);
         int toRead = shops.Count(s => !Read(s.Id));
         var tries = new Dictionary<int, int>();
         var random = new Random();
         int readNow = 0;
+        int round = 1, roundRead = 0, roundGone = gone, missStreaks = 0;
+        var roundStarted = DateTime.Now;
+        if (continuous)
+            _log($"🔁 Sürekli pazar takibi başladı: yeni açılan dükkanlar hemen, diğerleri {refresh.TotalMinutes:0} dakikada bir yeniden okunur. Hiçbir şey satın alınmaz.");
         _log($"🛒 Pazar taraması başladı: {shops.Count} dükkan var, {toRead} tanesi okunacak" +
              (book.Shops > 0 ? $" (listede {book.Shops} dükkan vardı{(gone > 0 ? $", {gone} kapanmış dükkan çıkarıldı" : "")}; son 2 saatte okunanlar atlanıyor)" : "") +
              ". Hiçbir şey satın alınmaz. Durdurmak için " + StopKeys + " ya da DURDUR." +
@@ -324,14 +407,42 @@ internal sealed partial class BotEngine
                     break;
                 }
                 shops = MarketShops();
-                book.SetAllShops(shops); // shops closed meanwhile go out of the list at once
-                _marketStatus = $"Pazar taranıyor: {readNow}/{toRead} dükkan okundu · listede {book.Shops} dükkan, {book.Items} ürün.";
+                roundGone += book.SetAllShops(shops); // shops closed meanwhile go out of the list at once
+                _marketStatus = continuous
+                    ? $"🔁 Takip {round}. tur: bu turda {roundRead} dükkan okundu, {shops.Count(s => !Done(s.Id))} kaldı · listede {book.Shops} dükkan, {book.Items} ürün."
+                    : $"Pazar taranıyor: {readNow}/{toRead} dükkan okundu · listede {book.Shops} dükkan, {book.Items} ürün.";
                 var cover = ScreenCoverNow();
                 if (await CloseChatHistoryAsync(input, cover, token))
                     continue;
-                var next = NextShop(shops, world, camera, state, Done);
+                // Shops never read (new in the market) come first.
+                var unread = shops.Where(s => !book.Has(s.Id) && !Done(s.Id)).Select(s => s.Id).ToHashSet();
+                var next = NextShop(shops, world, camera, state, unread.Count > 0 ? id => Done(id) || !unread.Contains(id) : Done);
                 if (next == null)
-                    break;
+                {
+                    if (!continuous)
+                        break;
+                    // A round done: written down, then the next one once the oldest reading is old enough.
+                    SaveMarket(book);
+                    var (onMap, neverRead) = book.Coverage();
+                    _log($"🔁 {round}. tur bitti ({(DateTime.Now - roundStarted).TotalMinutes:0} dk): {roundRead} dükkan okundu, " +
+                         $"{roundGone} kapanan dükkan listeden çıktı. Pazarda {onMap} dükkan, listede {book.Shops} dükkan / {book.Items} ürün" +
+                         (neverRead > 0 ? $", {neverRead} dükkan açılamadı" : "") + ".");
+                    tries.Clear();
+                    var wait = (book.OldestRead() is DateTime oldest ? oldest + refresh - DateTime.Now : TimeSpan.Zero);
+                    wait = wait < TimeSpan.FromSeconds(20) ? TimeSpan.FromSeconds(20) : wait > TimeSpan.FromMinutes(10) ? TimeSpan.FromMinutes(10) : wait;
+                    for (var until = DateTime.Now + wait; DateTime.Now < until && !token.IsCancellationRequested;)
+                    {
+                        _marketStatus = $"🔁 {round}. tur bitti; yeni tur {(until - DateTime.Now).TotalSeconds:0} sn sonra (yeni açılan dükkan olursa hemen) · listede {book.Shops} dükkan, {book.Items} ürün.";
+                        await Task.Delay(2000, token);
+                        var now2 = MarketShops();
+                        if (now2.Count > 0 && now2.Any(s => !book.Has(s.Id)))
+                            break; // a new shop opened: read it now
+                    }
+                    round++;
+                    roundRead = roundGone = 0;
+                    roundStarted = DateTime.Now;
+                    continue;
+                }
                 var where = new Vec3(next.X, next.Y, world.Player.Z);
                 double away = where.DistanceXY(world.Player);
                 // Near and drawn: click its stall (on screen), the game walks up to it and opens it.
@@ -344,11 +455,25 @@ internal sealed partial class BotEngine
                     if (await WaitForShop(token) != null)
                     {
                         missedInARow = 0;
+                        missStreaks = 0;
                         if (await TakeOpenShop(input, book, token, close: true) is not null)
+                        {
                             readNow++;
+                            roundRead++;
+                        }
                     }
                     else if (++missedInARow >= ShopClicksWithoutOpen)
                     {
+                        // The continuous watch waits a little and tries again (something passed over the stalls);
+                        // three times in a row: it stops.
+                        if (continuous && ++missStreaks < 3)
+                        {
+                            _log($"{ShopClicksWithoutOpen} denemede hiçbir dükkan açılmadı; 30 sn sonra yeniden denenecek.");
+                            missedInARow = 0;
+                            tries.Clear();
+                            await Task.Delay(30_000, token);
+                            continue;
+                        }
                         why = $"{ShopClicksWithoutOpen} denemede hiçbir dükkan açılmadı; karakter dükkanların yanında mı?";
                         break;
                     }
@@ -374,7 +499,10 @@ internal sealed partial class BotEngine
         {
             why = "durduruldu";
         }
+        MarketWatching = false;
         string report = SaveMarket(book);
+        if (continuous)
+            return $"🔁 Sürekli pazar takibi bitti ({(why.Length > 0 ? why : "durduruldu")}): {round} tur, {readNow} dükkan okundu. Listede {book.Shops} dükkan, {book.Items} ürün.";
         int failed = shops.Count(s => !Read(s.Id) && tries.GetValueOrDefault(s.Id) >= ShopTries);
         int left = shops.Count(s => !Read(s.Id)) - failed;
         return $"🛒 Pazar taraması {(why.Length > 0 ? $"bitti ({why})" : "bitti")}: {readNow} dükkan okundu" +
@@ -492,6 +620,48 @@ internal sealed partial class BotEngine
         return null;
     }
 
+    private bool FirstTime(string key)
+    {
+        lock (_marketTold)
+        {
+            if (_marketTold.Count > 50_000)
+                _marketTold.Clear();
+            return _marketTold.Add(key);
+        }
+    }
+
+    /// <summary>Least listings of an item before its average counts (fewer: no "usual price" yet).</summary>
+    internal const int DealMinListings = 5;
+
+    /// <summary>
+    /// A good deal: an item without bonuses (stackables, books, stones: their price is comparable) for
+    /// sale this much under its usual price (the trimmed average of the market) is told, each sale once.
+    /// </summary>
+    private void TellDeals(OpenShop shop)
+    {
+        var profile = Profile;
+        if (!profile.MarketDeals || profile.MarketDealPercent <= 0)
+            return;
+        var stats = MarketStats();
+        foreach (var item in shop.Items.Where(i => i.Bonuses.Count == 0))
+        {
+            string name = ItemBook.NameOf(item.Vnum);
+            if (!stats.TryGetValue(name, out var s) || !IsDeal(item.UnitPrice, s, profile.MarketDealPercent) ||
+                !FirstTime($"deal|{shop.Id}|{item.Vnum}|{item.Price}"))
+                continue;
+            string text = $"💎 Kelepir: {name} — tanesi {MarketBook.Yang(item.UnitPrice)} yang (pazar ortalaması {MarketBook.Yang(s.Average)}, " +
+                          $"%{(1 - item.UnitPrice / s.Average) * 100:0} ucuz), {item.Count} adet, satıcı {shop.Owner}.";
+            _log(text);
+            if (profile.MarketNotify)
+                Notify(text);
+        }
+    }
+
+    /// <summary>Whether a piece price is a deal: at least <paramref name="percent"/> % under the usual price of an item seen often enough.</summary>
+    internal static bool IsDeal(double unitPrice, ItemStats stats, int percent) =>
+        stats.Listings >= DealMinListings && stats.Shops >= 3 && stats.Average > 0 && unitPrice > 0 &&
+        unitPrice <= stats.Average * (1 - percent / 100.0);
+
     /// <summary>The shop window is open: writes it into the list (and tells about wanted items);
     /// with <paramref name="close"/> closes it with Esc and waits until it is gone.</summary>
     private async Task<OpenShop?> TakeOpenShop(InputExecutor input, MarketBook book, CancellationToken token, bool close)
@@ -517,14 +687,17 @@ internal sealed partial class BotEngine
         {
             _log($"🛒 {shop.Owner} (Sv {shop.Level}): {shop.Items.Count} ürün" +
                  (shop.Items.Count > 0 ? $", en pahalısı {ItemBook.NameOf(shop.Items.MaxBy(i => i.Price)!.Vnum)} {MarketBook.Yang(shop.Items.Max(i => i.Price))} yang" : "") + ".");
-            // A wanted item at its price (or cheaper): told at once, also on Telegram.
+            // A wanted item at its price (or cheaper): told at once, also on Telegram (each sale once).
             foreach (var (_, item, price) in book.WantedIn(shop).GroupBy(f => f.Item).Select(g => g.MinBy(f => f.UnitPrice)))
             {
+                if (!FirstTime($"{shop.Id}|{item}|{price}"))
+                    continue;
                 string text = $"🎯 Pazarda bulundu: {item} — tanesi {MarketBook.Yang(price)} yang, satıcı {shop.Owner}.";
                 _log(text);
                 if (Profile.MarketNotify)
                     Notify(text);
             }
+            TellDeals(shop);
         }
         // Esc only while the shop window is open (with nothing open it would open the game menu).
         for (int i = 0; close && i < 3 && ShopOpenNow() != null; i++)
