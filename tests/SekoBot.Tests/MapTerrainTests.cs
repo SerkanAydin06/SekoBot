@@ -84,6 +84,11 @@ public class MapTerrainTests
             Assert.False(avoid[0].Crosses(from, p, 0));
             from = p;
         }
+        // Stuck right ahead (the character stands at its edge): not walked straight into again.
+        var ahead = new List<MapTerrain.Circle> { new(Me.X + 70, Me.Y, 80) };
+        var round = map.WayTo(Me, goal, avoid: ahead);
+        Assert.NotNull(round);
+        Assert.True(round!.Count > 1);
         // One the goal stands in doesn't count.
         Assert.Equal([goal], map.WayTo(Me, goal, avoid: [new(3000, 0, 300)]));
     }
