@@ -16,6 +16,9 @@ internal sealed class PopupWatch
     /// <summary>A known one (Esc should close it) gets a few more tries.</summary>
     public static readonly TimeSpan KnownGiveUpAfter = TimeSpan.FromSeconds(12);
 
+    /// <summary>The advert after a level-up.</summary>
+    public const string Advert = "popup_C";
+
     /// <summary>How many of each window are let be (showing at the start, or Esc didn't close them).</summary>
     private readonly Dictionary<string, int> _ignored = [];
     /// <summary>Since when there have been more of a window than are let be.</summary>
@@ -30,7 +33,9 @@ internal sealed class PopupWatch
         _ignored.Clear();
         foreach (var group in showing.GroupBy(w => w))
         {
-            if (!BotEngine.KnownWindows.Contains(group.Key))
+            // Unknown windows, and adverts already up (seen: one on IMEDUSA06's game at every start that Esc
+            // never closed, and Esc opened the game menu twice each time): part of the screen.
+            if (!BotEngine.KnownWindows.Contains(group.Key) || group.Key == Advert)
                 _ignored[group.Key] = group.Count();
             else if (before.TryGetValue(group.Key, out int letBe) && letBe > 0)
                 _ignored[group.Key] = Math.Min(letBe, group.Count());
