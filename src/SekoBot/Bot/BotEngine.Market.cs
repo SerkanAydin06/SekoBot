@@ -10,8 +10,9 @@ namespace SekoBot.Bot;
 /// minute, and every shop window that opens (by the bot or by the player) is written into it.
 /// "Pazarı tara" opens the shops not read lately one after another (the nearest first: walk, click
 /// the stall like a person, read the items from memory, Esc, on). "Dükkana götür" walks to the shop
-/// of an item picked from the list, clicks its stall and leaves its window open. Nothing is ever
-/// bought. Memory is only read.
+/// of an item picked from the list, clicks its stall and leaves its window open. Stalls are opened
+/// with a finger tap (<see cref="TouchTap"/>: the game may stay behind, the mouse stays the user's);
+/// a real click only when Windows refuses touches. Nothing is ever bought. Memory is only read.
 /// </summary>
 internal sealed partial class BotEngine
 {
@@ -285,10 +286,10 @@ internal sealed partial class BotEngine
                 // Near and drawn: click its stall (on screen), the game walks up to it and opens it.
                 if (ClickPoint(next, world, camera, state) is Point p)
                 {
+                    // A tap that couldn't be made (the window covered, the mouse in use) uses no try.
+                    if (!await OpenStallAsync(input, p, yieldMouse: true, token))
+                        continue;
                     tries[next.Id] = tries.GetValueOrDefault(next.Id) + 1;
-                    // A real click (the game in front, the cursor on the stall): clicks posted to
-                    // the window from the background are ignored on things in the world (seen).
-                    input.Enqueue(new ClickAction(p, Slow: true, Fast: true, Yield: true));
                     if (await WaitForShop(token) != null)
                     {
                         missedInARow = 0;
@@ -297,7 +298,7 @@ internal sealed partial class BotEngine
                     }
                     else if (++missedInARow >= ShopClicksWithoutOpen)
                     {
-                        why = $"{ShopClicksWithoutOpen} tıklamada hiçbir dükkan açılmadı; oyun penceresi önde mi, karakter dükkanların yanında mı?";
+                        why = $"{ShopClicksWithoutOpen} denemede hiçbir dükkan açılmadı; karakter dükkanların yanında mı?";
                         break;
                     }
                     if (readNow > 0 && readNow % 25 == 0)
@@ -350,6 +351,46 @@ internal sealed partial class BotEngine
         OnPlayfield(p, state.Width, state.Height)
             ? Point.Round(p)
             : null;
+
+    private bool _touchRefused;
+    private DateTime _touchToldAt;
+
+    /// <summary>Opens a stall at a point of the game picture: a finger tap (the game can stay behind
+    /// other windows, the cursor stays where the user has it), else a real click.</summary>
+    /// <returns>False when nothing was done (the game window is covered or the user is using the
+    /// mouse): try again a moment later.</returns>
+    private async Task<bool> OpenStallAsync(InputExecutor input, Point p, bool yieldMouse, CancellationToken token)
+    {
+        if (!_touchRefused)
+        {
+            var result = await TouchTap.TapAsync(_window, p, token);
+            if (result == TouchResult.Done)
+                return true;
+            if (result == TouchResult.Unavailable)
+            {
+                _touchRefused = true;
+                _log("Windows dokunmaya izin vermedi; dükkanlar fareyle açılacak (oyun öne gelir).");
+            }
+            else
+            {
+                string text = result == TouchResult.Covered
+                    ? "Oyun penceresinin üstü kapalı ya da küçültülmüş; dükkana dokunulamıyor. Pencere görününce devam edilecek."
+                    : "Fare kullanılıyor; dükkana dokunmak için farenin durması bekleniyor.";
+                _marketStatus = text;
+                if (DateTime.Now - _touchToldAt > TimeSpan.FromMinutes(2))
+                {
+                    _touchToldAt = DateTime.Now;
+                    _log(text);
+                }
+                await Task.Delay(1000, token);
+                return false;
+            }
+        }
+        // A real click (the game in front, the cursor on the stall): clicks posted to the window
+        // from the background are ignored on things in the world (seen).
+        input.Enqueue(new ClickAction(p, Slow: true, Fast: true, Yield: yieldMouse));
+        return true;
+    }
 
     /// <summary>Up to 5 s after a click: the character walks over and the server sends the shop.</summary>
     private async Task<OpenShop?> WaitForShop(CancellationToken token)
@@ -483,8 +524,9 @@ internal sealed partial class BotEngine
             _marketStatus = $"{owner} dükkanına gidiliyor: {new Vec3(shop.X, shop.Y, 0).DistanceXY(world.Player) / 100:0} m.";
             if (ClickPoint(shop, world, camera, state) is Point p && clicks < 4)
             {
+                if (!await OpenStallAsync(input, p, yieldMouse: false, token))
+                    continue;
                 clicks++;
-                input.Enqueue(new ClickAction(p, Slow: true, Fast: true));
                 if (await WaitForShop(token) is { } opened)
                 {
                     bool right = opened.Id == shopId;
