@@ -63,6 +63,21 @@ internal static class TouchTap
         }
         if (Win32.IsIconic(window.Handle))
             return TouchResult.Covered;
+        // Another SekoBot moving the real mouse right now (a UI button, dragging an item): not now.
+        if (!InputExecutor.TryTakeMouseTurn())
+            return TouchResult.Busy;
+        try
+        {
+            return Tap(window, client, screen, slower);
+        }
+        finally
+        {
+            InputExecutor.ReleaseMouseTurn();
+        }
+    }
+
+    private static TouchResult Tap(WindowInfo window, Point client, Point screen, bool slower)
+    {
         if (!Shows(window, screen))
         {
             PostedClick(window, client, screen, slower ? SlowerPostedClickGaps : PostedClickGaps);

@@ -407,12 +407,33 @@ internal sealed partial class BotEngine
     private bool _touchRefused;
     private DateTime _touchToldAt;
 
+    /// <summary>
+    /// Another SekoBot is doing a job with the mouse (throwing items away, selling, reviving, writing a
+    /// message): the scan waits until it is done, even its short cursor moves would get in the way.
+    /// </summary>
+    private async Task WaitForOtherMouseJobsAsync(CancellationToken token)
+    {
+        var busy = MouseUse.Others();
+        if (busy.Count == 0)
+            return;
+        string who = string.Join(", ", busy.Select(n => $"{n}."));
+        _log($"⏸ {who} SekoBot fareyle bir iş yapıyor (eşya atma, satış, dirilme ya da mesaj); pazar taraması o bitene kadar bekliyor.");
+        var began = DateTime.Now;
+        while ((busy = MouseUse.Others()).Count > 0)
+        {
+            _marketStatus = $"{string.Join(", ", busy.Select(n => $"{n}."))} SekoBot fareyi kullanıyor; pazar taraması bekliyor ({(DateTime.Now - began).TotalSeconds:0} sn).";
+            await Task.Delay(500, token);
+        }
+        _log($"▶ Diğer SekoBot'un işi bitti ({(DateTime.Now - began).TotalSeconds:0} sn beklendi); pazar taraması sürüyor.");
+    }
+
     /// <summary>Opens a stall at a point of the game picture: a finger tap (the game can stay behind
     /// other windows, the cursor stays where the user has it), else a real click.</summary>
     /// <returns>False when nothing was done (the game window is covered or the user is using the
     /// mouse): try again a moment later.</returns>
     private async Task<bool> OpenStallAsync(InputExecutor input, Point p, bool yieldMouse, CancellationToken token)
     {
+        await WaitForOtherMouseJobsAsync(token);
         if (!_touchRefused)
         {
             var player = World?.Player;
