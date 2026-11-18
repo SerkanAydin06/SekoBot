@@ -254,7 +254,7 @@ internal sealed class MiniBar : Form
             {
                 0 => _info.Attack ? "Saldırı açık. Tıkla: sadece yerdeki eşyaları topla" : "Sadece eşya topluyor. Tıkla: saldırıyı aç",
                 1 => _info.Running ? "Duraklat (F10)" : "Başlat (F10)",
-                2 => "Durdur (F11)",
+                2 => $"Durdur ({(Instance.IsFirst ? "F11 / " : "")}Ctrl+Shift+{Math.Min(Instance.Number, 9)})",
                 3 => "Büyüt (çift tık da olur)",
                 _ => "Sağ tık: pencereleri diz, büyüt",
             });

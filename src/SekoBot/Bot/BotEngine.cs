@@ -23,6 +23,9 @@ internal sealed record EngineStats(
 /// </summary>
 internal sealed partial class BotEngine : IDisposable
 {
+    /// <summary>The keys that stop this SekoBot (F11 only for the 1st; each has Ctrl+Shift+ its number).</summary>
+    internal static string StopKeys => (Instance.IsFirst ? "F11 ya da " : "") + $"Ctrl+Shift+{Math.Min(Instance.Number, 9)}";
+
     private readonly WindowInfo _window;
     private readonly Action<string> _log;
     private readonly Brain _brain;
@@ -375,8 +378,8 @@ internal sealed partial class BotEngine : IDisposable
             _sessionStarted = true;
         }
         _log(dryRun ? "Bot kuru çalışmada başladı (girdi gönderilmez)."
-            : background ? $"Bot başladı (oyun arka planda kalabilir). Acil durdurma: {(Instance.IsFirst ? "F11" : "Ctrl+F11")}"
-            : $"Bot başladı. Acil durdurma: {(Instance.IsFirst ? "F11" : "Ctrl+F11")}");
+            : background ? $"Bot başladı (oyun arka planda kalabilir). Acil durdurma: {StopKeys}"
+            : $"Bot başladı. Acil durdurma: {StopKeys}");
         return true;
     }
 
