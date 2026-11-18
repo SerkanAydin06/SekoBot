@@ -114,7 +114,9 @@ internal sealed partial class BotEngine
         string name = NpcBook.Shops.GetValueOrDefault(npc.Vnum, "Market");
         _log($"💰 Çantada satılacak {toSell} eşya var: {at.DistanceXY(start.Player) / 100:0} m ötedeki {name} NPC'sine gidiliyor.");
         using var input = new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
-        await WalkToAsync(input, at, TimeSpan.FromMinutes(2), token, () => { }, near: 250);
+        int stuck = await WalkFarAsync(input, at, TimeSpan.FromMinutes(3), token, near: 250);
+        if (World is { } w && w.Player.DistanceXY(at) > 600)
+            _log($"💰 {name} NPC'sine varılamadı: {w.Player.DistanceXY(at) / 100:0} m kaldı, yolda {stuck} kez takıldı.");
         if (World is not { } there || there.MapName != start.MapName || there.Player.DistanceXY(at) > 600)
             return Failed("NPC'ye varılamadı");
 
@@ -176,7 +178,7 @@ internal sealed partial class BotEngine
             input.Enqueue(new KeyTapAction(profile.Keys.CloseWindow));
             await Task.Delay(800, token);
         }
-        await WalkToAsync(input, home, TimeSpan.FromMinutes(2), token, () => { }, near: 300);
+        await WalkFarAsync(input, home, TimeSpan.FromMinutes(3), token, near: 300);
         if (sold == 0)
             return Failed("satılacak eşya satılamadı" + (cleaner.Problem is { } why ? $" ({why})" : ""));
         lock (_botGate)
@@ -185,6 +187,37 @@ internal sealed partial class BotEngine
         string done = $"💰 {sold} eşya {name} NPC'sine satıldı; alana dönüldü, avlanmaya devam.";
         Notify(done);
         return done;
+    }
+
+    /// <summary>
+    /// A long walk (to a market NPC and back): <see cref="WalkToAsync"/> stops at the first thing it gets
+    /// stuck on, so here, stuck, the character steps back and aside (left, then right, further each time)
+    /// and goes on. The number of times it got stuck.
+    /// </summary>
+    private async Task<int> WalkFarAsync(InputExecutor input, Vec3 target, TimeSpan limit, CancellationToken token, double near)
+    {
+        var keys = Profile.Keys;
+        var started = _clock.Elapsed;
+        int stuck = 0;
+        while (_clock.Elapsed - started < limit)
+        {
+            token.ThrowIfCancellationRequested();
+            await WalkToAsync(input, target, limit - (_clock.Elapsed - started), token, () => { }, near);
+            if (World is not { } world || world.Player.DistanceXY(target) < near)
+                break;
+            stuck++;
+            // Back a little, then sideways (the side changes each time, the step grows).
+            var side = stuck % 2 == 1 ? keys.MoveLeft : keys.MoveRight;
+            int ms = Math.Min(2000, 500 + stuck * 150);
+            input.Enqueue(new KeyDownAction(keys.MoveBack));
+            await Task.Delay(400, token);
+            input.Enqueue(new KeyUpAction(keys.MoveBack));
+            input.Enqueue(new KeyDownAction(side));
+            await Task.Delay(ms, token);
+            input.Enqueue(new KeyUpAction(side));
+            await Task.Delay(150, token);
+        }
+        return stuck;
     }
 
     private string Failed(string why)
