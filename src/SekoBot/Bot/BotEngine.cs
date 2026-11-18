@@ -200,7 +200,10 @@ internal sealed partial class BotEngine : IDisposable
                                 NotifyEvents(world);
                             }
                             if (world != null)
+                            {
                                 TrackPicked(world, now);
+                                NoticeTownNpcs(world, now);
+                            }
                             WatchMarket(world, now);
                             WatchTerrain(world, now);
                             ReadBagForCleaning();
