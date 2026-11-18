@@ -15,17 +15,23 @@ internal sealed record ItemStats(string Name, int Shops, int Listings, long Piec
 
 /// <summary>One item for sale, found in the market list: what, for how much, in which shop and where.</summary>
 internal sealed record MarketListing(string Name, int Count, long Price, double UnitPrice, string Bonuses,
-    int ShopId, string Owner, double X, double Y, DateTime Seen, int Vnum = 0, double Score = 0, int? BonusValue = null);
+    int ShopId, string Owner, double X, double Y, DateTime Seen, int Vnum = 0, double Score = 0, int? BonusValue = null,
+    int Level = 0, string Title = "", DateTime First = default);
 
 /// <summary>How the market list is ordered.</summary>
-internal enum MarketSort { Cheapest, BonusValue, Score }
+internal enum MarketSort { Cheapest, BonusValue, Score, Newest, Dearest }
 
 /// <summary>A search of the market list: words (in the name or the bonuses), and, when given, only items of an
 /// item group, only those with a bonus of at least a value; ordered as asked.</summary>
+/// <param name="MinPrice">Per piece at least (0: any).</param>
+/// <param name="MaxPrice">Per piece at most (0: any).</param>
+/// <param name="OnlyBonused">Only items with bonuses.</param>
+/// <param name="Seller">Only this seller's shop (part of the name).</param>
 internal sealed record MarketQuery(string Text, string? Group = null, string? Bonus = null, int MinValue = 0,
-    MarketSort Sort = MarketSort.Cheapest)
+    MarketSort Sort = MarketSort.Cheapest, long MinPrice = 0, long MaxPrice = 0, bool OnlyBonused = false, string? Seller = null)
 {
-    public bool Empty => Text.Trim().Length == 0 && Group == null && Bonus == null;
+    public bool Empty => Text.Trim().Length == 0 && Group == null && Bonus == null && MinPrice <= 0 && MaxPrice <= 0 &&
+                         !OnlyBonused && string.IsNullOrWhiteSpace(Seller);
 }
 
 /// <summary>
@@ -109,9 +115,10 @@ internal sealed class MarketBook
         lock (_gate)
         {
             var at = _all.TryGetValue(shop.Id, out var known) ? known : _shops.TryGetValue(shop.Id, out var old) ? (old.X, old.Y) : (0.0, 0.0);
+            var first = _shops.TryGetValue(shop.Id, out var before) && before.Owner == shop.Owner && before.First != default ? before.First : seen;
             _shops[shop.Id] = new Shop
             {
-                Id = shop.Id, Owner = shop.Owner, Level = shop.Level, Title = shop.Title, X = at.Item1, Y = at.Item2, Seen = seen,
+                Id = shop.Id, Owner = shop.Owner, Level = shop.Level, Title = shop.Title, X = at.Item1, Y = at.Item2, Seen = seen, First = first,
                 Items = [.. shop.Items.Select(i => new Item
                 {
                     Name = Name(i), Vnum = i.Vnum, Count = i.Count, Price = i.Price, Socket = i.Socket,
@@ -134,19 +141,27 @@ internal sealed class MarketBook
                                               .Select(w => (w, Name(i), i.UnitPrice)))];
 
     /// <summary>The items matching the search: name / bonus words, item group, a bonus of at least a value; ordered as asked.</summary>
-    public List<MarketListing> Find(MarketQuery query, BonusBook bonuses, int max = 300)
+    /// <param name="allowEmpty">An empty search gives everything (the market window), not nothing.</param>
+    public List<MarketListing> Find(MarketQuery query, BonusBook bonuses, int max = 300, bool allowEmpty = false)
     {
-        if (query.Empty)
+        if (query.Empty && !allowEmpty)
             return [];
-        string text = query.Text.Trim();
+        // Every word has to be in the name or the bonuses ("kılıç +9", "kavrama 4").
+        string[] words = query.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string seller = query.Seller?.Trim() ?? "";
+        bool Matches(Item i) => words.All(w => i.Name.Contains(w, StringComparison.CurrentCultureIgnoreCase) ||
+                                               i.Bonuses.Contains(w, StringComparison.CurrentCultureIgnoreCase));
         List<MarketListing> all;
         lock (_gate)
-            all = [.. _shops.Values.SelectMany(s => s.Items
-                    .Where(i => text.Length == 0 ||
-                                i.Name.Contains(text, StringComparison.CurrentCultureIgnoreCase) ||
-                                i.Bonuses.Contains(text, StringComparison.CurrentCultureIgnoreCase))
+            all = [.. _shops.Values
+                    .Where(s => seller.Length == 0 || s.Owner.Contains(seller, StringComparison.CurrentCultureIgnoreCase))
+                    .SelectMany(s => s.Items
+                    .Where(Matches)
                     .Where(i => query.Group == null || BonusBook.GroupOf(i.Vnum) == query.Group)
-                    .Select(i => new MarketListing(i.Name, i.Count, i.Price, i.UnitPrice, i.Bonuses, s.Id, s.Owner, s.X, s.Y, s.Seen, i.Vnum)))];
+                    .Where(i => (query.MinPrice <= 0 || i.UnitPrice >= query.MinPrice) && (query.MaxPrice <= 0 || i.UnitPrice <= query.MaxPrice))
+                    .Where(i => !query.OnlyBonused || i.Bonuses.Length > 0)
+                    .Select(i => new MarketListing(i.Name, i.Count, i.Price, i.UnitPrice, i.Bonuses, s.Id, s.Owner, s.X, s.Y, s.Seen, i.Vnum,
+                        Level: s.Level, Title: s.Title, First: s.First)))];
         if (query.Bonus != null)
             all = [.. all.Select(l => l with { BonusValue = BonusBook.ValueOf(l.Bonuses, query.Bonus) })
                          .Where(l => l.BonusValue is int v && v >= query.MinValue)];
@@ -155,9 +170,45 @@ internal sealed class MarketBook
         {
             MarketSort.BonusValue when query.Bonus != null => all.OrderByDescending(l => l.BonusValue).ThenBy(l => l.UnitPrice),
             MarketSort.Score or MarketSort.BonusValue => all.OrderByDescending(l => l.Score).ThenBy(l => l.UnitPrice),
+            MarketSort.Newest => all.OrderByDescending(l => l.First).ThenBy(l => l.UnitPrice),
+            MarketSort.Dearest => all.OrderByDescending(l => l.UnitPrice),
             _ => all.OrderBy(l => l.UnitPrice),
         };
         return [.. ordered.Take(max)];
+    }
+
+    /// <summary>Everything one shop sells (cheapest first); empty when it isn't known.</summary>
+    public List<MarketListing> ShopListings(int shopId)
+    {
+        lock (_gate)
+            return _shops.TryGetValue(shopId, out var s)
+                ? [.. s.Items.Select(i => new MarketListing(i.Name, i.Count, i.Price, i.UnitPrice, i.Bonuses, s.Id, s.Owner, s.X, s.Y, s.Seen, i.Vnum,
+                        Level: s.Level, Title: s.Title, First: s.First)).OrderBy(l => l.UnitPrice)]
+                : [];
+    }
+
+    /// <summary>Every sale of exactly this item (cheapest first).</summary>
+    public List<MarketListing> Listings(string name)
+    {
+        lock (_gate)
+            return [.. _shops.Values.SelectMany(s => s.Items.Where(i => string.Equals(i.Name, name, StringComparison.CurrentCultureIgnoreCase))
+                    .Select(i => new MarketListing(i.Name, i.Count, i.Price, i.UnitPrice, i.Bonuses, s.Id, s.Owner, s.X, s.Y, s.Seen, i.Vnum,
+                        Level: s.Level, Title: s.Title, First: s.First)))
+                .OrderBy(l => l.UnitPrice)];
+    }
+
+    /// <summary>How many shops of the map stand now, and how many of them were never opened.</summary>
+    public (int OnMap, int NeverRead) Coverage()
+    {
+        lock (_gate)
+            return (_all.Count, _all.Keys.Count(id => !_shops.ContainsKey(id)));
+    }
+
+    /// <summary>The oldest reading of a shop still standing (how old the list is at worst).</summary>
+    public DateTime? OldestRead()
+    {
+        lock (_gate)
+            return _shops.Count == 0 ? null : _shops.Values.Min(s => s.Seen);
     }
 
     /// <summary>Every item whose name (or bonuses) holds <paramref name="query"/>, cheapest piece first.</summary>
@@ -334,6 +385,8 @@ internal sealed class MarketBook
         public double Y { get; set; }
         /// <summary>When its items were read.</summary>
         public DateTime Seen { get; set; }
+        /// <summary>When it was read the first time (a shop new in the market).</summary>
+        public DateTime First { get; set; }
         public List<Item> Items { get; set; } = [];
     }
 

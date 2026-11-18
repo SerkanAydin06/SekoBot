@@ -400,9 +400,11 @@ internal sealed class MainForm : Form
 
         // Pazar: the market list of the map (kept up to date), search it, walk to a shop, scan, wanted items.
         var market = _tabPages[8];
-        _scanMarket = Theme.Button(market, "🛒  Pazarı tara", new Rectangle(0, 0, 170, 30), Theme.Primary, Theme.PrimaryHover);
+        _scanMarket = Theme.Button(market, "🛒  Pazarı tara", new Rectangle(0, 0, 140, 30), Theme.Secondary, Theme.SecondaryHover);
         _scanMarket.Click += (_, _) => ToggleMarketScan();
-        var openReport = Theme.Button(market, "📊  Raporu aç", new Rectangle(178, 0, 130, 30), Theme.Secondary, Theme.SecondaryHover);
+        var marketWindow = Theme.Button(market, "🖥  Pazar penceresi", new Rectangle(146, 0, 170, 30), Theme.Primary, Theme.PrimaryHover);
+        marketWindow.Click += (_, _) => OpenMarketWindow();
+        var openReport = Theme.Button(market, "📊  Rapor", new Rectangle(322, 0, 96, 30), Theme.Secondary, Theme.SecondaryHover);
         openReport.Click += (_, _) =>
         {
             if (BotEngine.LatestReport is { } report)
@@ -410,13 +412,13 @@ internal sealed class MainForm : Form
             else
                 WriteLog("Henüz pazar listesi yok: önce pazar haritasında \"Pazarı tara\"ya bas.");
         };
-        var marketFolder = Theme.Button(market, "📂  Klasör", new Rectangle(316, 0, 100, 30), Theme.Secondary, Theme.SecondaryHover);
+        var marketFolder = Theme.Button(market, "📂  Klasör", new Rectangle(424, 0, 90, 30), Theme.Secondary, Theme.SecondaryHover);
         marketFolder.Click += (_, _) =>
         {
             Directory.CreateDirectory(BotEngine.MarketFolder);
             OpenFile(BotEngine.MarketFolder);
         };
-        var bonusGuide = Theme.Button(market, "📚  Efsun rehberi", new Rectangle(424, 0, 150, 30), Theme.Secondary, Theme.SecondaryHover);
+        var bonusGuide = Theme.Button(market, "📚  Efsun rehberi", new Rectangle(520, 0, 136, 30), Theme.Secondary, Theme.SecondaryHover);
         bonusGuide.Click += (_, _) =>
         {
             try
@@ -432,7 +434,7 @@ internal sealed class MainForm : Form
             catch (IOException ex) { WriteLog("Efsun rehberi yazılamadı: " + ex.Message); }
         };
         _marketState = Theme.Label(market, "Pazar haritasında liste kendiliğinden güncellenir: açtığın dükkanlar eklenir, kapananlar çıkarılır.",
-            new Rectangle(582, 0, 336, 32), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.MiddleLeft);
+            new Rectangle(664, 0, 254, 32), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.MiddleLeft);
 
         // Left: search the list, pick, walk there.
         Theme.Label(market, "PAZARDA ARA", new Rectangle(0, 40, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
@@ -1296,6 +1298,39 @@ internal sealed class MainForm : Form
         {
             WriteLog("Açılamadı: " + path);
         }
+    }
+
+    private MarketForm? _marketWindow;
+
+    /// <summary>The market window (one at a time): search the market, the continuous watch, wanted items.</summary>
+    private void OpenMarketWindow()
+    {
+        if (_marketWindow is { IsDisposed: false })
+        {
+            if (_marketWindow.WindowState == FormWindowState.Minimized)
+                _marketWindow.WindowState = FormWindowState.Normal;
+            _marketWindow.Activate();
+            return;
+        }
+        _marketWindow = new MarketForm(() => _engine, _profile, SaveProfile, text => PostUi(() => WriteLog(text)), StartMarket, () => _engine?.StopMarketScan());
+        _marketWindow.FormClosed += (_, _) => ReloadSettings();
+        _marketWindow.Show(this);
+    }
+
+    /// <summary>Starts a market scan, or the continuous watch.</summary>
+    private void StartMarket(bool continuous)
+    {
+        if (_engine == null)
+        {
+            WriteLog("Önce oyun açık olmalı.");
+            return;
+        }
+        if (_engine.ScanningMarket)
+            return;
+        if (!_engine.StartMarketScan(out string error, continuous))
+            WriteLog(error);
+        UpdateControls();
+        UpdateStats();
     }
 
     private void ToggleMarketScan()

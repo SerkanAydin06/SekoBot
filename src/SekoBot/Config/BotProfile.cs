@@ -205,6 +205,15 @@ internal sealed class BotProfile
     /// <summary>A scan stopped half way on the same map within a few hours goes on where it was.</summary>
     public bool MarketResume { get; set; } = true;
 
+    /// <summary>Continuous market watch: a shop is read again once its reading is older than this (minutes).</summary>
+    public int MarketRefreshMinutes { get; set; } = 30;
+
+    /// <summary>Tell good deals: items without bonuses for sale well under their usual market price.</summary>
+    public bool MarketDeals { get; set; } = true;
+
+    /// <summary>A deal is at least this many percent under the usual price.</summary>
+    public int MarketDealPercent { get; set; } = 40;
+
     /// <summary>The bot was made small (one bar under its game) when last closed: it opens small again.</summary>
     public bool MiniMode { get; set; }
     /// <summary>Items always picked up, whatever the other loot choices (names, comma separated,
