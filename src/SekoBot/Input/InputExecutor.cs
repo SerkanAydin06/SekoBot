@@ -75,6 +75,11 @@ internal sealed class InputExecutor : IDisposable
             if (_holdFront == value)
                 return;
             _holdFront = value;
+            // Other SekoBots' market scans wait while this job goes on.
+            if (value)
+                MouseUse.Begin();
+            else
+                MouseUse.End();
             // The user's mouse stays held for the whole job, not freed between the clicks.
             if (value)
                 Interlocked.Exchange(ref _jobGuard, MouseGuard.Hold(JobMouseHold))?.Dispose();
@@ -168,6 +173,10 @@ internal sealed class InputExecutor : IDisposable
     private async Task ExecuteAsync(BotAction action, CancellationToken token)
     {
         bool turn = false;
+        // A job with the real mouse (not the market scan's own clicks): marked for the other SekoBots.
+        bool job = NeedsMouse(action) && action is not ClickAction { Yield: true };
+        if (job)
+            MouseUse.Begin();
         if (NeedsMouse(action))
         {
             bool yields = action is ClickAction { Yield: true };
@@ -193,8 +202,16 @@ internal sealed class InputExecutor : IDisposable
         {
             if (turn)
                 MouseTurn.Release();
+            if (job)
+                MouseUse.End();
         }
     }
+
+    /// <summary>The shared mouse turn for a moment's cursor use outside the queue (the market's stall
+    /// taps): taken only when free right now. Give it back with <see cref="ReleaseMouseTurn"/>.</summary>
+    internal static bool TryTakeMouseTurn() => MouseTurn.WaitOne(0);
+
+    internal static void ReleaseMouseTurn() => MouseTurn.Release();
 
     private async Task ExecuteCoreAsync(BotAction action, CancellationToken token)
     {
