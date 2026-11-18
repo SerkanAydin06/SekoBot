@@ -244,7 +244,7 @@ internal sealed partial class BotEngine
         int readNow = 0;
         _log($"🛒 Pazar taraması başladı: {shops.Count} dükkan var, {toRead} tanesi okunacak" +
              (book.Shops > 0 ? $" (listede {book.Shops} dükkan vardı{(gone > 0 ? $", {gone} kapanmış dükkan çıkarıldı" : "")}; son 2 saatte okunanlar atlanıyor)" : "") +
-             ". Hiçbir şey satın alınmaz. Durdurmak için F11 ya da DURDUR." +
+             ". Hiçbir şey satın alınmaz. Durdurmak için " + StopKeys + " ya da DURDUR." +
              (book.Wanted.Count > 0 ? $" Aranan: {string.Join(", ", book.Wanted.Select(w => w.Name.Trim() + (w.MaxPrice > 0 ? $" (≤ {MarketBook.Yang(w.MaxPrice)})" : "")))}." : ""));
         using var input = new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
         bool Done(int id) => Read(id) || tries.GetValueOrDefault(id) >= ShopTries;
@@ -457,7 +457,7 @@ internal sealed partial class BotEngine
             SaveMarket(book);
             return $"🚶 {owner} dükkanını kapatmış; listeden çıkarıldı. Listede başka satıcıya bak.";
         }
-        _log($"🚶 {owner} dükkanına gidiliyor ({item}). Durdurmak için F11 ya da DURDUR.");
+        _log($"🚶 {owner} dükkanına gidiliyor ({item}). Durdurmak için " + StopKeys + " ya da DURDUR.");
         using var input = new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
         await PrepareForMarket(input, Profile, token);
         var began = DateTime.Now;

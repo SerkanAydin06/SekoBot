@@ -41,7 +41,10 @@ internal sealed class MainForm : Form
     private readonly Label _pageTitle, _pageInfo, _bagState, _events, _identity;
 
     private static string StartKey => Instance.IsFirst ? "F10" : "Ctrl+F10";
-    private static string StopKey => Instance.IsFirst ? "F11" : "Ctrl+F11";
+    private static string StopKey => Instance.IsFirst ? $"F11 / {OwnStopName}" : OwnStopName;
+    /// <summary>This SekoBot's own stop key: Ctrl+Shift+ its number.</summary>
+    internal static string OwnStopName => $"Ctrl+Shift+{Math.Min(Instance.Number, 9)}";
+    private static Keys OwnStopKey => Keys.D0 + Math.Min(Instance.Number, 9);
 
     /// <summary>When a game process started (to take the oldest free game first).</summary>
     private static DateTime GameStarted(uint processId)
@@ -833,8 +836,11 @@ internal sealed class MainForm : Form
         bool control = !Instance.IsFirst;
         if (!_hotkeys.Register(Keys.F10, () => BeginInvoke(new Action(ToggleBot)), control))
             WriteLog($"{StartKey} kısayolu başka bir uygulamada kullanılıyor.");
-        if (!_hotkeys.Register(Keys.F11, () => BeginInvoke(new Action(() => StopBot($"{StopKey} acil durdurma", byUser: true))), control))
-            WriteLog($"{StopKey} kısayolu başka bir uygulamada kullanılıyor; Durdur düğmesini kullan.");
+        if (Instance.IsFirst && !_hotkeys.Register(Keys.F11, () => BeginInvoke(new Action(() => StopBot("F11 acil durdurma", byUser: true)))))
+            WriteLog("F11 kısayolu başka bir uygulamada kullanılıyor; Durdur düğmesini kullan.");
+        // Every SekoBot has a stop key of its own: Ctrl+Shift+1 for the 1st, Ctrl+Shift+2 for the 2nd, …
+        if (!_hotkeys.Register(OwnStopKey, () => BeginInvoke(new Action(() => StopBot($"{OwnStopName} acil durdurma", byUser: true))), control: true, shift: true))
+            WriteLog($"{OwnStopName} kısayolu başka bir uygulamada kullanılıyor; Durdur düğmesini kullan.");
         if (!Instance.IsFirst)
             WriteLog($"Bu {Instance.Number}. SekoBot: kendi ayarlarını kullanır, kısayollar {StartKey} / {StopKey}. " +
                      "Telegram komutları ve güncelleme 1. SekoBot'ta.");

@@ -3,7 +3,7 @@ namespace SekoBot;
 /// <summary>
 /// Several SekoBots at once, one per game window: each takes the first free number (1, 2, …) when it
 /// starts. Number 1 works as before; the others keep their own settings and log (profile-2.json,
-/// gunluk-2.txt), use Ctrl+F10 / Ctrl+F11, and leave Telegram commands and updates to number 1.
+/// gunluk-2.txt), use Ctrl+F10 and Ctrl+Shift+ their number to stop, and leave Telegram commands and updates to number 1.
 /// A SekoBot connected to a game marks it taken, so another one picks a different game.
 /// </summary>
 internal static class Instance
