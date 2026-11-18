@@ -45,6 +45,8 @@ internal sealed partial class BotEngine
     private readonly PickedItems _pickedItems = new();
     private TimeSpan _pickedSavedAt;
     private TimeSpan? _bagBonusesAt;
+    /// <summary>The bonus items told about (slot, item), so each is told once.</summary>
+    private readonly HashSet<(int Slot, int Vnum)> _bonusTold = [];
 
     private IReadOnlySet<(int Slot, int Vnum)> BotPicked
     {
@@ -72,6 +74,32 @@ internal sealed partial class BotEngine
             _pickedItems.Update(progress.Inventory, BotRunning, item => KeepPicked(item, profile));
             _lootedItems.UseCharacter(_world?.CharacterName ?? "");
             _lootedItems.Update(progress.Inventory, BotRunning, (Func<InventoryItem, bool>?)null);
+            foreach (var (vnum, count) in _pickedItems.Gained)
+                _sessionItems.Picked(vnum, count);
+            _sessionItems.Save();
+            // What the character carries teaches the bonus book too (not only the shops).
+            string me = _world?.CharacterName ?? "";
+            if (me.Length > 0 && (_bagBonusesAt is not { } last || now - last > TimeSpan.FromSeconds(10)))
+            {
+                _bagBonusesAt = now;
+                foreach (var item in progress.Inventory)
+                    BonusBook.Shared.LearnBag(me, item);
+            }
+            // Told when its bonus is first seen on an item the bot picked up (the game fills the bonuses a
+            // moment after the item comes in: not at once, seen).
+            var looted = _lootedItems.Picked;
+            foreach (var item in progress.Inventory.Where(i => looted.Contains((i.Slot, i.Vnum))).ToList())
+                if (Loot.KindOf(item.Vnum) == LootKind.Equipment && GoodBonus(item, profile) && _bonusTold.Add((item.Slot, item.Vnum)))
+                {
+                    // The bonuses asked for are marked ✔ (the others are told too: they make its worth).
+                    var wanted = profile.LootBonuses;
+                    string bonuses = string.Join(", ", (item.Bonuses ?? []).Where(b => b.Type > 0).Select(b =>
+                        ItemBonuses.Describe([b]) + (wanted.Any(w => ItemBonuses.Same(w.Type, b.Type) && b.Value >= w.Min && w.Applies(item.Vnum)) ? " ✔" : "")));
+                    string text = $"⭐ Efsunlu eşya alındı: {ItemBook.NameOf(item.Vnum)} — {bonuses}";
+                    _log(text);
+                    if (profile.NotifyBonusItems)
+                        Notify(text);
+                }
             // A bonus asked for, once seen on an item (also after it came in: the game fills its bonuses a
             // moment later), keeps it for good: never thrown, never sold (seen: an EXP +6 necklace thrown).
             foreach (var item in progress.Inventory)
@@ -86,29 +114,6 @@ internal sealed partial class BotEngine
                 else if (KeepPicked(item, profile))
                     _pickedItems.Forget(item.Slot, item.Vnum); // wanted (its price…): not junk
             }
-            foreach (var (vnum, count) in _pickedItems.Gained)
-                _sessionItems.Picked(vnum, count);
-            _sessionItems.Save();
-            // What the character carries teaches the bonus book too (not only the shops).
-            string me = _world?.CharacterName ?? "";
-            if (me.Length > 0 && (_bagBonusesAt is not { } last || now - last > TimeSpan.FromSeconds(10)))
-            {
-                _bagBonusesAt = now;
-                foreach (var item in progress.Inventory)
-                    BonusBook.Shared.LearnBag(me, item);
-            }
-            foreach (var item in _pickedItems.CameIn)
-                if (Loot.KindOf(item.Vnum) == LootKind.Equipment && GoodBonus(item, profile))
-                {
-                    // The bonuses asked for are marked ✔ (the others are told too: they make its worth).
-                    var wanted = profile.LootBonuses;
-                    string bonuses = string.Join(", ", (item.Bonuses ?? []).Where(b => b.Type > 0).Select(b =>
-                        ItemBonuses.Describe([b]) + (wanted.Any(w => ItemBonuses.Same(w.Type, b.Type) && b.Value >= w.Min && w.Applies(item.Vnum)) ? " ✔" : "")));
-                    string text = $"⭐ Efsunlu eşya alındı: {ItemBook.NameOf(item.Vnum)} — {bonuses}";
-                    _log(text);
-                    if (profile.NotifyBonusItems)
-                        Notify(text);
-                }
             if (_pickedItems.Changed && now - _pickedSavedAt > TimeSpan.FromSeconds(5))
             {
                 _pickedSavedAt = now;
