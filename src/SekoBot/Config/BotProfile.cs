@@ -214,6 +214,9 @@ internal sealed class BotProfile
     /// <summary>A deal is at least this many percent under the usual price.</summary>
     public int MarketDealPercent { get; set; } = 40;
 
+    /// <summary>The market window's list refreshes itself once a minute (off: only with "Yenile").</summary>
+    public bool MarketAutoRefresh { get; set; }
+
     /// <summary>The bot was made small (one bar under its game) when last closed: it opens small again.</summary>
     public bool MiniMode { get; set; }
     /// <summary>Items always picked up, whatever the other loot choices (names, comma separated,
