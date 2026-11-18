@@ -12,6 +12,16 @@ internal sealed record ShopItem(int Slot, int Vnum, int Count, long Price, IRead
     public double UnitPrice => Count > 1 ? (double)Price / Count : Price;
 }
 
+/// <summary>What lies over the game picture (in client pixels): a stall under it must not be tapped.</summary>
+/// <param name="ChatHistory">Where the chat history window is drawn when open (it covers the middle of the
+/// screen, Esc doesn't close it). Memory shows it "visible" open or closed (seen): whether it is open
+/// has to be seen in the picture.</param>
+/// <param name="ChatHistoryClose">Its X button.</param>
+internal sealed record ScreenCover(IReadOnlyList<Rectangle> Areas, Rectangle? ChatHistory = null, Point? ChatHistoryClose = null)
+{
+    public bool Covers(Point p) => Areas.Any(a => a.Contains(p));
+}
+
 /// <summary>The shop whose window is open: who sells, and everything in it.</summary>
 internal sealed record OpenShop(int Id, string Owner, int Level, string Title, IReadOnlyList<ShopItem> Items);
 
@@ -110,6 +120,70 @@ internal sealed partial class GameWorldReader
         }
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException or OverflowException) { }
         return names;
+    }
+
+    /// <summary>
+    /// The game's own windows over the picture now: the chat line at the bottom (a tap there may open the
+    /// chat history), the message window when open, and where the chat history and its X button are
+    /// drawn. Null when it can't be read.
+    /// </summary>
+    public ScreenCover? ReadScreenCover()
+    {
+        try
+        {
+            if (!_located)
+                return null;
+            long instance = Pointer(_moduleBase + _gameInstance);
+            long instanceClass = Pointer(instance + ObjClass);
+            if (ClassName(instanceClass) != "m2data_C")
+                return null;
+            long ui = Pointer(instance + Offset(instanceClass, "m2data_C", "uiMain"));
+            if (!MemoryReads.IsPointer(ui))
+                return null;
+            long uiClass = Pointer(ui + ObjClass);
+            var areas = new List<Rectangle>();
+            long chat = Pointer(ui + Offset(uiClass, "UI_C", "chatBox"));
+            if (Showing(chat) && ClassName(Pointer(chat + ObjClass)) == "chatBox_C")
+            {
+                long main = Pointer(chat + Offset(Pointer(chat + ObjClass), "chatBox_C", "main"));
+                if (Showing(main) && DrawnAt(main) is Rectangle line)
+                    areas.Add(line);
+            }
+            long dm = Pointer(ui + Offset(uiClass, "UI_C", "dmBox"));
+            long dmClass = Pointer(dm + ObjClass);
+            if (MemoryReads.IsPointer(dm) && ClassName(dmClass) == "dmBox_C" &&
+                Byte(dm + Offset(dmClass, "dmBox_C", "IsOpen")) is byte dmOpen && dmOpen != 0 && DrawnAt(dm) is Rectangle dmAt)
+                areas.Add(dmAt);
+            Point? close = null;
+            Rectangle? history = null;
+            long adds = ui + Offset(uiClass, "UI_C", "canvasAdds");
+            long data = Pointer(adds);
+            int count = Int32(adds + 8) ?? 0;
+            if (MemoryReads.IsPointer(data) && count is > 0 and <= 64)
+                for (int i = 0; i < count; i++)
+                {
+                    long widget = Pointer(data + i * 8L);
+                    if (!Showing(widget))
+                        continue;
+                    long cls = Pointer(widget + ObjClass);
+                    if (ClassName(cls) == "chatHistoryWindow_C")
+                    {
+                        long frame = Pointer(widget + Offset(cls, "chatHistoryWindow_C", "w_window"));
+                        if (DrawnAt(frame) is Rectangle at)
+                        {
+                            history = at;
+                            long x = Pointer(frame + Offset(Pointer(frame + ObjClass), "w_window_C", "X"));
+                            if (DrawnAt(x) is Rectangle button)
+                                close = new Point(button.X + button.Width / 2, button.Y + button.Height / 2);
+                        }
+                    }
+                }
+            return new ScreenCover(areas, history, close);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException or OverflowException or InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     /// <summary>The shop whose window is open now, or null.</summary>

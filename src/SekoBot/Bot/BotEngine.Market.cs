@@ -1,5 +1,6 @@
 using SekoBot.Config;
 using SekoBot.Input;
+using SekoBot.Capture;
 using SekoBot.Memory;
 
 namespace SekoBot.Bot;
@@ -121,6 +122,53 @@ internal sealed partial class BotEngine
     {
         lock (_worldGate)
             return _world?.ReadMarketShops() ?? [];
+    }
+
+    private ScreenCover? ScreenCoverNow()
+    {
+        lock (_worldGate)
+            return _world?.ReadScreenCover();
+    }
+
+    /// <summary>Whether the chat history is open, seen in the picture: its dark blue panel covers the
+    /// middle of the screen (the market's ground is green). Memory doesn't tell (seen).</summary>
+    private bool ChatHistoryShowing(ScreenCover? cover) =>
+        cover?.ChatHistory is Rectangle panel && WithLatestFrame(frame => PanelShowing(frame, panel));
+
+    internal static bool PanelShowing(Frame frame, Rectangle panel)
+    {
+        var inner = Rectangle.Intersect(Rectangle.Inflate(panel, -panel.Width / 8, -panel.Height / 8), new Rectangle(0, 0, frame.Width, frame.Height));
+        if (inner.Width < 20 || inner.Height < 20)
+            return false;
+        int all = 0, blue = 0;
+        for (int y = inner.Top; y < inner.Bottom; y += inner.Height / 12)
+            for (int x = inner.Left; x < inner.Right; x += inner.Width / 16)
+            {
+                var (b, g, r) = frame.Pixel(x, y);
+                all++;
+                if (b >= g - 10 && b > r + 15 && Math.Max(r, Math.Max(g, b)) < 110)
+                    blue++;
+            }
+        return all > 0 && blue > all / 2;
+    }
+
+    /// <summary>The chat history is open over the game (Esc doesn't close it): its X is tapped, and
+    /// clicked when a tap didn't close it. True when it was open.</summary>
+    private async Task<bool> CloseChatHistoryAsync(InputExecutor input, ScreenCover? cover, CancellationToken token)
+    {
+        if (cover?.ChatHistoryClose is not Point x || !ChatHistoryShowing(cover))
+            return false;
+        _log("Sohbet geçmişi penceresi açık (dükkanları kapatıyor); kapatılıyor.");
+        await OpenStallAsync(input, x, yieldMouse: true, token);
+        await Task.Delay(1000, token);
+        if (ChatHistoryShowing(cover))
+        {
+            input.Enqueue(new ClickAction(x, Slow: true, Fast: true, Yield: true));
+            await Task.Delay(2500, token);
+            if (ChatHistoryShowing(cover))
+                throw new InvalidOperationException("sohbet geçmişi penceresi kapanmadı; oyunda X ile kapat, sonra yeniden tara.");
+        }
+        return true;
     }
 
     private OpenShop? ShopOpenNow()
@@ -278,13 +326,16 @@ internal sealed partial class BotEngine
                 shops = MarketShops();
                 book.SetAllShops(shops); // shops closed meanwhile go out of the list at once
                 _marketStatus = $"Pazar taranıyor: {readNow}/{toRead} dükkan okundu · listede {book.Shops} dükkan, {book.Items} ürün.";
+                var cover = ScreenCoverNow();
+                if (await CloseChatHistoryAsync(input, cover, token))
+                    continue;
                 var next = NextShop(shops, world, camera, state, Done);
                 if (next == null)
                     break;
                 var where = new Vec3(next.X, next.Y, world.Player.Z);
                 double away = where.DistanceXY(world.Player);
                 // Near and drawn: click its stall (on screen), the game walks up to it and opens it.
-                if (ClickPoint(next, world, camera, state) is Point p)
+                if (ClickPoint(next, world, camera, state, cover) is Point p)
                 {
                     // A tap that couldn't be made (the window covered, the mouse in use) uses no try.
                     if (!await OpenStallAsync(input, p, yieldMouse: true, token))
@@ -344,11 +395,12 @@ internal sealed partial class BotEngine
             : first;
     }
 
-    /// <summary>Where to click a shop's stall on screen: near enough, drawn, on the play field; else null.</summary>
-    private static Point? ClickPoint(MarketShop shop, WorldSnapshot world, CameraView camera, Vision.GameState state) =>
+    /// <summary>Where to click a shop's stall on screen: near enough, drawn, on the play field, not under
+    /// one of the game's windows (the chat line: a tap there opens the chat history); else null.</summary>
+    private static Point? ClickPoint(MarketShop shop, WorldSnapshot world, CameraView camera, Vision.GameState state, ScreenCover? cover = null) =>
         new Vec3(shop.X, shop.Y, world.Player.Z).DistanceXY(world.Player) <= ShopClickFrom && shop.Body is Vec3 body &&
         camera.ToScreen(body with { Z = body.Z + ShopClickHeight }, state.Width, state.Height) is PointF p &&
-        OnPlayfield(p, state.Width, state.Height)
+        OnPlayfield(p, state.Width, state.Height) && cover?.Covers(Point.Round(p)) != true
             ? Point.Round(p)
             : null;
 
@@ -522,7 +574,10 @@ internal sealed partial class BotEngine
                 return $"🚶 {owner} dükkanını kapatmış; listeden çıkarıldı.";
             }
             _marketStatus = $"{owner} dükkanına gidiliyor: {new Vec3(shop.X, shop.Y, 0).DistanceXY(world.Player) / 100:0} m.";
-            if (ClickPoint(shop, world, camera, state) is Point p && clicks < 4)
+            var cover = ScreenCoverNow();
+            if (await CloseChatHistoryAsync(input, cover, token))
+                continue;
+            if (ClickPoint(shop, world, camera, state, cover) is Point p && clicks < 4)
             {
                 if (!await OpenStallAsync(input, p, yieldMouse: false, token))
                     continue;
