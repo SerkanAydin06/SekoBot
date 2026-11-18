@@ -48,9 +48,15 @@ internal sealed partial class BotEngine
         return info.Sell >= profile.LootEquipmentMinGold;
     }
 
-    /// <summary>The market NPC known on this map nearest to the character, within reach.</summary>
-    private static NpcBook.Place? NearShop(WorldSnapshot world) =>
-        NpcBook.Shared.On(world.MapName, world.Player).FirstOrDefault(n => new Vec3(n.X, n.Y, n.Z).DistanceXY(world.Player) <= SellTripRange);
+    /// <summary>The market NPC to sell at, within reach: one a walked way leads to first (no slope in
+    /// between, see <see cref="WalkedPaths"/>), else the nearest.</summary>
+    private NpcBook.Place? NearShop(WorldSnapshot world)
+    {
+        var near = NpcBook.Shared.On(world.MapName, world.Player).Where(n => new Vec3(n.X, n.Y, n.Z).DistanceXY(world.Player) <= SellTripRange).ToList();
+        return near.FirstOrDefault(n => _walked.Way(world.MapName, world.Player, new Vec3(n.X, n.Y, n.Z)) is { } way &&
+                                        way.Count >= 2 && way[^2].DistanceXY(new Vec3(n.X, n.Y, n.Z)) <= 500)
+               ?? near.FirstOrDefault();
+    }
 
     /// <summary>Something to sell and a market NPC near to sell it at (not right after a failed trip).</summary>
     private bool CanSellNear(WorldSnapshot world, BotProfile p)
