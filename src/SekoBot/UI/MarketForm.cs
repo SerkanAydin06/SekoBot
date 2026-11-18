@@ -37,7 +37,9 @@ internal sealed class MarketForm : Form
     private readonly Panel _salesView, _pricesView, _wantedView, _detail;
     private readonly Label _dName, _dPrice, _dSeller, _dSeen, _dBonuses, _dMarket;
     private readonly Panel _chart;
-    private readonly Button _watch, _once, _go;
+    private readonly Button _watch, _once, _go, _refresh;
+    private readonly CheckBox _autoRefresh;
+    private DateTime _searchedAt;
     private readonly Button[] _views;
     private readonly TextBox _priceFind;
 
@@ -141,7 +143,18 @@ internal sealed class MarketForm : Form
         _onlyBonused = new CheckBox { Text = "Sadece efsunlu", Bounds = new Rectangle(580, 40, 120, 24), ForeColor = Theme.Text, BackColor = Theme.Background };
         filters.Controls.Add(_onlyBonused);
         var clear = Theme.Button(filters, "Temizle", new Rectangle(704, 38, 74, 26), Theme.Secondary, Theme.SecondaryHover);
-        _count = Theme.Label(filters, "", new Rectangle(784, 38, 300, 26), 8.5f, Theme.Muted);
+        // The list changes only when asked (or once a minute when ticked): the market bot reads shops all the
+        // time, a list changing under the eyes jumps and loses rows (user, 2026-11-19).
+        _refresh = Theme.Button(filters, "🔄  Yenile", new Rectangle(784, 38, 150, 26), Theme.Secondary, Theme.SecondaryHover);
+        _refresh.Click += (_, _) => Search();
+        _autoRefresh = new CheckBox
+        {
+            Text = "Dakikada bir yenile", Bounds = new Rectangle(884, 2, 150, 24), ForeColor = Theme.Text, BackColor = Theme.Background,
+            Checked = profile.MarketAutoRefresh,
+        };
+        filters.Controls.Add(_autoRefresh);
+        _autoRefresh.CheckedChanged += (_, _) => { _profile.MarketAutoRefresh = _autoRefresh.Checked; _save(); };
+        _count = Theme.Label(filters, "", new Rectangle(942, 38, 300, 26), 8.5f, Theme.Muted);
         _count.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right;
 
         _list = Grid(["Eşya", "Efsunlar", "Adet", "Tanesi", "Piyasa", "Satıcı", "Uzaklık", "Okundu"],
@@ -176,6 +189,9 @@ internal sealed class MarketForm : Form
         _chart = new Panel { Bounds = new Rectangle(0, 326, 396, 96), BackColor = Theme.Inset };
         _chart.Paint += DrawChart;
         head.Controls.Add(_chart);
+        // Several lines each: no ellipsis (it swallows the line breaks).
+        _dBonuses.AutoEllipsis = false;
+        _dMarket.AutoEllipsis = false;
         Theme.Label(head, "SATICININ DİĞER ÜRÜNLERİ", new Rectangle(0, 428, 396, 16), 8f, Theme.Accent, FontStyle.Bold);
         // Below the fixed part: the seller's items fill what is left, the buttons stay at the bottom.
         var buttons = new Panel { Dock = DockStyle.Bottom, Height = 76, BackColor = Theme.Surface };
@@ -480,6 +496,10 @@ internal sealed class MarketForm : Form
         _sortColumn = query.Sort switch { MarketSort.Cheapest or MarketSort.Dearest => 3, MarketSort.Newest => 7, _ => -1 };
         _sortDown = query.Sort == MarketSort.Dearest;
         _shownUpdate = Book()?.Updated ?? default;
+        _searchedAt = DateTime.Now;
+        _refresh.Text = "🔄  Yenile";
+        _refresh.BackColor = Theme.Secondary;
+        _refresh.FlatAppearance.MouseOverBackColor = Theme.SecondaryHover;
         _list.VirtualListSize = 0;
         _list.VirtualListSize = _rows.Count;
         _list.Invalidate();
@@ -815,8 +835,15 @@ internal sealed class MarketForm : Form
     {
         UpdateStatus();
         var updated = Book()?.Updated ?? default;
-        if (updated != _shownUpdate && _salesView.Visible && !_find.Focused && !_seller.Focused && MouseButtons == MouseButtons.None &&
-            DateTime.Now - updated > TimeSpan.FromSeconds(1))
+        if (updated == _shownUpdate)
+            return;
+        // New readings: the button says so; the list itself changes only when asked, or once a minute when ticked.
+        int minutes = (int)(DateTime.Now - _searchedAt).TotalMinutes;
+        _refresh.Text = minutes < 1 ? "🔄  Yenile • yeni bilgi" : $"🔄  Yenile • {minutes} dk";
+        _refresh.BackColor = Theme.Primary;
+        _refresh.FlatAppearance.MouseOverBackColor = Theme.PrimaryHover;
+        if (_autoRefresh.Checked && DateTime.Now - _searchedAt >= TimeSpan.FromMinutes(1) && _salesView.Visible &&
+            !_find.Focused && !_seller.Focused && MouseButtons == MouseButtons.None && !_list.ClientRectangle.Contains(_list.PointToClient(MousePosition)))
         {
             int top = _list.TopItem?.Index ?? 0;
             Search();
