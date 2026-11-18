@@ -192,6 +192,39 @@ internal sealed partial class BotEngine
         return true;
     }
 
+    private string _turnWaitTold = "";
+
+    /// <summary>
+    /// The turn to use the screen and mouse (see <see cref="FrontTurn"/>): taken, or another SekoBot has
+    /// it — then this one waits (told once) where it is.
+    /// </summary>
+    private bool TakeTurn()
+    {
+        if (FrontTurn.Shared.TryTake(_world?.CharacterName is { Length: > 0 } me ? me : "başka bir SekoBot"))
+        {
+            _turnWaitTold = "";
+            return true;
+        }
+        string who = FrontTurn.Shared.Holder();
+        if (_turnWaitTold != who)
+        {
+            _turnWaitTold = who;
+            _log($"⏳ {(who.Length > 0 ? who : "Başka bir bot")} şu an envanter / satış işlemi yapıyor; sıra bekleniyor (işlemler karışmasın).");
+        }
+        return false;
+    }
+
+    /// <summary>The turn is let go (the bag emptied, the trip over, the message sent).</summary>
+    private void LetGoTurn()
+    {
+        if (!_cleaner.Active && !_selling && !_whisper.Active)
+            FrontTurn.Shared.LetGo();
+    }
+
+    /// <summary>While waiting for the turn: still fight what attacks (the brain), else stand.</summary>
+    private static IReadOnlyList<BotAction>? WaitingForTurn(GameState state) =>
+        state.Attackers.Count > 0 || state.Targets.Any(t => t.AttacksMe) ? null : [];
+
     /// <summary>The inventory as drawn, read only while throwing (on the perception thread).</summary>
     private void ReadBagForCleaning() =>
         _bagLayout = _cleaner.Active || _brain.ReadyToClean ? _world?.ReadBagLayout() : null;
@@ -206,6 +239,9 @@ internal sealed partial class BotEngine
         {
             if (!_brain.WantsClean || !_brain.ReadyToClean)
                 return null;
+            // One bot at a time: another one emptying its bag or selling is waited for.
+            if (!TakeTurn())
+                return WaitingForTurn(state);
             // What is to be thrown goes first, here; then what was picked for its price is taken to a market NPC.
             if ((World is not { } w || !HasThrowables(w, p)) && TryStartSellTrip(p) is { } letGo)
                 return letGo;
@@ -241,6 +277,7 @@ internal sealed partial class BotEngine
         {
             _log("Eşya atarken saldırı geldi; envanter kapatıldı, önce savaşılıyor.");
             _brain.CleanInterrupted();
+            LetGoTurn();
             return;
         }
         _brain.WantsClean = false;
@@ -266,5 +303,7 @@ internal sealed partial class BotEngine
             _cleanTries++;
             _log("Eşya atılamadı: " + (_cleaner.Problem ?? "bilinmeyen neden") + ".");
         }
+        if (!_brain.WantsClean)
+            LetGoTurn();
     }
 }

@@ -99,7 +99,11 @@ internal sealed partial class BotEngine
             try { message = await SellTripAsync(npc, toSell, token); }
             catch (OperationCanceledException) { message = "💰 Satış durduruldu."; }
             catch (Exception ex) { message = "💰 Satış yapılamadı: " + ex.Message; }
-            finally { _selling = false; }
+            finally
+            {
+                _selling = false;
+                LetGoTurn();
+            }
             _log(message);
         });
         // Nothing held while walking there with the other keys.

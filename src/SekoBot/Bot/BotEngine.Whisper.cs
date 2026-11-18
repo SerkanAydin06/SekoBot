@@ -46,6 +46,9 @@ internal sealed partial class BotEngine
             bool fighting = state.Attackers.Count > 0 || state.Targets.Any(t => t.AttacksMe);
             if (fighting && state.Time - pending.Since < WhisperWaitForFight)
                 return null;
+            // Typing brings the game to the front too: not while another bot uses the screen.
+            if (!TakeTurn())
+                return null;
             _pendingWhisper = null;
             _whisper.Start(state.Time, pending.To, pending.Text);
             lock (_social)
@@ -67,6 +70,7 @@ internal sealed partial class BotEngine
                 : $"✉ Mesaj gönderilemedi ({_whisper.To}): {_whisper.Problem}";
             _log(result);
             Notify(result);
+            LetGoTurn();
         }
         return actions;
     }
