@@ -200,7 +200,8 @@ internal sealed partial class BotEngine
             _brain.WantsClean = false;
         _cleanTries = 0;
         string done = $"💰 {sold} eşya {name} NPC'sine satıldı; alana dönüldü, avlanmaya devam.";
-        Notify(done);
+        if (profile.NotifySells)
+            Notify(done);
         return done;
     }
 

@@ -237,6 +237,10 @@ internal sealed class BotProfile
     public bool NotifyPoints { get; set; } = true;
     /// <summary>Send "🎁 Yere düştü" to Telegram when a "Topla" item drops (the log always gets it).</summary>
     public bool NotifyDrops { get; set; } = true;
+    /// <summary>Send "⭐ Seviye atladın" to Telegram.</summary>
+    public bool NotifyLevelUp { get; set; } = true;
+    /// <summary>Send "💰 … satıldı" to Telegram after a trip to a market NPC (the log always gets it).</summary>
+    public bool NotifySells { get; set; } = true;
     /// <summary>Pick up the item of a drop event going on now (level allowing), like "Topla".</summary>
     public bool EventLoot { get; set; } = true;
     /// <summary>Stop the bot when the inventory has no free slot left (loot would be lost).</summary>

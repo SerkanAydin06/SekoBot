@@ -267,6 +267,18 @@ internal sealed class MainForm : Form
         var items = _tabPages[2];
         Check(items, "Yerdeki eşyalara yürüyüp topla", 0, 0, 300, () => _profile.PickUpDrops, v => _profile.PickUpDrops = v);
         var itemList = Theme.Button(items, "📋  Eşya listesi (Topla / Alma / At)", new Rectangle(370, 0, 286, 28), Theme.Primary, Theme.PrimaryHover);
+        var presets = Theme.Button(items, "💾  Kayıtlı ayarlar (kaydet / yükle)", new Rectangle(666, 0, 250, 28), Theme.Secondary, Theme.SecondaryHover);
+        presets.Click += (_, _) =>
+        {
+            using var form = new LootPresetForm(_profile, _engine?.CharacterName is { Length: > 0 } me ? me + " ayarı" : "");
+            if (form.ShowDialog(this) != DialogResult.OK || form.Loaded is not { } name)
+                return;
+            ReloadSettings();
+            SaveProfile();
+            WriteLog($"💾 \"{name}\" eşya ayarları yüklendi: {_profile.LootPick.Count} eşya toplanacak, {_profile.LootSkip.Count} alınmayacak, " +
+                $"{_profile.LootThrow.Count} atılacak, efsun listesinde {_profile.LootBonuses.Count} efsun" +
+                (_profile.LootEquipmentMinGold > 0 ? $", silah / zırh en az {_profile.LootEquipmentMinGold:N0} yang." : "."));
+        };
         Theme.Label(items, "Toplanacaklar:", new Rectangle(0, 38, 120, 26), 9f, Theme.Muted);
         Check(items, "Yang", 124, 38, 70, () => _profile.LootYang, v => _profile.LootYang = v);
         Check(items, "İksir", 198, 38, 70, () => _profile.LootPotions, v => _profile.LootPotions = v);
@@ -644,7 +656,7 @@ internal sealed class MainForm : Form
             v => _profile.TelegramCommands = v);
         Hint(notify, "Kurulum: Telegram'da @BotFather'a /newbot yaz, verdiği anahtarı buraya yapıştır. Sonra kendi botuna " +
             "\"merhaba\" yaz ve 'Sohbeti bul'a bas. Botuna \"durum\", \"dur\", \"başla\" yazınca cevap verir (yalnız bu sohbete). " +
-            "Fısıltı, istek, adının geçmesi ve GM yazması uyarı sesiyle de bildirilir; hepsi günlüğe de yazılır.", 214);
+            "Fısıltı, istek, adının geçmesi ve GM yazması uyarı sesiyle de bildirilir; hepsi günlüğe de yazılır.", 244);
         Theme.Label(notify, "NELER BİLDİRİLSİN", new Rectangle(0, 108, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
         Check(notify, "Fısıltı (özel mesaj)", 0, 128, 170, () => _profile.NotifyWhispers, v => _profile.NotifyWhispers = v);
         Check(notify, "Takas / grup / arkadaş isteği", 176, 128, 220, () => _profile.NotifyRequests, v => _profile.NotifyRequests = v);
@@ -655,6 +667,8 @@ internal sealed class MainForm : Form
         Check(notify, "Topla eşyası düşünce", 562, 156, 200, () => _profile.NotifyDrops, v => _profile.NotifyDrops = v);
         Check(notify, "Efsun listesindeki efsunlu eşya alınınca (✨ Efsun listesi'nde seçtiklerin)", 0, 184, 560,
             () => _profile.NotifyBonusItems, v => _profile.NotifyBonusItems = v);
+        Check(notify, "Seviye atlayınca", 0, 212, 170, () => _profile.NotifyLevelUp, v => _profile.NotifyLevelUp = v);
+        Check(notify, "Şehre gidip eşya satınca", 176, 212, 240, () => _profile.NotifySells, v => _profile.NotifySells = v);
 
         var keys = _tabPages[6];
         var k = _profile.Keys;

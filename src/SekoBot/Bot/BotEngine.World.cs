@@ -244,7 +244,7 @@ internal sealed partial class BotEngine
         if (world.Dead && !_wasDead)
             Notify("☠ Karakter öldü" + (Profile.ReviveOnDeath ? "; yeniden başlatılıyor." : "."));
         _wasDead = world.Dead;
-        if (_lastLevel > 0 && world.Level > _lastLevel)
+        if (_lastLevel > 0 && world.Level > _lastLevel && Profile.NotifyLevelUp)
             Notify($"⭐ Seviye atladın: Sv {world.Level}");
         if (world.Level > 0)
             _lastLevel = world.Level;
