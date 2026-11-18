@@ -415,9 +415,24 @@ internal sealed partial class BotEngine
     {
         if (!_touchRefused)
         {
+            var player = World?.Player;
             var result = await TouchTap.TapAsync(_window, p, token);
             if (result == TouchResult.Done)
                 return true;
+            if (result == TouchResult.Posted)
+            {
+                // A posted click (the game under other windows) doesn't always take (seen: about a third):
+                // when nothing opened in 1.5 s and the character didn't start walking to it, once more, slower.
+                for (int waited = 0; waited < 1500; waited += 150)
+                {
+                    await Task.Delay(150, token);
+                    if (ShopOpenNow() != null)
+                        return true;
+                }
+                if (player is Vec3 was && World?.Player is Vec3 now && now.DistanceXY(was) < 30)
+                    await TouchTap.TapAsync(_window, p, token, slower: true);
+                return true;
+            }
             if (result == TouchResult.Unavailable)
             {
                 _touchRefused = true;
