@@ -31,6 +31,13 @@ internal sealed partial class BotEngine
 
     private bool JunkInBag() => Profile.ThrowWhenInventoryFull && _world != null && World is { } world && HasThrowables(world, Profile);
 
+    /// <summary>"Şimdi at" was pressed with something to sell: sold after throwing, also with room in the bag.</summary>
+    private bool _sellAsked;
+
+    /// <summary>Full, nearly full, or no room for a tall item (as when emptying starts).</summary>
+    private static bool BagTight(WorldSnapshot world) =>
+        world.Progress?.FreeSlots() is int free && (free <= CleanAtFreeSlots || world.Progress.TallSpace() == false);
+
     private bool HasThrowables(WorldSnapshot world, BotProfile profile) =>
         profile.NavigateMode && (world.Progress?.Inventory ?? []).Any(i => ShouldThrow(i, profile, BotPicked));
 
@@ -162,6 +169,7 @@ internal sealed partial class BotEngine
                 return "Eşyalar zaten atılıyor.";
             _cleanTries = 0;
             _brain.WantsClean = true;
+            _sellAsked = sell;
         }
         return HasThrowables(world, Profile)
             ? "Atılacak eşyalar atılacak" + (sell ? ", sonra fiyatı için alınanlar market NPC'sine satılacak" : "") + ": önce moblardan uzak, sakin bir yere geçiliyor."
@@ -248,8 +256,9 @@ internal sealed partial class BotEngine
             }
             _log($"🗑 {_cleaner.Thrown} eşya atıldı" + (_cleaner.Problem is { } p ? $" ({p})" : "") +
                  "; avlanmaya devam. Atılan yığının 10 m çevresine 1 dakika yaklaşılmıyor.");
-            // Then off to sell what was picked for its price (only once nothing is left to throw).
-            if (World is { } w && !HasThrowables(w, Profile) && CanSellNear(w, Profile))
+            // Then off to sell what was picked for its price: only when the bag is still (nearly) full or
+            // "Şimdi at" was pressed — not after throwing junk in a break.
+            if (World is { } w && !HasThrowables(w, Profile) && (_sellAsked || BagTight(w)) && CanSellNear(w, Profile))
                 _brain.WantsClean = true;
         }
         else
