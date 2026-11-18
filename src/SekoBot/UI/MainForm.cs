@@ -40,6 +40,18 @@ internal sealed class MainForm : Form
     private readonly Card _settingsCard;
     private readonly Label _pageTitle, _pageInfo, _bagState, _events, _identity;
 
+    // ── Modes: what this SekoBot does (farm, market, fishing), one tab each at the top ──
+    private const int FarmMode = 0, MarketMode = 1, FishingMode = 2;
+    private int _mode;
+    private readonly Button[] _modeButtons;
+    private readonly Card _side;
+    private readonly Panel _marketDash, _fishingDash;
+    private readonly Card _logCard, _itemsCard;
+    private Rectangle _dashBottomFarm, _logCardFarm, _logFarm;
+    private readonly Label _mState, _mRound, _mRead, _mDeals, _mWanted, _mShops, _mItems, _mOldest, _mNever;
+    private readonly ListBox _mFinds;
+    private DateTime _marketDashAt;
+
     private static string StartKey => Instance.IsFirst ? "F10" : "Ctrl+F10";
     private static string StopKey => Instance.IsFirst ? $"F11 / {OwnStopName}" : OwnStopName;
     /// <summary>This SekoBot's own stop key: Ctrl+Shift+ its number.</summary>
@@ -111,8 +123,18 @@ internal sealed class MainForm : Form
         var header = new Card { Bounds = new Rectangle(12, 10, 1156, 46) };
         Controls.Add(header);
         var title = Theme.Label(header, "◆  SEKOBOT", new Rectangle(14, 8, 150, 30), 13.5f, Theme.Text, FontStyle.Bold);
-        var version = _identity = Theme.Label(header, "v" + BuildInfo.Version, new Rectangle(160, 13, 380, 22), 8.5f, Theme.Muted);
-        _connection = Theme.Label(header, "○  Oyun bekleniyor", new Rectangle(540, 12, 246, 22), 9.5f, Theme.Muted,
+        string[] modeNames = ["⚔  FARM", "🛒  PAZAR", "🎣  BALIKÇILIK"];
+        _modeButtons = new Button[modeNames.Length];
+        for (int i = 0; i < modeNames.Length; i++)
+        {
+            int mode = i;
+            _modeButtons[i] = Theme.Button(header, modeNames[i], new Rectangle(160 + i * 124, 7, 118, 32), Theme.Secondary, Theme.SecondaryHover);
+            _modeButtons[i].Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            _modeButtons[i].Click += (_, _) => SetMode(mode);
+        }
+        var version = _identity = Theme.Label(header, "v" + BuildInfo.Version, new Rectangle(536, 4, 252, 20), 8f, Theme.Muted,
+            FontStyle.Regular, ContentAlignment.MiddleRight);
+        _connection = Theme.Label(header, "○  Oyun bekleniyor", new Rectangle(536, 23, 252, 20), 8.5f, Theme.Muted,
             FontStyle.Bold, ContentAlignment.MiddleRight);
         foreach (Control c in new Control[] { header, title, version, _connection })
         {
@@ -146,13 +168,19 @@ internal sealed class MainForm : Form
         _stopBot.Click += (_, _) => StopBot("kullanıcı durdurdu", byUser: true);
         _attackButton = Theme.Button(bar, "", new Rectangle(452, 10, 196, 44), Theme.Secondary, Theme.SecondaryHover);
         _attackButton.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
-        _attackButton.Click += (_, _) => ToggleAttack();
+        _attackButton.Click += (_, _) =>
+        {
+            if (_mode == MarketMode)
+                OpenMarketWindow();
+            else
+                ToggleAttack();
+        };
         ShowAttack();
         _reloads.Add(ShowAttack);
         _status = Theme.Label(bar, "Oyun bekleniyor", new Rectangle(660, 10, 484, 44), 12f, Theme.Muted, FontStyle.Bold);
 
         // ── Side menu: the dashboard and the settings pages ──────
-        var side = new Card { Bounds = new Rectangle(12, 136, 180, 772) };
+        var side = _side = new Card { Bounds = new Rectangle(12, 136, 180, 772) };
         Controls.Add(side);
         _dashButton = SideButton(side, "📊   Panel", 12);
         _dashButton.Click += (_, _) => SelectTab(-1);
@@ -768,10 +796,10 @@ internal sealed class MainForm : Form
         // ── Dashboard bottom: the log and this run's items (the settings pages show here instead) ──
         _dashBottom = new Panel { Bounds = new Rectangle(202, 544, 966, 364), BackColor = Theme.Background };
         Controls.Add(_dashBottom);
-        var logCard = new Card { Bounds = new Rectangle(0, 0, 600, 364) };
+        var logCard = _logCard = new Card { Bounds = new Rectangle(0, 0, 600, 364) };
         _dashBottom.Controls.Add(logCard);
         Theme.Label(logCard, "GÜNLÜK", new Rectangle(16, 8, 200, 20), 8f, Theme.Accent, FontStyle.Bold);
-        var itemsCard = new Card { Bounds = new Rectangle(610, 0, 356, 364) };
+        var itemsCard = _itemsCard = new Card { Bounds = new Rectangle(610, 0, 356, 364) };
         _dashBottom.Controls.Add(itemsCard);
         Theme.Label(itemsCard, "BU TUR EŞYALAR", new Rectangle(16, 8, 200, 20), 8f, Theme.Accent, FontStyle.Bold);
         var openItems = Theme.Button(itemsCard, "📄", new Rectangle(310, 4, 32, 26), Theme.Surface, Theme.Secondary);
@@ -822,6 +850,72 @@ internal sealed class MainForm : Form
             TabStop = false
         };
         logCard.Controls.Add(_log);
+
+        // ── PAZAR mode: the market watch at a glance; the full search in the market window ──
+        _marketDash = new Panel { Bounds = new Rectangle(12, 136, 1156, 400), BackColor = Theme.Background, Visible = false };
+        Controls.Add(_marketDash);
+        var watchCard = new Card { Bounds = new Rectangle(0, 0, 760, 400) };
+        _marketDash.Controls.Add(watchCard);
+        Theme.Label(watchCard, "PAZAR TAKİBİ", new Rectangle(16, 8, 300, 20), 8f, Theme.Accent, FontStyle.Bold);
+        _mState = Theme.Label(watchCard, "", new Rectangle(16, 30, 728, 40), 10f, Theme.Text, FontStyle.Bold, ContentAlignment.TopLeft);
+        _mRound = Tile(watchCard, "TUR", 16, 76);
+        _mRead = Tile(watchCard, "OKUNAN", 126, 76);
+        _mDeals = Tile(watchCard, "KELEPİR", 236, 76);
+        _mWanted = Tile(watchCard, "ARANAN", 346, 76);
+        _mShops = Tile(watchCard, "DÜKKAN", 16, 142);
+        _mItems = Tile(watchCard, "ÜRÜN", 126, 142);
+        _mOldest = Tile(watchCard, "EN ESKİ", 236, 142, small: true);
+        _mNever = Tile(watchCard, "OKUNMAMIŞ", 346, 142);
+        var bigMarket = Theme.Button(watchCard, "🖥  Pazar penceresi\nara · filtrele · fiyatlar · aranan", new Rectangle(460, 76, 284, 126), Theme.Primary, Theme.PrimaryHover);
+        bigMarket.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
+        bigMarket.Click += (_, _) => OpenMarketWindow();
+        var mReport = Theme.Button(watchCard, "📊  Rapor", new Rectangle(16, 216, 130, 30), Theme.Secondary, Theme.SecondaryHover);
+        mReport.Click += (_, _) => { if (BotEngine.LatestReport is { } r) OpenFile(r); else WriteLog("Henüz pazar listesi yok."); };
+        var mExcel = Theme.Button(watchCard, "📄  Excel", new Rectangle(152, 216, 110, 30), Theme.Secondary, Theme.SecondaryHover);
+        mExcel.Click += (_, _) => { if (BotEngine.LatestReport is { } r && File.Exists(Path.ChangeExtension(r, ".csv"))) OpenFile(Path.ChangeExtension(r, ".csv")); else WriteLog("Henüz pazar listesi yok."); };
+        var mGuide = Theme.Button(watchCard, "📚  Efsun rehberi", new Rectangle(268, 216, 150, 30), Theme.Secondary, Theme.SecondaryHover);
+        mGuide.Click += (_, _) =>
+        {
+            try
+            {
+                Directory.CreateDirectory(BotEngine.MarketFolder);
+                string page = Path.Combine(BotEngine.MarketFolder, "efsun-rehberi.html");
+                File.WriteAllText(page, BonusBook.Shared.Html(), new System.Text.UTF8Encoding(false));
+                OpenFile(page);
+            }
+            catch (IOException ex) { WriteLog("Efsun rehberi yazılamadı: " + ex.Message); }
+        };
+        var mFolder = Theme.Button(watchCard, "📂  Klasör", new Rectangle(424, 216, 110, 30), Theme.Secondary, Theme.SecondaryHover);
+        mFolder.Click += (_, _) => { Directory.CreateDirectory(BotEngine.MarketFolder); OpenFile(BotEngine.MarketFolder); };
+        Theme.Label(watchCard, "AYARLAR", new Rectangle(16, 258, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
+        NumberRow(watchCard, "Yeniden okuma (dk)", 16, 280, 5, 1440, () => _profile.MarketRefreshMinutes, 0, 5,
+            v => _profile.MarketRefreshMinutes = (int)v);
+        NumberRow(watchCard, "Kelepir eşiği (% ucuz)", 16, 312, 10, 90, () => _profile.MarketDealPercent, 0, 5,
+            v => _profile.MarketDealPercent = (int)v);
+        Check(watchCard, "Kelepirleri bildir", 330, 312, 200, () => _profile.MarketDeals, v => _profile.MarketDeals = v);
+        Check(watchCard, "Bulunanları Telegram'a yaz", 330, 280, 220, () => _profile.MarketNotify, v => _profile.MarketNotify = v);
+        Check(watchCard, "Kamerayı kuş bakışına al", 16, 344, 300, () => _profile.MarketBirdsEye, v => _profile.MarketBirdsEye = v);
+        Theme.Label(watchCard, "Hiçbir şey satın alınmaz; almak senin elinde.", new Rectangle(330, 344, 414, 26), 8.5f, Theme.Muted);
+
+        var findsCard = new Card { Bounds = new Rectangle(770, 0, 386, 400) };
+        _marketDash.Controls.Add(findsCard);
+        Theme.Label(findsCard, "SON BULUNANLAR (aranan · kelepir)", new Rectangle(16, 8, 354, 20), 8f, Theme.Accent, FontStyle.Bold);
+        _mFinds = new ListBox
+        {
+            Bounds = new Rectangle(14, 32, 358, 354), BackColor = Theme.Inset, ForeColor = Theme.Text, BorderStyle = BorderStyle.None,
+            Font = new Font("Segoe UI", 8.5f), IntegralHeight = false, HorizontalScrollbar = true,
+        };
+        findsCard.Controls.Add(_mFinds);
+
+        // ── BALIKÇILIK mode: not yet ──
+        _fishingDash = new Panel { Bounds = new Rectangle(12, 136, 1156, 772), BackColor = Theme.Background, Visible = false };
+        Controls.Add(_fishingDash);
+        var fishCard = new Card { Bounds = new Rectangle(0, 0, 1156, 772) };
+        _fishingDash.Controls.Add(fishCard);
+        Theme.Label(fishCard, "🎣  BALIKÇILIK", new Rectangle(24, 24, 600, 34), 16f, Theme.Text, FontStyle.Bold);
+        Theme.Label(fishCard, "Yakında. Balık tutma bu sekmeye eklenecek; şimdilik FARM ya da PAZAR sekmesini kullan.",
+            new Rectangle(24, 66, 1100, 26), 10f, Theme.Muted);
+
         SelectTab(-1);
 
         // ── Timers & hotkeys ─────────────────────────────────────
@@ -884,9 +978,108 @@ internal sealed class MainForm : Form
         _runItems.Columns[0].Width = nameWidth;
         _runItems.Columns[1].Width = number;
         _runItems.Columns[2].Width = number;
+        _dashBottomFarm = _dashBottom.Bounds;
+        _logCardFarm = _logCard.Bounds;
+        _logFarm = _log.Bounds;
+        // The market settings page lives in the PAZAR tab now.
+        _tabButtons[^1].Visible = false;
         ResumeLayout(false);
+        SetMode(Math.Clamp(_profile.UiMode, FarmMode, FishingMode), save: false);
         UpdateControls();
         UpdateStats();
+    }
+
+    /// <summary>Shows one mode: FARM (the hunting bot with its pages), PAZAR (the market watch), BALIKÇILIK.</summary>
+    private void SetMode(int mode, bool save = true)
+    {
+        _mode = mode;
+        bool farm = mode == FarmMode, market = mode == MarketMode;
+        SuspendLayout();
+        _side.Visible = farm;
+        _dashboard.Visible = farm;
+        if (!farm)
+            _settingsCard.Visible = false;
+        else
+            SelectTab(-1);
+        _marketDash.Visible = market;
+        _fishingDash.Visible = mode == FishingMode;
+        // The log: under the farm view (beside this run's items), or across the whole width under the market.
+        _dashBottom.Visible = farm || market;
+        _itemsCard.Visible = farm;
+        if (market)
+        {
+            _dashBottom.Bounds = new Rectangle(_marketDash.Left, _dashBottomFarm.Top, _marketDash.Width, _dashBottomFarm.Height);
+            _logCard.Width = _dashBottom.Width;
+            _log.Width = _logCard.Width - 2 * _logFarm.Left;
+        }
+        else
+        {
+            _dashBottom.Bounds = _dashBottomFarm;
+            _logCard.Bounds = _logCardFarm;
+            _log.Bounds = _logFarm;
+        }
+        _attackButton.Visible = mode != FishingMode;
+        for (int i = 0; i < _modeButtons.Length; i++)
+        {
+            _modeButtons[i].BackColor = i == mode ? Theme.Primary : Theme.Secondary;
+            _modeButtons[i].FlatAppearance.MouseOverBackColor = i == mode ? Theme.PrimaryHover : Theme.SecondaryHover;
+        }
+        ResumeLayout(true);
+        if (market)
+            ShowAttack();
+        else if (farm)
+            ShowAttack();
+        if (save && _profile.UiMode != mode)
+        {
+            _profile.UiMode = mode;
+            SaveProfile();
+        }
+        _marketDashAt = DateTime.MinValue;
+        UpdateControls();
+        UpdateStats();
+    }
+
+    /// <summary>The PAZAR page's numbers (every 2 s at most).</summary>
+    private void UpdateMarketDash()
+    {
+        if (DateTime.Now - _marketDashAt < TimeSpan.FromSeconds(2))
+            return;
+        _marketDashAt = DateTime.Now;
+        var engine = _engine;
+        bool scanning = engine?.ScanningMarket == true;
+        bool watching = scanning && engine!.MarketWatching;
+        _mState.Text = engine == null ? "Oyun bağlı değil."
+            : scanning ? engine.MarketStatus
+            : $"Takip kapalı. Karakter pazar haritasındayken \"🔁 SÜREKLİ TAKİP\"e bas ({StartKey}).";
+        _mState.ForeColor = watching ? Theme.Green : scanning ? Theme.Yellow : Theme.Muted;
+        var counts = engine?.MarketCounts ?? default;
+        _mRound.Text = scanning && watching ? counts.Round.ToString() : "—";
+        _mRead.Text = counts.Read.ToString("N0");
+        _mDeals.Text = counts.Deals.ToString("N0");
+        _mWanted.Text = counts.Wanted.ToString("N0");
+        var book = engine?.CurrentMarket();
+        var (onMap, never) = book?.Coverage() ?? (0, 0);
+        _mShops.Text = onMap > 0 ? onMap.ToString("N0") : book != null ? book.Shops.ToString("N0") : "—";
+        _mItems.Text = book != null ? book.Items.ToString("N0") : "—";
+        _mNever.Text = onMap > 0 ? never.ToString("N0") : "—";
+        _mOldest.Text = book?.OldestRead() is DateTime oldest ? Ago(oldest) : "—";
+        var finds = engine?.MarketFinds() ?? [];
+        if (finds.Count == 0 && _mFinds.Items.Count == 0 || finds.Count > 0 && (finds.Count != _mFinds.Items.Count || !Equals(_mFinds.Items[0], finds[0])))
+        {
+            _mFinds.BeginUpdate();
+            _mFinds.Items.Clear();
+            if (finds.Count == 0)
+                _mFinds.Items.Add("Henüz yok. Aranan ürün ya da kelepir çıkınca burada görünür.");
+            else
+                _mFinds.Items.AddRange([.. finds]);
+            _mFinds.EndUpdate();
+        }
+    }
+
+    private static string Ago(DateTime at)
+    {
+        int minutes = (int)(DateTime.Now - at).TotalMinutes;
+        return minutes < 1 ? "şimdi" : minutes < 60 ? $"{minutes} dk önce" : minutes < 1440 ? $"{minutes / 60} sa önce" : $"{minutes / 1440} gün önce";
     }
 
     // ── Layout helpers ───────────────────────────────────────────
@@ -923,6 +1116,13 @@ internal sealed class MainForm : Form
 
     private void ShowAttack()
     {
+        if (_mode == MarketMode)
+        {
+            _attackButton.Text = "🖥  Pazar penceresi";
+            _attackButton.BackColor = Theme.Secondary;
+            _attackButton.FlatAppearance.MouseOverBackColor = Theme.SecondaryHover;
+            return;
+        }
         bool on = _profile.Attack;
         _attackButton.Text = on ? "⚔  Saldırı: AÇIK" : "✋  Sadece eşya topla";
         _attackButton.BackColor = on ? Theme.Secondary : Theme.Accent;
@@ -1028,7 +1228,8 @@ internal sealed class MainForm : Form
     {
         if (IsDisposed)
             return;
-        _mini ??= new MiniBar(MiniInfoNow, ToggleBot, () => StopBot("kullanıcı durdurdu", byUser: true), GoBig, ArrangeAll, ToggleAttack);
+        _mini ??= new MiniBar(MiniInfoNow, ToggleBot, () => StopBot("kullanıcı durdurdu", byUser: true), GoBig, ArrangeAll,
+            () => { if (_mode == MarketMode) OpenMarketWindow(); else ToggleAttack(); });
         if (!_mini.Visible)
             _mini.Show();
         if (Visible)
@@ -1074,9 +1275,17 @@ internal sealed class MainForm : Form
             game = WindowLayout.Visible(engine.Window.Handle);
         var state = _engine?.State;
         var (hpPotions, mpPotions) = _engine?.PotionsLeft() ?? (null, null);
+        string? market = null;
+        if (_mode == MarketMode && _engine is { } m)
+        {
+            var c = m.MarketCounts;
+            var book = m.ScanningMarket ? m.CurrentMarket() : null;
+            market = (m.ScanningMarket && m.MarketWatching ? $"{c.Round}. tur · " : "") + $"{c.Read:N0} dükkan okundu · {c.Deals} kelepir · {c.Wanted} aranan" +
+                     (book != null ? $" · listede {book.Items:N0} ürün" : "");
+        }
         return new MiniInfo(_engine?.CharacterName ?? "", _status.Text, _status.ForeColor, state?.Hp, state?.Mp,
-            _statExpRate.Text, _statMobs.Text, _engine?.BotRunning == true, game,
-            _engine is { } e && Win32.IsWindow(e.Window.Handle) ? e.Window.Handle : 0, hpPotions, mpPotions, Attack: _profile.Attack);
+            _statExpRate.Text, _statMobs.Text, _mode == MarketMode ? _engine?.ScanningMarket == true : _engine?.BotRunning == true, game,
+            _engine is { } e && Win32.IsWindow(e.Window.Handle) ? e.Window.Handle : 0, hpPotions, mpPotions, Attack: _profile.Attack, Market: market);
     }
 
     protected override void WndProc(ref Message m)
@@ -1244,6 +1453,21 @@ internal sealed class MainForm : Form
             WriteLog("Önce oyun açık olmalı; açılınca kendiliğinden bağlanır.");
             return;
         }
+        // PAZAR: the start key / button starts and stops the continuous market watch.
+        if (_mode == MarketMode)
+        {
+            if (_engine.ScanningMarket)
+                _engine.StopMarketScan();
+            else
+                StartMarket(true);
+            UpdateControls();
+            return;
+        }
+        if (_mode == FishingMode)
+        {
+            WriteLog("🎣 Balıkçılık yakında; şimdilik FARM ya da PAZAR sekmesini kullan.");
+            return;
+        }
         if (_engine.BotRunning || _engine.ScanningMarket || _engine.ScanningArea)
         {
             StopBot("duraklatıldı", byUser: true);
@@ -1314,7 +1538,10 @@ internal sealed class MainForm : Form
         }
         _marketWindow = new MarketForm(() => _engine, _profile, SaveProfile, text => PostUi(() => WriteLog(text)), StartMarket, () => _engine?.StopMarketScan());
         _marketWindow.FormClosed += (_, _) => ReloadSettings();
-        _marketWindow.Show(this);
+        if (Visible)
+            _marketWindow.Show(this);
+        else
+            _marketWindow.Show();
     }
 
     /// <summary>Starts a market scan, or the continuous watch.</summary>
@@ -1584,6 +1811,8 @@ internal sealed class MainForm : Form
             _bagState.ForeColor = _bagState.Text.Contains("SIĞMIYOR") ? Theme.Yellow : Theme.Text;
         }
 
+        if (_mode == MarketMode)
+            UpdateMarketDash();
         if (_engine == null)
         {
             foreach (var l in new[] { _statTime, _statMobs, _statRate, _statDeaths, _statPotions, _statExp, _statExpRate, _statLevel, _statYang })
@@ -1665,6 +1894,21 @@ internal sealed class MainForm : Form
             _statYang.Text = Short(session.Yang);
         }
 
+        if (_mode == MarketMode)
+        {
+            UpdateMarketDash();
+            bool watching = _engine.ScanningMarket && _engine.MarketWatching;
+            SetLine(_engine.ScanningMarket ? (watching ? "🔁 " : "🛒 ") + _engine.MarketStatus
+                    : s.BotRunning ? "Farm botu çalışıyor (FARM sekmesinde)."
+                    : $"Pazar takibi kapalı. Başlatmak için SÜREKLİ TAKİP ya da {StartKey}.",
+                _engine.ScanningMarket ? Theme.Green : Theme.Text);
+            return;
+        }
+        if (_mode == FishingMode)
+        {
+            SetLine("🎣 Balıkçılık yakında.", Theme.Muted);
+            return;
+        }
         if (s.BotRunning)
         {
             _statTime.Text = s.BotUptime.ToString(@"hh\:mm\:ss");
@@ -1863,6 +2107,12 @@ internal sealed class MainForm : Form
         var s = _engine.Stats;
         var world = _engine.World;
         var lines = new List<string> { _engine.BotRunning ? "▶ Bot çalışıyor" : "⏸ Bot duruyor" + (_stopReason != null ? $" ({_stopReason})" : "") };
+        if (_engine.ScanningMarket)
+        {
+            var c = _engine.MarketCounts;
+            lines.Add((_engine.MarketWatching ? $"🔁 Pazar takibi ({c.Round}. tur)" : "🛒 Pazar taraması") +
+                      $": {c.Read:N0} dükkan okundu, {c.Deals} kelepir, {c.Wanted} aranan bulundu");
+        }
         if (world is { Progress: { } progress })
             lines.Add($"Sv {world.Level} · %{100.0 * progress.Exp / Math.Max(1, progress.Exp + progress.NeedExp):0.0}" +
                       (s.Session?.ToLevel is TimeSpan t ? $" (seviyeye ~{Duration(t)})" : ""));
@@ -1908,9 +2158,15 @@ internal sealed class MainForm : Form
         _findArea.Enabled = connected && !running && _engine?.ScanningMarket != true;
         _scanMarket.Enabled = connected && !running && _engine?.ScanningArea != true;
         _scanMobs.Enabled = connected;
-        _startBot.Text = running ? $"❚❚  DURAKLAT   {StartKey}"
+        _startBot.Text = _mode == MarketMode
+            ? (_engine?.ScanningMarket == true ? $"■  TAKİBİ DURDUR   {StartKey}" : $"🔁  SÜREKLİ TAKİP   {StartKey}")
+            : running ? $"❚❚  DURAKLAT   {StartKey}"
             : _engine?.ScanningMarket == true || _engine?.ScanningArea == true ? $"■  TARAMAYI DURDUR   {StartKey}"
             : $"▶  BAŞLAT   {StartKey}";
+        if (_mode == MarketMode)
+            _startBot.Enabled = connected && !running;
+        if (_mode == FishingMode)
+            _startBot.Enabled = false;
         _stopBot.Enabled = running || _engine?.ScanningMarket == true || _engine?.ScanningArea == true;
         bool recording = _engine?.IsRecording == true;
         _record.Enabled = connected;

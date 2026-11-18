@@ -219,6 +219,9 @@ internal sealed class BotProfile
 
     /// <summary>The bot was made small (one bar under its game) when last closed: it opens small again.</summary>
     public bool MiniMode { get; set; }
+
+    /// <summary>What this SekoBot shows: 0 FARM, 1 PAZAR (the market watch), 2 BALIKÇILIK.</summary>
+    public int UiMode { get; set; }
     /// <summary>Items always picked up, whatever the other loot choices (names, comma separated,
     /// part of the name is enough), e.g. "Cesaret Pelerini". A message is sent when one drops.</summary>
     public string LootAlways { get; set; } = "";
