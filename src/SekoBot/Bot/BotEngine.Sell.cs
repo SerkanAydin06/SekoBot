@@ -114,7 +114,7 @@ internal sealed partial class BotEngine
         string name = NpcBook.Shops.GetValueOrDefault(npc.Vnum, "Market");
         _log($"💰 Çantada satılacak {toSell} eşya var: {at.DistanceXY(start.Player) / 100:0} m ötedeki {name} NPC'sine gidiliyor.");
         using var input = new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
-        int stuck = await WalkFarAsync(input, at, TimeSpan.FromMinutes(3), token, near: 250);
+        int stuck = await WalkRouteAsync(input, at, TimeSpan.FromMinutes(3), token, near: 250);
         if (World is { } w && w.Player.DistanceXY(at) > 600)
             _log($"💰 {name} NPC'sine varılamadı: {w.Player.DistanceXY(at) / 100:0} m kaldı, yolda {stuck} kez takıldı.");
         if (World is not { } there || there.MapName != start.MapName || there.Player.DistanceXY(at) > 600)
@@ -178,7 +178,7 @@ internal sealed partial class BotEngine
             input.Enqueue(new KeyTapAction(profile.Keys.CloseWindow));
             await Task.Delay(800, token);
         }
-        await WalkFarAsync(input, home, TimeSpan.FromMinutes(3), token, near: 300);
+        await WalkRouteAsync(input, home, TimeSpan.FromMinutes(3), token, near: 300);
         if (sold == 0)
             return Failed("satılacak eşya satılamadı" + (cleaner.Problem is { } why ? $" ({why})" : ""));
         lock (_botGate)
@@ -189,35 +189,116 @@ internal sealed partial class BotEngine
         return done;
     }
 
+    /// <summary>Mobs on the way are passed this far off (world units, 3 m).</summary>
+    internal const double PassMobsBy = 300;
+
     /// <summary>
-    /// A long walk (to a market NPC and back): <see cref="WalkToAsync"/> stops at the first thing it gets
-    /// stuck on, so here, stuck, the character steps back and aside (left, then right, further each time)
-    /// and goes on. The number of times it got stuck.
+    /// A long walk (to a market NPC and back) on a planned route: around the map's walls, houses, rocks
+    /// and trees at the character's height (slopes too high, a drop: see <see cref="MapTerrain"/>), the
+    /// places the bots got stuck at before (<see cref="ObstacleMap"/>), the places they couldn't reach
+    /// (cliffs, water: <see cref="NoGoMap"/>) and the living mobs near the way. The route is drawn again
+    /// every second (mobs move). Stuck: the spot is noted as an obstacle (for every bot), the character
+    /// steps back and the route is drawn around it. Returns how many times it got stuck.
     /// </summary>
-    private async Task<int> WalkFarAsync(InputExecutor input, Vec3 target, TimeSpan limit, CancellationToken token, double near)
+    private async Task<int> WalkRouteAsync(InputExecutor input, Vec3 target, TimeSpan limit, CancellationToken token, double near)
     {
         var keys = Profile.Keys;
+        var held = new HashSet<Keys>();
         var started = _clock.Elapsed;
+        var lastMove = started;
+        var stuckHere = new List<MapTerrain.Circle>();
+        Vec3? last = null;
+        List<Vec3>? way = null;
+        var wayAt = TimeSpan.FromDays(-1);
         int stuck = 0;
-        while (_clock.Elapsed - started < limit)
+        void Let(HashSet<Keys> want)
         {
-            token.ThrowIfCancellationRequested();
-            await WalkToAsync(input, target, limit - (_clock.Elapsed - started), token, () => { }, near);
-            if (World is not { } world || world.Player.DistanceXY(target) < near)
-                break;
-            stuck++;
-            // Back a little, then sideways (the side changes each time, the step grows).
-            var side = stuck % 2 == 1 ? keys.MoveLeft : keys.MoveRight;
-            int ms = Math.Min(2000, 500 + stuck * 150);
-            input.Enqueue(new KeyDownAction(keys.MoveBack));
-            await Task.Delay(400, token);
-            input.Enqueue(new KeyUpAction(keys.MoveBack));
-            input.Enqueue(new KeyDownAction(side));
-            await Task.Delay(ms, token);
-            input.Enqueue(new KeyUpAction(side));
-            await Task.Delay(150, token);
+            foreach (var k in held.Where(k => !want.Contains(k)).ToList())
+            {
+                input.Enqueue(new KeyUpAction(k));
+                held.Remove(k);
+            }
+            foreach (var k in want.Where(held.Add))
+                input.Enqueue(new KeyDownAction(k));
+        }
+        try
+        {
+            while (_clock.Elapsed - started < limit)
+            {
+                token.ThrowIfCancellationRequested();
+                if (World is not { Camera: { } camera } world)
+                {
+                    await Task.Delay(250, token);
+                    continue;
+                }
+                var me = world.Player;
+                if (me.DistanceXY(target) < near)
+                    break;
+                if (last is Vec3 l && me.DistanceXY(l) > 30)
+                    lastMove = _clock.Elapsed;
+                else if (_clock.Elapsed - lastMove > TimeSpan.FromSeconds(1.5))
+                {
+                    // Held up: noted where (just ahead), a step back, and a route around it.
+                    stuck++;
+                    var ahead = way is { Count: > 0 } ? _terrain.Of(world.MapName)?.Aim(way, me) ?? target : target;
+                    double d = Math.Max(1, me.DistanceXY(ahead));
+                    double sx = me.X + (ahead.X - me.X) / d * ObstacleMap.Ahead, sy = me.Y + (ahead.Y - me.Y) / d * ObstacleMap.Ahead;
+                    _obstacles.Stuck(world.MapName, sx, sy, DateTime.Now);
+                    stuckHere.Add(new MapTerrain.Circle(sx, sy, 60 + 30 * Math.Min(4, stuckHere.Count(c => Math.Abs(c.X - sx) < 150 && Math.Abs(c.Y - sy) < 150))));
+                    Let([keys.MoveBack]);
+                    await Task.Delay(450, token);
+                    Let([]);
+                    way = null;
+                    lastMove = _clock.Elapsed;
+                    last = null;
+                    continue;
+                }
+                last = me;
+                if (way == null || _clock.Elapsed - wayAt > TimeSpan.FromSeconds(1))
+                {
+                    way = Route(world, target, stuckHere);
+                    wayAt = _clock.Elapsed;
+                }
+                var aim = way is { Count: > 0 } && _terrain.Of(world.MapName) is { } map ? map.Aim(way, me) : target;
+                var (right, up) = camera.ToScreenDirection(aim.X - me.X, aim.Y - me.Y);
+                double length = Math.Max(1e-6, Math.Sqrt(right * right + up * up));
+                double kx = right / length, ky = -up / length;
+                var want = new HashSet<Keys>();
+                if (kx > 0.38) want.Add(keys.MoveRight);
+                if (kx < -0.38) want.Add(keys.MoveLeft);
+                if (ky > 0.38) want.Add(keys.MoveBack);
+                if (ky < -0.38) want.Add(keys.MoveForward);
+                Let(want);
+                await Task.Delay(200, token);
+            }
+        }
+        finally
+        {
+            foreach (var k in held)
+                input.Enqueue(new KeyUpAction(k));
+            await Task.Delay(300, CancellationToken.None);
         }
         return stuck;
+    }
+
+    /// <summary>The route to <paramref name="target"/> around everything known (see <see cref="WalkRouteAsync"/>);
+    /// when there is none, the mobs, then the learned places are left out. Null: straight on.</summary>
+    private List<Vec3>? Route(WorldSnapshot world, Vec3 target, IReadOnlyList<MapTerrain.Circle> stuckHere)
+    {
+        if (_terrain.Of(world.MapName) is not { } map)
+            return null;
+        var me = world.Player;
+        double reach = me.DistanceXY(target) + 3000;
+        var learned = _obstacles.Near(world.MapName, me, reach).Select(o => new MapTerrain.Circle(o.X, o.Y, 60))
+            .Concat(_noGo.Places(world.MapName, DateTime.Now).Where(p => Math.Abs(p.X - me.X) < reach && Math.Abs(p.Y - me.Y) < reach)
+                .Select(p => new MapTerrain.Circle(p.X, p.Y, NoGoMap.Radius * 0.6)))
+            .Concat(stuckHere).ToList();
+        var mobs = world.Mobs.Where(m => m.Hp > 0 && m.Position.DistanceXY(me) < reach)
+            .Select(m => new MapTerrain.Circle(m.Position.X, m.Position.Y, PassMobsBy)).ToList();
+        return map.WayTo(me, target, avoid: [.. learned, .. mobs])
+               ?? map.WayTo(me, target, avoid: learned)
+               ?? map.WayTo(me, target, avoid: stuckHere)
+               ?? map.WayTo(me, target);
     }
 
     private string Failed(string why)

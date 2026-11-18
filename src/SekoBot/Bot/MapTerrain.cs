@@ -97,8 +97,12 @@ internal sealed class MapTerrain
     }
 
     /// <summary>Nothing (at our height) within <see cref="Margin"/> of the straight way from <paramref name="from"/> to <paramref name="to"/>.</summary>
-    public bool LineClear(Vec3 from, Vec3 to, double margin = Margin)
+    public bool LineClear(Vec3 from, Vec3 to, double margin = Margin, IReadOnlyList<Circle>? avoid = null)
     {
+        if (avoid != null)
+            foreach (var c in avoid)
+                if (!c.Holds(from, margin) && !c.Holds(to, margin) && c.Crosses(from, to, margin))
+                    return false;
         double length = from.DistanceXY(to);
         var near = Around(Math.Min(from.X, to.X) - margin, Math.Min(from.Y, to.Y) - margin, Math.Max(from.X, to.X) + margin, Math.Max(from.Y, to.Y) + margin)
             .Where(b => InTheWay(b, from.Z, Away(b, from)) && !(b.Distance(from.X, from.Y) < margin * 0.6)).ToList();
@@ -121,21 +125,39 @@ internal sealed class MapTerrain
     /// to it when it stands in an obstacle). Null when there is no way (within the grid).
     /// </summary>
     /// <param name="room">How far around the two points the way may lead at most (world units).</param>
-    public List<Vec3>? WayTo(Vec3 from, Vec3 to, double margin = Margin, double room = 12000)
+    /// <param name="avoid">Round places kept away from as well (where the bot got stuck before, unreachable
+    /// places, mobs on the way); one the character or the goal stands in doesn't count.</param>
+    public List<Vec3>? WayTo(Vec3 from, Vec3 to, double margin = Margin, double room = 12000, IReadOnlyList<Circle>? avoid = null)
     {
-        if (LineClear(from, to, margin))
+        var keep = avoid?.Where(c => !c.Holds(from, margin) && !c.Holds(to, margin)).ToList();
+        if (LineClear(from, to, margin, keep))
             return [to];
         // Looked for close around the two points first; a long wall needs more room to get round.
         foreach (double r in Rooms.Where(r => r <= room))
-            if (WayWithin(from, to, margin, r) is { } way)
+            if (WayWithin(from, to, margin, r, keep) is { } way)
                 return way;
         return null;
+    }
+
+    /// <summary>A round place to keep away from (world units).</summary>
+    internal readonly record struct Circle(double X, double Y, double R)
+    {
+        public bool Holds(Vec3 p, double margin) => (p.X - X) * (p.X - X) + (p.Y - Y) * (p.Y - Y) < (R + margin) * (R + margin);
+
+        /// <summary>The straight way from a to b passes within R + margin of the middle.</summary>
+        public bool Crosses(Vec3 a, Vec3 b, double margin)
+        {
+            double dx = b.X - a.X, dy = b.Y - a.Y, len = dx * dx + dy * dy;
+            double t = len <= 0 ? 0 : Math.Clamp(((X - a.X) * dx + (Y - a.Y) * dy) / len, 0, 1);
+            double px = a.X + dx * t - X, py = a.Y + dy * t - Y;
+            return px * px + py * py < (R + margin) * (R + margin);
+        }
     }
 
     /// <summary>How far around the two points a way is looked for, in turn (world units).</summary>
     private static readonly double[] Rooms = [1500, 5000, 12000];
 
-    private List<Vec3>? WayWithin(Vec3 from, Vec3 to, double margin, double room)
+    private List<Vec3>? WayWithin(Vec3 from, Vec3 to, double margin, double room, IReadOnlyList<Circle>? avoid = null)
     {
         double span = Math.Max(Math.Abs(to.X - from.X), Math.Abs(to.Y - from.Y)) + 2 * room;
         double cell = Math.Max(Cell, span / MaxCells);
@@ -155,6 +177,19 @@ internal sealed class MapTerrain
                 for (int y = y0; y <= y1; y++)
                     if (!solid[y * w + x] && b.Distance(ox + (x + 0.5) * cell, oy + (y + 0.5) * cell) < solidWithin)
                         solid[y * w + x] = true;
+        }
+        foreach (var c in avoid ?? [])
+        {
+            double r = c.R + solidWithin;
+            int x0 = Math.Max(0, (int)((c.X - r - ox) / cell)), x1 = Math.Min(w - 1, (int)((c.X + r - ox) / cell));
+            int y0 = Math.Max(0, (int)((c.Y - r - oy) / cell)), y1 = Math.Min(h - 1, (int)((c.Y + r - oy) / cell));
+            for (int x = x0; x <= x1; x++)
+                for (int y = y0; y <= y1; y++)
+                {
+                    double cx = ox + (x + 0.5) * cell - c.X, cy = oy + (y + 0.5) * cell - c.Y;
+                    if (cx * cx + cy * cy < r * r)
+                        solid[y * w + x] = true;
+                }
         }
         int Index(Vec3 p) => Math.Clamp((int)((p.Y - oy) / cell), 0, h - 1) * w + Math.Clamp((int)((p.X - ox) / cell), 0, w - 1);
         int start = Index(from), goal = Index(to);

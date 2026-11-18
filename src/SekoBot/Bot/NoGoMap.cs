@@ -82,6 +82,15 @@ internal sealed class NoGoMap
         }
     }
 
+    /// <summary>The places not to be gone to on a map (as <see cref="Blocked"/>): their middles.</summary>
+    public List<(double X, double Y)> Places(string map, DateTime now)
+    {
+        lock (_gate)
+            return _maps.TryGetValue(map, out var spots)
+                ? [.. spots.Where(s => s.Hits >= Sure || now - s.Last < Once).Select(s => (s.X, s.Y))]
+                : [];
+    }
+
     /// <summary>The character stands here: places right here were reachable after all.</summary>
     public void Walked(string map, Vec3 me, DateTime now)
     {
