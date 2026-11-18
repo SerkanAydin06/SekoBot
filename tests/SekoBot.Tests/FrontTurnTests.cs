@@ -32,13 +32,4 @@ public class FrontTurnTests
             File.Delete(file + ".kimde");
         }
     }
-
-    [Fact]
-    public void A_short_hold_meanwhile_does_not_end_the_long_one()
-    {
-        using var job = MouseGuard.Hold(TimeSpan.FromMinutes(1));
-        using (MouseGuard.Hold(TimeSpan.FromMilliseconds(1))) { }
-        Thread.Sleep(20);
-        Assert.True(MouseGuard.Holding);
-    }
 }

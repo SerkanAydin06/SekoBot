@@ -99,3 +99,23 @@ public class SellTests
         Assert.Equal(1, cleaner.Thrown);
     }
 }
+
+public class BagBonusTests
+{
+    [Fact]
+    public void The_window_bag_keeps_the_bonuses_read_from_the_character_data()
+    {
+        // Seen: the window's list (no bonuses) replaced the data's, and an EXP +6 necklace was thrown.
+        var exp = new SekoBot.Memory.ItemBonus(47, 6);
+        IReadOnlyList<SekoBot.Memory.InventoryItem> data = [new(7, 16007, 1, [new(47, 10)]), new(17, 16000, 1, [exp]), new(20, 11850, 1)];
+        IReadOnlyList<SekoBot.Memory.InventoryItem> window = [new(17, 16000, 1), new(20, 11850, 1), new(21, 27001, 150)];
+        var bag = SekoBot.Memory.GameWorldReader.WithBonuses(data, window);
+        Assert.Equal(4, bag.Count);
+        Assert.Equal([exp], bag.Single(i => i.Slot == 17).Bonuses);
+        Assert.NotNull(bag.Single(i => i.Slot == 7).Bonuses);   // worn: from the data
+        Assert.Null(bag.Single(i => i.Slot == 20).Bonuses);
+        Assert.Equal(150, bag.Single(i => i.Slot == 21).Count);   // the window's count
+        var p = new SekoBot.Config.BotProfile { LootBonuses = [new SekoBot.Config.BonusWant { Type = 47, Min = 6 }] };
+        Assert.True(SekoBot.Bot.BotEngine.GoodBonus(bag.Single(i => i.Slot == 17), p));
+    }
+}

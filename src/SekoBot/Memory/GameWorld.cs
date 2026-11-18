@@ -697,7 +697,7 @@ internal sealed partial class GameWorldReader : IDisposable
             _bagReadAt = DateTime.UtcNow;
         }
         if (progress != null && _bag.Count > 0)
-            progress = progress with { Inventory = [.. progress.Inventory.Where(i => i.Slot < CharacterProgress.FirstBagSlot), .. _bag] };
+            progress = progress with { Inventory = WithBonuses(progress.Inventory, _bag) };
         // Skills change only when one is learned or levelled: every few seconds is plenty.
         if (DateTime.UtcNow - _skillsReadAt >= TimeSpan.FromSeconds(3))
         {
@@ -899,6 +899,21 @@ internal sealed partial class GameWorldReader : IDisposable
     }
 
     private List<InventoryItem> _bag = [];
+
+    /// <summary>
+    /// The bag as the inventory window shows it (its counts are up to date), each item with its bonuses
+    /// from charData (the window's slots hold none): the same slot and item. Seen: the window's list
+    /// alone left every bag item without bonuses, and an EXP +6 necklace asked for was thrown away.
+    /// </summary>
+    internal static List<InventoryItem> WithBonuses(IReadOnlyList<InventoryItem> data, IReadOnlyList<InventoryItem> window)
+    {
+        var bonuses = new Dictionary<(int, int), ItemBonus[]>();
+        foreach (var item in data)
+            if (item.Bonuses is { Length: > 0 } b)
+                bonuses.TryAdd((item.Slot, item.Vnum), b);
+        return [.. data.Where(i => i.Slot < CharacterProgress.FirstBagSlot),
+                .. window.Select(i => i.Bonuses == null && bonuses.TryGetValue((i.Slot, i.Vnum), out var b) ? i with { Bonuses = b } : i)];
+    }
     private DateTime _bagReadAt = DateTime.MinValue;
     private readonly byte[] _slotBytes = new byte[0x10];
 

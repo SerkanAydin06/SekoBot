@@ -47,8 +47,9 @@ internal static class MouseGuard
 
         public void Dispose()
         {
-            if (Interlocked.Exchange(ref _done, 1) == 0)
-                Interlocked.Decrement(ref _holds);
+            // The last hold let go: the end time goes too (a long job's end doesn't stretch a later short hold).
+            if (Interlocked.Exchange(ref _done, 1) == 0 && Interlocked.Decrement(ref _holds) <= 0)
+                Interlocked.Exchange(ref _untilTicks, 0);
         }
     }
 
