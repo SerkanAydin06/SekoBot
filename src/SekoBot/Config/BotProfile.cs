@@ -231,6 +231,9 @@ internal sealed class BotProfile
     public bool SellToNpc { get; set; } = true;
     /// <summary>Another player staying this many minutes within 30 m while the experience drops: find another place (0 = off).</summary>
     public double AvoidPlayerMinutes { get; set; } = 3;
+
+    /// <summary>Move to another farm spot when a player stays near (off: the bot stays where it farms).</summary>
+    public bool MoveAwayFromPlayers { get; set; }
     /// <summary>How much the experience a minute has to drop (percent) against before the player came.</summary>
     public double AvoidPlayerExpDrop { get; set; } = 40;
     /// <summary>Answer "durum", "dur", "başla" written to the Telegram bot.</summary>
