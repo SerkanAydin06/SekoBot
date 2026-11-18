@@ -426,7 +426,7 @@ internal sealed partial class BotEngine
             else
             {
                 string text = result == TouchResult.Covered
-                    ? "Oyun penceresinin üstü kapalı ya da küçültülmüş; dükkana dokunulamıyor. Pencere görününce devam edilecek."
+                    ? "Oyun penceresi simge durumuna küçültülmüş; dükkan açılamıyor. Pencere açılınca devam edilecek (üstünde başka pencere olması sorun değil)."
                     : "Fare kullanılıyor; dükkana dokunmak için farenin durması bekleniyor.";
                 _marketStatus = text;
                 if (DateTime.Now - _touchToldAt > TimeSpan.FromMinutes(2))
