@@ -371,11 +371,15 @@ internal sealed partial class BotEngine
         var random = new Random();
         int readNow = 0;
         int round = 1, roundRead = 0, roundGone = gone, missStreaks = 0;
+        // Shops that open while the scan goes on are read first; those standing at the start are read
+        // nearest first (going after every never-read one across the market zigzags: seen 5 s a shop).
+        var standing = shops.Select(s => s.Id).ToHashSet();
         var roundStarted = DateTime.Now;
         if (continuous)
             _log($"🔁 Sürekli pazar takibi başladı: yeni açılan dükkanlar hemen, diğerleri {refresh.TotalMinutes:0} dakikada bir yeniden okunur. Hiçbir şey satın alınmaz.");
         _log($"🛒 Pazar taraması başladı: {shops.Count} dükkan var, {toRead} tanesi okunacak" +
-             (book.Shops > 0 ? $" (listede {book.Shops} dükkan vardı{(gone > 0 ? $", {gone} kapanmış dükkan çıkarıldı" : "")}; son 2 saatte okunanlar atlanıyor)" : "") +
+             (book.Shops > 0 ? $" (listede {book.Shops} dükkan vardı{(gone > 0 ? $", {gone} kapanmış dükkan çıkarıldı" : "")}; " +
+                               $"son {(continuous ? $"{refresh.TotalMinutes:0} dakikada" : "2 saatte")} okunanlar atlanıyor)" : "") +
              ". Hiçbir şey satın alınmaz. Durdurmak için " + StopKeys + " ya da DURDUR." +
              (book.Wanted.Count > 0 ? $" Aranan: {string.Join(", ", book.Wanted.Select(w => w.Name.Trim() + (w.MaxPrice > 0 ? $" (≤ {MarketBook.Yang(w.MaxPrice)})" : "")))}." : ""));
         using var input = new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
@@ -415,7 +419,7 @@ internal sealed partial class BotEngine
                 if (await CloseChatHistoryAsync(input, cover, token))
                     continue;
                 // Shops never read (new in the market) come first.
-                var unread = shops.Where(s => !book.Has(s.Id) && !Done(s.Id)).Select(s => s.Id).ToHashSet();
+                var unread = shops.Where(s => !standing.Contains(s.Id) && !book.Has(s.Id) && !Done(s.Id)).Select(s => s.Id).ToHashSet();
                 var next = NextShop(shops, world, camera, state, unread.Count > 0 ? id => Done(id) || !unread.Contains(id) : Done);
                 if (next == null)
                 {
@@ -435,11 +439,12 @@ internal sealed partial class BotEngine
                         _marketStatus = $"🔁 {round}. tur bitti; yeni tur {(until - DateTime.Now).TotalSeconds:0} sn sonra (yeni açılan dükkan olursa hemen) · listede {book.Shops} dükkan, {book.Items} ürün.";
                         await Task.Delay(2000, token);
                         var now2 = MarketShops();
-                        if (now2.Count > 0 && now2.Any(s => !book.Has(s.Id)))
-                            break; // a new shop opened: read it now
+                        if (now2.Count > 0 && now2.Any(s => !standing.Contains(s.Id) && !book.Has(s.Id)))
+                            break; // a new shop opened: read it now (not one that couldn't be opened)
                     }
                     round++;
                     roundRead = roundGone = 0;
+                    standing = MarketShops().Select(s => s.Id).ToHashSet() is { Count: > 0 } now3 ? now3 : standing;
                     roundStarted = DateTime.Now;
                     continue;
                 }
