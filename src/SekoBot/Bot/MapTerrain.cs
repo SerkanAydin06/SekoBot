@@ -101,7 +101,7 @@ internal sealed class MapTerrain
     {
         if (avoid != null)
             foreach (var c in avoid)
-                if (!c.Holds(from, margin) && !c.Holds(to, margin) && c.Crosses(from, to, margin))
+                if (!c.Holds(to, margin) && (c.Holds(from, margin) ? c.Towards(from, to) : c.Crosses(from, to, margin)))
                     return false;
         double length = from.DistanceXY(to);
         var near = Around(Math.Min(from.X, to.X) - margin, Math.Min(from.Y, to.Y) - margin, Math.Max(from.X, to.X) + margin, Math.Max(from.Y, to.Y) + margin)
@@ -129,7 +129,8 @@ internal sealed class MapTerrain
     /// places, mobs on the way); one the character or the goal stands in doesn't count.</param>
     public List<Vec3>? WayTo(Vec3 from, Vec3 to, double margin = Margin, double room = 12000, IReadOnlyList<Circle>? avoid = null)
     {
-        var keep = avoid?.Where(c => !c.Holds(from, margin) && !c.Holds(to, margin)).ToList();
+        // One the character stands in still counts (it got stuck right there): not walked into again.
+        var keep = avoid?.Where(c => !c.Holds(to, margin)).ToList();
         if (LineClear(from, to, margin, keep))
             return [to];
         // Looked for close around the two points first; a long wall needs more room to get round.
@@ -143,6 +144,14 @@ internal sealed class MapTerrain
     internal readonly record struct Circle(double X, double Y, double R)
     {
         public bool Holds(Vec3 p, double margin) => (p.X - X) * (p.X - X) + (p.Y - Y) * (p.Y - Y) < (R + margin) * (R + margin);
+
+        /// <summary>From <paramref name="a"/> (in it) towards <paramref name="b"/> leads further in: more towards its middle than sideways.</summary>
+        public bool Towards(Vec3 a, Vec3 b)
+        {
+            double mx = X - a.X, my = Y - a.Y, dx = b.X - a.X, dy = b.Y - a.Y;
+            double m = Math.Sqrt(mx * mx + my * my), d = Math.Sqrt(dx * dx + dy * dy);
+            return m > 1 && d > 1 && (mx * dx + my * dy) / (m * d) > 0.3;
+        }
 
         /// <summary>The straight way from a to b passes within R + margin of the middle.</summary>
         public bool Crosses(Vec3 a, Vec3 b, double margin)
