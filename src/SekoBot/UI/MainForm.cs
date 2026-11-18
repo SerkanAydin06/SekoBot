@@ -285,6 +285,8 @@ internal sealed class MainForm : Form
         var throwNow = Theme.Button(items, "🗑  Şimdi at", new Rectangle(0, 172, 140, 30), Theme.Secondary, Theme.SecondaryHover);
         throwNow.Click += (_, _) => WriteLog(_engine?.CleanNow() ?? "Önce oyunu bağla.");
         _bagState = Theme.Label(items, "", new Rectangle(152, 172, 760, 30), 9f, Theme.Text);
+        Check(items, "Atmak yerine market NPC'sine sat (aynı haritada, 300 m içinde biliniyorsa; Topla / efsunlu / etkinlik eşyası satılmaz)",
+            0, 208, 760, () => _profile.SellToNpc, v => _profile.SellToNpc = v);
         var bonusList = Theme.Button(items, "✨  Efsun listesi", new Rectangle(310, 72, 180, 26), Theme.Secondary, Theme.SecondaryHover);
         bonusList.Click += (_, _) =>
         {

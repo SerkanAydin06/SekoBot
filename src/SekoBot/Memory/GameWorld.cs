@@ -124,8 +124,11 @@ internal readonly record struct BagSlotView(int Slot, int Vnum, int Count, int P
 /// <param name="MenuKnown">The item menu (one click on an item: "Kullan", "Yere at"…) is found in memory.</param>
 /// <param name="DropButton">That menu's "Yere at", while the menu is showing.</param>
 /// <param name="MenuSlot">The bag slot the menu is showing for.</param>
+/// <param name="SellButton">That menu's "Sat" (only shown next to a market NPC, its shop open).</param>
+/// <param name="NpcShop">The market NPC whose shop window is open (9001…), 0 when none.</param>
 internal sealed record BagLayout(bool Open, Rectangle Window, int Page, IReadOnlyList<Point> PageButtons,
-    IReadOnlyList<BagSlotView> Items, Point? Confirm, bool MenuKnown = false, Point? DropButton = null, int MenuSlot = -1);
+    IReadOnlyList<BagSlotView> Items, Point? Confirm, bool MenuKnown = false, Point? DropButton = null, int MenuSlot = -1,
+    Point? SellButton = null, int NpcShop = 0);
 
 /// <summary>What kind of thing an item is, by its number (Metin2's item numbers).</summary>
 internal enum LootKind { Unknown, Yang, Potion, Equipment, Other }
@@ -1358,16 +1361,26 @@ internal sealed partial class GameWorldReader : IDisposable
             long menu = Pointer(ui + Offset(Pointer(ui + ObjClass), "UI_C", "pop_weaponArmor"));
             long menuClass = Pointer(menu + ObjClass);
             bool menuKnown = MemoryReads.IsPointer(menu) && ClassName(menuClass) == "pop_equp_C";
-            Point? dropButton = null;
+            Point? dropButton = null, sellButton = null;
             int menuSlot = -1;
             if (menuKnown && open && Showing(menu))
             {
                 long drop = Pointer(menu + Offset(menuClass, "pop_equp_C", "yeret"));
                 if (Showing(drop) && DrawnAt(drop) is { } r)
                     dropButton = new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
+                // "Sat" shows only next to a market NPC (seen in the game).
+                long sell = Pointer(menu + Offset(menuClass, "pop_equp_C", "sat"));
+                if (Showing(sell) && DrawnAt(sell) is { } s)
+                    sellButton = new Point(s.X + s.Width / 2, s.Y + s.Height / 2);
                 menuSlot = Int32(menu + Offset(menuClass, "pop_equp_C", "slotid")) ?? -1;
             }
-            return new BagLayout(open, window, showing, buttons, items, confirm, menuKnown, dropButton, menuSlot);
+            // A market NPC's shop window (m2data.shopWindow, seen: shopId 9001 with "Al" / "Sat").
+            int npcShop = 0;
+            long shopWindow = Pointer(instance + Offset(instanceClass, "m2data_C", "shopWindow"));
+            long shopClass = Pointer(shopWindow + ObjClass);
+            if (MemoryReads.IsPointer(shopWindow) && ClassName(shopClass) == "shopWindow_C" && Showing(shopWindow))
+                npcShop = Int32(shopWindow + Offset(shopClass, "shopWindow_C", "shopId")) ?? 0;
+            return new BagLayout(open, window, showing, buttons, items, confirm, menuKnown, dropButton, menuSlot, sellButton, npcShop);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

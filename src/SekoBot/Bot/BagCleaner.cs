@@ -42,6 +42,9 @@ internal sealed class BagCleaner
     private readonly Dictionary<int, int> _pageClicks = [];
 
     public bool Active { get; private set; }
+
+    /// <summary>Selling at a market NPC instead of throwing away: the menu's "Sat", never dragging out.</summary>
+    public bool Selling { get; init; }
     /// <summary>Items thrown away this time.</summary>
     public int Thrown { get; private set; }
 
@@ -132,8 +135,8 @@ internal sealed class BagCleaner
                 break;
 
             case Step.Menu:
-                // The item's menu is up: "Yere at" (the question comes next, as after a drag).
-                if (bag.DropButton is Point drop && bag.MenuSlot == _slot)
+                // The item's menu is up: "Yere at" (the question comes next, as after a drag) — or "Sat".
+                if ((Selling ? bag.SellButton : bag.DropButton) is Point drop && bag.MenuSlot == _slot)
                 {
                     actions.Add(new ClickAction(drop, Slow: true, Fast: true));
                     _draggedAt = now;
@@ -143,6 +146,15 @@ internal sealed class BagCleaner
                 }
                 if (now - _clickedAt >= MenuTimeout)
                 {
+                    if (Selling)
+                    {
+                        // No "Sat" in its menu (the shop closed, or the item can't be sold): left.
+                        _failed[_slot] = TriesPerItem;
+                        actions.Add(new KeyTapAction(p.Keys.CloseWindow));
+                        _step = Step.Pick;
+                        _waitUntil = now + AfterKey;
+                        break;
+                    }
                     _menuMisses++; // twice no menu: drag from now on
                     _step = Step.Pick;
                     goto case Step.Pick;
@@ -150,6 +162,14 @@ internal sealed class BagCleaner
                 break;
 
             case Step.Dragged:
+                // Sold without a question: the item is gone.
+                if (Selling && !bag.Items.Any(i => i.Slot == _slot && i.Vnum == _vnum))
+                {
+                    Thrown++;
+                    ThrownItems.Add((_vnum, Math.Max(1, _count)));
+                    _step = Step.Pick;
+                    goto case Step.Pick;
+                }
                 // No question came up: the drag didn't take.
                 if (now - _draggedAt >= QuestionTimeout)
                 {
@@ -190,7 +210,7 @@ internal sealed class BagCleaner
                     // A new item: try its menu first (faster); the same item after a missing menu: drag.
                     bool sameItem = here.Slot == _slot && here.Vnum == _vnum && _menuTried;
                     _count = here.Count;
-                    _viaMenu = bag.MenuKnown && _menuMisses < 2 && !sameItem;
+                    _viaMenu = Selling || bag.MenuKnown && _menuMisses < 2 && !sameItem;
                     if (_viaMenu)
                     {
                         actions.Add(new ClickAction(from, Slow: true, Fast: true));
