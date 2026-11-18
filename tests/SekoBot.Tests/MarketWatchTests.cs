@@ -57,6 +57,15 @@ public class MarketWatchTests
     }
 
     [Fact]
+    public void A_book_whose_skill_is_unknown_has_no_price_of_its_own()
+    {
+        Assert.False(BotEngine.PricedByName("Beceri Kitabı"));
+        Assert.False(BotEngine.PricedByName("Ruh Taşı"));
+        Assert.True(BotEngine.PricedByName("Beceri Kitabı: Hava Kılıcı"));
+        Assert.True(BotEngine.PricedByName("Kavrama Taşı+2"));
+    }
+
+    [Fact]
     public void The_price_history_keeps_one_entry_a_day_and_tells_the_trend()
     {
         var history = new MarketHistory();
