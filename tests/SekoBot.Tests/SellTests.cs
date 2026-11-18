@@ -51,6 +51,37 @@ public class SellTests
     }
 
     [Fact]
+    public void An_item_found_wanted_when_its_menu_is_up_is_not_thrown()
+    {
+        // Seen: an EXP +6 necklace thrown; its bonus is read again right before "Yere at".
+        var cleaner = new BagCleaner();
+        var p = new BotProfile();
+        var item = new BagSlotView(20, Sword, 1, 0, new Rectangle(700, 200, 40, 40));
+        var window = new Rectangle(662, 20, 520, 599);
+        BagLayout Bag(bool menu) => new(true, window, 0, [], [item], null, MenuKnown: true,
+            DropButton: menu ? new Point(900, 300) : null, MenuSlot: menu ? 20 : -1);
+        cleaner.Start(TimeSpan.Zero);
+        bool junk = true;
+        Assert.Equal([new ClickAction(new Point(720, 220), Slow: true, Fast: true)], cleaner.Tick(TimeSpan.Zero, Bag(false), _ => junk, p, new Size(1204, 688)));
+        junk = false; // its bonus came through meanwhile
+        var actions = cleaner.Tick(TimeSpan.FromSeconds(1), Bag(true), _ => junk, p, new Size(1204, 688));
+        Assert.DoesNotContain(new ClickAction(new Point(900, 300), Slow: true, Fast: true), actions);
+        Assert.Contains(new KeyTapAction(p.Keys.CloseWindow), actions);
+        Assert.Equal(0, cleaner.Thrown);
+    }
+
+    [Fact]
+    public void A_picked_item_found_wanted_later_is_forgotten()
+    {
+        var picked = new PickedItems();
+        picked.Update([], true, (Func<InventoryItem, bool>?)null);
+        picked.Update([new InventoryItem(20, Sword, 1)], true, (Func<InventoryItem, bool>?)(_ => false));
+        Assert.Contains((20, Sword), picked.Picked);
+        picked.Forget(20, Sword);
+        Assert.DoesNotContain((20, Sword), picked.Picked);
+    }
+
+    [Fact]
     public void Selling_clicks_the_item_then_its_Sat_and_counts_it_when_it_is_gone()
     {
         var cleaner = new BagCleaner { Selling = true };

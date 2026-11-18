@@ -72,6 +72,20 @@ internal sealed partial class BotEngine
             _pickedItems.Update(progress.Inventory, BotRunning, item => KeepPicked(item, profile));
             _lootedItems.UseCharacter(_world?.CharacterName ?? "");
             _lootedItems.Update(progress.Inventory, BotRunning, (Func<InventoryItem, bool>?)null);
+            // A bonus asked for, once seen on an item (also after it came in: the game fills its bonuses a
+            // moment later), keeps it for good: never thrown, never sold (seen: an EXP +6 necklace thrown).
+            foreach (var item in progress.Inventory)
+            {
+                if (item.Slot < CharacterProgress.FirstBagSlot)
+                    continue;
+                if (GoodBonus(item, profile) || AlwaysLoot(item.Vnum, profile) || Array.IndexOf(Loot.AllEventItems, item.Vnum) >= 0)
+                {
+                    _pickedItems.Forget(item.Slot, item.Vnum);
+                    _lootedItems.Forget(item.Slot, item.Vnum);
+                }
+                else if (KeepPicked(item, profile))
+                    _pickedItems.Forget(item.Slot, item.Vnum); // wanted (its price…): not junk
+            }
             foreach (var (vnum, count) in _pickedItems.Gained)
                 _sessionItems.Picked(vnum, count);
             _sessionItems.Save();

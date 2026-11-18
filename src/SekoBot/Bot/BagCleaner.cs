@@ -138,6 +138,16 @@ internal sealed class BagCleaner
                 // The item's menu is up: "Yere at" (the question comes next, as after a drag) — or "Sat".
                 if ((Selling ? bag.SellButton : bag.DropButton) is Point drop && bag.MenuSlot == _slot)
                 {
+                    // Looked at once more, as read now, right before "Yere at" / "Sat": a bonus asked for
+                    // read meanwhile (or the item gone, another one there) and it stays.
+                    if (bag.Items.FirstOrDefault(i => i.Slot == _slot && i.Vnum == _vnum) is not { Vnum: > 0 } still || !throwIt(still))
+                    {
+                        _failed[_slot] = TriesPerItem;
+                        actions.Add(new KeyTapAction(p.Keys.CloseWindow));
+                        _step = Step.Pick;
+                        _waitUntil = now + AfterKey;
+                        break;
+                    }
                     actions.Add(new ClickAction(drop, Slow: true, Fast: true));
                     _draggedAt = now;
                     _step = Step.Dragged;

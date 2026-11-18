@@ -95,6 +95,14 @@ internal sealed class PickedItems
         CameIn = cameIn;
     }
 
+    /// <summary>The item at this slot is wanted after all (seen: its bonus wasn't read yet the moment it
+    /// came in, and it was taken for junk): not the bot's to throw or sell from now on.</summary>
+    public void Forget(int slot, int vnum)
+    {
+        if (_picked.Remove((slot, vnum)))
+            Changed = true;
+    }
+
     // ---- the file (per character) ----
 
     private string FileOf(string character) =>
