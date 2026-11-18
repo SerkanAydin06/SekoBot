@@ -172,9 +172,10 @@ public class PopupWatchTests
         watch.Start(["popup_C", "popup_C"]);                            // stopped and started again
         Assert.Empty(watch.Update(["popup_C", "popup_C"], S(20)));
         Assert.Equal(["popup_C"], watch.Update(["popup_C", "popup_C", "popup_C"], S(30)));   // a new one still is closed
-        // A fresh SekoBot doesn't know them: tries Esc first.
+        // A fresh SekoBot too: an advert already up at the start is let be (no Esc at every start).
         var fresh = new PopupWatch();
         fresh.Start(["popup_C"]);
-        Assert.Equal(["popup_C"], fresh.Update(["popup_C"], S(0)));
+        Assert.Empty(fresh.Update(["popup_C"], S(0)));
+        Assert.Equal(["popup_C"], fresh.Update(["popup_C", "popup_C"], S(5)));   // a new one is closed
     }
 }
