@@ -9,6 +9,8 @@ internal enum TouchResult
 {
     /// <summary>Touched.</summary>
     Done,
+    /// <summary>Covered by another window: the click was posted to the game (it doesn't always take: check, try again slower).</summary>
+    Posted,
     /// <summary>The game is minimized: not touched.</summary>
     Covered,
     /// <summary>The user kept using the mouse the whole time: not touched.</summary>
@@ -38,7 +40,8 @@ internal static class TouchTap
     private static readonly object Gate = new();
     private static bool? _ready;
 
-    public static async Task<TouchResult> TapAsync(WindowInfo window, Point client, CancellationToken token)
+    /// <param name="slower">A posted click that didn't take: the cursor stays longer on the stall's place.</param>
+    public static async Task<TouchResult> TapAsync(WindowInfo window, Point client, CancellationToken token, bool slower = false)
     {
         if (!Ready())
             return TouchResult.Unavailable;
@@ -62,8 +65,8 @@ internal static class TouchTap
             return TouchResult.Covered;
         if (!Shows(window, screen))
         {
-            PostedClick(window, client, screen);
-            return TouchResult.Done;
+            PostedClick(window, client, screen, slower ? SlowerPostedClickGaps : PostedClickGaps);
+            return TouchResult.Posted;
         }
         lock (Gate)
         {
@@ -97,10 +100,12 @@ internal static class TouchTap
 
     /// <summary>The cursor stays on the stall's place this long around the posted click (ms: move, down, up).</summary>
     internal static readonly int[] PostedClickGaps = [15, 25, 20];
+    /// <summary>The second try, when the first didn't take (the game behind others draws fewer frames).</summary>
+    internal static readonly int[] SlowerPostedClickGaps = [40, 60, 40];
 
     /// <summary>A click posted to the game window (covered by another one): the cursor is put where the
     /// stall is for a moment, as the game reads it from there, then back where the user had it.</summary>
-    private static void PostedClick(WindowInfo window, Point client, Point screen)
+    private static void PostedClick(WindowInfo window, Point client, Point screen, int[] gaps)
     {
         lock (Gate)
         {
@@ -110,11 +115,11 @@ internal static class TouchTap
             {
                 Win32.SetCursorPos(screen.X, screen.Y);
                 Win32.PostMessage(window.Handle, 0x200, 0, at); // WM_MOUSEMOVE
-                Thread.Sleep(PostedClickGaps[0]);
+                Thread.Sleep(gaps[0]);
                 Win32.PostMessage(window.Handle, 0x201, 1, at); // WM_LBUTTONDOWN
-                Thread.Sleep(PostedClickGaps[1]);
+                Thread.Sleep(gaps[1]);
                 Win32.PostMessage(window.Handle, 0x202, 0, at); // WM_LBUTTONUP
-                Thread.Sleep(PostedClickGaps[2]);
+                Thread.Sleep(gaps[2]);
             }
             finally
             {
