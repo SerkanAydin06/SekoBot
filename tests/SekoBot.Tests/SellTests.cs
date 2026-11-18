@@ -111,7 +111,7 @@ public class BagBonusTests
         IReadOnlyList<SekoBot.Memory.InventoryItem> window = [new(17, 16000, 1), new(20, 11850, 1), new(21, 27001, 150)];
         var bag = SekoBot.Memory.GameWorldReader.WithBonuses(data, window);
         Assert.Equal(4, bag.Count);
-        Assert.Equal([exp], bag.Single(i => i.Slot == 17).Bonuses);
+        Assert.Equal([exp], bag.Single(i => i.Slot == 17).Bonuses!);
         Assert.NotNull(bag.Single(i => i.Slot == 7).Bonuses);   // worn: from the data
         Assert.Null(bag.Single(i => i.Slot == 20).Bonuses);
         Assert.Equal(150, bag.Single(i => i.Slot == 21).Count);   // the window's count

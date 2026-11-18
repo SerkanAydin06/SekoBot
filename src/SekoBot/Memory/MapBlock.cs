@@ -19,6 +19,42 @@ internal sealed class MapBlock
     public bool Passable { get; set; }
 
     public int Corners => Points.Length / 2;
+
+    /// <summary>A tree: its outline is the whole tree from above (the crown), the game collides only with
+    /// the trunk in the middle (seen: walking under a baobab's crown made the whole tree "passable", and
+    /// then the bot walked into its trunk). Only the trunk counts, and it is never passable.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsTree
+    {
+        get
+        {
+            if (ReferenceEquals(_treeOf, Name))
+                return _tree;
+            string n = Name.ToLowerInvariant();
+            _treeOf = Name;
+            return _tree = n.Contains("tree") || n.Contains("acacia") || n.Contains("baobab") || n.Contains("broadleaf") || n.Contains("pine") ||
+                   n.Contains("oak") || n.Contains("birch") || n.Contains("palm") || n.Contains("agac") || n.Contains("trunk");
+        }
+    }
+
+    private string? _treeOf;
+    private bool _tree;
+
+    /// <summary>A tree's trunk: a circle in the middle of its outline (world units).</summary>
+    private double TrunkRadius
+    {
+        get
+        {
+            var (a, b, c, d) = Box;
+            return Math.Clamp(Math.Min(c - a, d - b) * 0.2, 30, 90);
+        }
+    }
+
+    private double FromTrunk(double x, double y)
+    {
+        var (cx, cy) = Centre;
+        return Math.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) - TrunkRadius;
+    }
     public double X(int i) => Points[2 * i];
     public double Y(int i) => Points[2 * i + 1];
 
@@ -86,6 +122,8 @@ internal sealed class MapBlock
     /// <summary>The point is inside the outline.</summary>
     public bool Contains(double x, double y)
     {
+        if (IsTree)
+            return FromTrunk(x, y) <= 0;
         bool inside = false;
         for (int i = 0, j = Corners - 1; i < Corners; j = i++)
             if (Y(i) > y != Y(j) > y && x < (X(j) - X(i)) * (y - Y(i)) / (Y(j) - Y(i)) + X(i))
@@ -98,6 +136,8 @@ internal sealed class MapBlock
     {
         if (Corners == 0)
             return double.MaxValue;
+        if (IsTree)
+            return Math.Max(0, FromTrunk(x, y));
         if (Corners >= 3 && Contains(x, y))
             return 0;
         double best = double.MaxValue;
