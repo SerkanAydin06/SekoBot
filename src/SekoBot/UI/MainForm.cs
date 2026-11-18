@@ -372,6 +372,26 @@ internal sealed class MainForm : Form
         Check(area, "Güçlü moblara gitme", 190, 68, 176, () => _profile.AutoArea, v => _profile.AutoArea = v);
         NumberRow(area, "Oyuncu kalınca yeni alan (dk)", 0, 100, 0, 30, () => _profile.AvoidPlayerMinutes, 0, 1,
             v => _profile.AvoidPlayerMinutes = v);
+        var saveSpot = Theme.Button(area, "📌  Bu alanı kaydet", new Rectangle(370, 100, 190, 28), Theme.Primary, Theme.PrimaryHover);
+        saveSpot.Click += (_, _) =>
+        {
+            WriteLog(_engine?.SaveMySpot() ?? "Önce oyunu bağla.");
+            ReloadSettings();
+            SaveProfile();
+        };
+        var forgetSpot = Theme.Button(area, "Kaydettiğim alanı sil", new Rectangle(570, 100, 180, 28), Theme.Secondary, Theme.SecondaryHover);
+        forgetSpot.Click += (_, _) =>
+        {
+            if (_profile.MySpot == null)
+            {
+                WriteLog("Kaydettiğin bir alan yok.");
+                return;
+            }
+            _profile.MySpot = null;
+            SaveProfile();
+            WriteLog("Kaydettiğin alan silindi" + (_profile.FarmSpot != null && _profile.UseFarmSpot
+                ? "; bot başlarken botun bulduğu alana gider." : "; bot durduğu yerde başlar."));
+        };
         _respawnState = Theme.Label(area, "", new Rectangle(0, 140, 918, 22), 8.5f, Theme.Muted);
         _positionState = Theme.Label(area, "", new Rectangle(0, 166, 918, 40), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
 
@@ -1562,8 +1582,12 @@ internal sealed class MainForm : Form
         string respawn = _engine.RespawnSummary();
         _respawnState.Text = "Doğma süreleri: " + (respawn.Length > 0 ? respawn : "ölçülüyor (bot çalışırken)") +
                              " · 0 = kapalı";
-        _farmState.Text = _profile.FarmSpot is { } farm
-            ? $"Kayıtlı alan ({farm.MapName}, {farm.FoundAt:dd.MM HH:mm}): {farm.Mobs} mob — {farm.Names}" +
+        _farmState.Text = _profile.MySpot is { } mine
+            ? $"📌 Kaydettiğin alan ({mine.MapName}, {mine.FoundAt:dd.MM HH:mm})" +
+              (world != null && world.MapName == mine.MapName ? $" · {mine.Position.DistanceXY(world.Player) / 100:0} m uzakta" : "") +
+              (_profile.UseFarmSpot ? "; bot buradan başlar." : "; 'Kayıtlı alanda başla' kapalı.")
+            : _profile.FarmSpot is { } farm
+            ?$"Kayıtlı alan ({farm.MapName}, {farm.FoundAt:dd.MM HH:mm}): {farm.Mobs} mob — {farm.Names}" +
               (world != null && world.MapName == farm.MapName ? $" · {farm.Position.DistanceXY(world.Player) / 100:0} m uzakta" : "")
             : "Kayıtlı alan yok. \"En iyi alanı bul\": karakter ~1 dk çevrede dolaşıp en verimli yeri bulur.";
         string scanText = _engine.ScanningArea ? "■  Taramayı durdur" : _profile.FarmSpot != null ? "🔄  Alanı güncelle" : "📍  En iyi alanı bul";

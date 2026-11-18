@@ -56,13 +56,31 @@ internal static class Instance
     {
         LeaveGame();
         _gameMark = new EventWaitHandle(false, EventResetMode.ManualReset, $@"Local\SekoBot-game-{processId}");
+        // Which SekoBot has it (for putting the games in order: 1st, 2nd, …).
+        _numberMark = new EventWaitHandle(false, EventResetMode.ManualReset, $@"Local\SekoBot-game-{processId}-no-{Number}");
         _ownGame = processId;
     }
+
+    private static EventWaitHandle? _numberMark;
 
     public static void LeaveGame()
     {
         _gameMark?.Dispose();
         _gameMark = null;
+        _numberMark?.Dispose();
+        _numberMark = null;
         _ownGame = 0;
+    }
+
+    /// <summary>The number of the SekoBot connected to this game (int.MaxValue: none).</summary>
+    public static int BotOf(uint processId)
+    {
+        for (int n = 1; n <= MaxInstances + 1; n++)
+            if (EventWaitHandle.TryOpenExisting($@"Local\SekoBot-game-{processId}-no-{n}", out var mark))
+            {
+                mark.Dispose();
+                return n;
+            }
+        return int.MaxValue;
     }
 }

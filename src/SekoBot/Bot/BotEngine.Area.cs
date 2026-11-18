@@ -141,12 +141,47 @@ internal sealed partial class BotEngine
         }
     }
 
+    /// <summary>"Bu alanı kaydet": where the character stands now becomes the user's own farm spot,
+    /// started at from now on (also after the bot is stopped and started again).</summary>
+    public string SaveMySpot()
+    {
+        if (World is not { MapName.Length: > 0 } world)
+            return "Karakterin yeri okunamadı; önce oyunu bağla.";
+        var profile = Profile;
+        var spot = new FarmSpot
+        {
+            MapName = world.MapName, X = world.Player.X, Y = world.Player.Y, Z = world.Player.Z,
+            FoundAt = DateTime.Now, Names = "senin kaydettiğin alan",
+        };
+        lock (_botGate)
+        {
+            profile.MySpot = spot;
+            profile.UseFarmSpot = true;
+            if (BotRunning)
+            {
+                _farmSpot = spot.Position;
+                _botHome = spot.Position;
+                _brain.NewFarmSpot(); // the area is around here from now on
+            }
+        }
+        return $"📌 Bu alan kaydedildi ({world.MapName}). Bot artık her başlatışta buraya gelip buradan başlar; " +
+               $"alan sınırı ({profile.LeashMeters:0} m) bu noktanın çevresidir.";
+    }
+
     /// <summary>The saved farm spot, when it is to be used now (same map, not too far).</summary>
     private Vec3? UsableFarmSpot(WorldSnapshot? world, BotProfile profile, out string? why)
     {
         why = null;
         if (!profile.UseFarmSpot || world == null)
             return null;
+        // The place the user saved comes first (on its map).
+        if (profile.MySpot is { } mine && mine.MapName == world.MapName)
+        {
+            if (mine.Position.DistanceXY(world.Player) <= 30000)
+                return mine.Position;
+            why = "Kaydettiğin alan 300 m'den uzakta; bot durduğu yerde başlıyor (karakteri alana yaklaştırıp yeniden başlat).";
+            return null;
+        }
         if (profile.FarmSpot is not { } spot)
         {
             why = "Kayıtlı farm alanı yok; önce \"En iyi alanı bul\"a bas. Bot durduğu yerde başlıyor.";

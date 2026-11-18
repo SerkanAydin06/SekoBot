@@ -114,6 +114,9 @@ internal sealed class BotProfile
 
     /// <summary>The best place to farm, found with "En iyi alanı bul"; null until then.</summary>
     public FarmSpot? FarmSpot { get; set; }
+    /// <summary>The place the user saved with "Bu alanı kaydet": started at whenever it is on this map
+    /// (before <see cref="FarmSpot"/>, the one the bot found); never moved by the bot.</summary>
+    public FarmSpot? MySpot { get; set; }
     /// <summary>Walk to <see cref="FarmSpot"/> first when the bot starts (off: start where the character stands).</summary>
     public bool UseFarmSpot { get; set; }
 
@@ -411,7 +414,7 @@ internal static class CharacterSettings
         nameof(BotProfile.PotionHpBelow), nameof(BotProfile.PotionMpBelow), nameof(BotProfile.ReviveOnDeath),
         nameof(BotProfile.PullGroups), nameof(BotProfile.PullMaxMobs), nameof(BotProfile.PullAreaMetres),
         nameof(BotProfile.PullMinHp), nameof(BotProfile.PullLearned), nameof(BotProfile.PreferCrowds), nameof(BotProfile.CrowdMinMobs),
-        nameof(BotProfile.FarmSpot), nameof(BotProfile.UseFarmSpot), nameof(BotProfile.LeashMeters),
+        nameof(BotProfile.FarmSpot), nameof(BotProfile.MySpot), nameof(BotProfile.UseFarmSpot), nameof(BotProfile.LeashMeters),
         nameof(BotProfile.AttackersFirst), nameof(BotProfile.MaxMobLevel), nameof(BotProfile.OnlyMobs),
         nameof(BotProfile.SkipMobs), nameof(BotProfile.Metins), nameof(BotProfile.PickUpDrops),
         nameof(BotProfile.LootYang), nameof(BotProfile.LootPotions), nameof(BotProfile.LootEquipment),
@@ -478,7 +481,7 @@ internal static class CharacterSettings
             try
             {
                 object? read = value?.Deserialize(property.PropertyType, ProfileStore.JsonOptions);
-                if (read != null || name == nameof(BotProfile.FarmSpot)) // no farm spot is a setting too
+                if (read != null || name is nameof(BotProfile.FarmSpot) or nameof(BotProfile.MySpot)) // no farm spot is a setting too
                     property.SetValue(profile, read);
             }
             catch (JsonException) { }

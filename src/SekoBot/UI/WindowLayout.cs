@@ -122,8 +122,10 @@ internal static class WindowLayout
         if (games.Count == 0)
             return 0;
         var work = Screen.FromRectangle(near).WorkingArea;
-        // Keep their order from left to right (then top to bottom), so nothing swaps places.
-        var ordered = games.Select(g => (g, at: Visible(g.Handle))).OrderBy(p => p.at.Top / 200).ThenBy(p => p.at.Left).Select(p => p.g).ToList();
+        // In the bots' order: the 1st SekoBot's game first (top left), then the 2nd, …; games without a
+        // SekoBot last, as they stand from left to right.
+        var ordered = games.Select(g => (g, at: Visible(g.Handle), bot: Instance.BotOf(g.ProcessId)))
+            .OrderBy(p => p.bot).ThenBy(p => p.at.Top / 200).ThenBy(p => p.at.Left).Select(p => p.g).ToList();
         var pictures = ordered.Select(g => Win32.GetClientRect(g.Handle, out var c) ? new Size(c.Right - c.Left, c.Bottom - c.Top) : Size.Empty).ToList();
         // The title bar and borders around the picture (the same for all of them).
         var frame = Size.Empty;
