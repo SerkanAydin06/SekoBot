@@ -373,8 +373,8 @@ internal sealed class MainForm : Form
         Check(area, "Şehre girince dur", 190, 34, 170, () => _profile.StopInSafeZone, v => _profile.StopInSafeZone = v);
         Check(area, "Ara sıra mola ver", 0, 68, 180, () => _profile.Breaks, v => _profile.Breaks = v);
         Check(area, "Güçlü moblara gitme", 190, 68, 176, () => _profile.AutoArea, v => _profile.AutoArea = v);
-        NumberRow(area, "Oyuncu kalınca yeni alan (dk)", 0, 100, 0, 30, () => _profile.AvoidPlayerMinutes, 0, 1,
-            v => _profile.AvoidPlayerMinutes = v);
+        // Off by default: it took the character to odd places (user, 2026-11-19).
+        Check(area, "Oyuncu gelince başka alana geç", 0, 102, 360, () => _profile.MoveAwayFromPlayers, v => _profile.MoveAwayFromPlayers = v);
         var saveSpot = Theme.Button(area, "📌  Bu alanı kaydet", new Rectangle(370, 100, 190, 28), Theme.Primary, Theme.PrimaryHover);
         saveSpot.Click += (_, _) =>
         {

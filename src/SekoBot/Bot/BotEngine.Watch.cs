@@ -142,7 +142,7 @@ internal sealed partial class BotEngine
         // The user's own characters (in another game next to this one) aren't strangers taking our place.
         var players = (world.Players ?? []).Where(p => !OwnCharacter(p.Name)).ToList();
         string? reason = _players.Update(now, _session.Exp, world.Player, players, profile.AvoidPlayerMinutes, profile.AvoidPlayerExpDrop);
-        if (reason == null)
+        if (reason == null || !profile.MoveAwayFromPlayers)
             return;
         var others = players.Where(p => !p.IsGm).Select(p => p.Position).ToList();
         var old = _farmSpot ?? world.Player;
