@@ -45,6 +45,19 @@ internal sealed partial class BotEngine
         return Loot.KindOf(item.Vnum) is LootKind.Equipment or LootKind.Other;
     }
 
+    /// <summary>The market NPC known on this map nearest to the character, within reach.</summary>
+    private static NpcBook.Place? NearShop(WorldSnapshot world) =>
+        NpcBook.Shared.On(world.MapName, world.Player).FirstOrDefault(n => new Vec3(n.X, n.Y, n.Z).DistanceXY(world.Player) <= SellTripRange);
+
+    /// <summary>Something to sell and a market NPC near to sell it at (not right after a failed trip).</summary>
+    private bool CanSellNear(WorldSnapshot world, BotProfile p)
+    {
+        if (!p.SellToNpc || _sellFailedAt is { } failed && _clock.Elapsed - failed < SellRetryAfter || NearShop(world) == null)
+            return false;
+        var picked = BotLooted;
+        return (world.Progress?.Inventory ?? []).Any(i => ShouldSell(i, p, picked));
+    }
+
     /// <summary>
     /// Inside <see cref="_botGate"/>, when the bag is to be emptied: off to a market NPC instead of throwing,
     /// when one is known near on this map and there is something to sell. The keys to let go, or null.
@@ -53,11 +66,11 @@ internal sealed partial class BotEngine
     {
         if (!p.SellToNpc || _selling || World is not { } world || _sellFailedAt is { } failed && _clock.Elapsed - failed < SellRetryAfter)
             return null;
-        var picked = BotPicked;
+        var picked = BotLooted;
         int toSell = (world.Progress?.Inventory ?? []).Count(i => ShouldSell(i, p, picked));
         if (toSell == 0)
             return null;
-        var npc = NpcBook.Shared.On(world.MapName, world.Player).FirstOrDefault(n => new Vec3(n.X, n.Y, n.Z).DistanceXY(world.Player) <= SellTripRange);
+        var npc = NearShop(world);
         if (npc == null)
         {
             if (_noNpcToldMap != world.MapName)
@@ -139,7 +152,7 @@ internal sealed partial class BotEngine
             while (cleaner.Active && _clock.Elapsed - began < TimeSpan.FromMinutes(4))
             {
                 token.ThrowIfCancellationRequested();
-                var picked = BotPicked;
+                var picked = BotLooted;
                 var full = (World?.Progress?.Inventory ?? []).Where(i => i.Slot >= CharacterProgress.FirstBagSlot)
                     .GroupBy(i => (i.Slot, i.Vnum)).ToDictionary(g => g.Key, g => g.First());
                 var state = State;
