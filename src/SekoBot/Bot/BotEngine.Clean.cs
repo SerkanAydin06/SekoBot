@@ -46,7 +46,7 @@ internal sealed partial class BotEngine
     private TimeSpan _pickedSavedAt;
     private TimeSpan? _bagBonusesAt;
     /// <summary>The bonus items told about (slot, item), so each is told once.</summary>
-    private readonly HashSet<(int Slot, int Vnum)> _bonusTold = [];
+    private readonly Dictionary<(int Slot, int Vnum), TimeSpan> _bonusTold = [];
 
     private IReadOnlySet<(int Slot, int Vnum)> BotPicked
     {
@@ -88,8 +88,16 @@ internal sealed partial class BotEngine
             // Told when its bonus is first seen on an item the bot picked up (the game fills the bonuses a
             // moment after the item comes in: not at once, seen).
             var looted = _lootedItems.Picked;
+            // Gone from the bag a while (thrown, dropped, sold; not one bad read): picked up again it is told again.
+            foreach (var i in progress.Inventory)
+                if (_bonusTold.ContainsKey((i.Slot, i.Vnum)))
+                    _bonusTold[(i.Slot, i.Vnum)] = now;
+            foreach (var gone in _bonusTold.Where(kv => now - kv.Value > TimeSpan.FromSeconds(5)).Select(kv => kv.Key).ToList())
+                _bonusTold.Remove(gone);
+            foreach (var came in _lootedItems.CameIn)
+                _bonusTold.Remove((came.Slot, came.Vnum)); // just picked up (again): a new one to tell
             foreach (var item in progress.Inventory.Where(i => looted.Contains((i.Slot, i.Vnum))).ToList())
-                if (Loot.KindOf(item.Vnum) == LootKind.Equipment && GoodBonus(item, profile) && _bonusTold.Add((item.Slot, item.Vnum)))
+                if (Loot.KindOf(item.Vnum) == LootKind.Equipment && GoodBonus(item, profile) && _bonusTold.TryAdd((item.Slot, item.Vnum), now))
                 {
                     // The bonuses asked for are marked ✔ (the others are told too: they make its worth).
                     var wanted = profile.LootBonuses;
