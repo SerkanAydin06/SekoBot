@@ -143,6 +143,7 @@ internal sealed partial class BotEngine
         }
         if (!open)
             return Failed($"{name} dükkanı açılamadı");
+        _log($"💰 {name} dükkanı açıldı; eşyalar tek tek satılıyor (Sat → Evet).");
 
         // Sell, item by item, with the game in front the whole time (not back and forth).
         var cleaner = new BagCleaner { Selling = true };
