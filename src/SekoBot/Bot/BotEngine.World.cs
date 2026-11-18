@@ -157,7 +157,8 @@ internal sealed partial class BotEngine
                 StopFor($"GM görüldü ({gm.Name})");
         }
 
-        if (world.InSafeZone && profile.StopInSafeZone)
+        // Walking into the town to sell is meant (see BotEngine.Sell).
+        if (world.InSafeZone && profile.StopInSafeZone && !_selling)
         {
             _log("⚠ Karakter güvenli bölgeye (şehre) girdi; bot durduruluyor.");
             Alert();

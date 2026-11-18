@@ -84,6 +84,7 @@ internal sealed partial class BotEngine
             return null;
         }
         _selling = true;
+        _sellAsked = false;
         _sellCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
         var token = _sellCts.Token;
         _ = Task.Run(async () =>
