@@ -11,6 +11,9 @@ namespace SekoBot.Bot;
 internal sealed partial class BotEngine
 {
     private readonly TerrainBook _terrain = new();
+    /// <summary>The ways really walked (over hills and slopes the map's obstacles don't show), shared.</summary>
+    private readonly WalkedPaths _walked = WalkedPaths.Load();
+    private TimeSpan _walkedSeenAt, _walkedSavedAt;
     private string _terrainMap = "", _terrainLevel = "";
     private readonly HashSet<string> _terrainTold = [];
     private TimeSpan _terrainTriedAt = TimeSpan.FromDays(-1), _terrainWalkedAt, _terrainSavedAt;
@@ -59,6 +62,16 @@ internal sealed partial class BotEngine
                 if (_terrainTold.Add(map) && before != read.Count)
                     _log($"🗺 {map} haritası kaydedildi: {MapReport.Summary(terrain.Blocks)}. Bot yolunu bunların etrafından buluyor.");
             }
+        }
+        if (now - _walkedSeenAt >= TimeSpan.FromMilliseconds(400))
+        {
+            _walkedSeenAt = now;
+            _walked.Saw(map, world.Player);
+        }
+        if (now - _walkedSavedAt >= TimeSpan.FromSeconds(30))
+        {
+            _walkedSavedAt = now;
+            _walked.Save();
         }
         if (now - _terrainWalkedAt >= TimeSpan.FromSeconds(1))
         {
