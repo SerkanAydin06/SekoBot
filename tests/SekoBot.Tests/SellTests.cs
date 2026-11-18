@@ -12,7 +12,7 @@ public class SellTests
 
     private static void Items()
     {
-        ItemBook.Learn(new ItemInfo(Sword, "Test Kılıç+0", "ITEM_WEAPON", "WEAPON_SWORD", 5000));
+        ItemBook.Learn(new ItemInfo(Sword, "Test Kılıç+0", "ITEM_WEAPON", "WEAPON_SWORD", 20000));
         ItemBook.Learn(new ItemInfo(Armour, "Test Zırh+0", "ITEM_ARMOR", "ARMOR_BODY", 15000));
         ItemBook.Learn(new ItemInfo(Necklace, "Test Kolye+0", "ITEM_ARMOR", "ARMOR_NECK", 3000));
         ItemBook.Learn(new ItemInfo(Quest, "Test Görev Kağıdı", "ITEM_QUEST", "", 100));
@@ -21,28 +21,33 @@ public class SellTests
     }
 
     [Fact]
-    public void Only_what_the_bot_picked_and_nobody_asked_for_is_sold()
+    public void Only_weapons_and_armour_picked_for_their_price_are_sold()
     {
         Items();
         var p = new BotProfile { LootEquipmentMinGold = 3000, LootBonuses = [new BonusWant { Type = 47, Min = 10 }], LootPick = [Junk + 1] };
         InventoryItem I(int slot, int vnum, ItemBonus[]? bonuses = null) => new(slot, vnum, 1, bonuses);
-        var sword = I(20, Sword);
-        var armour = I(21, Armour);                                  // kept by the price limit: sold too
+        var sword = I(20, Sword);                                    // picked for its price: sold
+        var armour = I(21, Armour);
         var expNecklace = I(22, Necklace, [new ItemBonus(47, 12)]);  // a bonus asked for: kept
         var quest = I(23, Quest);
-        var junk = I(24, Junk);
+        var junk = I(24, Junk);                                      // not weapon / armour: thrown, not sold
         var free = I(25, Free);                                      // worth nothing in a shop
         var mine = I(26, Sword);                                     // the user's own
         HashSet<(int, int)> picked = [(20, Sword), (21, Armour), (22, Necklace), (23, Quest), (24, Junk), (25, Free)];
         Assert.True(BotEngine.ShouldSell(sword, p, picked));
         Assert.True(BotEngine.ShouldSell(armour, p, picked));
-        Assert.True(BotEngine.ShouldSell(junk, p, picked));
+        Assert.False(BotEngine.ShouldSell(junk, p, picked));
         Assert.False(BotEngine.ShouldSell(expNecklace, p, picked));
+        // Cheaper than the limit (thrown as before), ticked "At", or every weapon asked for: not sold.
+        Assert.False(BotEngine.ShouldSell(sword, new BotProfile { LootEquipmentMinGold = 5000 }, picked));
+        Assert.False(BotEngine.ShouldSell(sword, new BotProfile { LootEquipmentMinGold = 3000, LootThrow = [Sword] }, picked));
+        Assert.False(BotEngine.ShouldSell(sword, new BotProfile { LootEquipmentMinGold = 3000, LootEquipment = true }, picked));
+        Assert.False(BotEngine.ShouldSell(sword, new BotProfile(), picked));
         Assert.False(BotEngine.ShouldSell(quest, p, picked));
         Assert.False(BotEngine.ShouldSell(free, p, picked));
         Assert.False(BotEngine.ShouldSell(mine, p, picked));
-        p.LootPick = [Junk];                                         // ticked "Topla": kept
-        Assert.False(BotEngine.ShouldSell(junk, p, picked));
+        p.LootPick = [Sword];                                        // ticked "Topla": kept
+        Assert.False(BotEngine.ShouldSell(sword, p, picked));
     }
 
     [Fact]
