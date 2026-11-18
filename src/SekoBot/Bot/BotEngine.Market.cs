@@ -643,19 +643,32 @@ internal sealed partial class BotEngine
         if (!profile.MarketDeals || profile.MarketDealPercent <= 0)
             return;
         var stats = MarketStats();
+        var found = new List<string>();
         foreach (var item in shop.Items.Where(i => i.Bonuses.Count == 0))
         {
             string name = ItemBook.NameOf(item.Vnum);
-            if (!stats.TryGetValue(name, out var s) || !IsDeal(item.UnitPrice, s, profile.MarketDealPercent) ||
+            // A skill book / spirit stone whose skill isn't known: all of them share the name, their average says nothing.
+            if (!PricedByName(name) || !stats.TryGetValue(name, out var s) || !IsDeal(item.UnitPrice, s, profile.MarketDealPercent) ||
                 !FirstTime($"deal|{shop.Id}|{item.Vnum}|{item.Price}"))
                 continue;
-            string text = $"💎 Kelepir: {name} — tanesi {MarketBook.Yang(item.UnitPrice)} yang (pazar ortalaması {MarketBook.Yang(s.Average)}, " +
-                          $"%{(1 - item.UnitPrice / s.Average) * 100:0} ucuz), {item.Count} adet, satıcı {shop.Owner}.";
-            _log(text);
-            if (profile.MarketNotify)
-                Notify(text);
+            found.Add($"{name} — tanesi {MarketBook.Yang(item.UnitPrice)} yang (ortalama {MarketBook.Yang(s.Average)}, " +
+                      $"%{(1 - item.UnitPrice / s.Average) * 100:0} ucuz){(item.Count > 1 ? $", {item.Count} adet" : "")}");
         }
+        if (found.Count == 0)
+            return;
+        // One message per shop (a shop full of cheap items is one find, not ten).
+        string text = found.Count == 1
+            ? $"💎 Kelepir: {found[0]}, satıcı {shop.Owner}."
+            : $"💎 {shop.Owner} dükkanında {found.Count} kelepir:\n• " + string.Join("\n• ", found);
+        _log(text.Replace("\n", " "));
+        if (profile.MarketNotify)
+            Notify(text);
     }
+
+    /// <summary>Whether items of this name have one comparable price: not a skill book or spirit stone
+    /// whose skill isn't known (they'd all share one name).</summary>
+    internal static bool PricedByName(string name) =>
+        !((name.Contains("Kitab", StringComparison.OrdinalIgnoreCase) || name.StartsWith("Ruh Taşı", StringComparison.OrdinalIgnoreCase)) && !name.Contains(':'));
 
     /// <summary>Whether a piece price is a deal: at least <paramref name="percent"/> % under the usual price of an item seen often enough.</summary>
     internal static bool IsDeal(double unitPrice, ItemStats stats, int percent) =>
