@@ -189,6 +189,8 @@ internal sealed partial class BotEngine
         return done;
     }
 
+    private bool _toldWalkedWay;
+
     /// <summary>Mobs on the way are passed this far off (world units, 3 m).</summary>
     internal const double PassMobsBy = 300;
 
@@ -208,7 +210,7 @@ internal sealed partial class BotEngine
         var lastMove = started;
         var stuckHere = new List<MapTerrain.Circle>();
         Vec3? last = null;
-        List<Vec3>? way = null;
+        List<Vec3>? way = null, walked = null;
         var wayAt = TimeSpan.FromDays(-1);
         int stuck = 0;
         void Let(HashSet<Keys> want)
@@ -248,7 +250,7 @@ internal sealed partial class BotEngine
                     Let([keys.MoveBack]);
                     await Task.Delay(450, token);
                     Let([]);
-                    way = null;
+                    way = walked = null;
                     lastMove = _clock.Elapsed;
                     last = null;
                     continue;
@@ -256,10 +258,25 @@ internal sealed partial class BotEngine
                 last = me;
                 if (way == null || _clock.Elapsed - wayAt > TimeSpan.FromSeconds(1))
                 {
-                    way = Route(world, target, stuckHere);
+                    // A way walked before (over the slopes up to the town…) first; else drawn around what is known.
+                    walked = _walked.Way(world.MapName, me, target);
+                    way = walked ?? Route(world, target, stuckHere);
                     wayAt = _clock.Elapsed;
+                    if (walked != null && !_toldWalkedWay)
+                    {
+                        _toldWalkedWay = true;
+                        _log("💰 Daha önce yürünmüş yol biliniyor; onun üzerinden gidiliyor (yokuş, tepe…).");
+                    }
                 }
-                var aim = way is { Count: > 0 } && _terrain.Of(world.MapName) is { } map ? map.Aim(way, me) : target;
+                Vec3 aim;
+                if (walked is { Count: > 0 })
+                {
+                    // Along the walked cells: the one after the nearest.
+                    int k = Enumerable.Range(0, walked.Count).MinBy(i => walked[i].DistanceXY(me));
+                    aim = walked[Math.Min(k + 1, walked.Count - 1)];
+                }
+                else
+                    aim = way is { Count: > 0 } && _terrain.Of(world.MapName) is { } map ? map.Aim(way, me) : target;
                 var (right, up) = camera.ToScreenDirection(aim.X - me.X, aim.Y - me.Y);
                 double length = Math.Max(1e-6, Math.Sqrt(right * right + up * up));
                 double kx = right / length, ky = -up / length;
