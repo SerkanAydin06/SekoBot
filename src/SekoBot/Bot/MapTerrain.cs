@@ -35,6 +35,12 @@ internal sealed class MapTerrain
         Read = read;
         foreach (var b in blocks)
         {
+            // A tree once taken for passable (walked under its crown): its trunk is there all the same.
+            if (b.IsTree && b.Passable)
+            {
+                b.Passable = false;
+                Changed = true;
+            }
             var (minX, minY, maxX, maxY) = b.Box;
             for (int x = (int)Math.Floor(minX / Bucket); x <= (int)Math.Floor(maxX / Bucket); x++)
                 for (int y = (int)Math.Floor(minY / Bucket); y <= (int)Math.Floor(maxY / Bucket); y++)
@@ -87,7 +93,7 @@ internal sealed class MapTerrain
     {
         int found = 0;
         foreach (var b in Around(me.X, me.Y, me.X, me.Y))
-            if (!b.Passable && b.Contains(me.X, me.Y) && me.Z - FeetBelow > b.Bottom - 100 && me.Z - FeetBelow < b.Top + 150)
+            if (!b.Passable && !b.IsTree && b.Contains(me.X, me.Y) && me.Z - FeetBelow > b.Bottom - 100 && me.Z - FeetBelow < b.Top + 150)
             {
                 b.Passable = true;
                 Changed = true;

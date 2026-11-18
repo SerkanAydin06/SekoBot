@@ -185,3 +185,25 @@ public class MapTerrainTests
         Assert.Equal("[]", MapReport.Outlines(null));
     }
 }
+
+public class TreeTrunkTests
+{
+    [Fact]
+    public void Only_a_trees_trunk_blocks_and_walking_under_its_crown_does_not_make_it_passable()
+    {
+        // A baobab seen from above: 5 x 5.5 m; the trunk is in the middle.
+        var tree = new MapBlock { Name = "AfricanBaobab_RT3", Points = [24018, 53043, 24535, 53043, 24535, 53609, 24018, 53609], Bottom = 1415, Top = 2518 };
+        Assert.True(tree.IsTree);
+        var (cx, cy) = tree.Centre;
+        Assert.True(tree.Contains(cx, cy));
+        Assert.False(tree.Contains(24050, 53080));            // under the crown, not the trunk
+        Assert.True(tree.Distance(24050, 53080) > 100);
+        var map = new MapTerrain("t", [tree], DateTime.Now);
+        Assert.Equal(0, map.Walked(new SekoBot.Memory.Vec3(24050, 53080, 1500)));
+        Assert.False(tree.Passable);
+        // One saved as passable before: an obstacle again.
+        var old = new MapBlock { Name = "Acacia_RT", Points = [0, 0, 400, 0, 400, 400, 0, 400], Bottom = 0, Top = 900, Passable = true };
+        _ = new MapTerrain("t", [old], DateTime.Now);
+        Assert.False(old.Passable);
+    }
+}
