@@ -89,8 +89,8 @@ internal sealed class BagCleaner
         if (_step != Step.Close && now - _started > GiveUpAfter)
             Close("süre doldu");
 
-        // The "throw it away?" question is showing.
-        if (bag.Confirm is Point yes)
+        // The "throw it away?" question is showing (selling: "sell it?", another window).
+        if ((bag.Confirm ?? (Selling ? bag.OtherConfirm : null)) is Point yes)
         {
             if (_step == Step.Dragged || _step == Step.Confirmed && _yesClicks < 2)
             {

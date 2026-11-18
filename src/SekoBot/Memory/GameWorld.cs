@@ -125,10 +125,11 @@ internal readonly record struct BagSlotView(int Slot, int Vnum, int Count, int P
 /// <param name="DropButton">That menu's "Yere at", while the menu is showing.</param>
 /// <param name="MenuSlot">The bag slot the menu is showing for.</param>
 /// <param name="SellButton">That menu's "Sat" (only shown next to a market NPC, its shop open).</param>
+/// <param name="OtherConfirm">The "evet" of another question showing (the sell question after "Sat").</param>
 /// <param name="NpcShop">The market NPC whose shop window is open (9001…), 0 when none.</param>
 internal sealed record BagLayout(bool Open, Rectangle Window, int Page, IReadOnlyList<Point> PageButtons,
     IReadOnlyList<BagSlotView> Items, Point? Confirm, bool MenuKnown = false, Point? DropButton = null, int MenuSlot = -1,
-    Point? SellButton = null, int NpcShop = 0);
+    Point? SellButton = null, int NpcShop = 0, Point? OtherConfirm = null);
 
 /// <summary>What kind of thing an item is, by its number (Metin2's item numbers).</summary>
 internal enum LootKind { Unknown, Yang, Potion, Equipment, Other }
@@ -433,6 +434,7 @@ internal sealed partial class GameWorldReader : IDisposable
         ("slot_C", "skillUsed", 0x580),
         ("slot_C", "Time", 0x590),
         ("m2data_C", "dropWindow", 0x1440),
+        ("m2data_C", "MsgBoxShowing", 0x1680),
         ("UI_C", "pop_weaponArmor", 0x480),
         ("pop_equp_C", "yeret", 0x330),
         ("pop_equp_C", "slotid", 0x508),
@@ -1356,6 +1358,21 @@ internal sealed partial class GameWorldReader : IDisposable
                 if (Showing(yes) && DrawnAt(yes) is { } r)
                     confirm = new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
             }
+            // Any other question showing (m2data.MsgBoxShowing, msgbox_C each: "Sell this item?" after "Sat",
+            // seen in the game): the newest one's "evet".
+            Point? otherConfirm = null;
+            long boxes = instance + Offset(instanceClass, "m2data_C", "MsgBoxShowing");
+            long boxData = Pointer(boxes);
+            int boxCount = Int32(boxes + 8) ?? 0;
+            for (int i = Math.Min(boxCount, 8) - 1; i >= 0 && otherConfirm == null && MemoryReads.IsPointer(boxData); i--)
+            {
+                long box = Pointer(boxData + i * 8L);
+                if (!Showing(box) || ClassName(Pointer(box + ObjClass)) != "msgbox_C")
+                    continue;
+                long yes = Pointer(box + Offset(Pointer(box + ObjClass), "msgbox_C", "evet"));
+                if (Showing(yes) && DrawnAt(yes) is { } r)
+                    otherConfirm = new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
+            }
             // One click on an item opens its menu (UI_C.pop_weaponArmor, a pop_equp_C, for every item
             // seen): "Yere at" there asks the same question as dragging the item out.
             long menu = Pointer(ui + Offset(Pointer(ui + ObjClass), "UI_C", "pop_weaponArmor"));
@@ -1380,7 +1397,7 @@ internal sealed partial class GameWorldReader : IDisposable
             long shopClass = Pointer(shopWindow + ObjClass);
             if (MemoryReads.IsPointer(shopWindow) && ClassName(shopClass) == "shopWindow_C" && Showing(shopWindow))
                 npcShop = Int32(shopWindow + Offset(shopClass, "shopWindow_C", "shopId")) ?? 0;
-            return new BagLayout(open, window, showing, buttons, items, confirm, menuKnown, dropButton, menuSlot, sellButton, npcShop);
+            return new BagLayout(open, window, showing, buttons, items, confirm, menuKnown, dropButton, menuSlot, sellButton, npcShop, otherConfirm);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
