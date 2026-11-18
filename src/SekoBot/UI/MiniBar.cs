@@ -7,7 +7,7 @@ namespace SekoBot.UI;
 /// <param name="GameWindow">The game window the bot plays (0 when none): the bar is tied to it.</param>
 /// <param name="HpPotions">HP and MP potions left in the bag (the ones on the potion keys), when known.</param>
 internal sealed record MiniInfo(string Name, string Status, Color StatusColor, double? Hp, double? Mp, string ExpRate, string Mobs,
-    bool Running, Rectangle? Game, nint GameWindow = 0, int? HpPotions = null, int? MpPotions = null, bool Attack = true);
+    bool Running, Rectangle? Game, nint GameWindow = 0, int? HpPotions = null, int? MpPotions = null, bool Attack = true, string? Market = null);
 
 /// <summary>
 /// The bot made small: one bar (420×84) under its own game window, so many bots fit on one screen
@@ -179,9 +179,18 @@ internal sealed class MiniBar : Form
         string name = (Instance.IsFirst ? "" : $"{Instance.Number} · ") + (info.Name.Length > 0 ? info.Name : "SekoBot");
         TextRenderer.DrawText(g, "◆ " + name, nameFont, new Rectangle((int)(14 * s), (int)(6 * s), (int)((W - 188) * s), (int)(22 * s)), Theme.Text,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-        string status = info.Attack ? info.Status : "✋ Sadece eşya · " + info.Status;
-        TextRenderer.DrawText(g, status, small, new Rectangle((int)(14 * s), (int)(29 * s), (int)((W - 186) * s), (int)(20 * s)), info.Attack ? info.StatusColor : Theme.Accent,
+        bool market = info.Market != null;
+        string status = info.Attack || market ? info.Status : "✋ Sadece eşya · " + info.Status;
+        TextRenderer.DrawText(g, status, small, new Rectangle((int)(14 * s), (int)(29 * s), (int)((W - 186) * s), (int)(20 * s)), info.Attack || market ? info.StatusColor : Theme.Accent,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        if (market)
+        {
+            // The market bot: what it read and found, no HP / potions / experience.
+            TextRenderer.DrawText(g, "🛒 " + info.Market, smallBold, new Rectangle((int)(14 * s), (int)(54 * s), (int)((W - 20) * s), (int)(22 * s)), Theme.Text,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            DrawButtons(g, s, info);
+            return;
+        }
         // The potions left, under the buttons: red when few.
         string Count(int? n) => n is int c ? c.ToString("N0") : "—";
         bool low = info.HpPotions is < 20 || info.MpPotions is < 10;
@@ -198,8 +207,14 @@ internal sealed class MiniBar : Form
             new Rectangle((int)(expAt * s), (int)(54 * s), (int)((W - expAt - 6) * s), (int)(22 * s)), Theme.Muted,
             TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
-        string[] glyphs = [info.Attack ? "⚔" : "✋", info.Running ? "⏸" : "▶", "■", "⤢"];
-        Color[] backs = [info.Attack ? Theme.Secondary : Theme.Accent, Theme.Primary, Theme.Danger, Theme.Secondary];
+        DrawButtons(g, s, info);
+    }
+
+    private void DrawButtons(Graphics g, float s, MiniInfo info)
+    {
+        bool market = info.Market != null;
+        string[] glyphs = [market ? "🔍" : info.Attack ? "⚔" : "✋", info.Running ? (market ? "■" : "⏸") : "▶", "■", "⤢"];
+        Color[] backs = [market ? Theme.Secondary : info.Attack ? Theme.Secondary : Theme.Accent, Theme.Primary, Theme.Danger, Theme.Secondary];
         for (int i = 0; i < Buttons; i++)
         {
             var r = Button(i);
@@ -252,7 +267,9 @@ internal sealed class MiniBar : Form
             Cursor = hit >= 0 ? Cursors.Hand : Cursors.Default;
             _tip.SetToolTip(this, hit switch
             {
+                0 when _info.Market != null => "Pazar penceresini aç",
                 0 => _info.Attack ? "Saldırı açık. Tıkla: sadece yerdeki eşyaları topla" : "Sadece eşya topluyor. Tıkla: saldırıyı aç",
+                1 when _info.Market != null => _info.Running ? "Pazar takibini durdur" : "Sürekli pazar takibini başlat",
                 1 => _info.Running ? "Duraklat (F10)" : "Başlat (F10)",
                 2 => $"Durdur ({(Instance.IsFirst ? "F11 / " : "")}Ctrl+Shift+{Math.Min(Instance.Number, 9)})",
                 3 => "Büyüt (çift tık da olur)",

@@ -28,6 +28,29 @@ internal sealed partial class BotEngine
     /// <summary>What was told already (shop, item, price, bonuses): a continuous watch reads the same
     /// shops again and again, a find is told once.</summary>
     private readonly HashSet<string> _marketTold = [];
+    private readonly List<string> _marketFinds = [];
+
+    /// <summary>The market scan's numbers now (for the main window and the small bar).</summary>
+    public (int Round, int Read, int Deals, int Wanted) MarketCounts { get; private set; }
+
+    /// <summary>The newest finds (wanted items and deals), newest first, with the time.</summary>
+    public List<string> MarketFinds()
+    {
+        lock (_marketFinds)
+            return [.. _marketFinds];
+    }
+
+    private void Found(string text, bool deal)
+    {
+        lock (_marketFinds)
+        {
+            _marketFinds.Insert(0, $"{DateTime.Now:HH:mm}  {text}");
+            if (_marketFinds.Count > 40)
+                _marketFinds.RemoveAt(_marketFinds.Count - 1);
+        }
+        var c = MarketCounts;
+        MarketCounts = deal ? c with { Deals = c.Deals + 1 } : c with { Wanted = c.Wanted + 1 };
+    }
 
     /// <summary>A market scan or a walk to a shop is going on.</summary>
     public bool ScanningMarket => _marketTask is { IsCompleted: false };
@@ -371,6 +394,7 @@ internal sealed partial class BotEngine
         var random = new Random();
         int readNow = 0;
         int round = 1, roundRead = 0, roundGone = gone, missStreaks = 0;
+        MarketCounts = (1, 0, 0, 0);
         // Shops that open while the scan goes on are read first; those standing at the start are read
         // nearest first (going after every never-read one across the market zigzags: seen 5 s a shop).
         var standing = shops.Select(s => s.Id).ToHashSet();
@@ -443,6 +467,7 @@ internal sealed partial class BotEngine
                             break; // a new shop opened: read it now (not one that couldn't be opened)
                     }
                     round++;
+                    MarketCounts = MarketCounts with { Round = round };
                     roundRead = roundGone = 0;
                     standing = MarketShops().Select(s => s.Id).ToHashSet() is { Count: > 0 } now3 ? now3 : standing;
                     roundStarted = DateTime.Now;
@@ -465,6 +490,7 @@ internal sealed partial class BotEngine
                         {
                             readNow++;
                             roundRead++;
+                            MarketCounts = MarketCounts with { Round = round, Read = readNow };
                         }
                     }
                     else if (++missedInARow >= ShopClicksWithoutOpen)
@@ -666,6 +692,7 @@ internal sealed partial class BotEngine
             ? $"💎 Kelepir: {found[0]}, satıcı {shop.Owner}."
             : $"💎 {shop.Owner} dükkanında {found.Count} kelepir:\n• " + string.Join("\n• ", found);
         _log(text.Replace("\n", " "));
+        Found(text.Replace("\n", " "), deal: true);
         if (profile.MarketNotify)
             Notify(text);
     }
@@ -712,6 +739,7 @@ internal sealed partial class BotEngine
                     continue;
                 string text = $"🎯 Pazarda bulundu: {item} — tanesi {MarketBook.Yang(price)} yang, satıcı {shop.Owner}.";
                 _log(text);
+                Found(text, deal: false);
                 if (Profile.MarketNotify)
                     Notify(text);
             }
