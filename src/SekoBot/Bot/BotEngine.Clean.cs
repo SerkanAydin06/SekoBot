@@ -179,6 +179,9 @@ internal sealed partial class BotEngine
         {
             if (!_brain.WantsClean || !_brain.ReadyToClean)
                 return null;
+            // A market NPC known near: sold there instead of thrown away.
+            if (TryStartSellTrip(p) is { } letGo)
+                return letGo;
             _cleaner.Start(state.Time);
             _log("Sakin bir yerdeyiz; envanter açılıp 'At' işaretli eşyalar atılıyor.");
         }

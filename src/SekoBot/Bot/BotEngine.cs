@@ -239,7 +239,8 @@ internal sealed partial class BotEngine : IDisposable
         {
             if (_input == null)
                 return (BotPhase.Stopped, Array.Empty<BotAction>());
-            actions = WhisperTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);
+            // Off to a market NPC to sell: that trip drives the character, the brain waits.
+            actions = _selling ? [] : WhisperTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);
             phase = _brain.Phase;
             // Throwing items away: the game stays in front for all the clicks, not back and forth for each.
             _input.HoldFront = _cleaner.Active;
@@ -375,6 +376,7 @@ internal sealed partial class BotEngine : IDisposable
 
     public void StopBot(string reason)
     {
+        _sellCts?.Cancel(); // a sale trip stops with the bot
         ItemBook.SaveIfChanged();
         _sessionItems.Save(force: true);
         if (_obstacles.Changed)
