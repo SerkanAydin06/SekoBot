@@ -247,6 +247,9 @@ internal sealed partial class BotEngine : IDisposable
             phase = _brain.Phase;
             // Throwing items away: the game stays in front for all the clicks, not back and forth for each.
             _input.HoldFront = _cleaner.Active;
+            // Nothing (left) to do with the screen: the turn goes to the next bot.
+            if (!_brain.WantsClean && FrontTurn.Shared.Mine)
+                LetGoTurn();
             if (_brain.ProfileChanged)
             {
                 // Learned (how many mobs this character takes on this map): kept with the character.
@@ -401,6 +404,7 @@ internal sealed partial class BotEngine : IDisposable
             return;
         input.HoldFront = false;
         input.Dispose();
+        FrontTurn.Shared.LetGo(); // another bot waiting can go on
         _log("Bot durdu: " + reason);
         WriteSessionReport(reason);
     }

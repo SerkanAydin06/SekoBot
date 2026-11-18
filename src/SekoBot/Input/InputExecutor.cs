@@ -57,6 +57,9 @@ internal sealed class InputExecutor : IDisposable
     public void Enqueue(BotAction action) => _queue.Writer.TryWrite(action);
 
     private volatile bool _holdFront;
+    private IDisposable? _jobGuard;
+    /// <summary>The mouse is never held longer than this for one job.</summary>
+    internal static readonly TimeSpan JobMouseHold = TimeSpan.FromMinutes(5);
     private nint _heldBefore;
 
     /// <summary>
@@ -72,6 +75,11 @@ internal sealed class InputExecutor : IDisposable
             if (_holdFront == value)
                 return;
             _holdFront = value;
+            // The user's mouse stays held for the whole job, not freed between the clicks.
+            if (value)
+                Interlocked.Exchange(ref _jobGuard, MouseGuard.Hold(JobMouseHold))?.Dispose();
+            else
+                Interlocked.Exchange(ref _jobGuard, null)?.Dispose();
             if (!value)
             {
                 nint before = Interlocked.Exchange(ref _heldBefore, 0);
@@ -593,6 +601,7 @@ internal sealed class InputExecutor : IDisposable
 
     public void Dispose()
     {
+        Interlocked.Exchange(ref _jobGuard, null)?.Dispose();
         _queue.Writer.TryComplete();
         _cts.Cancel();
         try { _worker.Wait(1500); } catch { }

@@ -22,11 +22,19 @@ internal static class MouseGuard
     private static HookProc? _proc; // kept alive: the hook calls it
 
     /// <summary>Holds the user's mouse until the returned object is disposed (or <see cref="MaxHold"/> passed).</summary>
-    public static IDisposable Hold()
+    public static IDisposable Hold() => Hold(MaxHold);
+
+    /// <summary>Holds the user's mouse for a whole job (all the items thrown, a sale): at most <paramref name="most"/>.
+    /// A shorter hold meanwhile doesn't end it sooner.</summary>
+    public static IDisposable Hold(TimeSpan most)
     {
         Start();
         Interlocked.Increment(ref _holds);
-        Interlocked.Exchange(ref _untilTicks, DateTime.UtcNow.Add(MaxHold).Ticks);
+        long until = DateTime.UtcNow.Add(most).Ticks;
+        long now;
+        do
+            now = Interlocked.Read(ref _untilTicks);
+        while (until > now && Interlocked.CompareExchange(ref _untilTicks, until, now) != now);
         return new Release();
     }
 
