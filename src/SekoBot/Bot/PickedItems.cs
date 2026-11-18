@@ -21,6 +21,11 @@ internal sealed class PickedItems
     private Dictionary<(int Slot, int Vnum), int>? _last;
     private int _shrunkReads;
     private string _character = "";
+    private readonly string _prefix;
+
+    /// <param name="prefix">The file name start: "bot-istenmeyen-" (picked without wanting them) or
+    /// "bot-topladi-" (everything the bot picked up, for selling).</param>
+    public PickedItems(string prefix = "bot-istenmeyen-") => _prefix = prefix;
 
     public IReadOnlySet<(int Slot, int Vnum)> Picked => _picked;
 
@@ -92,8 +97,8 @@ internal sealed class PickedItems
 
     // ---- the file (per character) ----
 
-    private static string FileOf(string character) =>
-        Path.Combine(ProfileStore.Directory, "bot-istenmeyen-" +
+    private string FileOf(string character) =>
+        Path.Combine(ProfileStore.Directory, _prefix +
                      string.Concat(character.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)) + ".json");
 
     /// <summary>The character is known (or changed): load what the bot picked for it before.</summary>

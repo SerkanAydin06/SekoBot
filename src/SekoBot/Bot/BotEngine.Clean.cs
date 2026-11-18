@@ -22,7 +22,7 @@ internal sealed partial class BotEngine
 
     /// <summary>Whether a full bag holds an item ticked "At" (so throwing can free a slot).</summary>
     private bool CanThrow(WorldSnapshot world, BotProfile profile) =>
-        profile.ThrowWhenInventoryFull && HasThrowables(world, profile);
+        profile.ThrowWhenInventoryFull && (HasThrowables(world, profile) || CanSellNear(world, profile));
 
     /// <summary>For the brain's breaks: something to throw away now (the bag read last).</summary>
     /// <summary>What came into the bag and was thrown away during this run (window and tur-esyalari.txt).</summary>
@@ -44,6 +44,14 @@ internal sealed partial class BotEngine
         get { lock (_pickedItems) return new HashSet<(int, int)>(_pickedItems.Picked); }
     }
 
+    /// <summary>Everything in the bag the bot picked up itself, wanted or not (for selling).</summary>
+    private readonly PickedItems _lootedItems = new("bot-topladi-");
+
+    private IReadOnlySet<(int Slot, int Vnum)> BotLooted
+    {
+        get { lock (_pickedItems) return new HashSet<(int, int)>(_lootedItems.Picked); }
+    }
+
     /// <summary>On the perception thread: notes what came into the bag, saves it now and then.</summary>
     private void TrackPicked(WorldSnapshot world, TimeSpan now)
     {
@@ -55,6 +63,8 @@ internal sealed partial class BotEngine
             var profile = Profile;
             // Wanted when it came in (yang, potions, dear equipment or good bonuses, "Topla", an event's reward): never junk.
             _pickedItems.Update(progress.Inventory, BotRunning, item => KeepPicked(item, profile));
+            _lootedItems.UseCharacter(_world?.CharacterName ?? "");
+            _lootedItems.Update(progress.Inventory, BotRunning, (Func<InventoryItem, bool>?)null);
             foreach (var (vnum, count) in _pickedItems.Gained)
                 _sessionItems.Picked(vnum, count);
             _sessionItems.Save();
@@ -82,6 +92,11 @@ internal sealed partial class BotEngine
             {
                 _pickedSavedAt = now;
                 _pickedItems.Save();
+            }
+            if (_lootedItems.Changed && now - _pickedSavedAt > TimeSpan.FromSeconds(5))
+            {
+                _pickedSavedAt = now;
+                _lootedItems.Save();
             }
         }
     }
@@ -137,8 +152,10 @@ internal sealed partial class BotEngine
         var world = World;
         if (!BotRunning)
             return "Önce botu başlat; atma bot çalışırken yapılır.";
-        if (world == null || !HasThrowables(world, Profile))
-            return "Çantada atılacak eşya yok ('At' işaretli ya da botun yanlışlıkla aldığı istenmeyen eşya).";
+        bool sell = world != null && CanSellNear(world, Profile);
+        if (world == null || !sell && !HasThrowables(world, Profile))
+            return "Çantada atılacak ya da satılacak eşya yok ('At' işaretli, botun yanlışlıkla aldığı ya da botun toplayıp istenmeyen eşya)." +
+                   (world != null && Profile.SellToNpc && NearShop(world) == null ? " (Yakında bilinen market NPC'si de yok.)" : "");
         lock (_botGate)
         {
             if (_cleaner.Active || _brain.WantsClean)
@@ -146,7 +163,9 @@ internal sealed partial class BotEngine
             _cleanTries = 0;
             _brain.WantsClean = true;
         }
-        return "'At' işaretli eşyalar atılacak: önce moblardan uzak, sakin bir yere geçiliyor.";
+        return sell
+            ? "Satılacak eşyalar market NPC'sine götürülüyor: önce moblardan uzak, sakin bir yere geçiliyor."
+            : "'At' işaretli eşyalar atılacak: önce moblardan uzak, sakin bir yere geçiliyor.";
     }
 
     /// <summary>The bag is full: throw items away when possible. False when the bot should stop instead.</summary>
