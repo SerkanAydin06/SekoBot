@@ -161,6 +161,9 @@ internal sealed record MobInfo(int Vnum, string Name, int Level, int Exp, int Go
 /// <summary>A mob that just died (it stays in the world for a moment).</summary>
 internal readonly record struct DeadMob(int Id, Vec3 Position);
 
+/// <summary>A townsfolk NPC seen (not a mob: a market, the bank, …): its number and where it stands.</summary>
+internal readonly record struct TownNpc(int Vnum, Vec3 Position);
+
 /// <summary>Another player around.</summary>
 /// <param name="IsGm">The game marks the player as a game master.</param>
 internal sealed record OtherPlayer(string Name, bool IsGm, Vec3 Position)
@@ -340,7 +343,7 @@ internal sealed record WorldSnapshot(Vec3 Player, CameraView? Camera, IReadOnlyL
     IReadOnlyList<DeadMob>? DeadMobs = null, CharacterProgress? Progress = null, IReadOnlyList<OtherPlayer>? Players = null,
     IReadOnlyList<GroundItem>? Drops = null, bool InSafeZone = false, IReadOnlyList<string>? OpenWindows = null,
     double? ReviveIn = null, IReadOnlyList<SkillInfo>? Skills = null, double AttackDistance = 0, int AttackPower = 0,
-    bool Stunned = false, IReadOnlyList<double?>? SkillWaits = null)
+    bool Stunned = false, IReadOnlyList<double?>? SkillWaits = null, IReadOnlyList<TownNpc>? TownNpcs = null)
 {
     /// <summary>Dead, and "Burada yeniden başla" can be clicked.</summary>
     public bool ReviveReady => Dead && ReviveIn is <= 0;
@@ -611,6 +614,7 @@ internal sealed partial class GameWorldReader : IDisposable
         var mobs = new List<WorldMob>();
         var deadMobs = new List<DeadMob>();
         var players = new List<OtherPlayer>();
+        var townNpcs = new List<TownNpc>();
         var drops = new List<GroundItem>();
         if (DateTime.UtcNow - _otherActorsSince > TimeSpan.FromSeconds(10))
         {
@@ -633,6 +637,7 @@ internal sealed partial class GameWorldReader : IDisposable
                     case WorldMob mob: mobs.Add(mob); break;
                     case DeadMob died: deadMobs.Add(died); break;
                     case OtherPlayer other: players.Add(other); break;
+                    case TownNpc npc: townNpcs.Add(npc); break;
                 }
             }
             else if (className == "PlayerCameraManager")
@@ -720,7 +725,7 @@ internal sealed partial class GameWorldReader : IDisposable
         double? reviveIn = dead ? ReviveIn(Pointer(instance + Offset(instanceClass, "m2data_C", "uiMain"))) : null;
         var skillWaits = ReadSkillWaits(instance, instanceClass);
         return new WorldSnapshot(player, camera, mobs, players.Count, mapName, target, stats, dead, characterLevel, deadMobs, progress, players,
-            drops, safe, windows, reviveIn, _skills, attackDistance, attackPower, stunned, skillWaits);
+            drops, safe, windows, reviveIn, _skills, attackDistance, attackPower, stunned, skillWaits, townNpcs);
     }
 
     private (CharacterStats? Stats, int Level) ReadStats(long loader)
@@ -1640,7 +1645,7 @@ internal sealed partial class GameWorldReader : IDisposable
         return items;
     }
 
-    /// <returns>A <see cref="WorldMob"/>, a <see cref="DeadMob"/>, an <see cref="OtherPlayer"/>, or null for anything else.</returns>
+    /// <returns>A <see cref="WorldMob"/>, a <see cref="DeadMob"/>, an <see cref="OtherPlayer"/>, a <see cref="TownNpc"/>, or null for anything else.</returns>
     /// <param name="selected">The selected mob: also when it just died (HP 0), so the bot sees it die.</param>
     private object? ReadNpc(long actor, long cls, bool selected = false)
     {
@@ -1663,6 +1668,12 @@ internal sealed partial class GameWorldReader : IDisposable
             long playerRoot = BitConverter.ToInt64(data, ActorRoot);
             TryVec3(playerRoot + ComponentWorldLocation, out var at);
             return new OtherPlayer(ReadFString(actor + Offset(cls, "NPC", "playername"), 64), Flag("isGM"), at);
+        }
+        if (!Flag("attackable") && !Flag("isOwnedMob") && Int("thismob.vnum") is int npcVnum and >= 9000 and < 9100)
+        {
+            // A townsfolk NPC (a market: silah 9001, zırh 9002, genel 9003…): where it stands.
+            long npcRoot = BitConverter.ToInt64(data, ActorRoot);
+            return MemoryReads.IsPointer(npcRoot) && TryVec3(npcRoot + ComponentWorldLocation, out var npcAt) ? new TownNpc(npcVnum, npcAt) : null;
         }
         if (!Flag("attackable") || Flag("isOwnedMob"))
             return null;

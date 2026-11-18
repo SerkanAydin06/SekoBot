@@ -77,6 +77,7 @@ internal sealed partial class BotEngine
                 _obstacles.Save();
                 _brain.Lore.Save();
                 BonusBook.Shared.Save();
+                NpcBook.Shared.Save();
                 _obstaclesSavedAt = now;
             }
             if (now - _respawnSavedAt > TimeSpan.FromSeconds(30))
@@ -113,6 +114,10 @@ internal sealed partial class BotEngine
 
         foreach (var mob in world.Mobs)
             _seenMobs[mob.Id] = (mob, now);
+        // Market NPCs passed by: where they stand, for selling (shared by every SekoBot).
+        foreach (var npc in world.TownNpcs ?? [])
+            if (NpcBook.Shared.Saw(world.MapName, npc.Vnum, npc.Position, DateTime.Now))
+                _log($"🏪 {world.MapName} haritasında {NpcBook.Shops[npc.Vnum]} görüldü; yeri kaydedildi (eşya satmak için).");
         foreach (var (id, (_, seen)) in _seenMobs.ToList())
             if (now - seen > TimeSpan.FromMinutes(3))
                 _seenMobs.Remove(id);
