@@ -74,8 +74,12 @@ internal sealed class WalkedPaths
     /// from the walked cell nearest the start (within <see cref="JoinWithin"/>) to the one nearest the goal.
     /// Null when no walked way joins them.
     /// </summary>
-    public List<Vec3>? Way(string map, Vec3 from, Vec3 to)
+    public List<Vec3>? Way(string map, Vec3 from, Vec3 to, IReadOnlyList<MapTerrain.Circle>? avoid = null)
     {
+        // Cells where the character got stuck on this trip (something new stands there: a stall…) are left out,
+        // otherwise the same way is taken again and again into the same spot (seen: 60 times a trip, all night).
+        bool Blocked(int x, int y) => avoid is { Count: > 0 } && avoid.Any(c =>
+            Math.Abs((x + 0.5) * Cell - c.X) < c.R + Cell / 2 && Math.Abs((y + 0.5) * Cell - c.Y) < c.R + Cell / 2);
         Dictionary<(int, int), List<(int, int)>> graph = [];
         lock (_gate)
         {
@@ -86,12 +90,16 @@ internal sealed class WalkedPaths
                 var n = link.Split(',');
                 if (n.Length != 4 || !int.TryParse(n[0], out int ax) || !int.TryParse(n[1], out int ay) || !int.TryParse(n[2], out int bx) || !int.TryParse(n[3], out int by))
                     continue;
+                if (Blocked(ax, ay) || Blocked(bx, by))
+                    continue;
                 (graph.TryGetValue((ax, ay), out var la) ? la : graph[(ax, ay)] = []).Add((bx, by));
                 (graph.TryGetValue((bx, by), out var lb) ? lb : graph[(bx, by)] = []).Add((ax, ay));
             }
         }
         Vec3 Mid((int X, int Y) c, double z) => new((c.X + 0.5) * Cell, (c.Y + 0.5) * Cell, z);
         double D((int X, int Y) c, Vec3 p) => Mid(c, 0).DistanceXY(p);
+        if (graph.Count == 0)
+            return null;
         // Joined near both ends: the goal end chosen among the cells reachable from the start end.
         var start = graph.Keys.MinBy(c => D(c, from));
         if (D(start, from) > JoinWithin)
