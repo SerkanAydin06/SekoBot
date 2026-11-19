@@ -49,6 +49,7 @@ internal sealed class MainForm : Form
     private readonly Card _logCard, _itemsCard;
     private Rectangle _dashBottomFarm, _logCardFarm, _logFarm;
     private readonly Label _mState, _mRound, _mRead, _mDeals, _mWanted, _mShops, _mItems, _mOldest, _mNever;
+    private readonly Label _fState, _fTime, _fCasts, _fPulled, _fHooked, _fMissed;
     private readonly ListBox _mFinds;
     private DateTime _marketDashAt;
 
@@ -907,14 +908,33 @@ internal sealed class MainForm : Form
         };
         findsCard.Controls.Add(_mFinds);
 
-        // ── BALIKÇILIK mode: not yet ──
-        _fishingDash = new Panel { Bounds = new Rectangle(12, 136, 1156, 772), BackColor = Theme.Background, Visible = false };
+        // ── BALIKÇILIK mode: cast, wait for the bite, pull; the picture question is the player's ──
+        _fishingDash = new Panel { Bounds = new Rectangle(12, 136, 1156, 400), BackColor = Theme.Background, Visible = false };
         Controls.Add(_fishingDash);
-        var fishCard = new Card { Bounds = new Rectangle(0, 0, 1156, 772) };
+        var fishCard = new Card { Bounds = new Rectangle(0, 0, 760, 400) };
         _fishingDash.Controls.Add(fishCard);
-        Theme.Label(fishCard, "🎣  BALIKÇILIK", new Rectangle(24, 24, 600, 34), 16f, Theme.Text, FontStyle.Bold);
-        Theme.Label(fishCard, "Yakında. Balık tutma bu sekmeye eklenecek; şimdilik FARM ya da PAZAR sekmesini kullan.",
-            new Rectangle(24, 66, 1100, 26), 10f, Theme.Muted);
+        Theme.Label(fishCard, "BALIK TUTMA", new Rectangle(16, 8, 300, 20), 8f, Theme.Accent, FontStyle.Bold);
+        _fState = Theme.Label(fishCard, "", new Rectangle(16, 30, 728, 40), 10f, Theme.Text, FontStyle.Bold, ContentAlignment.TopLeft);
+        _fTime = Tile(fishCard, "SÜRE", 16, 76, small: true);
+        _fCasts = Tile(fishCard, "ATIŞ", 126, 76);
+        _fPulled = Tile(fishCard, "ÇEKİŞ", 236, 76);
+        _fHooked = Tile(fishCard, "TAKILAN", 346, 76);
+        _fMissed = Tile(fishCard, "KAÇAN", 456, 76);
+        Theme.Label(fishCard, "AYARLAR", new Rectangle(16, 150, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
+        Theme.Label(fishCard, "Yem tuşu (kısayol)", new Rectangle(16, 174, 150, 26), 9f, Theme.Muted);
+        var baitKey = new KeyPicker { Bounds = new Rectangle(170, 174, 104, 26), Key = _profile.FishBaitKey };
+        baitKey.KeyChanged += key => { _profile.FishBaitKey = key; SaveProfile(); WriteLog($"Yem tuşu: {KeyPicker.Name(key)}"); };
+        fishCard.Controls.Add(baitKey);
+        Theme.Label(fishCard, "Olta atılamazsa (yem bitince) bu tuşa basılıp yem takılır. Boş bırakılabilir.",
+            new Rectangle(284, 174, 460, 26), 8.5f, Theme.Muted);
+        Check(fishCard, "Balık takılınca Telegram'a yaz", 16, 208, 300, () => _profile.FishNotify, v => _profile.FishNotify = v);
+        Theme.Label(fishCard, "NASIL", new Rectangle(16, 246, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
+        Theme.Label(fishCard,
+            "1. Oyunda oltayı kuşan, yemi tak, suyun kenarında suya dönük dur.\n" +
+            "2. \"🎣 BALIK TUT\"a bas. Bot oltayı Space ile atar; başın üstünde balık balonu çıkınca Space ile çeker.\n" +
+            "3. Balık takılınca oyun 4 resimden doğrusunu sorar: bu soruyu SEN cevaplarsın. SekoBot ses çıkarır ve bekler;\n" +
+            "    sen seçince kaldığı yerden devam eder. (Bu soru oyunun insan kontrolü; bot cevaplamaz.)",
+            new Rectangle(16, 268, 728, 100), 9f, Theme.Text, FontStyle.Regular, ContentAlignment.TopLeft);
 
         SelectTab(-1);
 
@@ -1004,9 +1024,9 @@ internal sealed class MainForm : Form
         _marketDash.Visible = market;
         _fishingDash.Visible = mode == FishingMode;
         // The log: under the farm view (beside this run's items), or across the whole width under the market.
-        _dashBottom.Visible = farm || market;
+        _dashBottom.Visible = true;
         _itemsCard.Visible = farm;
-        if (market)
+        if (!farm)
         {
             _dashBottom.Bounds = new Rectangle(_marketDash.Left, _dashBottomFarm.Top, _marketDash.Width, _dashBottomFarm.Height);
             _logCard.Width = _dashBottom.Width;
@@ -1019,6 +1039,7 @@ internal sealed class MainForm : Form
             _log.Bounds = _logFarm;
         }
         _attackButton.Visible = mode != FishingMode;
+        _fishDashAt = DateTime.MinValue;
         for (int i = 0; i < _modeButtons.Length; i++)
         {
             _modeButtons[i].BackColor = i == mode ? Theme.Primary : Theme.Secondary;
@@ -1073,6 +1094,43 @@ internal sealed class MainForm : Form
             else
                 _mFinds.Items.AddRange([.. finds]);
             _mFinds.EndUpdate();
+        }
+    }
+
+    private DateTime _fishDashAt = DateTime.MinValue;
+
+    /// <summary>The BALIKÇILIK page's numbers (every second at most).</summary>
+    private void UpdateFishingDash()
+    {
+        if (DateTime.Now - _fishDashAt < TimeSpan.FromSeconds(1))
+            return;
+        _fishDashAt = DateTime.Now;
+        var engine = _engine;
+        bool fishing = engine?.Fishing == true;
+        _fState.Text = engine == null ? "Oyun bağlı değil."
+            : fishing || engine.FishingStatus.Length > 0 ? engine.FishingStatus
+            : $"Kapalı. Oltayı kuşan, suya dönük dur, sonra \"🎣 BALIK TUT\"a bas ({StartKey}).";
+        _fState.ForeColor = !fishing ? Theme.Muted : _fState.Text.Contains("takıldı") ? Theme.Yellow : Theme.Green;
+        var (casts, pulled, hooked, missed) = engine?.FishCounts ?? default;
+        _fTime.Text = fishing && engine!.FishingSince is DateTime since ? (DateTime.Now - since).ToString(@"hh\:mm\:ss") : "—";
+        _fCasts.Text = casts.ToString("N0");
+        _fPulled.Text = pulled.ToString("N0");
+        _fHooked.Text = hooked.ToString("N0");
+        _fMissed.Text = missed.ToString("N0");
+    }
+
+    /// <summary>A fish is hooked: the player answers the game's picture question — a sound and the game in front.</summary>
+    private void FishQuestionShown(bool showing)
+    {
+        if (!showing || _engine is not { } engine)
+            return;
+        System.Media.SystemSounds.Exclamation.Play();
+        WriteLog("🎣 Balık takıldı! Oyundaki resim sorusunu cevapla.");
+        if (Win32.IsWindow(engine.Window.Handle))
+        {
+            if (Win32.IsIconic(engine.Window.Handle))
+                Win32.ShowWindow(engine.Window.Handle, 9);
+            Win32.SetForegroundWindow(engine.Window.Handle);
         }
     }
 
@@ -1229,7 +1287,7 @@ internal sealed class MainForm : Form
         if (IsDisposed)
             return;
         _mini ??= new MiniBar(MiniInfoNow, ToggleBot, () => StopBot("kullanıcı durdurdu", byUser: true), GoBig, ArrangeAll,
-            () => { if (_mode == MarketMode) OpenMarketWindow(); else ToggleAttack(); }, CloseFromMini);
+            () => { if (_mode == MarketMode) OpenMarketWindow(); else if (_mode == FarmMode) ToggleAttack(); }, CloseFromMini);
         if (!_mini.Visible)
             _mini.Show();
         if (Visible)
@@ -1315,8 +1373,18 @@ internal sealed class MainForm : Form
             market = (m.ScanningMarket && m.MarketWatching ? $"{c.Round}. tur · " : "") + $"{c.Read:N0} dükkan okundu · {c.Deals} kelepir · {c.Wanted} aranan" +
                      (book != null ? $" · listede {book.Items:N0} ürün" : "");
         }
+        if (_mode == FishingMode && _engine is { } f)
+        {
+            var (casts, _, hooked, missed) = f.FishCounts;
+            market = f.Fishing ? $"🎣 {casts} atış · {hooked} balık takıldı · {missed} kaçtı" : "🎣 Balık tutma kapalı";
+        }
         return new MiniInfo(_engine?.CharacterName ?? "", _status.Text, _status.ForeColor, state?.Hp, state?.Mp,
-            _statExpRate.Text, _statMobs.Text, _mode == MarketMode ? _engine?.ScanningMarket == true : _engine?.BotRunning == true, game,
+            _statExpRate.Text, _statMobs.Text, _mode switch
+            {
+                MarketMode => _engine?.ScanningMarket == true,
+                FishingMode => _engine?.Fishing == true,
+                _ => _engine?.BotRunning == true,
+            }, game,
             _engine is { } e && Win32.IsWindow(e.Window.Handle) ? e.Window.Handle : 0, hpPotions, mpPotions, Attack: _profile.Attack, Market: market,
             Exp10: Exp10());
     }
@@ -1438,6 +1506,8 @@ internal sealed class MainForm : Form
                     OpenFile(report);
             });
             engine.BotStopped += reason => PostUi(() => { _stopReason = reason; UpdateControls(); UpdateStats(); });
+            engine.FishQuestion += showing => PostUi(() => FishQuestionShown(showing));
+            engine.FishingFinished += _ => PostUi(() => { UpdateControls(); UpdateStats(); });
             _engine = engine;
             Instance.TakeGame(window.ProcessId);
             engine.Start(previewFps: 30);
@@ -1498,7 +1568,12 @@ internal sealed class MainForm : Form
         }
         if (_mode == FishingMode)
         {
-            WriteLog("🎣 Balıkçılık yakında; şimdilik FARM ya da PAZAR sekmesini kullan.");
+            if (_engine.Fishing)
+                _engine.StopFishing();
+            else if (!_engine.StartFishing(out string fishError))
+                WriteLog("🎣 " + fishError);
+            UpdateControls();
+            UpdateStats();
             return;
         }
         if (_engine.BotRunning || _engine.ScanningMarket || _engine.ScanningArea)
@@ -1523,6 +1598,12 @@ internal sealed class MainForm : Form
     /// (minimized game) keep the window as is so the user can see why it stopped.</param>
     private void StopBot(string reason, bool byUser = false)
     {
+        if (_engine is { Fishing: true } fisher)
+        {
+            fisher.StopFishing();
+            WriteLog("🎣 Balık tutma durduruluyor…");
+            return;
+        }
         // The stop key and button also stop a market or area scan.
         if (_engine is { } scanning && (scanning.ScanningMarket || scanning.ScanningArea))
         {
@@ -1846,6 +1927,8 @@ internal sealed class MainForm : Form
 
         if (_mode == MarketMode)
             UpdateMarketDash();
+        if (_mode == FishingMode)
+            UpdateFishingDash();
         if (_engine == null)
         {
             foreach (var l in new[] { _statTime, _statMobs, _statRate, _statDeaths, _statPotions, _statExp, _statExpRate, _statLevel, _statYang })
@@ -1939,7 +2022,11 @@ internal sealed class MainForm : Form
         }
         if (_mode == FishingMode)
         {
-            SetLine("🎣 Balıkçılık yakında.", Theme.Muted);
+            UpdateFishingDash();
+            SetLine(_engine.Fishing ? _engine.FishingStatus
+                    : s.BotRunning ? "Farm botu çalışıyor (FARM sekmesinde)."
+                    : $"Balık tutma kapalı. Başlatmak için BALIK TUT ya da {StartKey}.",
+                _engine.Fishing ? Theme.Green : Theme.Text);
             return;
         }
         if (s.BotRunning)
@@ -2193,14 +2280,15 @@ internal sealed class MainForm : Form
         _scanMobs.Enabled = connected;
         _startBot.Text = _mode == MarketMode
             ? (_engine?.ScanningMarket == true ? $"■  TAKİBİ DURDUR   {StartKey}" : $"🔁  SÜREKLİ TAKİP   {StartKey}")
+            : _mode == FishingMode ? (_engine?.Fishing == true ? $"■  BALIĞI DURDUR   {StartKey}" : $"🎣  BALIK TUT   {StartKey}")
             : running ? $"❚❚  DURAKLAT   {StartKey}"
             : _engine?.ScanningMarket == true || _engine?.ScanningArea == true ? $"■  TARAMAYI DURDUR   {StartKey}"
             : $"▶  BAŞLAT   {StartKey}";
         if (_mode == MarketMode)
             _startBot.Enabled = connected && !running;
         if (_mode == FishingMode)
-            _startBot.Enabled = false;
-        _stopBot.Enabled = running || _engine?.ScanningMarket == true || _engine?.ScanningArea == true;
+            _startBot.Enabled = connected && !running && _engine?.ScanningMarket != true;
+        _stopBot.Enabled = running || _engine?.ScanningMarket == true || _engine?.ScanningArea == true || _engine?.Fishing == true;
         bool recording = _engine?.IsRecording == true;
         _record.Enabled = connected;
         _record.Text = recording ? "■  Kaydı bitir" : "⏺  Kaydet";

@@ -238,6 +238,11 @@ internal sealed class BotProfile
     /// <summary>Another player staying this many minutes within 30 m while the experience drops: find another place (0 = off).</summary>
     public double AvoidPlayerMinutes { get; set; } = 3;
 
+    /// <summary>Fishing: the quick slot key the bait is on (pressed when a cast doesn't take); None = not used.</summary>
+    public System.Windows.Forms.Keys FishBaitKey { get; set; } = System.Windows.Forms.Keys.None;
+    /// <summary>Fishing: a Telegram message when a fish is hooked and the picture question waits.</summary>
+    public bool FishNotify { get; set; } = true;
+
     /// <summary>Move to another farm spot when a player stays near (off: the bot stays where it farms).</summary>
     public bool MoveAwayFromPlayers { get; set; }
     /// <summary>How much the experience a minute has to drop (percent) against before the player came.</summary>

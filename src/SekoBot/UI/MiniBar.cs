@@ -190,7 +190,7 @@ internal sealed class MiniBar : Form
         if (market)
         {
             // The market bot: what it read and found, no HP / potions / experience.
-            TextRenderer.DrawText(g, "🛒 " + info.Market, smallBold, new Rectangle((int)(14 * s), (int)(54 * s), (int)((W - 20) * s), (int)(22 * s)), Theme.Text,
+            TextRenderer.DrawText(g, (info.Market.StartsWith("🎣", StringComparison.Ordinal) ? "" : "🛒 ") + info.Market, smallBold, new Rectangle((int)(14 * s), (int)(54 * s), (int)((W - 20) * s), (int)(22 * s)), Theme.Text,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
             DrawButtons(g, s, info);
             return;

@@ -333,8 +333,8 @@ internal sealed partial class BotEngine
         error = "";
         if (BotRunning)
             error = "Önce botu durdur.";
-        else if (ScanningArea || ScanningMarket)
-            error = "Bir tarama ya da yürüyüş zaten sürüyor.";
+        else if (ScanningArea || ScanningMarket || Fishing)
+            error = Fishing ? "Balık tutuluyor; önce onu durdur." : "Bir tarama ya da yürüyüş zaten sürüyor.";
         else if (GameMinimized)
             error = "Oyun simge durumunda; önce oyunu aç.";
         else if (World == null)
