@@ -218,7 +218,7 @@ internal sealed class InputExecutor : IDisposable
         switch (action)
         {
             case ClickAction { Slow: true } button:
-                await ClickButtonAsync(button.Client, token, button.Fast);
+                await ClickButtonAsync(button.Client, token, button.Fast, button.StillWanted);
                 break;
             case ClickAction click:
                 await ClickAsync(click.Client, 30, 60, token);
@@ -298,8 +298,10 @@ internal sealed class InputExecutor : IDisposable
     /// hover, press with a real mouse event, hold, release, and wait for the game to take it.
     /// Afterwards the cursor and the window that was in front are put back.
     /// </summary>
-    private async Task ClickButtonAsync(Point client, CancellationToken token, bool fast = false)
+    private async Task ClickButtonAsync(Point client, CancellationToken token, bool fast = false, Func<bool>? stillWanted = null)
     {
+        if (stillWanted?.Invoke() == false)
+            return;
         using var guard = MouseGuard.Hold(); // the user's mouse can't mix in meanwhile
         Win32.GetCursorPos(out var previous);
         nint before = Win32.GetForegroundWindow();
@@ -320,6 +322,8 @@ internal sealed class InputExecutor : IDisposable
             }
             MoveMouse(screen);
             await Task.Delay(fast ? 120 : 300, token);
+            if (stillWanted?.Invoke() == false)
+                return; // gone while coming in: no press
             if (front)
                 SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);
             else

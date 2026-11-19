@@ -145,6 +145,18 @@ public class BagCleanerTests
         p.LootThrow = [];
         Assert.True(BotEngine.WantedLoot(new GroundItem(1, new Vec3(0, 0, 0), 95080, 1), p));
     }
+
+    [Fact]
+    public void Cut_short_by_an_attack_the_throw_question_is_said_no_to_and_the_bag_closed()
+    {
+        var p = new BotProfile();
+        var cleaner = new BagCleaner();
+        cleaner.Start(TimeSpan.Zero);
+        var asking = new BagLayout(true, new Rectangle(10, 20, 500, 600), 0, Pages, [], new Point(300, 300));
+        var actions = cleaner.Abort(asking, p, "saldırı geldi");
+        Assert.Equal([new KeyTapAction(p.Keys.CloseWindow), new KeyTapAction(p.Keys.Inventory)], actions);
+        Assert.False(cleaner.Active);
+    }
 }
 
 public class CleanSpotTests

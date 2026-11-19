@@ -141,6 +141,8 @@ internal sealed partial class BotEngine
             return Failed("NPC'ye varılamadı");
 
         // Click the NPC: its shop opens (seen in the game: straight away).
+        async Task<bool> OpenShopAsync()
+        {
         bool open = false;
         for (int tries = 0; tries < 4 && !open; tries++)
         {
@@ -161,8 +163,11 @@ internal sealed partial class BotEngine
                 open = ReadBagNow() is { NpcShop: > 0 };
             }
         }
-        if (!open)
+        return open;
+        }
+        if (!await OpenShopAsync())
             return Failed($"{name} dükkanı açılamadı");
+        int reopened = 0, soldBefore = 0;
         _log($"💰 {name} dükkanı açıldı; eşyalar tek tek satılıyor (Sat → Evet).");
 
         // Sell, item by item, with the game in front the whole time (not back and forth).
@@ -175,6 +180,26 @@ internal sealed partial class BotEngine
             while (cleaner.Active && _clock.Elapsed - began < TimeSpan.FromMinutes(4))
             {
                 token.ThrowIfCancellationRequested();
+                // The shop window closed by itself (seen): the inventory question is let go, the NPC clicked again.
+                if (ReadBagNow() is { NpcShop: 0 } && reopened < 3)
+                {
+                    reopened++;
+                    _log($"💰 {name} penceresi kapandı; yeniden açılıyor ({reopened}. kez).");
+                    input.HoldFront = false;
+                    input.Enqueue(new KeyTapAction(profile.Keys.CloseWindow));
+                    await Task.Delay(600, token);
+                    if (ReadBagNow() is { Open: true })
+                    {
+                        input.Enqueue(new KeyTapAction(profile.Keys.Inventory));
+                        await Task.Delay(500, token);
+                    }
+                    if (!await OpenShopAsync())
+                        break;
+                    input.HoldFront = true;
+                    soldBefore += cleaner.Thrown;
+                    cleaner.Start(_clock.Elapsed);
+                    continue;
+                }
                 var picked = BotLooted;
                 var full = (World?.Progress?.Inventory ?? []).Where(i => i.Slot >= CharacterProgress.FirstBagSlot)
                     .GroupBy(i => (i.Slot, i.Vnum)).ToDictionary(g => g.Key, g => g.First());
@@ -191,7 +216,7 @@ internal sealed partial class BotEngine
         }
         finally { input.HoldFront = false; }
         _sessionItems.Save();
-        int sold = cleaner.Thrown;
+        int sold = soldBefore + cleaner.Thrown;
 
         // Close the shop (the inventory was closed by the cleaner), then back to the place.
         for (int i = 0; i < 3 && ReadBagNow() is { NpcShop: > 0 }; i++)

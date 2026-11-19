@@ -118,6 +118,7 @@ internal sealed partial class BotEngine
         _lineBackAt = null;
         var random = new Random();
         int failedCasts = 0, shortCasts = 0;
+        var spot = World?.Player; // where the character fishes: moved off it, casts go nowhere
         if (profile.FishBaitKey == Keys.None)
             _log("🎣 Yem tuşu ayarlı değil: yem takılmadan atılır. Yem kısayoldaysa BALIKÇILIK sekmesinde \"Yem tuşu\"nu ayarla.");
         _log("🎣 Balık tutma başladı: olta Space ile atılır, balık gelince (başın üstünde balık balonu) Space ile çekilir. " +
@@ -187,6 +188,11 @@ internal sealed partial class BotEngine
                 failedCasts++;
                 if (failedCasts >= 4)
                 {
+                    if (spot is Vec3 was && World?.Player is Vec3 at && at.DistanceXY(was) > 120)
+                    {
+                        Notify("🎣 Karakter balık tuttuğu yerden kaymış; balık tutma durdu.");
+                        return $"🎣 Karakter balık tuttuğu yerden {at.DistanceXY(was) / 100:0.0} m uzaklaşmış; olta atılamıyor. Suya dönük yerine koyup yeniden başlat.";
+                    }
                     Notify("🎣 Olta atılamıyor; balık tutma durdu. Yem bitmiş olabilir.");
                     return "🎣 Olta 4 kez atılamadı: yem bitmiş, olta elde değil ya da karakter suya bakmıyor olabilir. Balık tutma durdu.";
                 }
@@ -351,17 +357,18 @@ internal sealed partial class BotEngine
         var random = new Random();
         _fishStatus = $"🎣 {fish} takıldı; düz resim seçiliyor…";
         await Task.Delay(random.Next(PickAfterMs.Min, PickAfterMs.Max), token);
-        for (int tries = 0; tries < 2; tries++)
+        // One click, made only while the window still shows (another SekoBot may hold the mouse a while:
+        // a click after the window closed landed on the ground and walked the character off the shore).
+        if (FishingNow() is { Asking: true } showing)
         {
-            if (FishingNow() is not { Asking: true } now)
-                break; // gone (answered or too late)
-            if (now.Upright is not { } picture)
+            if (showing.Upright is not { } picture)
                 return false;
             var at = new Point(picture.X + picture.Width / 2 + random.Next(-picture.Width / 6, picture.Width / 6 + 1),
                 picture.Y + picture.Height / 2 + random.Next(-picture.Height / 6, picture.Height / 6 + 1));
-            input.Enqueue(new ClickAction(at, Slow: true));
+            input.Enqueue(new ClickAction(at, Slow: true, Fast: true,
+                StillWanted: () => FishingNow() is { Asking: true, Upright: { } still } && still.Contains(at)));
             var clickedAt = DateTime.Now;
-            while (DateTime.Now - clickedAt < TimeSpan.FromSeconds(2.5) && FishingNow() is { Asking: true })
+            while (DateTime.Now - clickedAt < TimeSpan.FromSeconds(8) && FishingNow() is { Asking: true })
                 await Task.Delay(10, token);
         }
         // The game tells how it went (2 caught, 1 got away) for only ~30 ms after the window closes: read often.

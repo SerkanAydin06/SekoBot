@@ -71,7 +71,13 @@ internal sealed class BagCleaner
     {
         Active = false;
         Problem = why;
-        return bag?.Open == true ? [new KeyTapAction(p.Keys.Inventory)] : [];
+        var actions = new List<BotAction>();
+        // The throw / sell question left showing (seen: it stayed open while the bot fought on): no to it first.
+        if (bag?.Confirm != null || bag?.OtherConfirm != null)
+            actions.Add(new KeyTapAction(p.Keys.CloseWindow));
+        if (bag?.Open == true)
+            actions.Add(new KeyTapAction(p.Keys.Inventory));
+        return actions;
     }
 
     public IReadOnlyList<BotAction> Tick(TimeSpan now, BagLayout? bag, Func<BagSlotView, bool> throwIt, BotProfile p, Size client)
