@@ -8,7 +8,7 @@ namespace SekoBot.UI;
 /// <param name="HpPotions">HP and MP potions left in the bag (the ones on the potion keys), when known.</param>
 internal sealed record MiniInfo(string Name, string Status, Color StatusColor, double? Hp, double? Mp, string ExpRate, string Mobs,
     bool Running, Rectangle? Game, nint GameWindow = 0, int? HpPotions = null, int? MpPotions = null, bool Attack = true, string? Market = null,
-    string Exp10 = "");
+    string Exp10 = "", string Elapsed = "");
 
 /// <summary>
 /// The bot made small: one bar (420×84) under its own game window, so many bots fit on one screen
@@ -181,7 +181,15 @@ internal sealed class MiniBar : Form
         using var smallBold = new Font("Segoe UI", 8.5f, FontStyle.Bold);
         // Every bar shows its SekoBot's number (the 1st too), so they can be told apart.
         string name = $"{Instance.Number} · " + (info.Name.Length > 0 ? info.Name : "SekoBot");
-        TextRenderer.DrawText(g, "◆ " + name, nameFont, new Rectangle((int)(14 * s), (int)(6 * s), (int)((W - 226) * s), (int)(22 * s)), Theme.Text,
+        var nameRow = new Rectangle((int)(14 * s), (int)(6 * s), (int)((W - 226) * s), (int)(22 * s));
+        if (info.Elapsed.Length > 0)
+        {
+            // How long it has run, at the right of the name row.
+            TextRenderer.DrawText(g, "⏱ " + info.Elapsed, smallBold, nameRow, info.Running ? Theme.Green : Theme.Muted,
+                TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+            nameRow.Width -= TextRenderer.MeasureText("⏱ " + info.Elapsed, smallBold).Width + (int)(8 * s);
+        }
+        TextRenderer.DrawText(g, "◆ " + name, nameFont, nameRow, Theme.Text,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         bool market = info.Market != null;
         string status = info.Attack || market ? info.Status : "✋ Sadece eşya · " + info.Status;
@@ -218,17 +226,46 @@ internal sealed class MiniBar : Form
     {
         bool market = info.Market != null;
         bool fishing = info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true;
-        string[] glyphs = [fishing ? "🎣" : market ? "🔍" : info.Attack ? "⚔" : "✋", info.Running ? (market ? "■" : "⏸") : "▶", "■", "⤢", "✕"];
+        // 0: the tab's own button · 1: start ▶ / pause ⏸ · 2: stop ■ · 3: big · 4: close — the shapes drawn, all centred alike.
+        string first = fishing ? "🎣" : market ? "🔍" : info.Attack ? "⚔" : "✋";
         Color[] backs = [market ? Theme.Secondary : info.Attack ? Theme.Secondary : Theme.Accent, Theme.Primary, Theme.Danger, Theme.Secondary, Theme.Surface];
+        g.SmoothingMode = SmoothingMode.AntiAlias;
         for (int i = 0; i < Buttons; i++)
         {
             var r = Button(i);
             using var back = new SolidBrush(_hover == i ? ControlPaint.Light(backs[i], 0.25f) : backs[i]);
             using var path = Rounded(r, 6 * s);
             g.FillPath(back, path);
-            using var glyph = new Font("Segoe UI Symbol", 11f, FontStyle.Bold);
-            TextRenderer.DrawText(g, glyphs[i], glyph, r, Theme.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            float cx = r.X + r.Width / 2f, cy = r.Y + r.Height / 2f, u = 5.5f * s;
+            using var white = new SolidBrush(Theme.Text);
+            using var pen = new Pen(Theme.Text, 2f * s) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            switch (i)
+            {
+                case 0:
+                    using (var glyph = new Font("Segoe UI Symbol", 11f, FontStyle.Bold))
+                        TextRenderer.DrawText(g, first, glyph, r, Theme.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                    break;
+                case 1 when info.Running: // pause: two bars
+                    g.FillRectangle(white, cx - u, cy - u, u * 0.7f, u * 2);
+                    g.FillRectangle(white, cx + u * 0.3f, cy - u, u * 0.7f, u * 2);
+                    break;
+                case 1: // start: a triangle
+                    g.FillPolygon(white, [new PointF(cx - u * 0.7f, cy - u), new PointF(cx - u * 0.7f, cy + u), new PointF(cx + u, cy)]);
+                    break;
+                case 2: // stop: a square
+                    g.FillRectangle(white, cx - u * 0.85f, cy - u * 0.85f, u * 1.7f, u * 1.7f);
+                    break;
+                case 3: // big: two corners
+                    g.DrawLines(pen, [new PointF(cx - u, cy - u * 0.2f), new PointF(cx - u, cy - u), new PointF(cx - u * 0.2f, cy - u)]);
+                    g.DrawLines(pen, [new PointF(cx + u, cy + u * 0.2f), new PointF(cx + u, cy + u), new PointF(cx + u * 0.2f, cy + u)]);
+                    break;
+                case 4: // close: an X
+                    g.DrawLine(pen, cx - u * 0.8f, cy - u * 0.8f, cx + u * 0.8f, cy + u * 0.8f);
+                    g.DrawLine(pen, cx - u * 0.8f, cy + u * 0.8f, cx + u * 0.8f, cy - u * 0.8f);
+                    break;
+            }
         }
+        g.SmoothingMode = SmoothingMode.Default;
     }
 
     private static void Bar(Graphics g, string caption, double? value, Color fill, RectangleF r, Font font)
@@ -275,10 +312,10 @@ internal sealed class MiniBar : Form
                 0 when _info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true => "Balık tutma",
                 0 when _info.Market != null => "Pazar penceresini aç",
                 0 => _info.Attack ? "Saldırı açık. Tıkla: sadece yerdeki eşyaları topla" : "Sadece eşya topluyor. Tıkla: saldırıyı aç",
-                1 when _info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true => _info.Running ? "Balık tutmayı durdur" : "Balık tutmayı başlat",
-                1 when _info.Market != null => _info.Running ? "Pazar takibini durdur" : "Sürekli pazar takibini başlat",
+                1 when _info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true => _info.Running ? "Duraklat (sayaçlar korunur)" : "Balık tutmayı başlat / sürdür",
+                1 when _info.Market != null => _info.Running ? "Duraklat" : "Sürekli pazar takibini başlat",
                 1 => _info.Running ? "Duraklat (F10)" : "Başlat (F10)",
-                2 => $"Durdur ({(Instance.IsFirst ? "F11 / " : "")}Ctrl+Shift+{Math.Min(Instance.Number, 9)})",
+                2 => $"Durdur ve sıfırla ({(Instance.IsFirst ? "F11 / " : "")}Ctrl+Shift+{Math.Min(Instance.Number, 9)})",
                 3 => "Büyüt (çift tık da olur)",
                 4 => "SekoBot'u kapat",
                 _ => "Sağ tık: pencereleri diz, büyüt",

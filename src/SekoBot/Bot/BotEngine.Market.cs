@@ -366,12 +366,15 @@ internal sealed partial class BotEngine
         if (!CanUseMarket(out error))
             return false;
         MarketWatching = continuous;
+        MarketSince = DateTime.Now;
         RunMarketTask(token => ScanMarketAsync(continuous, token), "Pazar taraması hatası: ");
         return true;
     }
 
     /// <summary>The scan going on is the continuous watch.</summary>
     public bool MarketWatching { get; private set; }
+    /// <summary>When the market scan / watch going on started.</summary>
+    public DateTime? MarketSince { get; private set; }
 
     public void StopMarketScan() => _marketCts?.Cancel();
 

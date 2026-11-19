@@ -134,29 +134,28 @@ internal sealed class MainForm : Form
             _modeButtons[i].Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
             _modeButtons[i].Click += (_, _) => SetMode(mode);
         }
-        var version = _identity = Theme.Label(header, "v" + BuildInfo.Version, new Rectangle(536, 4, 252, 20), 8f, Theme.Muted,
+        var version = _identity = Theme.Label(header, "v" + BuildInfo.Version, new Rectangle(526, 4, 252, 20), 8f, Theme.Muted,
             FontStyle.Regular, ContentAlignment.MiddleRight);
-        _connection = Theme.Label(header, "○  Oyun bekleniyor", new Rectangle(536, 23, 252, 20), 8.5f, Theme.Muted,
+        _connection = Theme.Label(header, "○  Oyun bekleniyor", new Rectangle(526, 23, 252, 20), 8.5f, Theme.Muted,
             FontStyle.Bold, ContentAlignment.MiddleRight);
         foreach (Control c in new Control[] { header, title, version, _connection })
         {
             c.MouseDown += DragWindow;
             c.Cursor = Cursors.SizeAll;
         }
-        _gameButton = Theme.Button(header, "Oyunu seç  ▾", new Rectangle(950, 7, 110, 32), Theme.Secondary, Theme.SecondaryHover);
+        _gameButton = Theme.Button(header, "Oyunu seç  ▾", new Rectangle(950, 7, 112, 32), Theme.Secondary, Theme.SecondaryHover);
         _gameButton.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
         _gameButton.Click += (_, _) => ShowGameMenu();
         // Many games on one screen: put the games side by side, every bot small under its game.
-        var arrange = Theme.Button(header, "⊞  Diz", new Rectangle(794, 7, 74, 32), Theme.Secondary, Theme.SecondaryHover);
+        var arrange = Theme.Button(header, "⊞  Diz", new Rectangle(786, 7, 76, 32), Theme.Secondary, Theme.SecondaryHover);
         arrange.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
         arrange.Click += (_, _) => ArrangeAll();
-        var small = Theme.Button(header, "▭  Mini", new Rectangle(872, 7, 72, 32), Theme.Secondary, Theme.SecondaryHover);
+        var small = Theme.Button(header, "▭  Mini", new Rectangle(868, 7, 76, 32), Theme.Secondary, Theme.SecondaryHover);
         small.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
         small.Click += (_, _) => GoMini();
-        var minimize = Theme.Button(header, "—", new Rectangle(1068, 7, 36, 32), Theme.Surface, Theme.Secondary);
+        var minimize = Theme.WindowButton(header, "min", new Rectangle(1068, 7, 36, 32), Theme.Surface, Theme.Secondary);
         minimize.Click += (_, _) => WindowState = FormWindowState.Minimized;
-        var close = Theme.Button(header, "×", new Rectangle(1110, 7, 36, 32), Theme.Surface, Theme.Danger);
-        close.Font = new Font("Segoe UI", 14f);
+        var close = Theme.WindowButton(header, "close", new Rectangle(1110, 7, 36, 32), Theme.Surface, Theme.Danger);
         close.Click += (_, _) => Close();
 
         // ── Control bar: Start / Stop and what the bot is doing ───
@@ -1123,7 +1122,7 @@ internal sealed class MainForm : Form
             : $"Kapalı. Oltayı kuşan, suya dönük dur, sonra \"🎣 BALIK TUT\"a bas ({StartKey}).";
         _fState.ForeColor = !fishing ? Theme.Muted : _fState.Text.Contains("takıldı") ? Theme.Yellow : Theme.Green;
         var (casts, _, _, missed, caught) = engine?.FishCounts ?? default;
-        _fTime.Text = fishing && engine!.FishingSince is DateTime since ? (DateTime.Now - since).ToString(@"hh\:mm\:ss") : "—";
+        _fTime.Text = engine is { } fe && (fe.Fishing || fe.FishingPaused || fe.FishingTime > TimeSpan.Zero) ? fe.FishingTime.ToString(@"hh\:mm\:ss") : "—";
         _fCasts.Text = $"{caught:N0}/{casts:N0}";
         _fHooked.Text = casts > 0 ? $"%{100.0 * caught / casts:0}" : "—";
         _fMissed.Text = missed.ToString("N0");
@@ -1334,6 +1333,20 @@ internal sealed class MainForm : Form
         Close();
     }
 
+    /// <summary>How long the work of this tab has run ("" when idle): farm, market watch or fishing.</summary>
+    private string ElapsedNow()
+    {
+        if (_engine is not { } e)
+            return "";
+        TimeSpan? t = _mode switch
+        {
+            FishingMode => e.Fishing || e.FishingPaused ? e.FishingTime : null,
+            MarketMode => e.ScanningMarket && e.MarketSince is DateTime since ? DateTime.Now - since : null,
+            _ => e.BotRunning ? e.Stats.BotUptime : null,
+        };
+        return t is TimeSpan v ? (v.TotalHours >= 1 ? $"{(int)v.TotalHours}:{v.Minutes:00}:{v.Seconds:00}" : v.ToString(@"mm\:ss")) : "";
+    }
+
     // ── EXP of the last 10 minutes (the small bar) ──
     private readonly Queue<(DateTime At, long Exp)> _expSamples = new();
 
@@ -1413,7 +1426,7 @@ internal sealed class MainForm : Form
                 _ => _engine?.BotRunning == true,
             }, game,
             _engine is { } e && Win32.IsWindow(e.Window.Handle) ? e.Window.Handle : 0, hpPotions, mpPotions, Attack: _profile.Attack, Market: market,
-            Exp10: Exp10());
+            Exp10: Exp10(), Elapsed: ElapsedNow());
     }
 
     protected override void WndProc(ref Message m)
@@ -1596,7 +1609,7 @@ internal sealed class MainForm : Form
         if (_mode == FishingMode)
         {
             if (_engine.Fishing)
-                _engine.StopFishing();
+                _engine.StopFishing(pause: true);
             else if (!_engine.StartFishing(out string fishError))
                 WriteLog("🎣 " + fishError);
             UpdateControls();
@@ -1625,9 +1638,17 @@ internal sealed class MainForm : Form
     /// (minimized game) keep the window as is so the user can see why it stopped.</param>
     private void StopBot(string reason, bool byUser = false)
     {
-        if (_engine is { Fishing: true } fisher)
+        if (_engine is { Fishing: true } || _engine is { FishingPaused: true })
         {
+            var fisher = _engine;
+            bool wasFishing = fisher.Fishing;
             fisher.StopFishing();
+            if (!wasFishing)
+            {
+                WriteLog("🎣 Balık tutma sayaçları sıfırlanacak (duraklatma bitti).");
+                UpdateControls();
+                return;
+            }
             WriteLog("🎣 Balık tutma durduruluyor…");
             return;
         }

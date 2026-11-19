@@ -82,6 +82,50 @@ internal static class Theme
         return button;
     }
 
+    /// <summary>A window button drawn as a shape (font glyphs like × sit low): "close" an X, "min" a dash.</summary>
+    public static Button WindowButton(Control parent, string kind, Rectangle bounds, Color normal, Color hover)
+    {
+        var button = new ShapeButton
+        {
+            Kind = kind,
+            Bounds = bounds,
+            BackColor = normal,
+            ForeColor = Text,
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand,
+            TabStop = false,
+        };
+        button.FlatAppearance.BorderSize = 0;
+        button.FlatAppearance.MouseOverBackColor = hover;
+        parent.Controls.Add(button);
+        return button;
+    }
+
+    private sealed class ShapeButton : Button
+    {
+        private bool _over;
+        public string Kind { get; set; } = "close";
+
+        protected override void OnMouseEnter(EventArgs e) { _over = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { _over = false; Invalidate(); base.OnMouseLeave(e); }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            using (var brush = new SolidBrush(_over ? FlatAppearance.MouseOverBackColor : BackColor))
+                e.Graphics.FillRectangle(brush, ClientRectangle);
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            float cx = Width / 2f, cy = Height / 2f, u = Math.Min(Width, Height) * 0.17f;
+            using var pen = new Pen(ForeColor, 1.6f) { StartCap = System.Drawing.Drawing2D.LineCap.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round };
+            if (Kind == "min")
+                e.Graphics.DrawLine(pen, cx - u, cy, cx + u, cy);
+            else
+            {
+                e.Graphics.DrawLine(pen, cx - u, cy - u, cx + u, cy + u);
+                e.Graphics.DrawLine(pen, cx - u, cy + u, cx + u, cy - u);
+            }
+        }
+    }
+
     private sealed class CaptionButton : Button
     {
         private bool _over;

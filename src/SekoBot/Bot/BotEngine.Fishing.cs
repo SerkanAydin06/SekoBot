@@ -22,6 +22,12 @@ internal sealed partial class BotEngine
     /// <summary>Casts, bites pulled, fish hooked (the picture question came), bites missed.</summary>
     public (int Casts, int Pulled, int Hooked, int Missed, int Caught) FishCounts { get; private set; }
     public DateTime? FishingSince { get; private set; }
+    private TimeSpan _fishedBefore;
+    /// <summary>Paused (not stopped): the next start goes on with the same counters and time.</summary>
+    public bool FishingPaused { get; private set; }
+
+    /// <summary>How long this fishing has run (pauses left out).</summary>
+    public TimeSpan FishingTime => _fishedBefore + (Fishing && FishingSince is DateTime since ? DateTime.Now - since : TimeSpan.Zero);
 
     /// <summary>A fish is hooked: the picture question is showing and waits for the player (true), or gone (false).</summary>
     public event Action<bool>? FishQuestion;
@@ -32,7 +38,7 @@ internal sealed partial class BotEngine
     /// <summary>No bite within this long: the line is cast again (the game takes it back after ~20 s itself).</summary>
     internal static readonly TimeSpan BiteWithin = TimeSpan.FromSeconds(45);
     /// <summary>The pull this long after the bite bubble shows (ms; it shows ~2.5 s).</summary>
-    internal static readonly (int Min, int Max) PullAfterMs = (1400, 2000);
+    internal static readonly (int Min, int Max) PullAfterMs = (500, 2400);
     /// <summary>The mini game's picture is clicked this long after it opens (ms): a look first, well in time.</summary>
     internal static readonly (int Min, int Max) PickAfterMs = (650, 1200);
     /// <summary>After the line is back the reel-in plays this long at most before the next bait and cast.</summary>
@@ -67,8 +73,15 @@ internal sealed partial class BotEngine
             return false;
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
         _fishCts = cts;
-        FishCounts = (0, 0, 0, 0, 0);
-        LastPullMs = 0;
+        if (!FishingPaused)
+        {
+            FishCounts = (0, 0, 0, 0, 0);
+            LastPullMs = 0;
+            _fishedBefore = TimeSpan.Zero;
+            lock (_fishLog)
+                _fishLog.Clear();
+        }
+        FishingPaused = false;
         FishingSince = DateTime.Now;
         _fishTask = Task.Run(async () =>
         {
@@ -87,7 +100,15 @@ internal sealed partial class BotEngine
         return true;
     }
 
-    public void StopFishing() => _fishCts?.Cancel();
+    /// <param name="pause">Paused: the next start keeps the counters and the time.</param>
+    public void StopFishing(bool pause = false)
+    {
+        if (Fishing && FishingSince is DateTime since)
+            _fishedBefore += DateTime.Now - since;
+        FishingSince = null;
+        FishingPaused = pause;
+        _fishCts?.Cancel();
+    }
 
     private async Task<string> FishAsync(CancellationToken token)
     {
