@@ -925,13 +925,13 @@ internal sealed class MainForm : Form
         var baitKey = new KeyPicker { Bounds = new Rectangle(170, 174, 104, 26), Key = _profile.FishBaitKey };
         baitKey.KeyChanged += key => { _profile.FishBaitKey = key; SaveProfile(); WriteLog($"Yem tuşu: {KeyPicker.Name(key)}"); };
         fishCard.Controls.Add(baitKey);
-        Theme.Label(fishCard, "Olta atılamazsa (yem bitince) bu tuşa basılıp yem takılır. Boş bırakılabilir.",
+        Theme.Label(fishCard, "Her atıştan önce bu tuşa basılıp yem takılır (yemi kısayola koy).",
             new Rectangle(284, 174, 460, 26), 8.5f, Theme.Muted);
         Check(fishCard, "Balık takılınca Telegram'a yaz", 16, 208, 300, () => _profile.FishNotify, v => _profile.FishNotify = v);
         Theme.Label(fishCard, "NASIL", new Rectangle(16, 246, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
         Theme.Label(fishCard,
-            "1. Oyunda oltayı kuşan, yemi tak, suyun kenarında suya dönük dur.\n" +
-            "2. \"🎣 BALIK TUT\"a bas. Bot oltayı Space ile atar; başın üstünde balık balonu çıkınca Space ile çeker.\n" +
+            "1. Oyunda oltayı kuşan, yemi kısayola koy (Yem tuşu), suyun kenarında suya dönük dur.\n" +
+            "2. \"🎣 BALIK TUT\"a bas. Bot yemi takar, oltayı Space ile atar; başın üstünde balık balonu çıkınca Space ile çeker.\n" +
             "3. Balık takılınca oyun 4 resimden doğrusunu sorar: bu soruyu SEN cevaplarsın. SekoBot ses çıkarır ve bekler;\n" +
             "    sen seçince kaldığı yerden devam eder. (Bu soru oyunun insan kontrolü; bot cevaplamaz.)",
             new Rectangle(16, 268, 728, 100), 9f, Theme.Text, FontStyle.Regular, ContentAlignment.TopLeft);
