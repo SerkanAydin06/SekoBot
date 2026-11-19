@@ -511,6 +511,7 @@ internal sealed partial class GameWorldReader : IDisposable
         ("Warrior_C", "status", 0x26E0),
         ("Warrior_C", "haveRod", 0x2BD),
         ("Warrior_C", "fishing", 0x2D8),
+        ("Warrior_C", "_roderFishing", 0x2708),
         ("actorName", "N", 0x280),
         ("actorName_C", "showEmoji", 0x2CC),
         ("m2data_C", "fishBox", 0x1488),

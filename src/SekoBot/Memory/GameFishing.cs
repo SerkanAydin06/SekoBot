@@ -10,7 +10,9 @@ namespace SekoBot.Memory;
 /// <item>a catch: the "which picture is right" window (m2data_C.fishBox, fishOnay_C) — the player answers it.</item>
 /// </list>
 /// </summary>
-internal sealed record FishingState(bool RodInHand, bool LineOut, bool Bite, bool Asking, int FishId);
+/// <param name="FloatOut">The float is still drawn (anim._roderFishing): after the line is back it stays ~3 s
+/// while the reel-in plays; a cast then goes nowhere (seen 2026-11-19).</param>
+internal sealed record FishingState(bool RodInHand, bool LineOut, bool Bite, bool Asking, int FishId, bool FloatOut = false);
 
 internal sealed partial class GameWorldReader
 {
@@ -42,6 +44,7 @@ internal sealed partial class GameWorldReader
             string status = ReadFString(anim + Offset(animClass, "Warrior_C", "status"), 32);
             bool rod = status == "fish" || Byte(anim + Offset(animClass, "Warrior_C", "haveRod")) is byte r && r != 0;
             bool line = Byte(anim + Offset(animClass, "Warrior_C", "fishing")) is byte f && f != 0;
+            bool floatOut = MemoryReads.IsPointer(Pointer(anim + Offset(animClass, "Warrior_C", "_roderFishing")));
 
             bool bite = false;
             long tag = Pointer(pawn + Offset(pawnClass, "playerMove", "mename"));
@@ -60,7 +63,7 @@ internal sealed partial class GameWorldReader
                 asking = true;
                 fishId = Int32(box + Offset(Pointer(box + ObjClass), "fishOnay_C", "fishId")) ?? 0;
             }
-            return new FishingState(rod, line, bite, asking, fishId);
+            return new FishingState(rod, line, bite, asking, fishId, floatOut);
         }
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException or OverflowException or InvalidOperationException) { }
         return null;

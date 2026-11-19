@@ -31,6 +31,8 @@ internal sealed partial class BotEngine
     internal static readonly TimeSpan CastTakes = TimeSpan.FromSeconds(3);
     /// <summary>No bite within this long: the line is cast again (the game takes it back after ~20 s itself).</summary>
     internal static readonly TimeSpan BiteWithin = TimeSpan.FromSeconds(45);
+    /// <summary>The pull this long after the bite bubble shows (ms; it shows ~2.5 s).</summary>
+    internal static readonly (int Min, int Max) PullAfterMs = (1400, 2000);
     /// <summary>A line back sooner than this without a bite had no bait on it.</summary>
     internal static readonly TimeSpan NoBaitBack = TimeSpan.FromSeconds(7);
     /// <summary>How long the picture question may wait for the player before the bot gives up on the catch.</summary>
@@ -118,8 +120,17 @@ internal sealed partial class BotEngine
                 continue;
             }
 
+            // The reel-in after a pull / a miss plays on (the float still drawn): bait or cast now goes nowhere.
+            if (state.FloatOut)
+            {
+                _fishStatus = "🎣 Olta toplanıyor…";
+                var reelSince = DateTime.Now;
+                while (DateTime.Now - reelSince < TimeSpan.FromSeconds(8) && FishingNow() is { FloatOut: true, LineOut: false, Asking: false })
+                    await Task.Delay(150, token);
+                continue;
+            }
             // Bait first (every cast: the user's way), then cast.
-            await Task.Delay(random.Next(600, 1500), token); // a breath between catches, not machine-even
+            await Task.Delay(random.Next(700, 1500), token); // a breath between catches, not machine-even
             if (profile.FishBaitKey != Keys.None)
             {
                 _fishStatus = "🎣 Yem takılıyor…";
@@ -194,8 +205,16 @@ internal sealed partial class BotEngine
             }
             if (state.Bite)
             {
+                // Not at once: pulled right away the fish gets off (3 of 3); the user pulls 1.5–2.6 s after the bubble shows.
                 _fishStatus = "🎣 Balık geldi! Çekiliyor…";
-                await Task.Delay(random.Next(250, 650), token);
+                var biteAt = DateTime.Now;
+                var pullAt = biteAt + TimeSpan.FromMilliseconds(random.Next(PullAfterMs.Min, PullAfterMs.Max));
+                while (DateTime.Now < pullAt)
+                {
+                    await Task.Delay(50, token);
+                    if (FishingNow() is { } now && (!now.LineOut || now.Asking))
+                        return now.Asking;
+                }
                 input.Enqueue(new KeyTapAction(Keys.Space));
                 FishCounts = FishCounts with { Pulled = FishCounts.Pulled + 1 };
                 // The line comes back (or the picture question opens).
