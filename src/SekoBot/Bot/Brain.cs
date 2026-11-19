@@ -203,6 +203,10 @@ internal sealed partial class Brain
             actions.Add(new NoteAction("Saldırı açıldı: moblara yeniden saldırılıyor."));
         }
 
+        // Just started or revived: the buffs on first, then the fight.
+        if (BuffsFirstTick(state, p, actions))
+            return actions;
+
         CastSkills(state, p, actions);
 
         if (p.NavigateMode)

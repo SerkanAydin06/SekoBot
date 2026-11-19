@@ -57,6 +57,14 @@ internal sealed partial class Brain
     /// not after a death, when they are gone but their slots still cool down.</summary>
     private bool _learnBuffs = true;
 
+    /// <summary>Started (or revived): the buffs go on first, then the fight (user, 2026-11-19).</summary>
+    private bool _buffsFirst = true;
+    private TimeSpan _buffsFirstSince = Never;
+    private readonly HashSet<Keys> _buffsFirstSkipped = [];
+
+    /// <summary>Putting the buffs on before the first fight gives up after this long (a buff that never takes).</summary>
+    internal const int BuffsFirstMaxMs = 12_000;
+
     /// <summary>A press shows on the quick slot bar within this (else it didn't take).</summary>
     internal const int SkillTakesMs = 1500;
 
@@ -76,6 +84,9 @@ internal sealed partial class Brain
         _skillBeforeName.Clear();
         _lastSkillName = "";
         _learnBuffs = true;
+        _buffsFirst = true;
+        _buffsFirstSince = Never;
+        _buffsFirstSkipped.Clear();
         _lastAnySkill = Never;
         _lastSkillSlot = -1;
         _skillsTold = "";
@@ -164,6 +175,70 @@ internal sealed partial class Brain
         _skillPressed.Clear();
         _learnBuffs = false;
         Array.Fill(_lastSkill, Never);
+        _buffsFirst = true;
+        _buffsFirstSince = Never;
+        _buffsFirstSkipped.Clear();
+    }
+
+    /// <summary>
+    /// Before the first fight (after starting or reviving): every buff that isn't on is cast, standing
+    /// still, one after another — also those that slow the character (otherwise only put on in a fight).
+    /// A buff whose slot is cooling down counts as on (the player cast it). One that can't be cast
+    /// (not enough MP, it doesn't take) is left for later.
+    /// </summary>
+    /// <returns>True while buffs are still being put on (nothing else this tick).</returns>
+    private bool BuffsFirstTick(GameState state, BotProfile p, List<BotAction> actions)
+    {
+        if (!_buffsFirst)
+            return false;
+        var now = state.Time;
+        if (!p.AutoSkills)
+        {
+            _buffsFirst = false;
+            return false;
+        }
+        // The quick slots not read (yet): nothing to wait for; the buffs go on once they are.
+        if (state.Skills.Count == 0)
+            return false;
+        if (_buffsFirstSince == Never)
+            _buffsFirstSince = now;
+        WatchSkillSlots(state, actions);
+        TellSkills(state, actions);
+        var buffs = state.Skills.Where(s => s.Kind == SkillKind.Buff && !_skillUsed.ContainsKey(s.Key) && !_buffsFirstSkipped.Contains(s.Key)).ToList();
+        bool waiting = state.Skills.Any(s => s.Kind == SkillKind.Buff && _skillPressed.ContainsKey(s.Key));
+        if (buffs.Count == 0 && !waiting || now - _buffsFirstSince > Ms(BuffsFirstMaxMs))
+        {
+            _buffsFirst = false;
+            int on = state.Skills.Count(s => s.Kind == SkillKind.Buff && _skillUsed.ContainsKey(s.Key));
+            if (state.Skills.Any(s => s.Kind == SkillKind.Buff))
+                actions.Add(new NoteAction(on > 0 ? "Bufflar açık; dövüşe giriliyor." : "Buff basılamadı (MP yetmedi ya da tutmadı); dövüşte yeniden denenecek."));
+            return false;
+        }
+        // Standing still while casting.
+        if (p.NavigateMode)
+        {
+            SetMoves([], p, actions, refresh: false);
+            SetAttack(false, p, actions, refresh: false);
+        }
+        if (waiting || now - _lastAnySkill < GapAfterLast(p))
+            return true;
+        foreach (var buff in buffs)
+        {
+            if (state.MpPoints is int mp && mp < buff.Mana || !SkillReady(buff, now))
+            {
+                _buffsFirstSkipped.Add(buff.Key);
+                continue;
+            }
+            if (_buffsFirstSkipped.Count == 0 && buff == buffs[0] && _skillUsed.Count == 0)
+                actions.Add(new NoteAction("Önce bufflar basılıyor, sonra dövüşe girilecek."));
+            Cast(buff.Key, state, p, actions);
+            _lastSkillSlot = -1;
+            _skillUsed[buff.Key] = now;
+            if (buff.Wait != null)
+                _skillPressed[buff.Key] = now;
+            return true;
+        }
+        return true;
     }
 
     /// <summary>

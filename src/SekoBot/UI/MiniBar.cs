@@ -7,7 +7,8 @@ namespace SekoBot.UI;
 /// <param name="GameWindow">The game window the bot plays (0 when none): the bar is tied to it.</param>
 /// <param name="HpPotions">HP and MP potions left in the bag (the ones on the potion keys), when known.</param>
 internal sealed record MiniInfo(string Name, string Status, Color StatusColor, double? Hp, double? Mp, string ExpRate, string Mobs,
-    bool Running, Rectangle? Game, nint GameWindow = 0, int? HpPotions = null, int? MpPotions = null, bool Attack = true, string? Market = null);
+    bool Running, Rectangle? Game, nint GameWindow = 0, int? HpPotions = null, int? MpPotions = null, bool Attack = true, string? Market = null,
+    string Exp10 = "");
 
 /// <summary>
 /// The bot made small: one bar (420×84) under its own game window, so many bots fit on one screen
@@ -21,14 +22,15 @@ internal sealed class MiniBar : Form
     public const int LogicalWidth = 420, LogicalHeight = 84;
 
     private readonly Func<MiniInfo> _read;
-    private readonly Action _start, _stop, _big, _arrange, _attack;
+    private readonly Action _start, _stop, _big, _arrange, _attack, _close;
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 300 };
     private MiniInfo _info = new("", "", Theme.Muted, null, null, "—", "—", false, null);
     private int _hover = -1;
     private readonly ToolTip _tip = new();
 
-    public MiniBar(Func<MiniInfo> read, Action start, Action stop, Action big, Action arrange, Action attack)
+    public MiniBar(Func<MiniInfo> read, Action start, Action stop, Action big, Action arrange, Action attack, Action close)
     {
+        _close = close;
         _attack = attack;
         _read = read;
         _start = start;
@@ -51,6 +53,7 @@ internal sealed class MiniBar : Form
         menu.Items.Add("▶  Başlat / duraklat", null, (_, _) => _start());
         menu.Items.Add("■  Durdur", null, (_, _) => _stop());
         menu.Items.Add("⚔  Saldırı aç / sadece eşya topla", null, (_, _) => _attack());
+        menu.Items.Add("✕  SekoBot'u kapat", null, (_, _) => _close());
         ContextMenuStrip = menu;
         _timer.Tick += (_, _) => Pull(true);
         FormClosed += (_, _) =>
@@ -156,9 +159,9 @@ internal sealed class MiniBar : Form
     /// <summary>Narrowest the bar gets (small games in a big grid): still everything readable.</summary>
     private const int MinWidth = 340;
 
-    private const int Buttons = 4;
-    /// <summary>The buttons: attack on/off, start, stop, big.</summary>
-    private Rectangle Button(int i) => new((int)((W - 156 + i * 38) * S), (int)(6 * S), (int)(32 * S), (int)(28 * S));
+    private const int Buttons = 5;
+    /// <summary>The buttons: attack on/off, start, stop, big, close.</summary>
+    private Rectangle Button(int i) => new((int)((W - 194 + i * 38) * S), (int)(6 * S), (int)(32 * S), (int)(28 * S));
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -176,12 +179,13 @@ internal sealed class MiniBar : Form
         using var nameFont = new Font("Segoe UI", 10f, FontStyle.Bold);
         using var small = new Font("Segoe UI", 8.5f);
         using var smallBold = new Font("Segoe UI", 8.5f, FontStyle.Bold);
-        string name = (Instance.IsFirst ? "" : $"{Instance.Number} · ") + (info.Name.Length > 0 ? info.Name : "SekoBot");
-        TextRenderer.DrawText(g, "◆ " + name, nameFont, new Rectangle((int)(14 * s), (int)(6 * s), (int)((W - 188) * s), (int)(22 * s)), Theme.Text,
+        // Every bar shows its SekoBot's number (the 1st too), so they can be told apart.
+        string name = $"{Instance.Number} · " + (info.Name.Length > 0 ? info.Name : "SekoBot");
+        TextRenderer.DrawText(g, "◆ " + name, nameFont, new Rectangle((int)(14 * s), (int)(6 * s), (int)((W - 226) * s), (int)(22 * s)), Theme.Text,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         bool market = info.Market != null;
         string status = info.Attack || market ? info.Status : "✋ Sadece eşya · " + info.Status;
-        TextRenderer.DrawText(g, status, small, new Rectangle((int)(14 * s), (int)(29 * s), (int)((W - 186) * s), (int)(20 * s)), info.Attack || market ? info.StatusColor : Theme.Accent,
+        TextRenderer.DrawText(g, status, small, new Rectangle((int)(14 * s), (int)(29 * s), (int)((W - 214) * s), (int)(20 * s)), info.Attack || market ? info.StatusColor : Theme.Accent,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         if (market)
         {
@@ -195,15 +199,15 @@ internal sealed class MiniBar : Form
         string Count(int? n) => n is int c ? c.ToString("N0") : "—";
         bool low = info.HpPotions is < 20 || info.MpPotions is < 10;
         TextRenderer.DrawText(g, $"İksir  HP {Count(info.HpPotions)} · MP {Count(info.MpPotions)}", smallBold,
-            new Rectangle((int)((W - 172) * s), (int)(38 * s), (int)(166 * s), (int)(18 * s)), low ? Theme.Red : Theme.Text,
+            new Rectangle((int)((W - 210) * s), (int)(38 * s), (int)(204 * s), (int)(18 * s)), low ? Theme.Red : Theme.Text,
             TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
         // Wider bar: longer HP and MP bars (the experience stays at the right).
-        float hp = Math.Clamp((W - 200) * 0.5f, 110, 300), mp = hp * 0.8f;
+        float hp = Math.Clamp((W - 230) * 0.45f, 90, 280), mp = hp * 0.8f;
         Bar(g, "HP", info.Hp, Theme.Red, new RectangleF(14 * s, 58 * s, hp * s, 14 * s), smallBold);
         Bar(g, "MP", info.Mp, Theme.Accent, new RectangleF((20 + hp) * s, 58 * s, mp * s, 14 * s), smallBold);
         float expAt = 28 + hp + mp;
-        TextRenderer.DrawText(g, $"{info.ExpRate} EXP/sa · {info.Mobs} mob", small,
+        TextRenderer.DrawText(g, $"{info.ExpRate} EXP/sa" + (info.Exp10.Length > 0 ? $" · son 10 dk {info.Exp10}" : "") + $" · {info.Mobs} mob", small,
             new Rectangle((int)(expAt * s), (int)(54 * s), (int)((W - expAt - 6) * s), (int)(22 * s)), Theme.Muted,
             TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
@@ -213,8 +217,8 @@ internal sealed class MiniBar : Form
     private void DrawButtons(Graphics g, float s, MiniInfo info)
     {
         bool market = info.Market != null;
-        string[] glyphs = [market ? "🔍" : info.Attack ? "⚔" : "✋", info.Running ? (market ? "■" : "⏸") : "▶", "■", "⤢"];
-        Color[] backs = [market ? Theme.Secondary : info.Attack ? Theme.Secondary : Theme.Accent, Theme.Primary, Theme.Danger, Theme.Secondary];
+        string[] glyphs = [market ? "🔍" : info.Attack ? "⚔" : "✋", info.Running ? (market ? "■" : "⏸") : "▶", "■", "⤢", "✕"];
+        Color[] backs = [market ? Theme.Secondary : info.Attack ? Theme.Secondary : Theme.Accent, Theme.Primary, Theme.Danger, Theme.Secondary, Theme.Surface];
         for (int i = 0; i < Buttons; i++)
         {
             var r = Button(i);
@@ -273,6 +277,7 @@ internal sealed class MiniBar : Form
                 1 => _info.Running ? "Duraklat (F10)" : "Başlat (F10)",
                 2 => $"Durdur ({(Instance.IsFirst ? "F11 / " : "")}Ctrl+Shift+{Math.Min(Instance.Number, 9)})",
                 3 => "Büyüt (çift tık da olur)",
+                4 => "SekoBot'u kapat",
                 _ => "Sağ tık: pencereleri diz, büyüt",
             });
             Invalidate();
@@ -297,6 +302,7 @@ internal sealed class MiniBar : Form
             case 1: _start(); break;
             case 2: _stop(); break;
             case 3: _big(); break;
+            case 4: _close(); return;
         }
         Pull(false);
     }

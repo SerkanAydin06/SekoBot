@@ -22,9 +22,9 @@ internal enum TouchResult
 /// <summary>
 /// Opens a market stall without the game in front and without taking the mouse:
 /// <list type="bullet">
-/// <item>The stall shows on the screen: a finger tap there (the game is a mobile game and takes
+/// <item>The game in front and the stall showing: a finger tap there (the game is a mobile game and takes
 /// touches). Windows puts the cursor on the tapped point for a moment; it is put back at once (~15 ms).</item>
-/// <item>Another window covers it: the click is posted to the game window itself, with the cursor put
+/// <item>Otherwise (another window covers it, or another window is in front): the click is posted to the game window itself, with the cursor put
 /// on the stall's place for ~90 ms (the game looks where the cursor is; seen: under 55 ms the click
 /// is lost), then back. What lies over the game doesn't matter then.</item>
 /// </list>
@@ -78,7 +78,10 @@ internal static class TouchTap
 
     private static TouchResult Tap(WindowInfo window, Point client, Point screen, bool slower)
     {
-        if (!Shows(window, screen))
+        // A touch brings the window it lands on to the front (like a click): only when the game is in
+        // front already. Otherwise the click is posted, which leaves every window where it is (seen:
+        // with all games side by side, every tap pulled the market bot's game to the front).
+        if (!Shows(window, screen) || Win32.GetForegroundWindow() != window.Handle)
         {
             PostedClick(window, client, screen, slower ? SlowerPostedClickGaps : PostedClickGaps);
             return TouchResult.Posted;
