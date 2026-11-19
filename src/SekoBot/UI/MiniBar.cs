@@ -217,7 +217,8 @@ internal sealed class MiniBar : Form
     private void DrawButtons(Graphics g, float s, MiniInfo info)
     {
         bool market = info.Market != null;
-        string[] glyphs = [market ? "🔍" : info.Attack ? "⚔" : "✋", info.Running ? (market ? "■" : "⏸") : "▶", "■", "⤢", "✕"];
+        bool fishing = info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true;
+        string[] glyphs = [fishing ? "🎣" : market ? "🔍" : info.Attack ? "⚔" : "✋", info.Running ? (market ? "■" : "⏸") : "▶", "■", "⤢", "✕"];
         Color[] backs = [market ? Theme.Secondary : info.Attack ? Theme.Secondary : Theme.Accent, Theme.Primary, Theme.Danger, Theme.Secondary, Theme.Surface];
         for (int i = 0; i < Buttons; i++)
         {
@@ -271,8 +272,10 @@ internal sealed class MiniBar : Form
             Cursor = hit >= 0 ? Cursors.Hand : Cursors.Default;
             _tip.SetToolTip(this, hit switch
             {
+                0 when _info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true => "Balık tutma",
                 0 when _info.Market != null => "Pazar penceresini aç",
                 0 => _info.Attack ? "Saldırı açık. Tıkla: sadece yerdeki eşyaları topla" : "Sadece eşya topluyor. Tıkla: saldırıyı aç",
+                1 when _info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true => _info.Running ? "Balık tutmayı durdur" : "Balık tutmayı başlat",
                 1 when _info.Market != null => _info.Running ? "Pazar takibini durdur" : "Sürekli pazar takibini başlat",
                 1 => _info.Running ? "Duraklat (F10)" : "Başlat (F10)",
                 2 => $"Durdur ({(Instance.IsFirst ? "F11 / " : "")}Ctrl+Shift+{Math.Min(Instance.Number, 9)})",

@@ -68,6 +68,7 @@ internal sealed partial class BotEngine
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
         _fishCts = cts;
         FishCounts = (0, 0, 0, 0, 0);
+        LastPullMs = 0;
         FishingSince = DateTime.Now;
         _fishTask = Task.Run(async () =>
         {
@@ -77,7 +78,7 @@ internal sealed partial class BotEngine
             catch (Exception ex) { message = "🎣 Balık tutma hatası: " + ex.Message; }
             var (casts, pulled, hooked, missed, caught) = FishCounts;
             if (casts > 0)
-                message += $" ({casts} atış, {hooked} takıldı, {caught} yakalandı, {missed} kaçtı)";
+                message += $" ({caught}/{casts} atış yakalandı, %{100.0 * caught / casts:0} başarı, {missed} kaçtı)";
             _fishStatus = message;
             _log(message);
             FishQuestion?.Invoke(false);
@@ -200,7 +201,7 @@ internal sealed partial class BotEngine
         _fishStatus = "🎣 Olta suda; balık bekleniyor…";
         while (DateTime.Now - since < BiteWithin)
         {
-            await Task.Delay(100, token);
+            await Task.Delay(30, token);
             if (FishingNow() is not { } state)
                 continue;
             if (state.Asking)
@@ -211,7 +212,7 @@ internal sealed partial class BotEngine
                 bool quick = DateTime.Now - since < NoBaitBack;
                 if (!quick)
                     FishCounts = FishCounts with { Missed = FishCounts.Missed + 1 };
-                _fishStatus = quick ? "🎣 Olta hemen geri geldi (yem yok mu?); yeniden atılıyor." : "🎣 Balık kaçtı; yeniden atılıyor.";
+                _fishStatus = quick ? "🎣 Olta hemen geri geldi (yem yok mu?); yeniden atılıyor." : "🎣 Balon kaçırıldı; yeniden atılıyor.";
                 return false;
             }
             if (state.Bite)
@@ -227,14 +228,27 @@ internal sealed partial class BotEngine
                         return now.Asking;
                 }
                 input.Enqueue(new KeyTapAction(Keys.Space));
-                FishCounts = FishCounts with { Pulled = FishCounts.Pulled + 1 };
-                // The line comes back (or the picture question opens).
                 var pulledAt = DateTime.Now;
+                LastPullMs = (int)(pulledAt - biteAt).TotalMilliseconds;
+                FishCounts = FishCounts with { Pulled = FishCounts.Pulled + 1 };
+                // Hooked (the picture question opens) or got off (the game says 1 for ~30 ms): read often.
                 while (DateTime.Now - pulledAt < TimeSpan.FromSeconds(4))
                 {
-                    await Task.Delay(150, token);
-                    if (FishingNow() is { } after && (after.Asking || !after.LineOut))
+                    await Task.Delay(10, token);
+                    if (FishingNow() is not { } after)
+                        continue;
+                    if (after.Asking)
+                    {
+                        _pullPending = LastPullMs;
                         return true;
+                    }
+                    if (after.Result == 1)
+                    {
+                        FishCounts = FishCounts with { Missed = FishCounts.Missed + 1 };
+                        _fishStatus = $"🎣 Balık kaçtı (çekiş {LastPullMs / 1000.0:0.00} sn).";
+                        RecordPull(LastPullMs, "kaçtı", "");
+                        return true;
+                    }
                 }
                 return true;
             }
@@ -273,6 +287,39 @@ internal sealed partial class BotEngine
     }
 
     private DateTime? _lineBackAt;
+    private int? _pullPending;
+
+    /// <summary>How long after the bite bubble the last pull was (ms); 0 before the first.</summary>
+    public int LastPullMs { get; private set; }
+
+    private readonly List<string> _fishLog = [];
+
+    /// <summary>The last pulls, newest first ("17:09 Levrek yakalandı · 1,72 sn").</summary>
+    public List<string> FishLog()
+    {
+        lock (_fishLog)
+            return [.. _fishLog];
+    }
+
+    /// <summary>Every pull with its wait and outcome, to find the best wait (balik-cekis.csv).</summary>
+    private void RecordPull(int? ms, string outcome, string fish)
+    {
+        lock (_fishLog)
+        {
+            string icon = outcome == "yakalandı" ? "✔" : "✖";
+            _fishLog.Insert(0, $"{DateTime.Now:HH:mm:ss}  {icon} {(fish.Length > 0 ? fish + " " : "")}{outcome}" + (ms is int w ? $" · {w / 1000.0:0.00} sn" : ""));
+            if (_fishLog.Count > 100)
+                _fishLog.RemoveAt(_fishLog.Count - 1);
+        }
+        try
+        {
+            string file = Path.Combine(Config.ProfileStore.Directory, "balik-cekis.csv");
+            bool header = !File.Exists(file);
+            File.AppendAllText(file, (header ? "Zaman;Bekleme (ms);Sonuç;Eşya;Karakter\n" : "") +
+                $"{DateTime.Now:yyyy-MM-dd HH:mm:ss};{ms?.ToString() ?? ""};{outcome};{fish};{CharacterName}\n");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
     private InputExecutor? _fishInput;
 
     /// <summary>Clicks the upright picture of the mini game; false when it can't (then the user is asked).</summary>
@@ -310,17 +357,22 @@ internal sealed partial class BotEngine
         }
         if (stillAsking && result is not (1 or 2))
             return false;
+        string pull = _pullPending is int ms ? $" (çekiş {ms / 1000.0:0.00} sn)" : "";
         if (result == 2)
         {
             FishCounts = FishCounts with { Caught = FishCounts.Caught + 1 };
-            _fishStatus = $"🎣 {fish} yakalandı!";
-            _log(_fishStatus);
+            _fishStatus = $"🎣 {fish} yakalandı!{pull}";
+            RecordPull(_pullPending, "yakalandı", fish);
         }
         else
         {
-            _fishStatus = result == 1 ? $"🎣 {fish} kaçtı (resim seçildi ama tutmadı)." : $"🎣 {fish}: resim seçildi.";
-            _log(_fishStatus);
+            if (result == 1)
+                FishCounts = FishCounts with { Missed = FishCounts.Missed + 1 };
+            _fishStatus = result == 1 ? $"🎣 {fish} kaçtı: resim tutmadı.{pull}" : $"🎣 {fish}: resim seçildi.{pull}";
+            RecordPull(_pullPending, result == 1 ? "resim tutmadı" : "?", fish);
         }
+        _log(_fishStatus);
+        _pullPending = null;
         await Task.Delay(random.Next(800, 1400), token);
         return true;
     }

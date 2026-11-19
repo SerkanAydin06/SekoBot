@@ -50,6 +50,7 @@ internal sealed class MainForm : Form
     private Rectangle _dashBottomFarm, _logCardFarm, _logFarm;
     private readonly Label _mState, _mRound, _mRead, _mDeals, _mWanted, _mShops, _mItems, _mOldest, _mNever;
     private readonly Label _fState, _fTime, _fCasts, _fPulled, _fHooked, _fMissed;
+    private readonly ListBox _fPulls;
     private readonly ListBox _mFinds;
     private DateTime _marketDashAt;
 
@@ -161,14 +162,11 @@ internal sealed class MainForm : Form
         // ── Control bar: Start / Stop and what the bot is doing ───
         var bar = new Card { Bounds = new Rectangle(12, 64, 1156, 64) };
         Controls.Add(bar);
-        _startBot = Theme.Button(bar, $"▶  BAŞLAT   {StartKey}", new Rectangle(12, 10, 220, 44), Theme.Primary, Theme.PrimaryHover);
-        _startBot.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
+        _startBot = Theme.BigButton(bar, Caption("▶  BAŞLAT", StartKey), new Rectangle(12, 10, 220, 44), Theme.Primary, Theme.PrimaryHover);
         _startBot.Click += (_, _) => ToggleBot();
-        _stopBot = Theme.Button(bar, $"■  DURDUR   {StopKey}", new Rectangle(242, 10, 200, 44), Theme.Danger, Theme.DangerHover);
-        _stopBot.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
+        _stopBot = Theme.BigButton(bar, Caption("■  DURDUR", StopKey), new Rectangle(242, 10, 220, 44), Theme.Danger, Theme.DangerHover);
         _stopBot.Click += (_, _) => StopBot("kullanıcı durdurdu", byUser: true);
-        _attackButton = Theme.Button(bar, "", new Rectangle(452, 10, 196, 44), Theme.Secondary, Theme.SecondaryHover);
-        _attackButton.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
+        _attackButton = Theme.BigButton(bar, "", new Rectangle(472, 10, 220, 44), Theme.Secondary, Theme.SecondaryHover);
         _attackButton.Click += (_, _) =>
         {
             if (_mode == MarketMode)
@@ -178,7 +176,7 @@ internal sealed class MainForm : Form
         };
         ShowAttack();
         _reloads.Add(ShowAttack);
-        _status = Theme.Label(bar, "Oyun bekleniyor", new Rectangle(660, 10, 484, 44), 12f, Theme.Muted, FontStyle.Bold);
+        _status = Theme.Label(bar, "Oyun bekleniyor", new Rectangle(704, 10, 440, 44), 11f, Theme.Muted, FontStyle.Bold);
 
         // ── Side menu: the dashboard and the settings pages ──────
         var side = _side = new Card { Bounds = new Rectangle(12, 136, 180, 772) };
@@ -913,13 +911,22 @@ internal sealed class MainForm : Form
         Controls.Add(_fishingDash);
         var fishCard = new Card { Bounds = new Rectangle(0, 0, 760, 400) };
         _fishingDash.Controls.Add(fishCard);
+        var pullsCard = new Card { Bounds = new Rectangle(770, 0, 386, 400) };
+        _fishingDash.Controls.Add(pullsCard);
+        Theme.Label(pullsCard, "SON ÇEKİŞLER (sonuç · balondan sonra)", new Rectangle(16, 8, 354, 20), 8f, Theme.Accent, FontStyle.Bold);
+        _fPulls = new ListBox
+        {
+            Bounds = new Rectangle(14, 32, 358, 354), BackColor = Theme.Inset, ForeColor = Theme.Text, BorderStyle = BorderStyle.None,
+            Font = new Font("Segoe UI", 8.5f), IntegralHeight = false, HorizontalScrollbar = true,
+        };
+        pullsCard.Controls.Add(_fPulls);
         Theme.Label(fishCard, "BALIK TUTMA", new Rectangle(16, 8, 300, 20), 8f, Theme.Accent, FontStyle.Bold);
         _fState = Theme.Label(fishCard, "", new Rectangle(16, 30, 728, 40), 10f, Theme.Text, FontStyle.Bold, ContentAlignment.TopLeft);
         _fTime = Tile(fishCard, "SÜRE", 16, 76, small: true);
-        _fCasts = Tile(fishCard, "ATIŞ", 126, 76);
-        _fPulled = Tile(fishCard, "ÇEKİŞ", 236, 76);
-        _fHooked = Tile(fishCard, "YAKALANAN", 346, 76);
-        _fMissed = Tile(fishCard, "KAÇAN", 456, 76);
+        _fCasts = Tile(fishCard, "YAKALANAN", 126, 76);
+        _fHooked = Tile(fishCard, "BAŞARI", 236, 76);
+        _fMissed = Tile(fishCard, "KAÇAN", 346, 76);
+        _fPulled = Tile(fishCard, "SON ÇEKİŞ", 456, 76, small: true);
         Theme.Label(fishCard, "AYARLAR", new Rectangle(16, 150, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
         Theme.Label(fishCard, "Yem tuşu (kısayol)", new Rectangle(16, 174, 150, 26), 9f, Theme.Muted);
         var baitKey = new KeyPicker { Bounds = new Rectangle(170, 174, 104, 26), Key = _profile.FishBaitKey };
@@ -934,7 +941,7 @@ internal sealed class MainForm : Form
             "1. Oyunda oltayı kuşan, yemi kısayola koy (Yem tuşu), suyun kenarında suya dönük dur.\n" +
             "2. \"🎣 BALIK TUT\"a bas. Bot yemi takar, oltayı Space ile atar; başın üstünde balık balonu çıkınca Space ile çeker.\n" +
             "3. Balık takılınca çıkan 4 resimden düz olanı bot seçer (kapalıysa ses çıkarıp seni bekler).\n" +
-            "    Yakalanan / takılan sayısı YAKALANAN kutusunda.",
+            "    YAKALANAN = yakalanan / atış; her çekişin süresi ve sonucu balik-cekis.csv dosyasına yazılır.",
             new Rectangle(16, 268, 728, 100), 9f, Theme.Text, FontStyle.Regular, ContentAlignment.TopLeft);
 
         SelectTab(-1);
@@ -1040,6 +1047,9 @@ internal sealed class MainForm : Form
             _log.Bounds = _logFarm;
         }
         _attackButton.Visible = mode != FishingMode;
+        // The status line takes the attack button's place when it isn't shown (no gap in the bar).
+        _status.Bounds = mode == FishingMode ? new Rectangle(_attackButton.Left + 12, _status.Top, _status.Right - _attackButton.Left - 12, _status.Height)
+            : new Rectangle(_attackButton.Right + 12, _status.Top, _status.Right - _attackButton.Right - 12, _status.Height);
         _fishDashAt = DateTime.MinValue;
         for (int i = 0; i < _modeButtons.Length; i++)
         {
@@ -1112,12 +1122,23 @@ internal sealed class MainForm : Form
             : fishing || engine.FishingStatus.Length > 0 ? engine.FishingStatus
             : $"Kapalı. Oltayı kuşan, suya dönük dur, sonra \"🎣 BALIK TUT\"a bas ({StartKey}).";
         _fState.ForeColor = !fishing ? Theme.Muted : _fState.Text.Contains("takıldı") ? Theme.Yellow : Theme.Green;
-        var (casts, pulled, hooked, missed, caught) = engine?.FishCounts ?? default;
+        var (casts, _, _, missed, caught) = engine?.FishCounts ?? default;
         _fTime.Text = fishing && engine!.FishingSince is DateTime since ? (DateTime.Now - since).ToString(@"hh\:mm\:ss") : "—";
-        _fCasts.Text = casts.ToString("N0");
-        _fPulled.Text = pulled.ToString("N0");
-        _fHooked.Text = caught > 0 || hooked == 0 ? $"{caught:N0}/{hooked:N0}" : hooked.ToString("N0");
+        _fCasts.Text = $"{caught:N0}/{casts:N0}";
+        _fHooked.Text = casts > 0 ? $"%{100.0 * caught / casts:0}" : "—";
         _fMissed.Text = missed.ToString("N0");
+        _fPulled.Text = engine?.LastPullMs is int ms and > 0 ? $"{ms / 1000.0:0.00} sn" : "—";
+        var pulls = engine?.FishLog() ?? [];
+        if (pulls.Count == 0 && _fPulls.Items.Count == 0 || pulls.Count > 0 && (pulls.Count != _fPulls.Items.Count || !Equals(_fPulls.Items[0], pulls[0])))
+        {
+            _fPulls.BeginUpdate();
+            _fPulls.Items.Clear();
+            if (pulls.Count == 0)
+                _fPulls.Items.Add("Henüz çekiş yok.");
+            else
+                _fPulls.Items.AddRange([.. pulls]);
+            _fPulls.EndUpdate();
+        }
     }
 
     /// <summary>A fish is hooked: the player answers the game's picture question — a sound and the game in front.</summary>
@@ -1134,6 +1155,9 @@ internal sealed class MainForm : Form
             Win32.SetForegroundWindow(engine.Window.Handle);
         }
     }
+
+    /// <summary>A big button's text: the action, its key on the line under it (both centred).</summary>
+    private static string Caption(string action, string key) => action + "\n" + key;
 
     private static string Ago(DateTime at)
     {
@@ -1177,13 +1201,13 @@ internal sealed class MainForm : Form
     {
         if (_mode == MarketMode)
         {
-            _attackButton.Text = "🖥  Pazar penceresi";
+            _attackButton.Text = Caption("🖥  PAZAR PENCERESİ", "ara · filtrele · fiyat");
             _attackButton.BackColor = Theme.Secondary;
             _attackButton.FlatAppearance.MouseOverBackColor = Theme.SecondaryHover;
             return;
         }
         bool on = _profile.Attack;
-        _attackButton.Text = on ? "⚔  Saldırı: AÇIK" : "✋  Sadece eşya topla";
+        _attackButton.Text = on ? Caption("⚔  SALDIRI AÇIK", "kapatmak için tıkla") : Caption("✋  SADECE TOPLA", "saldırı kapalı");
         _attackButton.BackColor = on ? Theme.Secondary : Theme.Accent;
         _attackButton.FlatAppearance.MouseOverBackColor = on ? Theme.SecondaryHover : ControlPaint.Light(Theme.Accent, 0.2f);
     }
@@ -1376,8 +1400,10 @@ internal sealed class MainForm : Form
         }
         if (_mode == FishingMode && _engine is { } f)
         {
-            var (casts, _, hooked, missed, caught) = f.FishCounts;
-            market = f.Fishing ? $"🎣 {casts} atış · {caught}/{hooked} yakalandı · {missed} kaçtı" : "🎣 Balık tutma kapalı";
+            var (casts, _, _, missed, caught) = f.FishCounts;
+            market = !f.Fishing ? "🎣 Balık tutma kapalı"
+                : $"🎣 {caught}/{casts} yakalandı · %{(casts > 0 ? 100.0 * caught / casts : 0):0} başarı · {missed} kaçtı" +
+                  (f.LastPullMs > 0 ? $" · son çekiş {f.LastPullMs / 1000.0:0.00} sn" : "");
         }
         return new MiniInfo(_engine?.CharacterName ?? "", _status.Text, _status.ForeColor, state?.Hp, state?.Mp,
             _statExpRate.Text, _statMobs.Text, _mode switch
@@ -2279,12 +2305,12 @@ internal sealed class MainForm : Form
         _findArea.Enabled = connected && !running && _engine?.ScanningMarket != true;
         _scanMarket.Enabled = connected && !running && _engine?.ScanningArea != true;
         _scanMobs.Enabled = connected;
-        _startBot.Text = _mode == MarketMode
-            ? (_engine?.ScanningMarket == true ? $"■  TAKİBİ DURDUR   {StartKey}" : $"🔁  SÜREKLİ TAKİP   {StartKey}")
-            : _mode == FishingMode ? (_engine?.Fishing == true ? $"■  BALIĞI DURDUR   {StartKey}" : $"🎣  BALIK TUT   {StartKey}")
-            : running ? $"❚❚  DURAKLAT   {StartKey}"
-            : _engine?.ScanningMarket == true || _engine?.ScanningArea == true ? $"■  TARAMAYI DURDUR   {StartKey}"
-            : $"▶  BAŞLAT   {StartKey}";
+        _startBot.Text = Caption(_mode == MarketMode
+            ? (_engine?.ScanningMarket == true ? "■  TAKİBİ DURDUR" : "🔁  SÜREKLİ TAKİP")
+            : _mode == FishingMode ? (_engine?.Fishing == true ? "■  BALIĞI DURDUR" : "🎣  BALIK TUT")
+            : running ? "❚❚  DURAKLAT"
+            : _engine?.ScanningMarket == true || _engine?.ScanningArea == true ? "■  TARAMAYI DURDUR"
+            : "▶  BAŞLAT", StartKey);
         if (_mode == MarketMode)
             _startBot.Enabled = connected && !running;
         if (_mode == FishingMode)

@@ -59,6 +59,61 @@ internal static class Theme
         return button;
     }
 
+    /// <summary>A big button of the control bar: its action on top, its key (the text after a line break)
+    /// smaller under it, both centred, the same for every mode.</summary>
+    public static Button BigButton(Control parent, string text, Rectangle bounds, Color normal, Color hover)
+    {
+        var button = new CaptionButton
+        {
+            Text = text,
+            Bounds = bounds,
+            BackColor = normal,
+            ForeColor = Text,
+            Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand,
+            TabStop = false,
+            Hover = hover,
+        };
+        button.FlatAppearance.BorderSize = 0;
+        button.FlatAppearance.MouseOverBackColor = hover;
+        button.FlatAppearance.MouseDownBackColor = ControlPaint.Dark(hover, 0.1f);
+        parent.Controls.Add(button);
+        return button;
+    }
+
+    private sealed class CaptionButton : Button
+    {
+        private bool _over;
+        private static readonly Font KeyFont = new("Segoe UI", 8f);
+        public Color Hover { get; set; }
+
+        protected override void OnMouseEnter(EventArgs e) { _over = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { _over = false; Invalidate(); base.OnMouseLeave(e); }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var back = _over && Enabled ? FlatAppearance.MouseOverBackColor : BackColor;
+            if (!Enabled)
+                back = ControlPaint.Dark(BackColor, 0.35f);
+            using (var brush = new SolidBrush(back))
+                e.Graphics.FillRectangle(brush, ClientRectangle);
+            string[] lines = Text.Split('\n', 2);
+            var main = Enabled ? ForeColor : Color.FromArgb(150, ForeColor);
+            var sub = Enabled ? Color.FromArgb(200, ForeColor) : Color.FromArgb(110, ForeColor);
+            const TextFormatFlags centre = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis;
+            if (lines.Length == 1)
+            {
+                TextRenderer.DrawText(e.Graphics, lines[0], Font, ClientRectangle, main, centre);
+                return;
+            }
+            int h1 = TextRenderer.MeasureText(lines[0], Font).Height, h2 = TextRenderer.MeasureText(lines[1], KeyFont).Height;
+            int top = (Height - h1 - h2 + 2) / 2;
+            TextRenderer.DrawText(e.Graphics, lines[0], Font, new Rectangle(4, top, Width - 8, h1), main, centre);
+            TextRenderer.DrawText(e.Graphics, lines[1], KeyFont, new Rectangle(4, top + h1 - 2, Width - 8, h2), sub, centre);
+        }
+    }
+
     public static NumericUpDown Number(Control parent, Rectangle bounds, decimal min, decimal max,
         decimal value, int decimals = 0, decimal step = 1)
     {
