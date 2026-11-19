@@ -31,6 +31,8 @@ internal sealed partial class BotEngine
     internal static readonly TimeSpan CastTakes = TimeSpan.FromSeconds(3);
     /// <summary>No bite within this long: the line is cast again (the game takes it back after ~20 s itself).</summary>
     internal static readonly TimeSpan BiteWithin = TimeSpan.FromSeconds(45);
+    /// <summary>A line back sooner than this without a bite had no bait on it.</summary>
+    internal static readonly TimeSpan NoBaitBack = TimeSpan.FromSeconds(7);
     /// <summary>How long the picture question may wait for the player before the bot gives up on the catch.</summary>
     internal static readonly TimeSpan QuestionWaits = TimeSpan.FromMinutes(5);
 
@@ -85,7 +87,9 @@ internal sealed partial class BotEngine
         var profile = Profile;
         using var input = new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
         var random = new Random();
-        int failedCasts = 0;
+        int failedCasts = 0, shortCasts = 0;
+        if (profile.FishBaitKey == Keys.None)
+            _log("🎣 Yem tuşu ayarlı değil: yem takılmadan atılır. Yem kısayoldaysa BALIKÇILIK sekmesinde \"Yem tuşu\"nu ayarla.");
         _log("🎣 Balık tutma başladı: olta Space ile atılır, balık gelince (başın üstünde balık balonu) Space ile çekilir. " +
              "Balık takılınca çıkan resim sorusunu SEN cevaplarsın; bot bekler ve haber verir.");
         while (true)
@@ -114,9 +118,15 @@ internal sealed partial class BotEngine
                 continue;
             }
 
-            // Cast.
-            _fishStatus = "🎣 Olta atılıyor…";
+            // Bait first (every cast: the user's way), then cast.
             await Task.Delay(random.Next(600, 1500), token); // a breath between catches, not machine-even
+            if (profile.FishBaitKey != Keys.None)
+            {
+                _fishStatus = "🎣 Yem takılıyor…";
+                input.Enqueue(new KeyTapAction(profile.FishBaitKey));
+                await Task.Delay(random.Next(700, 1100), token);
+            }
+            _fishStatus = "🎣 Olta atılıyor…";
             input.Enqueue(new KeyTapAction(Keys.Space));
             var castAt = DateTime.Now;
             bool cast = false;
@@ -132,13 +142,6 @@ internal sealed partial class BotEngine
             if (!cast)
             {
                 failedCasts++;
-                if (failedCasts == 2 && profile.FishBaitKey != Keys.None)
-                {
-                    // Maybe the bait ran out: put the next one on (its quick slot key), then cast again.
-                    _log($"🎣 Olta atılamadı; yem takılıyor ({KeyName(profile.FishBaitKey)}).");
-                    input.Enqueue(new KeyTapAction(profile.FishBaitKey));
-                    await Task.Delay(1200, token);
-                }
                 if (failedCasts >= 4)
                 {
                     Notify("🎣 Olta atılamıyor; balık tutma durdu. Yem bitmiş olabilir.");
@@ -149,12 +152,27 @@ internal sealed partial class BotEngine
             }
             failedCasts = 0;
             FishCounts = FishCounts with { Casts = FishCounts.Casts + 1 };
-            await WatchLineAsync(input, random, token);
+            var lineAt = DateTime.Now;
+            bool bit = await WatchLineAsync(input, random, token);
+            // Back within a few seconds without a bite: no bait on the hook (seen: casting without bait).
+            if (!bit && DateTime.Now - lineAt < NoBaitBack)
+            {
+                if (++shortCasts >= 3)
+                {
+                    Notify("🎣 Yem bitti gibi; balık tutma durdu.");
+                    return profile.FishBaitKey == Keys.None
+                        ? "🎣 Olta yemsiz atılıyor ve hemen geri geliyor. BALIKÇILIK sekmesinde \"Yem tuşu\"nu ayarla (yemin kısayol tuşu). Balık tutma durdu."
+                        : $"🎣 Olta 3 kez yemsiz geri geldi: yem bitmiş ya da {KeyName(profile.FishBaitKey)} tuşunda yem yok. Balık tutma durdu.";
+                }
+            }
+            else
+                shortCasts = 0;
         }
     }
 
     /// <summary>The line is out: waits for the bite and pulls (a human's reaction time), or lets it come back.</summary>
-    private async Task WatchLineAsync(InputExecutor input, Random random, CancellationToken token)
+    /// <returns>True when a fish bit (pulled or the question came).</returns>
+    private async Task<bool> WatchLineAsync(InputExecutor input, Random random, CancellationToken token)
     {
         var since = DateTime.Now;
         _fishStatus = "🎣 Olta suda; balık bekleniyor…";
@@ -164,13 +182,15 @@ internal sealed partial class BotEngine
             if (FishingNow() is not { } state)
                 continue;
             if (state.Asking)
-                return;
+                return true;
             if (!state.LineOut)
             {
-                // Back without a pull: the bite was missed (or none came).
-                FishCounts = FishCounts with { Missed = FishCounts.Missed + 1 };
-                _fishStatus = "🎣 Balık kaçtı; yeniden atılıyor.";
-                return;
+                // Back without a pull: the bite was missed (or none came: no bait).
+                bool quick = DateTime.Now - since < NoBaitBack;
+                if (!quick)
+                    FishCounts = FishCounts with { Missed = FishCounts.Missed + 1 };
+                _fishStatus = quick ? "🎣 Olta hemen geri geldi (yem yok mu?); yeniden atılıyor." : "🎣 Balık kaçtı; yeniden atılıyor.";
+                return false;
             }
             if (state.Bite)
             {
@@ -184,14 +204,15 @@ internal sealed partial class BotEngine
                 {
                     await Task.Delay(150, token);
                     if (FishingNow() is { } after && (after.Asking || !after.LineOut))
-                        return;
+                        return true;
                 }
-                return;
+                return true;
             }
         }
         // Nothing for too long: pull the line back in and cast again.
         input.Enqueue(new KeyTapAction(Keys.Space));
         await Task.Delay(1500, token);
+        return false;
     }
 
     /// <summary>A fish is hooked: the picture question is the player's. Tells them, then waits until it's gone.</summary>
