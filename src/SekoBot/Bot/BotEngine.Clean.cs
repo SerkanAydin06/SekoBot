@@ -254,7 +254,11 @@ internal sealed partial class BotEngine
 
     /// <summary>The inventory as drawn, read only while throwing (on the perception thread).</summary>
     private void ReadBagForCleaning() =>
-        _bagLayout = _cleaner.Active || _brain.ReadyToClean ? _world?.ReadBagLayout() : null;
+        _bagLayout = _cleaner.Active || _brain.ReadyToClean || DateTime.Now < _leftoverCheckUntil ? _world?.ReadBagLayout() : null;
+
+    /// <summary>After throwing was cut short (a mob attacked): a while of looking for a question or the bag left open.</summary>
+    private DateTime _leftoverCheckUntil = DateTime.MinValue;
+    private DateTime _leftoverClosedAt = DateTime.MinValue;
 
     /// <summary>
     /// Inside <see cref="_botGate"/>: the actions for this tick while items are thrown away, or null
@@ -264,6 +268,21 @@ internal sealed partial class BotEngine
     {
         if (!_cleaner.Active)
         {
+            // Cut short a moment ago: the throw question (or the bag) may still be showing — closed, then fight on.
+            if (DateTime.Now < _leftoverCheckUntil && _bagLayout is { } left && DateTime.Now - _leftoverClosedAt > TimeSpan.FromSeconds(1.2))
+            {
+                if (left.Confirm != null || left.OtherConfirm != null)
+                {
+                    _leftoverClosedAt = DateTime.Now;
+                    _log("Atma sorusu açık kalmış; kapatılıyor.");
+                    return [new KeyTapAction(p.Keys.CloseWindow)];
+                }
+                if (left.Open)
+                {
+                    _leftoverClosedAt = DateTime.Now;
+                    return [new KeyTapAction(p.Keys.Inventory)];
+                }
+            }
             if (!_brain.WantsClean || !_brain.ReadyToClean)
                 return null;
             // One bot at a time: another one emptying its bag or selling is waited for.
@@ -280,7 +299,7 @@ internal sealed partial class BotEngine
         var full = (World?.Progress?.Inventory ?? []).Where(i => i.Slot >= CharacterProgress.FirstBagSlot)
             .GroupBy(i => (i.Slot, i.Vnum)).ToDictionary(g => g.Key, g => g.First());
         IReadOnlyList<BotAction> actions = state.Dead || state.Attackers.Count > 0 || state.Targets.Any(t => t.AttacksMe)
-            ? _cleaner.Abort(_bagLayout, p, "saldırı geldi")
+            ? AbortCleaning(p)
             : _cleaner.Tick(state.Time, _bagLayout, i => ShouldThrow(full.GetValueOrDefault((i.Slot, i.Vnum), new InventoryItem(i.Slot, i.Vnum, i.Count)), p, picked), p, new Size(state.Width, state.Height));
         foreach (var (vnum, count) in _cleaner.ThrownItems)
             _sessionItems.Thrown(vnum, count);
@@ -289,6 +308,13 @@ internal sealed partial class BotEngine
         if (!_cleaner.Active)
             CleaningDone();
         return actions;
+    }
+
+    private IReadOnlyList<BotAction> AbortCleaning(BotProfile p)
+    {
+        _leftoverCheckUntil = DateTime.Now + TimeSpan.FromSeconds(12);
+        _leftoverClosedAt = DateTime.Now;
+        return _cleaner.Abort(_bagLayout, p, "saldırı geldi");
     }
 
     /// <summary>Where items were last thrown away, and until when that spot is kept away from.</summary>

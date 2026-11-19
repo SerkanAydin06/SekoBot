@@ -7,7 +7,9 @@ internal abstract record BotAction;
 /// the button, hovers a moment, and the button is held down a bit, like a person clicks.</param>
 /// <param name="Fast">With <paramref name="Slow"/>: the same careful click (game in front, hover first) with shorter waits — for the item menu and its question while throwing items away.</param>
 /// <param name="Yield">A long job's click (the market scan): another SekoBot waiting for the mouse goes first.</param>
-internal sealed record ClickAction(Point Client, bool Slow = false, bool Fast = false, bool Yield = false) : BotAction
+/// <param name="StillWanted">Asked right before the press (after waiting for the mouse): false = no click at all
+/// (the window it was for has closed meanwhile; a click then would land on the ground and walk the character).</param>
+internal sealed record ClickAction(Point Client, bool Slow = false, bool Fast = false, bool Yield = false, Func<bool>? StillWanted = null) : BotAction
 {
     public override string ToString() => $"Tıkla ({Client.X}, {Client.Y}){(Slow ? " yavaş" : "")}";
 }
