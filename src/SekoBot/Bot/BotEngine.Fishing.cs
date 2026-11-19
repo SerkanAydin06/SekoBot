@@ -294,18 +294,21 @@ internal sealed partial class BotEngine
             input.Enqueue(new ClickAction(at, Slow: true));
             var clickedAt = DateTime.Now;
             while (DateTime.Now - clickedAt < TimeSpan.FromSeconds(2.5) && FishingNow() is { Asking: true })
-                await Task.Delay(100, token);
+                await Task.Delay(10, token);
         }
-        // The game tells how it went: 2 caught, 1 got away.
+        // The game tells how it went (2 caught, 1 got away) for only ~30 ms after the window closes: read often.
         var doneAt = DateTime.Now;
         int result = 0;
-        while (DateTime.Now - doneAt < TimeSpan.FromSeconds(2) && result == 0)
+        bool stillAsking = false;
+        while (DateTime.Now - doneAt < TimeSpan.FromSeconds(2.5) && result is not (1 or 2))
         {
-            result = FishingNow()?.Result ?? 0;
-            if (result == 0)
-                await Task.Delay(50, token);
+            var now = FishingNow();
+            result = now?.Result ?? 0;
+            stillAsking = now is { Asking: true };
+            if (result is not (1 or 2))
+                await Task.Delay(5, token);
         }
-        if (FishingNow() is { Asking: true })
+        if (stillAsking && result is not (1 or 2))
             return false;
         if (result == 2)
         {
@@ -315,7 +318,7 @@ internal sealed partial class BotEngine
         }
         else
         {
-            _fishStatus = $"🎣 {fish} kaçtı (resim seçildi ama tutmadı).";
+            _fishStatus = result == 1 ? $"🎣 {fish} kaçtı (resim seçildi ama tutmadı)." : $"🎣 {fish}: resim seçildi.";
             _log(_fishStatus);
         }
         await Task.Delay(random.Next(800, 1400), token);
