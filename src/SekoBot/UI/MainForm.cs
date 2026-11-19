@@ -918,7 +918,7 @@ internal sealed class MainForm : Form
         _fTime = Tile(fishCard, "SÜRE", 16, 76, small: true);
         _fCasts = Tile(fishCard, "ATIŞ", 126, 76);
         _fPulled = Tile(fishCard, "ÇEKİŞ", 236, 76);
-        _fHooked = Tile(fishCard, "TAKILAN", 346, 76);
+        _fHooked = Tile(fishCard, "YAKALANAN", 346, 76);
         _fMissed = Tile(fishCard, "KAÇAN", 456, 76);
         Theme.Label(fishCard, "AYARLAR", new Rectangle(16, 150, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
         Theme.Label(fishCard, "Yem tuşu (kısayol)", new Rectangle(16, 174, 150, 26), 9f, Theme.Muted);
@@ -927,13 +927,14 @@ internal sealed class MainForm : Form
         fishCard.Controls.Add(baitKey);
         Theme.Label(fishCard, "Her atıştan önce bu tuşa basılıp yem takılır (yemi kısayola koy).",
             new Rectangle(284, 174, 460, 26), 8.5f, Theme.Muted);
-        Check(fishCard, "Balık takılınca Telegram'a yaz", 16, 208, 300, () => _profile.FishNotify, v => _profile.FishNotify = v);
+        Check(fishCard, "Resimlerden düz olanı bot seçsin", 16, 208, 300, () => _profile.FishAutoPick, v => _profile.FishAutoPick = v);
+        Check(fishCard, "Seçemezse Telegram'a yaz", 330, 208, 300, () => _profile.FishNotify, v => _profile.FishNotify = v);
         Theme.Label(fishCard, "NASIL", new Rectangle(16, 246, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
         Theme.Label(fishCard,
             "1. Oyunda oltayı kuşan, yemi kısayola koy (Yem tuşu), suyun kenarında suya dönük dur.\n" +
             "2. \"🎣 BALIK TUT\"a bas. Bot yemi takar, oltayı Space ile atar; başın üstünde balık balonu çıkınca Space ile çeker.\n" +
-            "3. Balık takılınca oyun 4 resimden doğrusunu sorar: bu soruyu SEN cevaplarsın. SekoBot ses çıkarır ve bekler;\n" +
-            "    sen seçince kaldığı yerden devam eder. (Bu soru oyunun insan kontrolü; bot cevaplamaz.)",
+            "3. Balık takılınca çıkan 4 resimden düz olanı bot seçer (kapalıysa ses çıkarıp seni bekler).\n" +
+            "    Yakalanan / takılan sayısı YAKALANAN kutusunda.",
             new Rectangle(16, 268, 728, 100), 9f, Theme.Text, FontStyle.Regular, ContentAlignment.TopLeft);
 
         SelectTab(-1);
@@ -1111,11 +1112,11 @@ internal sealed class MainForm : Form
             : fishing || engine.FishingStatus.Length > 0 ? engine.FishingStatus
             : $"Kapalı. Oltayı kuşan, suya dönük dur, sonra \"🎣 BALIK TUT\"a bas ({StartKey}).";
         _fState.ForeColor = !fishing ? Theme.Muted : _fState.Text.Contains("takıldı") ? Theme.Yellow : Theme.Green;
-        var (casts, pulled, hooked, missed) = engine?.FishCounts ?? default;
+        var (casts, pulled, hooked, missed, caught) = engine?.FishCounts ?? default;
         _fTime.Text = fishing && engine!.FishingSince is DateTime since ? (DateTime.Now - since).ToString(@"hh\:mm\:ss") : "—";
         _fCasts.Text = casts.ToString("N0");
         _fPulled.Text = pulled.ToString("N0");
-        _fHooked.Text = hooked.ToString("N0");
+        _fHooked.Text = caught > 0 || hooked == 0 ? $"{caught:N0}/{hooked:N0}" : hooked.ToString("N0");
         _fMissed.Text = missed.ToString("N0");
     }
 
@@ -1375,8 +1376,8 @@ internal sealed class MainForm : Form
         }
         if (_mode == FishingMode && _engine is { } f)
         {
-            var (casts, _, hooked, missed) = f.FishCounts;
-            market = f.Fishing ? $"🎣 {casts} atış · {hooked} balık takıldı · {missed} kaçtı" : "🎣 Balık tutma kapalı";
+            var (casts, _, hooked, missed, caught) = f.FishCounts;
+            market = f.Fishing ? $"🎣 {casts} atış · {caught}/{hooked} yakalandı · {missed} kaçtı" : "🎣 Balık tutma kapalı";
         }
         return new MiniInfo(_engine?.CharacterName ?? "", _status.Text, _status.ForeColor, state?.Hp, state?.Mp,
             _statExpRate.Text, _statMobs.Text, _mode switch
