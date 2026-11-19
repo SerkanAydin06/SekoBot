@@ -387,8 +387,12 @@ internal sealed partial class BotEngine
         var scanStarted = DateTime.Now;
         // The continuous watch reads a shop again once its reading is older than the set minutes.
         var refresh = TimeSpan.FromMinutes(Math.Clamp(profile.MarketRefreshMinutes, 5, 24 * 60));
+        var roundStarted = DateTime.Now;
         // With "skip fresh": shops read in the last two hours aren't opened again (new and old ones are).
-        bool Read(int id) => book.Fresh(id, continuous ? refresh : profile.MarketResume ? MarketFreshFor : DateTime.Now - scanStarted, DateTime.Now);
+        // The watch: one read a round at most (a round longer than the refresh time re-read the near shops
+        // again and again while the far ones waited: seen 3414 reads for 1868 shops, 202 minutes).
+        bool Read(int id) => book.Fresh(id, continuous ? (DateTime.Now - roundStarted > refresh ? DateTime.Now - roundStarted : refresh)
+            : profile.MarketResume ? MarketFreshFor : DateTime.Now - scanStarted, DateTime.Now);
         int toRead = shops.Count(s => !Read(s.Id));
         var tries = new Dictionary<int, int>();
         var random = new Random();
@@ -398,7 +402,6 @@ internal sealed partial class BotEngine
         // Shops that open while the scan goes on are read first; those standing at the start are read
         // nearest first (going after every never-read one across the market zigzags: seen 5 s a shop).
         var standing = shops.Select(s => s.Id).ToHashSet();
-        var roundStarted = DateTime.Now;
         if (continuous)
             _log($"🔁 Sürekli pazar takibi başladı: yeni açılan dükkanlar hemen, diğerleri {refresh.TotalMinutes:0} dakikada bir yeniden okunur. Hiçbir şey satın alınmaz.");
         _log($"🛒 Pazar taraması başladı: {shops.Count} dükkan var, {toRead} tanesi okunacak" +

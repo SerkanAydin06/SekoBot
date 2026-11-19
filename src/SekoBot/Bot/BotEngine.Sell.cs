@@ -23,6 +23,12 @@ internal sealed partial class BotEngine
     private volatile bool _selling;
     private CancellationTokenSource? _sellCts;
     private TimeSpan? _sellFailedAt;
+    private int _sellFailsInRow;
+
+    /// <summary>After a failed trip: 10 minutes, doubled with every failure in a row (at most an hour).</summary>
+    internal static TimeSpan SellWaitAfter(int failsInRow) =>
+        TimeSpan.FromMinutes(Math.Min(60, SellRetryAfter.TotalMinutes * Math.Pow(2, Math.Max(0, failsInRow - 1))));
+    private bool SellWaiting => _sellFailedAt is { } failed && _clock.Elapsed - failed < SellWaitAfter(_sellFailsInRow);
     private string _noNpcToldMap = "";
 
     /// <summary>The item types never sold (quest items, skill books, boxes, stones…).</summary>
@@ -61,7 +67,7 @@ internal sealed partial class BotEngine
     /// <summary>Something to sell and a market NPC near to sell it at (not right after a failed trip).</summary>
     private bool CanSellNear(WorldSnapshot world, BotProfile p)
     {
-        if (!p.SellToNpc || _sellFailedAt is { } failed && _clock.Elapsed - failed < SellRetryAfter || NearShop(world) == null)
+        if (!p.SellToNpc || SellWaiting || NearShop(world) == null)
             return false;
         var picked = BotLooted;
         return (world.Progress?.Inventory ?? []).Any(i => ShouldSell(i, p, picked));
@@ -73,7 +79,7 @@ internal sealed partial class BotEngine
     /// </summary>
     private IReadOnlyList<BotAction>? TryStartSellTrip(BotProfile p)
     {
-        if (!p.SellToNpc || _selling || World is not { } world || _sellFailedAt is { } failed && _clock.Elapsed - failed < SellRetryAfter)
+        if (!p.SellToNpc || _selling || World is not { } world || SellWaiting)
             return null;
         var picked = BotLooted;
         int toSell = (world.Progress?.Inventory ?? []).Count(i => ShouldSell(i, p, picked));
@@ -199,6 +205,7 @@ internal sealed partial class BotEngine
         lock (_botGate)
             _brain.WantsClean = false;
         _cleanTries = 0;
+        _sellFailsInRow = 0;
         string done = $"💰 {sold} eşya {name} NPC'sine satıldı; alana dönüldü, avlanmaya devam.";
         if (profile.NotifySells)
             Notify(done);
@@ -275,7 +282,7 @@ internal sealed partial class BotEngine
                 if (way == null || _clock.Elapsed - wayAt > TimeSpan.FromSeconds(1))
                 {
                     // A way walked before (over the slopes up to the town…) first; else drawn around what is known.
-                    walked = _walked.Way(world.MapName, me, target);
+                    walked = _walked.Way(world.MapName, me, target, stuckHere);
                     way = walked ?? Route(world, target, stuckHere);
                     wayAt = _clock.Elapsed;
                     if (walked != null && !_toldWalkedWay)
@@ -337,6 +344,10 @@ internal sealed partial class BotEngine
     private string Failed(string why)
     {
         _sellFailedAt = _clock.Elapsed;
-        return $"💰 Satılamadı: {why}. Eşyalar eskisi gibi atılacak; 10 dakika satış denenmeyecek.";
+        _sellFailsInRow++;
+        int wait = (int)SellWaitAfter(_sellFailsInRow).TotalMinutes;
+        if (_sellFailsInRow == 3)
+            Notify($"💰 {_world?.CharacterName} satıcıya 3 kez üst üste gidemedi ({why}). Çanta dolu kalabilir; yolu bir kez elle yürütmek işe yarar.");
+        return $"💰 Satılamadı: {why}. Eşyalar eskisi gibi atılacak; {wait} dakika satış denenmeyecek.";
     }
 }
