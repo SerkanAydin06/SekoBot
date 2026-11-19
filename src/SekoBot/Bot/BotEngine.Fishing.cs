@@ -20,7 +20,7 @@ internal sealed partial class BotEngine
     public bool Fishing => _fishTask is { IsCompleted: false };
     public string FishingStatus => _fishStatus;
     /// <summary>Casts, bites pulled, fish hooked (the picture question came), bites missed.</summary>
-    public (int Casts, int Pulled, int Hooked, int Missed) FishCounts { get; private set; }
+    public (int Casts, int Pulled, int Hooked, int Missed, int Caught) FishCounts { get; private set; }
     public DateTime? FishingSince { get; private set; }
 
     /// <summary>A fish is hooked: the picture question is showing and waits for the player (true), or gone (false).</summary>
@@ -33,6 +33,10 @@ internal sealed partial class BotEngine
     internal static readonly TimeSpan BiteWithin = TimeSpan.FromSeconds(45);
     /// <summary>The pull this long after the bite bubble shows (ms; it shows ~2.5 s).</summary>
     internal static readonly (int Min, int Max) PullAfterMs = (1400, 2000);
+    /// <summary>The mini game's picture is clicked this long after it opens (ms): a look first, well in time.</summary>
+    internal static readonly (int Min, int Max) PickAfterMs = (650, 1200);
+    /// <summary>After the line is back the reel-in plays this long at most before the next bait and cast.</summary>
+    internal static readonly TimeSpan ReelIn = TimeSpan.FromSeconds(3.5);
     /// <summary>A line back sooner than this without a bite had no bait on it.</summary>
     internal static readonly TimeSpan NoBaitBack = TimeSpan.FromSeconds(7);
     /// <summary>How long the picture question may wait for the player before the bot gives up on the catch.</summary>
@@ -63,7 +67,7 @@ internal sealed partial class BotEngine
             return false;
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
         _fishCts = cts;
-        FishCounts = (0, 0, 0, 0);
+        FishCounts = (0, 0, 0, 0, 0);
         FishingSince = DateTime.Now;
         _fishTask = Task.Run(async () =>
         {
@@ -71,9 +75,9 @@ internal sealed partial class BotEngine
             try { message = await FishAsync(cts.Token); }
             catch (OperationCanceledException) { message = "🎣 Balık tutma durduruldu."; }
             catch (Exception ex) { message = "🎣 Balık tutma hatası: " + ex.Message; }
-            var (casts, pulled, hooked, missed) = FishCounts;
+            var (casts, pulled, hooked, missed, caught) = FishCounts;
             if (casts > 0)
-                message += $" ({casts} atış, {hooked} balık takıldı, {missed} kaçtı)";
+                message += $" ({casts} atış, {hooked} takıldı, {caught} yakalandı, {missed} kaçtı)";
             _fishStatus = message;
             _log(message);
             FishQuestion?.Invoke(false);
@@ -88,6 +92,8 @@ internal sealed partial class BotEngine
     {
         var profile = Profile;
         using var input = new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
+        _fishInput = input;
+        _lineBackAt = null;
         var random = new Random();
         int failedCasts = 0, shortCasts = 0;
         if (profile.FishBaitKey == Keys.None)
@@ -121,13 +127,17 @@ internal sealed partial class BotEngine
             }
 
             // The reel-in after a pull / a miss plays on (the float still drawn): bait or cast now goes nowhere.
-            if (state.FloatOut)
+            if (state.FloatOut && _lineBackAt != null)
             {
                 _fishStatus = "🎣 Olta toplanıyor…";
-                var reelSince = DateTime.Now;
-                while (DateTime.Now - reelSince < TimeSpan.FromSeconds(8) && FishingNow() is { FloatOut: true, LineOut: false, Asking: false })
+                // At most a few seconds: after a catch the float stays drawn ~45 s (seen), after a miss ~3 s.
+                var reelSince = _lineBackAt ?? DateTime.Now;
+                while (DateTime.Now - reelSince < ReelIn && FishingNow() is { FloatOut: true, LineOut: false, Asking: false })
                     await Task.Delay(150, token);
-                continue;
+                if (DateTime.Now - reelSince >= ReelIn)
+                    _lineBackAt = null;
+                else
+                    continue;
             }
             // Bait first (every cast: the user's way), then cast.
             await Task.Delay(random.Next(700, 1500), token); // a breath between catches, not machine-even
@@ -165,6 +175,7 @@ internal sealed partial class BotEngine
             FishCounts = FishCounts with { Casts = FishCounts.Casts + 1 };
             var lineAt = DateTime.Now;
             bool bit = await WatchLineAsync(input, random, token);
+            _lineBackAt = DateTime.Now;
             // Back within a few seconds without a bite: no bait on the hook (seen: casting without bait).
             if (!bit && DateTime.Now - lineAt < NoBaitBack)
             {
@@ -240,11 +251,14 @@ internal sealed partial class BotEngine
     {
         FishCounts = FishCounts with { Hooked = FishCounts.Hooked + 1 };
         string fish = state.FishId > 0 && ItemBook.Get(state.FishId) != null ? ItemBook.NameOf(state.FishId) : "balık";
-        _fishStatus = $"🎣 {fish} takıldı! Oyundaki resim sorusunu cevapla (doğru resmi seç).";
+        // The mini game: the upright picture (turned 0°) is clicked, after a look at the four.
+        if (profile.FishAutoPick && await PickUprightAsync(fish, token))
+            return true;
+        _fishStatus = $"🎣 {fish} takıldı! Oyundaki resimlerden düz olanı seç.";
         _log(_fishStatus);
         FishQuestion?.Invoke(true);
         if (profile.FishNotify)
-            Notify($"🎣 {fish} takıldı; oyundaki resim sorusunu cevapla.");
+            Notify($"🎣 {fish} takıldı; oyundaki resimlerden düz olanı seç.");
         var since = DateTime.Now;
         while (FishingNow() is not { Asking: false })
         {
@@ -255,6 +269,56 @@ internal sealed partial class BotEngine
         FishQuestion?.Invoke(false);
         _fishStatus = "🎣 Soru cevaplandı; devam.";
         await Task.Delay(1500, token);
+        return true;
+    }
+
+    private DateTime? _lineBackAt;
+    private InputExecutor? _fishInput;
+
+    /// <summary>Clicks the upright picture of the mini game; false when it can't (then the user is asked).</summary>
+    private async Task<bool> PickUprightAsync(string fish, CancellationToken token)
+    {
+        if (_fishInput is not { } input)
+            return false;
+        var random = new Random();
+        _fishStatus = $"🎣 {fish} takıldı; düz resim seçiliyor…";
+        await Task.Delay(random.Next(PickAfterMs.Min, PickAfterMs.Max), token);
+        for (int tries = 0; tries < 2; tries++)
+        {
+            if (FishingNow() is not { Asking: true } now)
+                break; // gone (answered or too late)
+            if (now.Upright is not { } picture)
+                return false;
+            var at = new Point(picture.X + picture.Width / 2 + random.Next(-picture.Width / 6, picture.Width / 6 + 1),
+                picture.Y + picture.Height / 2 + random.Next(-picture.Height / 6, picture.Height / 6 + 1));
+            input.Enqueue(new ClickAction(at, Slow: true));
+            var clickedAt = DateTime.Now;
+            while (DateTime.Now - clickedAt < TimeSpan.FromSeconds(2.5) && FishingNow() is { Asking: true })
+                await Task.Delay(100, token);
+        }
+        // The game tells how it went: 2 caught, 1 got away.
+        var doneAt = DateTime.Now;
+        int result = 0;
+        while (DateTime.Now - doneAt < TimeSpan.FromSeconds(2) && result == 0)
+        {
+            result = FishingNow()?.Result ?? 0;
+            if (result == 0)
+                await Task.Delay(50, token);
+        }
+        if (FishingNow() is { Asking: true })
+            return false;
+        if (result == 2)
+        {
+            FishCounts = FishCounts with { Caught = FishCounts.Caught + 1 };
+            _fishStatus = $"🎣 {fish} yakalandı!";
+            _log(_fishStatus);
+        }
+        else
+        {
+            _fishStatus = $"🎣 {fish} kaçtı (resim seçildi ama tutmadı).";
+            _log(_fishStatus);
+        }
+        await Task.Delay(random.Next(800, 1400), token);
         return true;
     }
 

@@ -1,3 +1,5 @@
+using System.Drawing;
+
 namespace SekoBot.Memory;
 
 /// <summary>
@@ -7,12 +9,16 @@ namespace SekoBot.Memory;
 /// is in hand, <c>fishing</c> 1 from the cast until the line is back (pulled, or after ~20 s untouched);</item>
 /// <item>a bite: the name tag over the head (playerMove.mename → actorName_C) shows the fish emoji,
 /// <c>showEmoji</c> = 5, for about 2.5 s; Space then pulls;</item>
-/// <item>a catch: the "which picture is right" window (m2data_C.fishBox, fishOnay_C) — the player answers it.</item>
+/// <item>a catch: the fishing mini game (m2data_C.fishBox, fishOnay_C): four pictures of the catch, turned by
+/// <c>datam</c> degrees (0/90/180/270, in the order of <c>images</c>); the upright one (0) lands the fish, a wrong
+/// one or too late lets it go. getFishAction then 2 = caught, 1 = got away.</item>
 /// </list>
 /// </summary>
 /// <param name="FloatOut">The float is still drawn (anim._roderFishing): after the line is back it stays ~3 s
 /// while the reel-in plays; a cast then goes nowhere (seen 2026-11-19).</param>
-internal sealed record FishingState(bool RodInHand, bool LineOut, bool Bite, bool Asking, int FishId, bool FloatOut = false);
+/// <param name="Upright">Where the upright picture of the mini game is drawn (client pixels), while it shows.</param>
+internal sealed record FishingState(bool RodInHand, bool LineOut, bool Bite, bool Asking, int FishId, bool FloatOut = false,
+    Rectangle? Upright = null, int Result = 0);
 
 internal sealed partial class GameWorldReader
 {
@@ -45,6 +51,7 @@ internal sealed partial class GameWorldReader
             bool rod = status == "fish" || Byte(anim + Offset(animClass, "Warrior_C", "haveRod")) is byte r && r != 0;
             bool line = Byte(anim + Offset(animClass, "Warrior_C", "fishing")) is byte f && f != 0;
             bool floatOut = MemoryReads.IsPointer(Pointer(anim + Offset(animClass, "Warrior_C", "_roderFishing")));
+            int result = Int32(anim + Offset(animClass, "Warrior_C", "getFishAction")) ?? 0;
 
             bool bite = false;
             long tag = Pointer(pawn + Offset(pawnClass, "playerMove", "mename"));
@@ -57,13 +64,25 @@ internal sealed partial class GameWorldReader
 
             bool asking = false;
             int fishId = 0;
+            Rectangle? upright = null;
             long box = Pointer(instance + Offset(instanceClass, "m2data_C", "fishBox"));
             if (MemoryReads.IsPointer(box) && ClassName(Pointer(box + ObjClass)) == "fishOnay_C")
             {
                 asking = true;
-                fishId = Int32(box + Offset(Pointer(box + ObjClass), "fishOnay_C", "fishId")) ?? 0;
+                long boxClass = Pointer(box + ObjClass);
+                fishId = Int32(box + Offset(boxClass, "fishOnay_C", "fishId")) ?? 0;
+                long turns = box + Offset(boxClass, "fishOnay_C", "datam");
+                long pictures = box + Offset(boxClass, "fishOnay_C", "images");
+                int n = Int32(turns + 8) ?? 0;
+                if (n is > 0 and <= 8 && Int32(pictures + 8) == n)
+                    for (int i = 0; i < n; i++)
+                        if (Int32(Pointer(turns) + i * 4) == 0 && Pointer(Pointer(pictures) + i * 8) is long picture && MemoryReads.IsPointer(picture))
+                        {
+                            upright = DrawnAt(picture);
+                            break;
+                        }
             }
-            return new FishingState(rod, line, bite, asking, fishId, floatOut);
+            return new FishingState(rod, line, bite, asking, fishId, floatOut, upright, result);
         }
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException or OverflowException or InvalidOperationException) { }
         return null;
