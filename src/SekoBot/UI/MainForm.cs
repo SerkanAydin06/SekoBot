@@ -1229,7 +1229,7 @@ internal sealed class MainForm : Form
         if (IsDisposed)
             return;
         _mini ??= new MiniBar(MiniInfoNow, ToggleBot, () => StopBot("kullanıcı durdurdu", byUser: true), GoBig, ArrangeAll,
-            () => { if (_mode == MarketMode) OpenMarketWindow(); else ToggleAttack(); });
+            () => { if (_mode == MarketMode) OpenMarketWindow(); else ToggleAttack(); }, CloseFromMini);
         if (!_mini.Visible)
             _mini.Show();
         if (Visible)
@@ -1239,6 +1239,38 @@ internal sealed class MainForm : Form
             _profile.MiniMode = true;
             SaveProfile();
         }
+    }
+
+    /// <summary>The small bar's ✕: closes SekoBot (asks first while the bot or a scan is running).</summary>
+    private void CloseFromMini()
+    {
+        bool busy = _engine is { } e && (e.BotRunning || e.ScanningMarket || e.ScanningArea);
+        if (busy && MessageBox.Show(_mini, "Bot çalışıyor. SekoBot kapatılsın mı?", "SekoBot", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            return;
+        Close();
+    }
+
+    // ── EXP of the last 10 minutes (the small bar) ──
+    private readonly Queue<(DateTime At, long Exp)> _expSamples = new();
+
+    /// <summary>The session's EXP now and then; what the last 10 minutes gave ("" until a minute is known).</summary>
+    private string Exp10()
+    {
+        if (_engine?.Stats.Session is not { } session || _engine.BotRunning != true)
+        {
+            _expSamples.Clear();
+            return "";
+        }
+        var now = DateTime.Now;
+        if (_expSamples.Count > 0 && session.Exp < _expSamples.Last().Exp)
+            _expSamples.Clear(); // a new session
+        if (_expSamples.Count == 0 || now - _expSamples.Last().At >= TimeSpan.FromSeconds(10))
+            _expSamples.Enqueue((now, session.Exp));
+        while (_expSamples.Count > 1 && now - _expSamples.Peek().At > TimeSpan.FromMinutes(10))
+            _expSamples.Dequeue();
+        var first = _expSamples.Peek();
+        return now - first.At < TimeSpan.FromMinutes(1) ? "" : "+" + Short(session.Exp - first.Exp);
     }
 
     /// <summary>The full window again.</summary>
@@ -1285,7 +1317,8 @@ internal sealed class MainForm : Form
         }
         return new MiniInfo(_engine?.CharacterName ?? "", _status.Text, _status.ForeColor, state?.Hp, state?.Mp,
             _statExpRate.Text, _statMobs.Text, _mode == MarketMode ? _engine?.ScanningMarket == true : _engine?.BotRunning == true, game,
-            _engine is { } e && Win32.IsWindow(e.Window.Handle) ? e.Window.Handle : 0, hpPotions, mpPotions, Attack: _profile.Attack, Market: market);
+            _engine is { } e && Win32.IsWindow(e.Window.Handle) ? e.Window.Handle : 0, hpPotions, mpPotions, Attack: _profile.Attack, Market: market,
+            Exp10: Exp10());
     }
 
     protected override void WndProc(ref Message m)

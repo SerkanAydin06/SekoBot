@@ -63,11 +63,11 @@ public class SkillLearnTests
         [.. actions.OfType<KeyTapAction>().Select(k => k.Key).Where(k => k is >= Keys.F1 and <= Keys.F5)];
 
     [Fact]
-    public void A_buff_that_slows_is_put_on_in_the_fight_not_on_the_way()
+    public void Right_after_starting_the_buffs_go_on_first_even_one_that_slows()
     {
         var (brain, _) = Ready();
-        Assert.DoesNotContain(Keys.F1, Taps(Run(brain, 0, 5_000, t => State(t, 1, [Beden], []))));      // nothing to fight
-        Assert.Contains(Keys.F1, Taps(Run(brain, 5_000, 9_000, t => State(t, 1, [Beden], [Mob(1, 80)]))));
+        // Nothing to fight yet: the buff is put on anyway, before anything else (user, 2026-11-19).
+        Assert.Contains(Keys.F1, Taps(Run(brain, 0, 5_000, t => State(t, 1, [Beden], []))));
     }
 
     [Fact]
