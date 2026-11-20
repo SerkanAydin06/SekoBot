@@ -68,11 +68,30 @@ public class BagCleanerTests
         var click = Assert.IsType<ClickAction>(Assert.Single(cleaner.Tick(S(0), With(items: junk), toThrow, p, Client)));
         Assert.Equal(new Point(junk.Rect.X + 21, junk.Rect.Y + 21), click.Client);
         var yereAt = new Point(848, 613);
-        Assert.Equal([new ClickAction(yereAt, Slow: true, Fast: true)], cleaner.Tick(S(1), With(yereAt, 20, null, junk), toThrow, p, Client));
+        // Read once: not clicked yet (its place may still be the last menu's); read at the same place again: clicked.
+        Assert.Empty(cleaner.Tick(S(1), With(yereAt, 20, null, junk), toThrow, p, Client));
+        Assert.Equal([new ClickAction(yereAt, Slow: true, Fast: true)], cleaner.Tick(S(1.5), With(yereAt, 20, null, junk), toThrow, p, Client));
         var yes = new Point(531, 389);
         Assert.Equal([new ClickAction(yes, Slow: true, Fast: true)], cleaner.Tick(S(2), With(null, -1, yes, junk), toThrow, p, Client));
         Assert.Equal([new KeyTapAction(p.Keys.Inventory)], cleaner.Tick(S(4), With(items: []), toThrow, p, Client));
         Assert.Equal(1, cleaner.Thrown);
+    }
+
+    [Fact]
+    public void A_menu_button_that_moves_right_after_showing_is_not_clicked_at_its_old_place()
+    {
+        // Seen: "Karşılaştır" clicked instead of "At" — the menu's place was still the last menu's for a moment.
+        var p = new BotProfile();
+        var cleaner = new BagCleaner();
+        var junk = Item(20, Junk, 0, true);
+        BagLayout With(Point drop) => Bag(true, 0, [junk], null) with { MenuKnown = true, DropButton = drop, MenuSlot = 20 };
+        cleaner.Start(S(0));
+        cleaner.Tick(S(0), Bag(true, 0, [junk], null) with { MenuKnown = true }, i => i.Vnum == Junk, p, Client); // the item clicked
+        var old = new Point(395, 325);
+        var now = new Point(362, 325);
+        Assert.Empty(cleaner.Tick(S(0.3), With(old), i => i.Vnum == Junk, p, Client));
+        Assert.Empty(cleaner.Tick(S(0.5), With(now), i => i.Vnum == Junk, p, Client));   // moved: read again first
+        Assert.Equal([new ClickAction(now, Slow: true, Fast: true)], cleaner.Tick(S(0.7), With(now), i => i.Vnum == Junk, p, Client));
     }
 
     [Fact]

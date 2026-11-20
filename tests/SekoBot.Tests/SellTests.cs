@@ -93,7 +93,8 @@ public class SellTests
         cleaner.Start(TimeSpan.Zero);
         Assert.Equal([new ClickAction(new Point(720, 220), Slow: true, Fast: true)], cleaner.Tick(TimeSpan.Zero, Bag(false, true), _ => true, p, new Size(1204, 688)));
         // The menu: "Sat", not "Yere at".
-        Assert.Equal([new ClickAction(new Point(900, 340), Slow: true, Fast: true)], cleaner.Tick(TimeSpan.FromSeconds(1), Bag(true, true), _ => true, p, new Size(1204, 688)));
+        Assert.Empty(cleaner.Tick(TimeSpan.FromSeconds(1), Bag(true, true), _ => true, p, new Size(1204, 688))); // read once: waits
+        Assert.Equal([new ClickAction(new Point(900, 340), Slow: true, Fast: true)], cleaner.Tick(TimeSpan.FromSeconds(1.5), Bag(true, true), _ => true, p, new Size(1204, 688)));
         // No question; the item is gone: sold.
         cleaner.Tick(TimeSpan.FromSeconds(2), Bag(false, false), _ => true, p, new Size(1204, 688));
         Assert.Equal(1, cleaner.Thrown);
