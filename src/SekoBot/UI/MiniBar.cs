@@ -8,7 +8,7 @@ namespace SekoBot.UI;
 /// <param name="HpPotions">HP and MP potions left in the bag (the ones on the potion keys), when known.</param>
 internal sealed record MiniInfo(string Name, string Status, Color StatusColor, double? Hp, double? Mp, string ExpRate, string Mobs,
     bool Running, Rectangle? Game, nint GameWindow = 0, int? HpPotions = null, int? MpPotions = null, bool Attack = true, string? Market = null,
-    string Exp10 = "", string Elapsed = "");
+    string Exp10 = "", string Elapsed = "", IReadOnlyList<(string Name, int Picked, int Thrown)>? Items = null);
 
 /// <summary>
 /// The bot made small: one bar (420×84) under its own game window, so many bots fit on one screen
@@ -27,6 +27,17 @@ internal sealed class MiniBar : Form
     private MiniInfo _info = new("", "", Theme.Muted, null, null, "—", "—", false, null);
     private int _hover = -1;
     private readonly ToolTip _tip = new();
+
+    // ── This run's items: the bar grows upwards to list them (the same window, no new one) ──
+    private bool _itemsOpen;
+    private int _itemsScroll;
+    /// <summary>Rows of the item list shown at once (more: the mouse wheel scrolls).</summary>
+    private const int ItemRows = 8;
+    private const int ItemRowHeight = 17, ItemsHeader = 24;
+    /// <summary>How much taller the bar is with the list open (96-dpi units).</summary>
+    private const int ItemsLogicalHeight = ItemsHeader + ItemRows * ItemRowHeight + 20;
+    /// <summary>The list's height now (pixels): 0 when closed. The bar itself is drawn under it.</summary>
+    private int Top => _itemsOpen ? (int)(ItemsLogicalHeight * S) : 0;
 
     public MiniBar(Func<MiniInfo> read, Action start, Action stop, Action big, Action arrange, Action attack, Action close, Action fill)
     {
@@ -142,9 +153,15 @@ internal sealed class MiniBar : Form
                 : (int)(LogicalWidth * S);
             if (Width != width)
                 Width = width;
+            int height = HeightAt(DeviceDpi) + Top;
+            if (Height != height)
+                Height = height;
+            var barSize = new Size(Width, HeightAt(DeviceDpi));
             var at = _info.Game is { IsEmpty: false } game
-                ? WindowLayout.BarPlace(game, Size, Screen.FromRectangle(game).WorkingArea)
+                ? WindowLayout.BarPlace(game, barSize, Screen.FromRectangle(game).WorkingArea)
                 : Stacked();
+            // The list opens above the bar: the bar row stays where it was.
+            at.Y = Math.Max(Screen.FromPoint(at).WorkingArea.Top, at.Y - Top);
             if (Location != at)
                 Location = at;
         }
@@ -163,11 +180,17 @@ internal sealed class MiniBar : Form
     private float W => ClientSize.Width / S;
     private const int MaxWidth = 1100;
     /// <summary>Narrowest the bar gets (small games in a big grid): still everything readable.</summary>
-    private const int MinWidth = 400;
+    private const int MinWidth = 440;
 
-    private const int Buttons = 8;
-    /// <summary>The buttons: the tab's own, start/pause, stop, all bots, the game big, arrange all, SekoBot big, close.</summary>
-    private Rectangle Button(int i) => new((int)((W - ButtonsWidth + i * 38) * S), (int)(6 * S), (int)(32 * S), (int)(28 * S));
+    private const int Buttons = 9;
+    /// <summary>The buttons: 0 the tab's own, 1 start/pause, 2 stop, 3 all bots, 8 this run's items (drawn 5th),
+    /// 4 the game big, 5 arrange all, 6 SekoBot big, 7 close. In the bar's own coordinates (under the item list).</summary>
+    private Rectangle Button(int i)
+    {
+        int at = i <= 3 ? i : i == ItemsButton ? 4 : i + 1;
+        return new((int)((W - ButtonsWidth + at * 38) * S), (int)(6 * S), (int)(32 * S), (int)(28 * S));
+    }
+    private const int ItemsButton = 8;
     private const int ButtonsWidth = Buttons * 38 + 4;
     private readonly ContextMenuStrip _allMenu = WindowLayout.AllMenu();
 
@@ -183,6 +206,11 @@ internal sealed class MiniBar : Form
         // A strip on the left: green while the bot runs.
         using (var strip = new SolidBrush(info.Running ? Theme.Green : Theme.Secondary))
             g.FillRectangle(strip, 0, 0, 4 * s, Height);
+        if (_itemsOpen)
+        {
+            DrawItems(g, s, info);
+            g.TranslateTransform(0, Top);
+        }
 
         using var nameFont = new Font("Segoe UI", 10f, FontStyle.Bold);
         using var small = new Font("Segoe UI", 8.5f);
@@ -194,27 +222,27 @@ internal sealed class MiniBar : Form
         using (var tiny = new Font("Segoe UI", 7.5f))
         {
             string version = "v" + BuildInfo.Version;
-            TextRenderer.DrawText(g, version, tiny, nameRow, Theme.Muted, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+            TextRenderer.DrawText(g, version, tiny, nameRow, Theme.Muted, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
             nameRow.Width -= TextRenderer.MeasureText(version, tiny).Width + (int)(6 * s);
         }
         if (info.Elapsed.Length > 0)
         {
             // How long it has run, at the right of the name row.
             TextRenderer.DrawText(g, "⏱ " + info.Elapsed, smallBold, nameRow, info.Running ? Theme.Green : Theme.Muted,
-                TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+                TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
             nameRow.Width -= TextRenderer.MeasureText("⏱ " + info.Elapsed, smallBold).Width + (int)(8 * s);
         }
         TextRenderer.DrawText(g, "◆ " + name, nameFont, nameRow, Theme.Text,
-            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.EndEllipsis);
         bool market = info.Market != null;
         string status = info.Attack || market ? info.Status : "✋ Sadece eşya · " + info.Status;
         TextRenderer.DrawText(g, status, small, new Rectangle((int)(14 * s), (int)(29 * s), (int)((W - ButtonsWidth - 20) * s), (int)(20 * s)), info.Attack || market ? info.StatusColor : Theme.Accent,
-            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.EndEllipsis);
         if (market)
         {
             // The market bot: what it read and found, no HP / potions / experience.
             TextRenderer.DrawText(g, (info.Market.StartsWith("🎣", StringComparison.Ordinal) ? "" : "🛒 ") + info.Market, smallBold, new Rectangle((int)(14 * s), (int)(54 * s), (int)((W - 20) * s), (int)(22 * s)), Theme.Text,
-                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.EndEllipsis);
             DrawButtons(g, s, info);
             return;
         }
@@ -223,7 +251,7 @@ internal sealed class MiniBar : Form
         bool low = info.HpPotions is < 20 || info.MpPotions is < 10;
         TextRenderer.DrawText(g, $"İksir  HP {Count(info.HpPotions)} · MP {Count(info.MpPotions)}", smallBold,
             new Rectangle((int)((W - 286) * s), (int)(38 * s), (int)(280 * s), (int)(18 * s)), low ? Theme.Red : Theme.Text,
-            TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.EndEllipsis);
 
         // Wider bar: longer HP and MP bars (the experience stays at the right).
         float hp = Math.Clamp((W - 230) * 0.45f, 90, 280), mp = hp * 0.8f;
@@ -232,9 +260,52 @@ internal sealed class MiniBar : Form
         float expAt = 28 + hp + mp;
         TextRenderer.DrawText(g, $"{info.ExpRate} EXP/sa" + (info.Exp10.Length > 0 ? $" · son 10 dk {info.Exp10}" : "") + $" · {info.Mobs} mob", small,
             new Rectangle((int)(expAt * s), (int)(54 * s), (int)((W - expAt - 6) * s), (int)(22 * s)), Theme.Muted,
-            TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.EndEllipsis);
 
         DrawButtons(g, s, info);
+    }
+
+    /// <summary>This run's items (picked up, thrown away / sold), above the bar.</summary>
+    private void DrawItems(Graphics g, float s, MiniInfo info)
+    {
+        var rows = (info.Items ?? []).OrderByDescending(r => r.Picked).ThenBy(r => r.Name).ToList();
+        _itemsScroll = Math.Clamp(_itemsScroll, 0, Math.Max(0, rows.Count - ItemRows));
+        using var head = new Font("Segoe UI", 8f, FontStyle.Bold);
+        using var font = new Font("Segoe UI", 8.5f);
+        float right = W - 12, thrownW = 52, pickedW = 52;
+        var header = new Rectangle((int)(14 * s), (int)(4 * s), (int)((W - 28) * s), (int)(ItemsHeader * s - 6 * s));
+        string title = rows.Count == 0 ? "BU TUR EŞYALAR · bot başlayınca dolar" : $"BU TUR EŞYALAR · {rows.Count} çeşit, {rows.Sum(r => r.Picked):N0} alındı";
+        TextRenderer.DrawText(g, title, head, header, Theme.Accent, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.EndEllipsis);
+        TextRenderer.DrawText(g, "Alınan", head, new Rectangle((int)((right - thrownW - pickedW) * s), header.Y, (int)(pickedW * s), header.Height), Theme.Muted, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
+        TextRenderer.DrawText(g, "Atılan", head, new Rectangle((int)((right - thrownW) * s), header.Y, (int)(thrownW * s), header.Height), Theme.Muted, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
+        using (var inset = new SolidBrush(Theme.Inset))
+            g.FillRectangle(inset, 10 * s, ItemsHeader * s, (W - 20) * s, ItemRows * ItemRowHeight * s + 2 * s);
+        for (int i = 0; i < ItemRows && _itemsScroll + i < rows.Count; i++)
+        {
+            var (name, picked, thrown) = rows[_itemsScroll + i];
+            int y = (int)((ItemsHeader + 1 + i * ItemRowHeight) * s), h = (int)(ItemRowHeight * s);
+            TextRenderer.DrawText(g, name, font, new Rectangle((int)(16 * s), y, (int)((right - thrownW - pickedW - 22) * s), h), Theme.Text,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.EndEllipsis);
+            TextRenderer.DrawText(g, picked > 0 ? picked.ToString("N0") : "", font, new Rectangle((int)((right - thrownW - pickedW) * s), y, (int)(pickedW * s), h), Theme.Text,
+                TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
+            TextRenderer.DrawText(g, thrown > 0 ? thrown.ToString("N0") : "", font, new Rectangle((int)((right - thrownW) * s), y, (int)(thrownW * s), h), Theme.Muted,
+                TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
+        }
+        if (rows.Count > ItemRows)
+            TextRenderer.DrawText(g, $"{_itemsScroll + 1}–{Math.Min(rows.Count, _itemsScroll + ItemRows)} / {rows.Count} (tekerlek)", font,
+                new Rectangle((int)(14 * s), (int)((ItemsHeader + ItemRows * ItemRowHeight + 3) * s), (int)((W - 28) * s), (int)(15 * s)), Theme.Muted,
+                TextFormatFlags.Right | TextFormatFlags.Top | TextFormatFlags.PreserveGraphicsTranslateTransform);
+        using var line = new Pen(Theme.Border);
+        g.DrawLine(line, 4 * s, Top - 1, Width, Top - 1);
+    }
+
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+        base.OnMouseWheel(e);
+        if (!_itemsOpen || e.Y >= Top)
+            return;
+        _itemsScroll -= Math.Sign(e.Delta) * 3;
+        Invalidate();
     }
 
     private void DrawButtons(Graphics g, float s, MiniInfo info)
@@ -243,7 +314,8 @@ internal sealed class MiniBar : Form
         bool fishing = info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true;
         // 0: the tab's own button · 1: start / pause · 2: stop · 3: all bots · 4: the game big · 5: arrange · 6: SekoBot big · 7: close — the shapes drawn, all centred alike.
         string first = fishing ? "🎣" : market ? "🔍" : info.Attack ? "⚔" : "✋";
-        Color[] backs = [market ? Theme.Secondary : info.Attack ? Theme.Secondary : Theme.Accent, Theme.Primary, Theme.Danger, Theme.Secondary, Theme.Secondary, Theme.Secondary, Theme.Secondary, Theme.Surface];
+        Color[] backs = [market ? Theme.Secondary : info.Attack ? Theme.Secondary : Theme.Accent, Theme.Primary, Theme.Danger, Theme.Secondary, Theme.Secondary, Theme.Secondary, Theme.Secondary, Theme.Surface,
+            _itemsOpen ? Theme.Primary : Theme.Secondary];
         g.SmoothingMode = SmoothingMode.AntiAlias;
         for (int i = 0; i < Buttons; i++)
         {
@@ -258,7 +330,7 @@ internal sealed class MiniBar : Form
             {
                 case 0:
                     using (var glyph = new Font("Segoe UI Symbol", 11f, FontStyle.Bold))
-                        TextRenderer.DrawText(g, first, glyph, r, Theme.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                        TextRenderer.DrawText(g, first, glyph, r, Theme.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
                     break;
                 case 1 when info.Running: // pause: two bars
                     g.FillRectangle(white, cx - u, cy - u, u * 0.7f, u * 2);
@@ -289,6 +361,10 @@ internal sealed class MiniBar : Form
                     g.DrawLines(pen, [new PointF(cx - u, cy - u * 0.2f), new PointF(cx - u, cy - u), new PointF(cx - u * 0.2f, cy - u)]);
                     g.DrawLines(pen, [new PointF(cx + u, cy + u * 0.2f), new PointF(cx + u, cy + u), new PointF(cx + u * 0.2f, cy + u)]);
                     break;
+                case ItemsButton: // this run's items: a bag
+                    g.DrawRectangle(pen, cx - u * 0.9f, cy - u * 0.35f, u * 1.8f, u * 1.35f);
+                    g.DrawArc(pen, cx - u * 0.5f, cy - u * 1.05f, u, u * 1.2f, 180, 180);
+                    break;
                 case 7: // close: an X
                     g.DrawLine(pen, cx - u * 0.8f, cy - u * 0.8f, cx + u * 0.8f, cy + u * 0.8f);
                     g.DrawLine(pen, cx - u * 0.8f, cy + u * 0.8f, cx + u * 0.8f, cy - u * 0.8f);
@@ -306,7 +382,7 @@ internal sealed class MiniBar : Form
             using (var front = new SolidBrush(fill))
                 g.FillRectangle(front, r.X, r.Y, r.Width * (float)Math.Clamp(v, 0, 1), r.Height);
         string text = value is double p ? $"{caption} {p * 100:0}%" : $"{caption} —";
-        TextRenderer.DrawText(g, text, font, Rectangle.Round(r), Theme.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        TextRenderer.DrawText(g, text, font, Rectangle.Round(r), Theme.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
     }
 
     private static GraphicsPath Rounded(Rectangle r, float radius)
@@ -323,6 +399,7 @@ internal sealed class MiniBar : Form
 
     private int HitButton(Point p)
     {
+        p.Y -= Top;
         for (int i = 0; i < Buttons; i++)
             if (Button(i).Contains(p))
                 return i;
@@ -351,6 +428,7 @@ internal sealed class MiniBar : Form
                 5 => "Tüm oyunları ve botları diz",
                 6 => "SekoBot'u büyüt (çift tık da olur)",
                 7 => "SekoBot'u kapat",
+                ItemsButton => _itemsOpen ? "Eşya listesini kapat" : "Bu tur toplanan ve atılan eşyalar (şerit yukarı doğru açılır)",
                 _ => "Sağ tık: pencereleri diz, büyüt",
             });
             Invalidate();
@@ -374,7 +452,13 @@ internal sealed class MiniBar : Form
             case 0: _attack(); break;
             case 1: _start(); break;
             case 2: _stop(); break;
-            case 3: _allMenu.Show(this, new Point(Button(3).Left, Button(3).Bottom)); return;
+            case 3: _allMenu.Show(this, new Point(Button(3).Left, Button(3).Bottom + Top)); return;
+            case ItemsButton:
+                _itemsOpen = !_itemsOpen;
+                _itemsScroll = 0;
+                _hover = -1;
+                Pull(true);
+                return;
             case 4: _fill(); break;
             case 5: _arrange(); break;
             case 6: _big(); break;
@@ -386,7 +470,7 @@ internal sealed class MiniBar : Form
     protected override void OnMouseDoubleClick(MouseEventArgs e)
     {
         base.OnMouseDoubleClick(e);
-        if (e.Button == MouseButtons.Left && HitButton(e.Location) < 0)
+        if (e.Button == MouseButtons.Left && HitButton(e.Location) < 0 && e.Y >= Top)
             _big();
     }
 }

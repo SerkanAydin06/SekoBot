@@ -1603,7 +1603,8 @@ internal sealed class MainForm : Form
                 _ => _engine?.BotRunning == true,
             }, game,
             _engine is { } e && Win32.IsWindow(e.Window.Handle) ? e.Window.Handle : 0, hpPotions, mpPotions, Attack: _profile.Attack, Market: market,
-            Exp10: Exp10(), Elapsed: ElapsedNow());
+            Exp10: Exp10(), Elapsed: ElapsedNow(),
+            Items: _engine?.SessionItems.Rows().Select(r => (r.Name, r.Picked, r.Thrown)).ToList());
     }
 
     protected override void WndProc(ref Message m)
