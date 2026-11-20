@@ -83,6 +83,16 @@ internal sealed class SessionStats
                 Exp += progress.Exp - exp;
                 expUp = true;
             }
+            else if (world.Level == _level && progress.Exp < exp)
+            {
+                // The experience back near 0 with the level not raised yet: the game is in the middle of a level up
+                // (it resets the experience a moment before the level). Not kept — else the "left to the level" read
+                // now (nearly a whole new level) was counted at the level up (seen: 10 Mn EXP per hour shown).
+                if (_yang is long y0 && progress.Yang > y0)
+                    Yang += progress.Yang - y0;
+                _yang = progress.Yang;
+                return false;
+            }
         }
         if (_yang is long yang && progress.Yang > yang)
             Yang += progress.Yang - yang;

@@ -8,7 +8,7 @@ namespace SekoBot.UI;
 /// <param name="HpPotions">HP and MP potions left in the bag (the ones on the potion keys), when known.</param>
 internal sealed record MiniInfo(string Name, string Status, Color StatusColor, double? Hp, double? Mp, string ExpRate, string Mobs,
     bool Running, Rectangle? Game, nint GameWindow = 0, int? HpPotions = null, int? MpPotions = null, bool Attack = true, string? Market = null,
-    string Exp10 = "", string Elapsed = "", IReadOnlyList<(string Name, int Picked, int Thrown, int Sold)>? Items = null);
+    string Exp10 = "", string Elapsed = "", IReadOnlyList<(string Name, int Picked, int Thrown, int Sold)>? Items = null, int Level = 0);
 
 /// <summary>
 /// The bot made small: one bar (420×84) under its own game window, so many bots fit on one screen
@@ -177,18 +177,26 @@ internal sealed class MiniBar : Form
 
     /// <summary>Four buttons with words (the user: icons alone were hard to tell apart): start / pause, stop,
     /// this run's items, the menu with the rest.</summary>
-    private const int Buttons = 6;
-    private const int StartButton = 0, StopButton = 1, ItemsButton = 2, FillButton = 3, ArrangeButton = 4, MenuButton = 5;
-    private static readonly int[] ButtonWidths = [74, 62, 68, 60, 46, 60];
+    private const int StartButton = 0, ItemsButton = 2, FillButton = 3, ArrangeButton = 4, MenuButton = 5;
+    private static int ButtonWidth(int kind) => kind switch { StartButton => 72, ItemsButton => 68, FillButton => 60, ArrangeButton => 46, _ => 60 };
     private const int ButtonGap = 4;
-    private static int ButtonsWidth => ButtonWidths.Sum() + ButtonGap * (Buttons - 1) + 6;
-    /// <summary>A button, in the bar's own coordinates (under the item list).</summary>
-    private Rectangle Button(int i)
+    /// <summary>The buttons shown: start (stop while running), this run's items (not for a market bot), the game
+    /// big, arrange, the menu.</summary>
+    private int[] Kinds => _info.Market != null && !_info.Market.StartsWith("🎣", StringComparison.Ordinal)
+        ? [StartButton, FillButton, ArrangeButton, MenuButton]
+        : [StartButton, ItemsButton, FillButton, ArrangeButton, MenuButton];
+    private int ButtonsWidth => Kinds.Sum(ButtonWidth) + ButtonGap * (Kinds.Length - 1) + 6;
+    /// <summary>A button by its kind, in the bar's own coordinates (under the item list).</summary>
+    private Rectangle Button(int kind)
     {
         int x = (int)W - ButtonsWidth;
-        for (int k = 0; k < i; k++)
-            x += ButtonWidths[k] + ButtonGap;
-        return new((int)(x * S), (int)(4 * S), (int)(ButtonWidths[i] * S), (int)(26 * S));
+        foreach (int k in Kinds)
+        {
+            if (k == kind)
+                return new((int)(x * S), (int)(4 * S), (int)(ButtonWidth(k) * S), (int)(26 * S));
+            x += ButtonWidth(k) + ButtonGap;
+        }
+        return Rectangle.Empty;
     }
 
     private readonly ContextMenuStrip _menu;
@@ -230,6 +238,11 @@ internal sealed class MiniBar : Form
     {
         _menu.Items.Clear();
         void Add(string text, Action act) => _menu.Items.Add(text, null, (_, _) => { act(); Pull(false); });
+        if (_info.Running)
+        {
+            Add("❚❚  Duraklat (kaldığı yerden sürer)", _start);
+            _menu.Items.Add(new ToolStripSeparator());
+        }
         bool fishing = _info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true;
         // Fishing has no action of its own here (BALIK TUT is the start button).
         if (_info.Market != null && !fishing)
@@ -275,21 +288,29 @@ internal sealed class MiniBar : Form
         const TextFormatFlags Right = TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform;
         float textW = W - ButtonsWidth - 16;
         // Every bar shows its SekoBot's number (the 1st too), so they can be told apart.
-        string name = $"{Instance.Number} · " + (info.Name.Length > 0 ? info.Name : "SekoBot");
+        string name = $"{Instance.Number} · " + (info.Name.Length > 0 ? info.Name : "SekoBot") + (info.Level > 0 ? $" (Sv {info.Level})" : "");
         var nameRow = new Rectangle((int)(10 * s), (int)(1 * s), (int)(textW * s), (int)(16 * s));
-        string tail = (info.Elapsed.Length > 0 ? "⏱ " + info.Elapsed + "  " : "") + "v" + BuildInfo.Version;
+        string tail = info.Elapsed.Length > 0 ? "⏱ " + info.Elapsed : "";
         TextRenderer.DrawText(g, tail, small, nameRow, info.Running && info.Elapsed.Length > 0 ? Theme.Green : Theme.Muted, Right);
         nameRow.Width -= TextRenderer.MeasureText(tail, small).Width + (int)(6 * s);
         TextRenderer.DrawText(g, "◆ " + name, nameFont, nameRow, Theme.Text, Left);
         bool market = info.Market != null;
         string status = market ? info.Market! : info.Attack ? info.Status : "✋ Sadece eşya · " + info.Status;
         var statusRow = new Rectangle((int)(10 * s), (int)(16 * s), (int)(textW * s), (int)(13 * s));
-        if (!market && info.ExpRate is { Length: > 0 } rate && rate != "—")
+        if (!market)
         {
-            // The experience per hour, always in sight (the user wants it on the bar, not only in the tip).
-            string exp = rate + " EXP/sa";
-            TextRenderer.DrawText(g, exp, smallBold, statusRow, Theme.Yellow, Right);
-            statusRow.Width -= TextRenderer.MeasureText(exp, smallBold).Width + (int)(6 * s);
+            // Potions left and the experience per hour, always in sight (the user: both matter).
+            string Count(int? n) => n is int c ? c.ToString("N0") : "—";
+            bool low = info.HpPotions is < 20 || info.MpPotions is < 10;
+            string exp = info.ExpRate is { Length: > 0 } rate && rate != "—" ? rate + "/sa" : "";
+            if (exp.Length > 0)
+            {
+                TextRenderer.DrawText(g, exp, smallBold, statusRow, Theme.Yellow, Right);
+                statusRow.Width -= TextRenderer.MeasureText(exp, smallBold).Width + (int)(4 * s);
+            }
+            string pots = $"HP {Count(info.HpPotions)} · MP {Count(info.MpPotions)}" + (exp.Length > 0 ? " ·" : "");
+            TextRenderer.DrawText(g, pots, smallBold, statusRow, low ? Theme.Red : Theme.Text, Right);
+            statusRow.Width -= TextRenderer.MeasureText(pots, smallBold).Width + (int)(6 * s);
         }
         TextRenderer.DrawText(g, status, small, statusRow, market ? Theme.Text : info.Attack ? info.StatusColor : Theme.Accent, Left);
         if (!market)
@@ -360,26 +381,24 @@ internal sealed class MiniBar : Form
     private void DrawButtons(Graphics g, float s, MiniInfo info)
     {
         bool fishing = info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true;
-        string startText = info.Running ? "❚❚  Duraklat" : fishing ? "▶  Balık tut" : info.Market != null ? "▶  Takip" : "▶  Başlat";
-        (string Text, Color Back)[] buttons =
-        [
-            (startText, info.Running ? Theme.Secondary : Theme.Primary),
-            ("■  Durdur", Theme.Danger),
-            ("🎒 Eşyalar", _itemsOpen ? Theme.Primary : Theme.Secondary),
-            ("⛶ Büyüt", Theme.Secondary),
-            ("⊞ Diz", Theme.Secondary),
-            ("☰ Menü", _menu.Visible ? Theme.Primary : Theme.Secondary),
-        ];
+        string startText = info.Running ? "■  Durdur" : fishing ? "▶  Balık tut" : info.Market != null ? "▶  Takip" : "▶  Başlat";
         using var font = new Font("Segoe UI", 8f, FontStyle.Bold);
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        for (int i = 0; i < Buttons; i++)
+        foreach (int kind in Kinds)
         {
-            var r = Button(i);
-            var back = buttons[i].Back;
-            using var brush = new SolidBrush(_hover == i ? ControlPaint.Light(back, 0.25f) : back);
+            var (text, back) = kind switch
+            {
+                StartButton => (startText, info.Running ? Theme.Danger : Theme.Primary),
+                ItemsButton => ("🎒 Eşyalar", _itemsOpen ? Theme.Primary : Theme.Secondary),
+                FillButton => ("⛶ Büyüt", Theme.Secondary),
+                ArrangeButton => ("⊞ Diz", Theme.Secondary),
+                _ => ("☰ Menü", _menu.Visible ? Theme.Primary : Theme.Secondary),
+            };
+            var r = Button(kind);
+            using var brush = new SolidBrush(_hover == kind ? ControlPaint.Light(back, 0.25f) : back);
             using var path = Rounded(r, 6 * s);
             g.FillPath(brush, path);
-            TextRenderer.DrawText(g, buttons[i].Text, font, r, Theme.Text,
+            TextRenderer.DrawText(g, text, font, r, Theme.Text,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
         }
         g.SmoothingMode = SmoothingMode.Default;
@@ -400,9 +419,9 @@ internal sealed class MiniBar : Form
     private int HitButton(Point p)
     {
         p.Y -= Top;
-        for (int i = 0; i < Buttons; i++)
-            if (Button(i).Contains(p))
-                return i;
+        foreach (int kind in Kinds)
+            if (Button(kind).Contains(p))
+                return kind;
         return -1;
     }
 
@@ -419,8 +438,8 @@ internal sealed class MiniBar : Form
             Cursor = hit >= 0 ? Cursors.Hand : Cursors.Default;
             _tip.SetToolTip(this, hit switch
             {
-                StartButton => _info.Running ? "Duraklat: kaldığı yerden sürdürülebilir (F10)" : "Başlat ya da kaldığı yerden sürdür (F10)",
-                StopButton => $"Durdur ve sıfırla ({(Instance.IsFirst ? "F11 / " : "")}Ctrl+Shift+{Math.Min(Instance.Number, 9)})",
+                StartButton => _info.Running ? $"Durdur ({(Instance.IsFirst ? "F11 / " : "")}Ctrl+Shift+{Math.Min(Instance.Number, 9)}); duraklatmak için Menü"
+                                             : "Başlat (F10)",
                 ItemsButton => _itemsOpen ? "Eşya listesini kapat" : "Bu tur alınan, atılan ve satılan eşyalar (şerit yukarı doğru açılır)",
                 FillButton => "Bu oyunu ekrana büyüt (bot altında kalır); tekrar bas: hepsini diz",
                 ArrangeButton => "Tüm oyunları ve botları diz",
@@ -463,8 +482,12 @@ internal sealed class MiniBar : Form
             return;
         switch (HitButton(e.Location))
         {
-            case StartButton: _start(); break;
-            case StopButton: _stop(); break;
+            case StartButton:
+                if (_info.Running)
+                    _stop();
+                else
+                    _start();
+                break;
             case ItemsButton:
                 _itemsOpen = !_itemsOpen;
                 _itemsScroll = 0;

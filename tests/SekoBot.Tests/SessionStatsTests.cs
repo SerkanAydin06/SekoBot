@@ -67,6 +67,19 @@ public class SessionStatsTests
     }
 
     [Fact]
+    public void A_level_up_read_half_way_does_not_count_a_whole_level()
+    {
+        // The game resets the experience a moment before it raises the level: read in between, the "left to the
+        // level" was nearly a whole level and was counted at the level up (seen: 10 Mn EXP per hour).
+        var stats = Started();
+        stats.Update(World(96_000), S(0), HpPotion, MpPotion);
+        stats.Update(World(150), S(1), HpPotion, MpPotion);              // level 12 still, experience reset
+        stats.Update(World(200, level: 13), S(2), HpPotion, MpPotion);    // then the level
+        Assert.Equal(4_000 + 200, stats.Exp);
+        Assert.Equal(1, stats.LevelsGained);
+    }
+
+    [Fact]
     public void Experience_over_a_level_up_and_potions_used()
     {
         var stats = Started();

@@ -395,12 +395,15 @@ internal sealed partial class Brain
     {
         var now = state.Time;
         var waited = now - _recoverSince;
-        bool done = state.Hp is double hp
+        // Mobs hitting us while we wait for HP: fought back at once — waiting under their blows only got the
+        // character killed again and again where the mobs are aggressive (seen). Potions go on as in a fight.
+        bool attacked = state.Attackers.Count > 0 || state.Targets.Any(t => t.AttacksMe);
+        bool done = attacked || (state.Hp is double hp
             ? hp >= p.ReviveHealTo || waited >= Ms(p.ReviveHealMaxMs)
-            : waited >= Ms(5000); // HP bar unknown: just give it a moment
+            : waited >= Ms(5000)); // HP bar unknown: just give it a moment
         if (done)
         {
-            actions.Add(new NoteAction("Can doldu; avlanmaya devam."));
+            actions.Add(new NoteAction(attacked ? "Can dolmadan saldırı geldi; beklemeden karşılık veriliyor." : "Can doldu; avlanmaya devam."));
             if (p.NavigateMode)
                 Enter(BotPhase.Searching, now);
             else
