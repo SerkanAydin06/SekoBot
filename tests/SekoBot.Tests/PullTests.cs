@@ -332,6 +332,22 @@ public class PullFinishFirstTests
         Assert.DoesNotContain(actions, a => a is NoteAction n && n.Text.Contains("toplanıyor"));
         Assert.Equal(BotPhase.Fighting, brain.Phase);
     }
+    [Fact]
+    public void A_group_right_beside_is_gathered_while_a_healthy_mob_hits_us()
+    {
+        // Seen by the user: a lone mob cut alone with a fine group next to it. The mob hitting us has 70 % HP
+        // left and a sleeping group sleeps 6 m away: it is gone for (the mob follows), not left for later.
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = false, PullMaxMobs = 9, Breaks = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        TargetInfo[] mobs = [At(1, 1, 90, hp: 420, attacks: true), At(10, 10, 600), At(11, 10, 620), At(12, 10, 640)];
+        var actions = new List<BotAction>();
+        for (double t = 0; t < 2000; t += 100)
+            actions.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
+                { Targets = mobs, Walking = false, AttackPower = 189 }));
+        Assert.Contains(actions, a => a is NoteAction n && n.Text.Contains("toplanıyor"));
+        Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
+    }
 }
 
 public class ArcherTests

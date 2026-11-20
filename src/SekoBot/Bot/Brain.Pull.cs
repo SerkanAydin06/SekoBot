@@ -142,6 +142,16 @@ internal sealed partial class Brain
         _pullClosest = double.MaxValue;
     }
 
+    /// <summary>A mob hitting us with less HP than this (of its most) is finished before gathering more.</summary>
+    internal const double FinishFirstBelow = 0.4;
+    /// <summary>A sleeping group this close (world units, 7 m) is gathered even while a mob hits us.</summary>
+    internal const double PullBeside = 700;
+
+    /// <summary>A whole sleeping group right beside us (not left a moment ago, inside the area).</summary>
+    private bool GroupBeside(GameState state, BotProfile p) =>
+        state.Targets.Where(t => t.Group != 0 && !_pulled.ContainsKey(t.Group)).GroupBy(t => t.Group)
+            .Any(g => g.All(t => !t.AttacksMe && t.Hp >= t.MaxHp) && g.Min(t => t.Distance) <= PullBeside && PullInsideArea(g, p));
+
     /// <summary>Groups are gathered only this far into the area (its radius), so walking to one — around
     /// whatever is in the way — doesn't take the character over the edge (and home again, half way).</summary>
     internal const double PullInArea = 0.75;
@@ -172,7 +182,10 @@ internal sealed partial class Brain
             return EndPull(actions, $"{chasing} mob toplandı; hepsi birden kesiliyor.");
         // Mobs hitting us right here and hurt: finish them first (recorded: a gathering started
         // again while a mob at 24 % HP was being hit, and the bot walked off and came back).
-        if (!_pulling && state.Targets.Any(t => t.AttacksMe && t.Distance <= t.Reach * 1.4 && t.Hp < t.MaxHp))
+        // A sleeping group right beside us is gathered all the same while the mob hitting us has much HP
+        // left (the user saw a lone mob cut alone with a fine group next to it); one nearly dead is finished.
+        if (!_pulling && state.Targets.Any(t => t.AttacksMe && t.Distance <= t.Reach * 1.4 && t.Hp < t.MaxHp &&
+                                               (t.Hp < t.MaxHp * FinishFirstBelow || !GroupBeside(state, p))))
             return EndPull(actions, null);
         // Mobs already after us (one walked into us): a new gathering only takes groups right
         // around us — they follow us there anyway; far groups would leave them hitting our back.
