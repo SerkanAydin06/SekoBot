@@ -132,6 +132,23 @@ internal sealed partial class BotEngine
         }
     }
 
+    /// <summary>
+    /// The market list out of memory (saved first if it changed): a farm or fishing bot doesn't need the
+    /// tens of thousands of items in it (seen: some 45 MB per SekoBot). Loaded again when wanted.
+    /// </summary>
+    public void ReleaseMarket()
+    {
+        if (ScanningMarket)
+            return;
+        lock (_marketGate)
+        {
+            if (_market is { Changed: true } old)
+                SaveMarket(old);
+            _market = null;
+            _history = null;
+        }
+    }
+
     // ── For the market window ──
 
     /// <summary>The market list to show: the map the character is on when it has one, else the market

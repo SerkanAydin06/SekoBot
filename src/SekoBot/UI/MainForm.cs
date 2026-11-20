@@ -46,6 +46,8 @@ internal sealed class MainForm : Form
     private readonly Button[] _modeButtons;
     private readonly Card _side;
     private readonly Panel _marketDash, _fishingDash;
+    private readonly Label[] _fBins;
+    private readonly Panel[] _fBinTiles;
     private readonly Card _logCard, _itemsCard;
     private Rectangle _dashBottomFarm, _logCardFarm, _logFarm;
     private readonly Label _mState, _mRound, _mRead, _mDeals, _mWanted, _mShops, _mItems, _mOldest, _mNever;
@@ -134,9 +136,9 @@ internal sealed class MainForm : Form
             _modeButtons[i].Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
             _modeButtons[i].Click += (_, _) => SetMode(mode);
         }
-        var version = _identity = Theme.Label(header, "v" + BuildInfo.Version, new Rectangle(526, 4, 252, 20), 8f, Theme.Muted,
+        var version = _identity = Theme.Label(header, "v" + BuildInfo.Version, new Rectangle(526, 4, 170, 20), 8f, Theme.Muted,
             FontStyle.Regular, ContentAlignment.MiddleRight);
-        _connection = Theme.Label(header, "○  Oyun bekleniyor", new Rectangle(526, 23, 252, 20), 8.5f, Theme.Muted,
+        _connection = Theme.Label(header, "○  Oyun bekleniyor", new Rectangle(526, 23, 170, 20), 8.5f, Theme.Muted,
             FontStyle.Bold, ContentAlignment.MiddleRight);
         foreach (Control c in new Control[] { header, title, version, _connection })
         {
@@ -146,6 +148,11 @@ internal sealed class MainForm : Form
         _gameButton = Theme.Button(header, "Oyunu seç  ▾", new Rectangle(950, 7, 112, 32), Theme.Secondary, Theme.SecondaryHover);
         _gameButton.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
         _gameButton.Click += (_, _) => ShowGameMenu();
+        // All the SekoBots at once: start, pause, stop.
+        var all = Theme.Button(header, "Hepsi  ▾", new Rectangle(704, 7, 76, 32), Theme.Secondary, Theme.SecondaryHover);
+        all.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+        var allMenu = WindowLayout.AllMenu();
+        all.Click += (_, _) => allMenu.Show(all, new Point(0, all.Height));
         // Many games on one screen: put the games side by side, every bot small under its game.
         var arrange = Theme.Button(header, "⊞  Diz", new Rectangle(786, 7, 76, 32), Theme.Secondary, Theme.SecondaryHover);
         arrange.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
@@ -858,17 +865,15 @@ internal sealed class MainForm : Form
         _marketDash.Controls.Add(watchCard);
         Theme.Label(watchCard, "PAZAR TAKİBİ", new Rectangle(16, 8, 300, 20), 8f, Theme.Accent, FontStyle.Bold);
         _mState = Theme.Label(watchCard, "", new Rectangle(16, 30, 728, 40), 10f, Theme.Text, FontStyle.Bold, ContentAlignment.TopLeft);
-        _mRound = Tile(watchCard, "TUR", 16, 76);
-        _mRead = Tile(watchCard, "OKUNAN", 126, 76);
-        _mDeals = Tile(watchCard, "KELEPİR", 236, 76);
-        _mWanted = Tile(watchCard, "ARANAN", 346, 76);
-        _mShops = Tile(watchCard, "DÜKKAN", 16, 142);
-        _mItems = Tile(watchCard, "ÜRÜN", 126, 142);
-        _mOldest = Tile(watchCard, "EN ESKİ", 236, 142, small: true);
-        _mNever = Tile(watchCard, "OKUNMAMIŞ", 346, 142);
-        var bigMarket = Theme.Button(watchCard, "🖥  Pazar penceresi\nara · filtrele · fiyatlar · aranan", new Rectangle(460, 76, 284, 126), Theme.Primary, Theme.PrimaryHover);
-        bigMarket.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
-        bigMarket.Click += (_, _) => OpenMarketWindow();
+        const int mw = 173;
+        _mRound = Tile(watchCard, "TUR", 16, 76, width: mw);
+        _mRead = Tile(watchCard, "OKUNAN", 16 + (mw + 12), 76, width: mw);
+        _mDeals = Tile(watchCard, "KELEPİR", 16 + 2 * (mw + 12), 76, width: mw);
+        _mWanted = Tile(watchCard, "ARANAN", 16 + 3 * (mw + 12), 76, width: mw);
+        _mShops = Tile(watchCard, "DÜKKAN", 16, 142, width: mw);
+        _mItems = Tile(watchCard, "ÜRÜN", 16 + (mw + 12), 142, width: mw);
+        _mOldest = Tile(watchCard, "EN ESKİ", 16 + 2 * (mw + 12), 142, small: true, width: mw);
+        _mNever = Tile(watchCard, "OKUNMAMIŞ", 16 + 3 * (mw + 12), 142, width: mw);
         var mReport = Theme.Button(watchCard, "📊  Rapor", new Rectangle(16, 216, 130, 30), Theme.Secondary, Theme.SecondaryHover);
         mReport.Click += (_, _) => { if (BotEngine.LatestReport is { } r) OpenFile(r); else WriteLog("Henüz pazar listesi yok."); };
         var mExcel = Theme.Button(watchCard, "📄  Excel", new Rectangle(152, 216, 110, 30), Theme.Secondary, Theme.SecondaryHover);
@@ -897,13 +902,14 @@ internal sealed class MainForm : Form
         Check(watchCard, "Kamerayı kuş bakışına al", 16, 344, 300, () => _profile.MarketBirdsEye, v => _profile.MarketBirdsEye = v);
         Theme.Label(watchCard, "Hiçbir şey satın alınmaz; almak senin elinde.", new Rectangle(330, 344, 414, 26), 8.5f, Theme.Muted);
 
-        var findsCard = new Card { Bounds = new Rectangle(770, 0, 386, 400) };
+        var findsCard = new Card { Bounds = new Rectangle(770, 0, 386, 400), Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left };
         _marketDash.Controls.Add(findsCard);
         Theme.Label(findsCard, "SON BULUNANLAR (aranan · kelepir)", new Rectangle(16, 8, 354, 20), 8f, Theme.Accent, FontStyle.Bold);
         _mFinds = new ListBox
         {
             Bounds = new Rectangle(14, 32, 358, 354), BackColor = Theme.Inset, ForeColor = Theme.Text, BorderStyle = BorderStyle.None,
             Font = new Font("Segoe UI", 8.5f), IntegralHeight = false, HorizontalScrollbar = true,
+            Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
         };
         findsCard.Controls.Add(_mFinds);
 
@@ -912,22 +918,24 @@ internal sealed class MainForm : Form
         Controls.Add(_fishingDash);
         var fishCard = new Card { Bounds = new Rectangle(0, 0, 760, 400) };
         _fishingDash.Controls.Add(fishCard);
-        var pullsCard = new Card { Bounds = new Rectangle(770, 0, 386, 400) };
+        var pullsCard = new Card { Bounds = new Rectangle(770, 0, 386, 400), Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left };
         _fishingDash.Controls.Add(pullsCard);
         Theme.Label(pullsCard, "SON ÇEKİŞLER (sonuç · balondan sonra)", new Rectangle(16, 8, 354, 20), 8f, Theme.Accent, FontStyle.Bold);
         _fPulls = new ListBox
         {
             Bounds = new Rectangle(14, 32, 358, 354), BackColor = Theme.Inset, ForeColor = Theme.Text, BorderStyle = BorderStyle.None,
             Font = new Font("Segoe UI", 8.5f), IntegralHeight = false, HorizontalScrollbar = true,
+            Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
         };
         pullsCard.Controls.Add(_fPulls);
         Theme.Label(fishCard, "BALIK TUTMA", new Rectangle(16, 8, 300, 20), 8f, Theme.Accent, FontStyle.Bold);
         _fState = Theme.Label(fishCard, "", new Rectangle(16, 30, 728, 40), 10f, Theme.Text, FontStyle.Bold, ContentAlignment.TopLeft);
-        _fTime = Tile(fishCard, "SÜRE", 16, 76, small: true);
-        _fCasts = Tile(fishCard, "YAKALANAN", 126, 76);
-        _fHooked = Tile(fishCard, "BAŞARI", 236, 76);
-        _fMissed = Tile(fishCard, "KAÇAN", 346, 76);
-        _fPulled = Tile(fishCard, "SON ÇEKİŞ", 456, 76, small: true);
+        const int fw = 136;
+        _fTime = Tile(fishCard, "SÜRE", 16, 76, small: true, width: fw);
+        _fCasts = Tile(fishCard, "YAKALANAN", 16 + (fw + 12), 76, width: fw);
+        _fHooked = Tile(fishCard, "BAŞARI", 16 + 2 * (fw + 12), 76, width: fw);
+        _fMissed = Tile(fishCard, "KAÇAN", 16 + 3 * (fw + 12), 76, width: fw);
+        _fPulled = Tile(fishCard, "SON ÇEKİŞ", 16 + 4 * (fw + 12), 76, small: true, width: fw);
         Theme.Label(fishCard, "AYARLAR", new Rectangle(16, 150, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
         Theme.Label(fishCard, "Yem tuşu (kısayol)", new Rectangle(16, 174, 150, 26), 9f, Theme.Muted);
         var baitKey = new KeyPicker { Bounds = new Rectangle(170, 174, 104, 26), Key = _profile.FishBaitKey };
@@ -937,13 +945,19 @@ internal sealed class MainForm : Form
             new Rectangle(284, 174, 460, 26), 8.5f, Theme.Muted);
         Check(fishCard, "Resimlerden düz olanı bot seçsin", 16, 208, 300, () => _profile.FishAutoPick, v => _profile.FishAutoPick = v);
         Check(fishCard, "Seçemezse Telegram'a yaz", 330, 208, 300, () => _profile.FishNotify, v => _profile.FishNotify = v);
-        Theme.Label(fishCard, "NASIL", new Rectangle(16, 246, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
+        Theme.Label(fishCard, "ÇEKİŞ SÜRESİNE GÖRE BAŞARI (balondan Space'e kadar geçen süre · tüm kayıtlar)", new Rectangle(16, 246, 728, 18), 8f, Theme.Accent, FontStyle.Bold);
+        int bins = FishPulls.Edges.Length + 1, bw = (728 - (bins - 1) * 8) / bins;
+        _fBins = new Label[bins];
+        _fBinTiles = new Panel[bins];
+        for (int i = 0; i < bins; i++)
+        {
+            _fBins[i] = Tile(fishCard, "", 16 + i * (bw + 8), 268, small: true, width: bw);
+            _fBinTiles[i] = (Panel)_fBins[i].Parent!;
+        }
         Theme.Label(fishCard,
-            "1. Oyunda oltayı kuşan, yemi kısayola koy (Yem tuşu), suyun kenarında suya dönük dur.\n" +
-            "2. BALIK TUT'a bas. Bot yemi takar, oltayı Space ile atar; başın üstünde balık balonu çıkınca Space ile çeker.\n" +
-            "3. Balık takılınca çıkan 4 resimden düz olanı bot seçer (kapalıysa ses çıkarıp seni bekler).\n" +
-            "    YAKALANAN = yakalanan / atış; her çekişin süresi ve sonucu balik-cekis.csv dosyasına yazılır.",
-            new Rectangle(16, 268, 728, 100), 9f, Theme.Text, FontStyle.Regular, ContentAlignment.TopLeft);
+            "Nasıl: oltayı kuşan, yemi Yem tuşuna koy, suya dönük dur ve BALIK TUT'a bas. Bot yemi takar, atar, balon çıkınca çeker,\n" +
+            "4 resimden düz olanı seçer. Yeşil kutu şimdiye kadar en çok balık getiren süre; her çekiş balik-cekis.csv dosyasına yazılır.",
+            new Rectangle(16, 336, 728, 52), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
 
         SelectTab(-1);
 
@@ -1033,14 +1047,23 @@ internal sealed class MainForm : Form
             SelectTab(-1);
         _marketDash.Visible = market;
         _fishingDash.Visible = mode == FishingMode;
+        // Away from the market (no watch, no market window): its big list out of memory.
+        if (!market && _marketWindow is not { Visible: true })
+            _engine?.ReleaseMarket();
         // The log: under the farm view (beside this run's items), or across the whole width under the market.
         _dashBottom.Visible = true;
         _itemsCard.Visible = farm;
         if (!farm)
         {
-            _dashBottom.Bounds = new Rectangle(_marketDash.Left, _dashBottomFarm.Top, _marketDash.Width, _dashBottomFarm.Height);
-            _logCard.Width = _dashBottom.Width;
-            _log.Width = _logCard.Width - 2 * _logFarm.Left;
+            // The list on the right the whole height; the log under the page's card on the left.
+            var dash = market ? _marketDash : _fishingDash;
+            dash.Height = _dashBottomFarm.Bottom - dash.Top;
+            int left = dash.Controls[0].Width, gap = _dashBottomFarm.Left - _side.Right;
+            int top = dash.Top + dash.Controls[0].Height + gap;
+            _dashBottom.Bounds = new Rectangle(dash.Left, top, left, _dashBottomFarm.Bottom - top);
+            _logCard.Bounds = new Rectangle(0, 0, _dashBottom.Width, _dashBottom.Height);
+            _log.Bounds = new Rectangle(_logFarm.Left, _logFarm.Top, _logCard.Width - 2 * _logFarm.Left, _logCard.Height - _logFarm.Top - _logFarm.Left);
+            _dashBottom.BringToFront();
         }
         else
         {
@@ -1130,6 +1153,15 @@ internal sealed class MainForm : Form
         _fHooked.Text = casts > 0 ? $"%{100.0 * caught / casts:0}" : "—";
         _fMissed.Text = missed.ToString("N0");
         _fPulled.Text = engine?.LastPullMs is int ms and > 0 ? $"{ms / 1000.0:0.00} sn" : "—";
+        var binsNow = engine?.PullBins() ?? FishPulls.Bins([]);
+        var best = binsNow.Where(b => b.Pulls >= 5).OrderByDescending(b => b.Rate).FirstOrDefault();
+        for (int i = 0; i < _fBins.Length && i < binsNow.Count; i++)
+        {
+            var b = binsNow[i];
+            ((Label)_fBinTiles[i].Controls[0]).Text = b.Name;
+            _fBins[i].Text = b.Pulls > 0 ? $"%{b.Rate * 100:0} · {b.Caught}/{b.Pulls}" : "—";
+            _fBins[i].ForeColor = b == best ? Theme.Green : Theme.Text;
+        }
         var pulls = engine?.FishLog() ?? [];
         if (pulls.Count == 0 && _fPulls.Items.Count == 0 || pulls.Count > 0 && (pulls.Count != _fPulls.Items.Count || !Equals(_fPulls.Items[0], pulls[0])))
         {
@@ -1169,12 +1201,12 @@ internal sealed class MainForm : Form
 
     // ── Layout helpers ───────────────────────────────────────────
 
-    private static Label Tile(Control parent, string caption, int x, int y, bool small = false)
+    private static Label Tile(Control parent, string caption, int x, int y, bool small = false, int width = 100)
     {
-        var tile = new Panel { Bounds = new Rectangle(x, y, 100, 60), BackColor = Theme.Inset };
+        var tile = new Panel { Bounds = new Rectangle(x, y, width, 60), BackColor = Theme.Inset };
         parent.Controls.Add(tile);
-        Theme.Label(tile, caption, new Rectangle(8, 6, 90, 16), 7f, Theme.Muted, FontStyle.Bold);
-        return Theme.Label(tile, "—", new Rectangle(8, 22, 90, 34), small ? 8.5f : 13f, Theme.Text, FontStyle.Bold);
+        Theme.Label(tile, caption, new Rectangle(8, 6, width - 10, 16), 7f, Theme.Muted, FontStyle.Bold);
+        return Theme.Label(tile, "—", new Rectangle(8, 22, width - 10, 34), small ? 8.5f : 13f, Theme.Text, FontStyle.Bold);
     }
 
     private static Meter AddMeter(Control parent, string caption, Color fill, int y)
@@ -1579,6 +1611,12 @@ internal sealed class MainForm : Form
         // Another SekoBot (or this one) arranged the windows: go small under the game.
         if (m.Msg == (int)WindowLayout.MiniMessage && m.WParam == 1)
             BeginInvoke(new Action(GoMini));
+        // One SekoBot's "all bots" button: every SekoBot starts / pauses / stops its own work.
+        if (m.Msg == (int)WindowLayout.AllMessage)
+        {
+            int what = (int)m.WParam;
+            BeginInvoke(new Action(() => AllBots(what)));
+        }
         base.WndProc(ref m);
     }
 
@@ -1734,6 +1772,36 @@ internal sealed class MainForm : Form
     }
 
     // ── Bot ──────────────────────────────────────────────────────
+
+    /// <summary>This tab's work going (farm, market watch or fishing).</summary>
+    private bool WorkingNow() => _mode switch
+    {
+        MarketMode => _engine?.ScanningMarket == true,
+        FishingMode => _engine?.Fishing == true,
+        _ => _engine?.BotRunning == true,
+    };
+
+    /// <summary>The "all bots" message: this SekoBot starts, pauses or stops its own tab's work.</summary>
+    private void AllBots(int what)
+    {
+        if (_engine == null)
+            return;
+        switch (what)
+        {
+            case WindowLayout.AllStart when !WorkingNow():
+            case WindowLayout.AllPause when WorkingNow():
+                WriteLog(what == WindowLayout.AllStart ? "Tüm botlar başlatıldı." : "Tüm botlar duraklatıldı.");
+                ToggleBot();
+                break;
+            case WindowLayout.AllStop:
+                if (WorkingNow() || _engine.FishingPaused)
+                {
+                    WriteLog("Tüm botlar durduruldu.");
+                    StopBot("tüm botlar durduruldu", byUser: true);
+                }
+                break;
+        }
+    }
 
     private void ToggleBot()
     {
@@ -2112,7 +2180,13 @@ internal sealed class MainForm : Form
         }
         _calibrationState.Text = _engine?.World != null ? "Her şey bellekten ✓" : "Bellek bekleniyor";
         _calibrationState.ForeColor = _engine?.World != null ? Theme.Green : Theme.Muted;
-        _events.Text = _engine?.EventsSummary() ?? "Bot çalışınca görünür.";
+        string events = _engine?.EventsSummary() ?? "Bot çalışınca görünür.";
+        // Nothing on now: the last run in its place (how it went and why it stopped), so the box isn't empty.
+        if (!events.StartsWith('▶') && _engine?.LastSummary is { } last && _engine.BotRunning != true)
+            events = (events == "Bot çalışınca görünür." ? "" : events + "\n\n") + "Son tur:\n" + last.Replace(" · ", "\n")
+                     + (_stopReason is { Length: > 0 } why ? "\nDurma: " + why : "");
+        if (_events.Text != events)
+            _events.Text = events;
         _events.ForeColor = _events.Text.StartsWith('▶') ? Theme.Green : Theme.Muted;
         if (_bagState.Visible)
         {

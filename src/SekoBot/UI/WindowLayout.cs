@@ -18,6 +18,23 @@ internal static class WindowLayout
     /// <summary>Tells every SekoBot open (this one too) to go small.</summary>
     public static void TellAllMini() => Win32.PostMessage(Win32.HWND_BROADCAST, MiniMessage, 1, 0);
 
+    /// <summary>The message every SekoBot gets for all bots at once: wParam <see cref="AllStart"/>, <see cref="AllPause"/> or <see cref="AllStop"/>.</summary>
+    public static readonly uint AllMessage = Win32.RegisterWindowMessage("SekoBot.All");
+    public const int AllStart = 1, AllPause = 2, AllStop = 3;
+
+    /// <summary>Tells every SekoBot open (this one too) to start, pause or stop its work (each in its own tab).</summary>
+    public static void TellAll(int what) => Win32.PostMessage(Win32.HWND_BROADCAST, AllMessage, what, 0);
+
+    /// <summary>The menu for all bots at once (the small bar's and the header's button).</summary>
+    public static ContextMenuStrip AllMenu()
+    {
+        var menu = new ContextMenuStrip();
+        menu.Items.Add("▶  Tüm botları başlat / sürdür", null, (_, _) => TellAll(AllStart));
+        menu.Items.Add("⏸  Tüm botları duraklat", null, (_, _) => TellAll(AllPause));
+        menu.Items.Add("■  Tüm botları durdur", null, (_, _) => TellAll(AllStop));
+        return menu;
+    }
+
     /// <summary>The usual shape of a game picture (width / height), when nothing better is known.</summary>
     public const double DefaultAspect = 16 / 9.0;
     /// <summary>The space left between two games (pixels).</summary>

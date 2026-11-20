@@ -54,6 +54,10 @@ internal sealed class MiniBar : Form
         menu.Items.Add("⊞  Pencereleri diz", null, (_, _) => _arrange());
         menu.Items.Add("▶  Başlat / duraklat", null, (_, _) => _start());
         menu.Items.Add("■  Durdur", null, (_, _) => _stop());
+        menu.Items.Add(new ToolStripSeparator());
+        foreach (ToolStripItem item in WindowLayout.AllMenu().Items.Cast<ToolStripItem>().ToList())
+            menu.Items.Add(item);
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("⚔  Saldırı aç / sadece eşya topla", null, (_, _) => _attack());
         menu.Items.Add("✕  SekoBot'u kapat", null, (_, _) => _close());
         ContextMenuStrip = menu;
@@ -159,11 +163,13 @@ internal sealed class MiniBar : Form
     private float W => ClientSize.Width / S;
     private const int MaxWidth = 1100;
     /// <summary>Narrowest the bar gets (small games in a big grid): still everything readable.</summary>
-    private const int MinWidth = 340;
+    private const int MinWidth = 400;
 
-    private const int Buttons = 7;
-    /// <summary>The buttons: the tab's own, start/pause, stop, the game big, arrange all, SekoBot big, close.</summary>
-    private Rectangle Button(int i) => new((int)((W - 270 + i * 38) * S), (int)(6 * S), (int)(32 * S), (int)(28 * S));
+    private const int Buttons = 8;
+    /// <summary>The buttons: the tab's own, start/pause, stop, all bots, the game big, arrange all, SekoBot big, close.</summary>
+    private Rectangle Button(int i) => new((int)((W - ButtonsWidth + i * 38) * S), (int)(6 * S), (int)(32 * S), (int)(28 * S));
+    private const int ButtonsWidth = Buttons * 38 + 4;
+    private readonly ContextMenuStrip _allMenu = WindowLayout.AllMenu();
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -183,7 +189,7 @@ internal sealed class MiniBar : Form
         using var smallBold = new Font("Segoe UI", 8.5f, FontStyle.Bold);
         // Every bar shows its SekoBot's number (the 1st too), so they can be told apart.
         string name = $"{Instance.Number} · " + (info.Name.Length > 0 ? info.Name : "SekoBot");
-        var nameRow = new Rectangle((int)(14 * s), (int)(6 * s), (int)((W - 302) * s), (int)(22 * s));
+        var nameRow = new Rectangle((int)(14 * s), (int)(6 * s), (int)((W - ButtonsWidth - 32) * s), (int)(22 * s));
         if (info.Elapsed.Length > 0)
         {
             // How long it has run, at the right of the name row.
@@ -195,7 +201,7 @@ internal sealed class MiniBar : Form
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         bool market = info.Market != null;
         string status = info.Attack || market ? info.Status : "✋ Sadece eşya · " + info.Status;
-        TextRenderer.DrawText(g, status, small, new Rectangle((int)(14 * s), (int)(29 * s), (int)((W - 290) * s), (int)(20 * s)), info.Attack || market ? info.StatusColor : Theme.Accent,
+        TextRenderer.DrawText(g, status, small, new Rectangle((int)(14 * s), (int)(29 * s), (int)((W - ButtonsWidth - 20) * s), (int)(20 * s)), info.Attack || market ? info.StatusColor : Theme.Accent,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         if (market)
         {
@@ -228,9 +234,9 @@ internal sealed class MiniBar : Form
     {
         bool market = info.Market != null;
         bool fishing = info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true;
-        // 0: the tab's own button · 1: start ▶ / pause ⏸ · 2: stop ■ · 3: big · 4: close — the shapes drawn, all centred alike.
+        // 0: the tab's own button · 1: start / pause · 2: stop · 3: all bots · 4: the game big · 5: arrange · 6: SekoBot big · 7: close — the shapes drawn, all centred alike.
         string first = fishing ? "🎣" : market ? "🔍" : info.Attack ? "⚔" : "✋";
-        Color[] backs = [market ? Theme.Secondary : info.Attack ? Theme.Secondary : Theme.Accent, Theme.Primary, Theme.Danger, Theme.Secondary, Theme.Secondary, Theme.Secondary, Theme.Surface];
+        Color[] backs = [market ? Theme.Secondary : info.Attack ? Theme.Secondary : Theme.Accent, Theme.Primary, Theme.Danger, Theme.Secondary, Theme.Secondary, Theme.Secondary, Theme.Secondary, Theme.Surface];
         g.SmoothingMode = SmoothingMode.AntiAlias;
         for (int i = 0; i < Buttons; i++)
         {
@@ -257,20 +263,26 @@ internal sealed class MiniBar : Form
                 case 2: // stop: a square
                     g.FillRectangle(white, cx - u * 0.85f, cy - u * 0.85f, u * 1.7f, u * 1.7f);
                     break;
-                case 3: // the game big: a screen with a bar under it
+                case 3: // all bots: two small triangles over a line
+                    float t = u * 0.62f;
+                    g.FillPolygon(white, [new PointF(cx - u * 1.1f, cy - t - 1), new PointF(cx - u * 1.1f, cy + t - 1), new PointF(cx - u * 1.1f + t * 1.4f, cy - 1)]);
+                    g.FillPolygon(white, [new PointF(cx - u * 0.1f, cy - t - 1), new PointF(cx - u * 0.1f, cy + t - 1), new PointF(cx - u * 0.1f + t * 1.4f, cy - 1)]);
+                    g.DrawLine(pen, cx - u * 1.1f, cy + u * 1.05f, cx + u * 1.1f, cy + u * 1.05f);
+                    break;
+                case 4: // the game big: a screen with a bar under it
                     g.DrawRectangle(pen, cx - u, cy - u * 0.9f, u * 2, u * 1.35f);
                     g.DrawLine(pen, cx - u, cy + u * 0.85f, cx + u, cy + u * 0.85f);
                     break;
-                case 4: // arrange all: four small windows
+                case 5: // arrange all: four small windows
                     float q = u * 0.8f;
                     foreach (var (dx, dy) in new[] { (-1, -1), (1, -1), (-1, 1), (1, 1) })
                         g.FillRectangle(white, cx + (dx < 0 ? -q - 1 : 1), cy + (dy < 0 ? -q - 1 : 1), q, q);
                     break;
-                case 5: // SekoBot big: two corners
+                case 6: // SekoBot big: two corners
                     g.DrawLines(pen, [new PointF(cx - u, cy - u * 0.2f), new PointF(cx - u, cy - u), new PointF(cx - u * 0.2f, cy - u)]);
                     g.DrawLines(pen, [new PointF(cx + u, cy + u * 0.2f), new PointF(cx + u, cy + u), new PointF(cx + u * 0.2f, cy + u)]);
                     break;
-                case 6: // close: an X
+                case 7: // close: an X
                     g.DrawLine(pen, cx - u * 0.8f, cy - u * 0.8f, cx + u * 0.8f, cy + u * 0.8f);
                     g.DrawLine(pen, cx - u * 0.8f, cy + u * 0.8f, cx + u * 0.8f, cy - u * 0.8f);
                     break;
@@ -327,10 +339,11 @@ internal sealed class MiniBar : Form
                 1 when _info.Market != null => _info.Running ? "Duraklat" : "Sürekli pazar takibini başlat",
                 1 => _info.Running ? "Duraklat (F10)" : "Başlat (F10)",
                 2 => $"Durdur ve sıfırla ({(Instance.IsFirst ? "F11 / " : "")}Ctrl+Shift+{Math.Min(Instance.Number, 9)})",
-                3 => "Bu oyunu büyüt (bot altında kalır); tekrar bas: hepsini diz",
-                4 => "Tüm oyunları ve botları diz",
-                5 => "SekoBot'u büyüt (çift tık da olur)",
-                6 => "SekoBot'u kapat",
+                3 => "Tüm botlar: hepsini başlat, duraklat ya da durdur",
+                4 => "Bu oyunu büyüt (bot altında kalır); tekrar bas: hepsini diz",
+                5 => "Tüm oyunları ve botları diz",
+                6 => "SekoBot'u büyüt (çift tık da olur)",
+                7 => "SekoBot'u kapat",
                 _ => "Sağ tık: pencereleri diz, büyüt",
             });
             Invalidate();
@@ -354,10 +367,11 @@ internal sealed class MiniBar : Form
             case 0: _attack(); break;
             case 1: _start(); break;
             case 2: _stop(); break;
-            case 3: _fill(); break;
-            case 4: _arrange(); break;
-            case 5: _big(); break;
-            case 6: _close(); return;
+            case 3: _allMenu.Show(this, new Point(Button(3).Left, Button(3).Bottom)); return;
+            case 4: _fill(); break;
+            case 5: _arrange(); break;
+            case 6: _big(); break;
+            case 7: _close(); return;
         }
         Pull(false);
     }

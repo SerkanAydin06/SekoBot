@@ -337,6 +337,19 @@ internal sealed partial class BotEngine
     }
 
     /// <summary>Every pull with its wait and outcome, to find the best wait (balik-cekis.csv).</summary>
+    private List<(int Ms, bool Caught)>? _pullHistory;
+
+    /// <summary>Every pull so far (the file read once, then kept up to date); under the <c>_fishLog</c> lock.</summary>
+    private List<(int Ms, bool Caught)> PullHistory() =>
+        _pullHistory ??= FishPulls.Read(Path.Combine(Config.ProfileStore.Directory, "balik-cekis.csv"));
+
+    /// <summary>All pulls ever made, grouped by the wait before the pull.</summary>
+    public List<FishPulls.Bin> PullBins()
+    {
+        lock (_fishLog)
+            return FishPulls.Bins(PullHistory());
+    }
+
     private void RecordPull(int? ms, string outcome, string fish)
     {
         lock (_fishLog)
@@ -346,6 +359,9 @@ internal sealed partial class BotEngine
             if (_fishLog.Count > 100)
                 _fishLog.RemoveAt(_fishLog.Count - 1);
         }
+        if (ms is int took)
+            lock (_fishLog)
+                PullHistory().Add((took, outcome == "yakalandı"));
         try
         {
             string file = Path.Combine(Config.ProfileStore.Directory, "balik-cekis.csv");
