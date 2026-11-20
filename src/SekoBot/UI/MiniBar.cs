@@ -190,6 +190,13 @@ internal sealed class MiniBar : Form
         // Every bar shows its SekoBot's number (the 1st too), so they can be told apart.
         string name = $"{Instance.Number} · " + (info.Name.Length > 0 ? info.Name : "SekoBot");
         var nameRow = new Rectangle((int)(14 * s), (int)(6 * s), (int)((W - ButtonsWidth - 32) * s), (int)(22 * s));
+        // The version, small, at the right of the name row (which SekoBot runs, at a glance).
+        using (var tiny = new Font("Segoe UI", 7.5f))
+        {
+            string version = "v" + BuildInfo.Version;
+            TextRenderer.DrawText(g, version, tiny, nameRow, Theme.Muted, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+            nameRow.Width -= TextRenderer.MeasureText(version, tiny).Width + (int)(6 * s);
+        }
         if (info.Elapsed.Length > 0)
         {
             // How long it has run, at the right of the name row.
