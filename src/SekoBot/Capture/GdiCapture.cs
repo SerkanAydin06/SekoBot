@@ -12,7 +12,9 @@ namespace SekoBot.Capture;
 internal sealed class GdiCapture : ICaptureSource
 {
     private readonly WindowInfo _window;
-    private readonly int _maxFps;
+    private volatile int _maxFps;
+
+    public int MaxFps { set => _maxFps = Math.Clamp(value, 1, 60); }
     private readonly CancellationTokenSource _cts = new();
     private Task? _loop;
 

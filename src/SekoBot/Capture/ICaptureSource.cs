@@ -12,6 +12,9 @@ internal interface ICaptureSource : IDisposable
 
     /// <summary>Starts producing frames. Ownership of each frame passes to the channel.</summary>
     void Start(ChannelWriter<Frame> output);
+
+    /// <summary>At most this many frames a second (changed while running: fewer when no one watches the picture).</summary>
+    int MaxFps { set; }
 }
 
 internal static class CaptureFactory

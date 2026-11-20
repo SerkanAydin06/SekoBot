@@ -44,7 +44,9 @@ internal sealed class WgcCapture : ICaptureSource
     private static readonly Guid Texture2DIid = typeof(ID3D11Texture2D).GUID;
 
     private readonly WindowInfo _window;
-    private readonly long _minFrameTicks;
+    private long _minFrameTicks;
+
+    public int MaxFps { set => Interlocked.Exchange(ref _minFrameTicks, Stopwatch.Frequency / Math.Clamp(value, 1, 120)); }
     private readonly object _gate = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
 
@@ -145,7 +147,7 @@ internal sealed class WgcCapture : ICaptureSource
                     return;
 
                 long now = _clock.ElapsedTicks;
-                if (now - _lastFrameTicks < _minFrameTicks)
+                if (now - _lastFrameTicks < Interlocked.Read(ref _minFrameTicks))
                     return;
 
                 var size = captured.ContentSize;

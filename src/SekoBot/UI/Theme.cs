@@ -283,6 +283,7 @@ internal sealed class KeyPicker : Button
 
     public static string Name(Keys key) => key switch
     {
+        Keys.None => "Yok",
         Keys.Space => "Boşluk",
         Keys.Escape => "Esc",
         Keys.Return => "Enter",
