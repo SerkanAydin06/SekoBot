@@ -413,4 +413,23 @@ public class PullAreaTests
         Assert.Contains(actions, x => x is KeyDownAction d && d.Key == p.Keys.MoveLeft);
         Assert.DoesNotContain(actions, x => x is KeyDownAction d && d.Key == p.Keys.MoveRight);
     }
+    [Fact]
+    public void A_group_is_not_given_up_right_after_something_else_came_between()
+    {
+        // Recorded: a sell trip (3 minutes) came back and the group being walked to was given up that very
+        // second — the time away counted as time spent failing to get there.
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = false, PullMaxMobs = 9, Breaks = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        TargetInfo[] group = [At(10, 10, 1000, 300), At(11, 10, 1020, 300), At(12, 10, 1040, 300)];
+        GameState State(double ms) => new(TimeSpan.FromMilliseconds(ms), W, H, 1, 1, 0, 1) { Targets = group, Walking = true, AttackPower = 189 };
+        for (double t = 0; t < 1000; t += 100)
+            brain.Tick(State(t));
+        // Three minutes elsewhere, then back: still walking to it, not given up.
+        var back = new List<BotAction>();
+        for (double t = 181_000; t < 182_000; t += 100)
+            back.AddRange(brain.Tick(State(t)));
+        Assert.DoesNotContain(back, x => x is NoteAction n && n.Text.Contains("Gruba ulaşılamadı"));
+        Assert.Contains(back, x => x is KeyDownAction d && d.Key == p.Keys.MoveRight);
+    }
 }

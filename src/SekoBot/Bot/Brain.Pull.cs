@@ -27,6 +27,9 @@ internal sealed partial class Brain
     private TimeSpan _pullWalkSince = Never, _pullWalkStarted = Never;
     private double _pullClosest = double.MaxValue;
     internal const int PullWalkMs = 4000, PullWalkMaxMs = 12000;
+    /// <summary>The last tick spent walking to the group; a longer gap than <see cref="PullPausedMs"/>: something else came between.</summary>
+    private TimeSpan _pullWalkTickAt = Never;
+    internal const int PullPausedMs = 1500;
     internal const double PullProgress = 150;
     /// <summary>A group that couldn't be reached is left this long.</summary>
     internal const int PullUnreachableMs = 300_000;
@@ -268,6 +271,15 @@ internal sealed partial class Brain
         }
         else
         {
+            // Walking to this group was cut by something else (a special drop picked up, a sell trip, emptying
+            // the bag, a stun): its clocks start again — the time away isn't time spent failing to get there
+            // (recorded: groups given up the very second a sell trip came back).
+            if (_pullWalkTickAt != Never && now - _pullWalkTickAt > Ms(PullPausedMs))
+            {
+                _pullWalkSince = _pullWalkStarted = now;
+                _pullClosest = double.MaxValue;
+            }
+            _pullWalkTickAt = now;
             if (member.Distance < _pullClosest - PullProgress)
             {
                 _pullClosest = member.Distance;
