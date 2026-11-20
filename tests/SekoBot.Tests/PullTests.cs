@@ -371,3 +371,30 @@ public class ArcherTests
         Assert.Contains(actions, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
     }
 }
+
+public class PullAreaTests
+{
+    private const int W = 1920, H = 1080;
+    private static readonly Point Center = new(W / 2, H / 2);
+
+    private static TargetInfo At(int id, int group, double x, int exp) =>
+        new(id, new Point(Center.X + (int)(x / 5), Center.Y), Math.Abs(x), 130, exp, 305, 305, 56, false, false, group, new Vec3(x, 0, 0));
+
+    [Fact]
+    public void Groups_near_the_area_edge_are_not_gathered()
+    {
+        // A 10 m area: a rich group 9 m to the right (inside the area, but walking there around things
+        // would take us over its edge — recorded on c3) and a cheaper one 6 m to the left.
+        var p = new BotProfile { LeashMeters = 10, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = false, PullMaxMobs = 9 };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        TargetInfo[] rich = [At(10, 10, 900, 900), At(11, 10, 920, 900), At(12, 10, 940, 900)];
+        TargetInfo[] cheap = [At(20, 20, -600, 100), At(21, 20, -620, 100), At(22, 20, -640, 100)];
+        var actions = new List<BotAction>();
+        for (double t = 0; t < 1500; t += 100)
+            actions.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), W, H, 1, 1, 0, 1)
+                { Targets = [.. rich, .. cheap], Walking = true, AttackPower = 189, Position = new Vec3(0, 0, 0) }));
+        Assert.Contains(actions, x => x is KeyDownAction d && d.Key == p.Keys.MoveLeft);
+        Assert.DoesNotContain(actions, x => x is KeyDownAction d && d.Key == p.Keys.MoveRight);
+    }
+}

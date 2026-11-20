@@ -123,6 +123,9 @@ internal sealed partial class Brain
         {
             _returning = true;
             actions.Add(new NoteAction("Alan sınırı aşıldı; başlangıç yerine dönülüyor."));
+            // A group being walked to is dropped, not given up as unreachable: the walk home stopped it,
+            // not a wall (recorded on c3: a gathering, the area left, then "Gruba ulaşılamadı" — ~half the tries).
+            DropPull(now);
         }
         else if (metres < p.LeashMeters * 0.5 && _returning)
         {

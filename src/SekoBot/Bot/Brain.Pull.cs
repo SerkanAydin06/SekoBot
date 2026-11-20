@@ -132,6 +132,24 @@ internal sealed partial class Brain
         _pullAnchor = null;
     }
 
+    /// <summary>The group being walked to let go without counting it as unreachable (the walk home took over).</summary>
+    private void DropPull(TimeSpan now)
+    {
+        if (_pullGroup != 0)
+            _pulled[_pullGroup] = now; // not again within the minute, but not left for 5 minutes either
+        _pullGroup = 0;
+        _pullHitSince = _pullWalkSince = _pullWalkStarted = Never;
+        _pullClosest = double.MaxValue;
+    }
+
+    /// <summary>Groups are gathered only this far into the area (its radius), so walking to one — around
+    /// whatever is in the way — doesn't take the character over the edge (and home again, half way).</summary>
+    internal const double PullInArea = 0.75;
+
+    private bool PullInsideArea(IEnumerable<TargetInfo> group, BotProfile p) =>
+        p.LeashMeters <= 0 || _home is not Memory.Vec3 home || Centre(group) is not Memory.Vec3 c ||
+        c.DistanceXY(home) <= p.LeashMeters * 100 * PullInArea;
+
     private static Memory.Vec3? Centre(IEnumerable<TargetInfo> group)
     {
         var known = group.Where(t => t.Position != null).Select(t => t.Position!.Value).ToList();
@@ -183,6 +201,7 @@ internal sealed partial class Brain
             .Where(t => t.Group != 0 && t.Distance <= PullRange * 1.5 && !_pulled.ContainsKey(t.Group))
             .GroupBy(t => t.Group)
             .Where(g => g.All(t => !t.AttacksMe && t.Hp >= t.MaxHp))
+            .Where(g => g.Key == _pullGroup || PullInsideArea(g, p))
             // The first group within 15 m; the next ones only around the first.
             .Where(g => _pullAnchor is not Memory.Vec3 anchor
                 ? g.Min(t => t.Distance) <= (leftovers ? Math.Max(area, PullNextWithChasers) : startingWithChasers ? area : PullRange)

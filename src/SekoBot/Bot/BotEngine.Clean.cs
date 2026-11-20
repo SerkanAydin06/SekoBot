@@ -29,7 +29,18 @@ internal sealed partial class BotEngine
     private readonly SessionItems _sessionItems = new();
     public SessionItems SessionItems => _sessionItems;
 
-    private bool JunkInBag() => Profile.ThrowWhenInventoryFull && _world != null && World is { } world && HasThrowables(world, Profile);
+    /// <summary>A break empties the bag only with this many items to throw (or a tight bag): not for one or two
+    /// (seen: the bot stepping aside for 1 item, then again a minute later).</summary>
+    internal const int ThrowInBreakFrom = 5;
+    /// <summary>The bag tight with at most this many to throw while a market NPC is near: off to sell first (selling
+    /// frees far more room; seen: 2 + 1 items thrown in 40 s, then off to sell 33 anyway).</summary>
+    internal const int SellFirstUpTo = 3;
+
+    private int ThrowCount(WorldSnapshot world, BotProfile profile) =>
+        profile.NavigateMode ? (world.Progress?.Inventory ?? []).Count(i => ShouldThrow(i, profile, BotPicked)) : 0;
+
+    private bool JunkInBag() => Profile.ThrowWhenInventoryFull && _world != null && World is { } world &&
+                                ThrowCount(world, Profile) is var n && (n >= ThrowInBreakFrom || n > 0 && BagTight(world));
 
     /// <summary>"Şimdi at" was pressed with something to sell: sold after throwing, also with room in the bag.</summary>
     private bool _sellAsked;
@@ -289,7 +300,7 @@ internal sealed partial class BotEngine
             if (!TakeTurn())
                 return WaitingForTurn(state);
             // What is to be thrown goes first, here; then what was picked for its price is taken to a market NPC.
-            if ((World is not { } w || !HasThrowables(w, p)) && TryStartSellTrip(p) is { } letGo)
+            if ((World is not { } w || !HasThrowables(w, p) || ThrowCount(w, p) <= SellFirstUpTo && BagTight(w)) && TryStartSellTrip(p) is { } letGo)
                 return letGo;
             _cleaner.Start(state.Time);
             _log("Sakin bir yerdeyiz; envanter açılıp 'At' işaretli eşyalar atılıyor.");
