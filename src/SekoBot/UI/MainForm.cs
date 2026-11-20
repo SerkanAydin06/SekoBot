@@ -1364,10 +1364,29 @@ internal sealed class MainForm : Form
     private void CloseFromMini()
     {
         bool busy = _engine is { } e && (e.BotRunning || e.ScanningMarket || e.ScanningArea);
-        if (busy && MessageBox.Show(_mini, "Bot çalışıyor. SekoBot kapatılsın mı?", "SekoBot", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
-                MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+        if (busy && !AskOnTop("Bot çalışıyor. SekoBot kapatılsın mı?"))
             return;
         Close();
+    }
+
+    /// <summary>
+    /// A yes / no question shown over everything, next to the small bar: the bar never takes the focus (it
+    /// mustn't take it from the game), so a question it owned opened behind the games (seen).
+    /// </summary>
+    private bool AskOnTop(string question)
+    {
+        var near = _mini is { Visible: true } bar ? bar.Bounds : Bounds;
+        using var owner = new Form
+        {
+            FormBorderStyle = FormBorderStyle.None, ShowInTaskbar = false, TopMost = true, Opacity = 0,
+            StartPosition = FormStartPosition.Manual, Size = new Size(1, 1),
+            Location = new Point(near.Left + near.Width / 2, near.Top + near.Height / 2),
+        };
+        owner.Show();
+        Win32.SetForegroundWindow(owner.Handle);
+        owner.Activate();
+        return MessageBox.Show(owner, question, "SekoBot", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+            MessageBoxDefaultButton.Button2) == DialogResult.Yes;
     }
 
     /// <summary>How long the work of this tab has run ("" when idle): farm, market watch or fishing.</summary>

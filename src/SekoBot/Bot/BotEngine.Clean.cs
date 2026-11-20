@@ -265,7 +265,70 @@ internal sealed partial class BotEngine
 
     /// <summary>The inventory as drawn, read only while throwing (on the perception thread).</summary>
     private void ReadBagForCleaning() =>
-        _bagLayout = _cleaner.Active || _brain.ReadyToClean || DateTime.Now < _leftoverCheckUntil ? _world?.ReadBagLayout() : null;
+        _bagLayout = _cleaner.Active || _brain.ReadyToClean || _tidying || DateTime.Now < _leftoverCheckUntil ? _world?.ReadBagLayout() : null;
+
+    // ── The screen left clean before the turn goes to another bot ──
+    // (seen: the last item's "throw it away?" left open when the next bot took over, the bot fighting on under it)
+    private bool _tidying;
+    private DateTime _tidyUntil, _tidyClearSince, _tidyActedAt;
+    private int _tidyClosed;
+    /// <summary>At most this long looking for windows left open; the screen clean this long: done.</summary>
+    internal static readonly TimeSpan TidyFor = TimeSpan.FromSeconds(8), TidyClearFor = TimeSpan.FromSeconds(1);
+
+    /// <summary>The work with the mouse is over: before the turn is let go, nothing of it may stay on the screen.</summary>
+    private void StartTidy()
+    {
+        _tidying = true;
+        _tidyUntil = DateTime.Now + TidyFor;
+        _tidyClearSince = DateTime.MinValue;
+        _tidyActedAt = DateTime.MinValue;
+        _tidyClosed = 0;
+    }
+
+    /// <summary>What is still open of a bag emptying / a sale: a question, the bag (with an item's menu), a shop.</summary>
+    internal static bool LeftOpen(BagLayout bag) => bag.Confirm != null || bag.OtherConfirm != null || bag.Open || bag.NpcShop > 0;
+
+    /// <summary>The key that closes the next thing left open (a question or a shop first, then the bag).</summary>
+    internal static Keys TidyKey(BagLayout bag, BotProfile p) =>
+        bag.Confirm != null || bag.OtherConfirm != null || bag.NpcShop > 0 ? p.Keys.CloseWindow : p.Keys.Inventory;
+
+    /// <summary>One look while tidying: a key that closes what is left, nothing (waiting), or null when done.</summary>
+    private IReadOnlyList<BotAction>? TidyTick(GameState state, BotProfile p)
+    {
+        var now = DateTime.Now;
+        var bag = _bagLayout;
+        if (now > _tidyUntil)
+        {
+            EndTidy(clean: false);
+            return null;
+        }
+        if (bag == null || !LeftOpen(bag))
+        {
+            if (_tidyClearSince == DateTime.MinValue)
+                _tidyClearSince = now;
+            if (now - _tidyClearSince >= TidyClearFor)
+            {
+                EndTidy(clean: true);
+                return null;
+            }
+            return state.Attackers.Count > 0 ? null : [];
+        }
+        _tidyClearSince = DateTime.MinValue;
+        if (now - _tidyActedAt < TimeSpan.FromMilliseconds(1200))
+            return [];
+        _tidyActedAt = now;
+        _tidyClosed++;
+        return [new KeyTapAction(TidyKey(bag, p))];
+    }
+
+    private void EndTidy(bool clean)
+    {
+        _tidying = false;
+        if (_tidyClosed > 0)
+            _log(clean ? "Ekranda açık kalan pencere kapatıldı; ekran temiz, sıra diğer botlara bırakıldı."
+                       : "Ekranda açık kalan pencere kapatılamadı; sıra yine de bırakıldı.");
+        LetGoTurn();
+    }
 
     /// <summary>After throwing was cut short (a mob attacked): a while of looking for a question or the bag left open.</summary>
     private DateTime _leftoverCheckUntil = DateTime.MinValue;
@@ -277,6 +340,8 @@ internal sealed partial class BotEngine
     /// </summary>
     private IReadOnlyList<BotAction>? CleanTick(GameState state, BotProfile p)
     {
+        if (!_cleaner.Active && _tidying && TidyTick(state, p) is { } tidy)
+            return tidy;
         if (!_cleaner.Active)
         {
             // Cut short a moment ago: the throw question (or the bag) may still be showing — closed, then fight on.
@@ -368,6 +433,6 @@ internal sealed partial class BotEngine
             _log("Eşya atılamadı: " + (_cleaner.Problem ?? "bilinmeyen neden") + ".");
         }
         if (!_brain.WantsClean)
-            LetGoTurn();
+            StartTidy(); // the turn goes once nothing is left open on the screen
     }
 }
