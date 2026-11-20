@@ -32,6 +32,10 @@ internal sealed class BagCleaner
     public static readonly TimeSpan MenuTimeout = TimeSpan.FromMilliseconds(2500);
     /// <summary>The menu shows some 60 ms after the click (recorded 2026-11-20); looked for this soon, waited for up to <see cref="MenuTimeout"/>.</summary>
     public static readonly TimeSpan AfterItemClick = TimeSpan.FromMilliseconds(250);
+    /// <summary>The menu's button read at one place this long before it is clicked (see <see cref="Step.Menu"/>).</summary>
+    public static readonly TimeSpan MenuSettle = TimeSpan.FromMilliseconds(150);
+    private Point? _menuSeenAt;
+    private TimeSpan _menuSeenWhen;
 
     private enum Step { Open, Pick, Menu, Dragged, Confirmed, Close }
     private TimeSpan _clickedAt;
@@ -169,6 +173,18 @@ internal sealed class BagCleaner
                         _waitUntil = now + AfterKey;
                         break;
                     }
+                    // The icons sit elsewhere for each item (and "Sat" comes in next to a market NPC): right after
+                    // the menu shows, its place may still be the last menu's — seen: "Karşılaştır" clicked instead of
+                    // "At". Clicked only once read at the same place twice, a moment apart.
+                    if (_menuSeenAt != drop || now - _menuSeenWhen < MenuSettle)
+                    {
+                        if (_menuSeenAt != drop)
+                        {
+                            _menuSeenAt = drop;
+                            _menuSeenWhen = now;
+                        }
+                        break;
+                    }
                     actions.Add(new ClickAction(drop, Slow: true, Fast: true));
                     _draggedAt = now;
                     _step = Step.Dragged;
@@ -252,6 +268,7 @@ internal sealed class BagCleaner
                         _yesClicks = 0;
                         _menuTried = true;
                         _clickedAt = now;
+                        _menuSeenAt = null; // the last item's place counts for nothing
                         _step = Step.Menu;
                         _waitUntil = now + AfterItemClick;
                         break;
