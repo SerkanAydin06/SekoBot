@@ -171,7 +171,7 @@ internal sealed class MiniBar : Form
     private float S => DeviceDpi / 96f;
     /// <summary>The bar's width now, in 96-dpi units.</summary>
     private float W => ClientSize.Width / S;
-    private const int MaxWidth = 1100;
+    private const int MaxWidth = 10000; // as wide as its game, also a game made big (the user: the bar stayed short under it)
     /// <summary>Narrowest the bar gets (small games in a big grid): still everything readable.</summary>
     private const int MinWidth = 440;
 
