@@ -108,13 +108,15 @@ public class BagCleanerTests
     }
 
     [Fact]
-    public void A_question_it_did_not_ask_for_is_answered_no()
+    public void A_throw_question_left_from_before_is_answered_yes()
     {
+        // Since the game's update of 2026-11-20 Esc doesn't close it (seen: "onay penceresi kapanmıyor"); it was
+        // asked for an item the bot meant to throw (cut short by a mob): "Evet".
         var p = new BotProfile();
         var cleaner = new BagCleaner();
         cleaner.Start(S(0));
         var actions = cleaner.Tick(S(0), Bag(true, 0, [Item(20, Junk, 0, true)], new Point(531, 389)), i => i.Vnum == Junk, p, Client);
-        Assert.Equal([new KeyTapAction(p.Keys.CloseWindow)], actions);
+        Assert.Equal([new ClickAction(new Point(531, 389), Slow: true, Fast: true)], actions);
     }
 
     [Fact]
@@ -147,14 +149,14 @@ public class BagCleanerTests
     }
 
     [Fact]
-    public void Cut_short_by_an_attack_the_throw_question_is_said_no_to_and_the_bag_closed()
+    public void Cut_short_by_an_attack_the_throw_question_is_answered_and_the_bag_closed()
     {
         var p = new BotProfile();
         var cleaner = new BagCleaner();
         cleaner.Start(TimeSpan.Zero);
         var asking = new BagLayout(true, new Rectangle(10, 20, 500, 600), 0, Pages, [], new Point(300, 300));
         var actions = cleaner.Abort(asking, p, "saldırı geldi");
-        Assert.Equal([new KeyTapAction(p.Keys.CloseWindow), new KeyTapAction(p.Keys.Inventory)], actions);
+        Assert.Equal([new ClickAction(new Point(300, 300), Slow: true, Fast: true), new KeyTapAction(p.Keys.Inventory)], actions);
         Assert.False(cleaner.Active);
     }
 }

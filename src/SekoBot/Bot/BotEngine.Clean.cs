@@ -289,8 +289,19 @@ internal sealed partial class BotEngine
     internal static bool LeftOpen(BagLayout bag) => bag.Confirm != null || bag.OtherConfirm != null || bag.Open || bag.NpcShop > 0;
 
     /// <summary>The key that closes the next thing left open (a question or a shop first, then the bag).</summary>
-    internal static Keys TidyKey(BagLayout bag, BotProfile p) =>
-        bag.Confirm != null || bag.OtherConfirm != null || bag.NpcShop > 0 ? p.Keys.CloseWindow : p.Keys.Inventory;
+    /// <summary>
+    /// What closes the next thing left open. The "throw it away?" question (and, at a shop, "sell it?") is answered
+    /// "Evet": Esc doesn't close it since the game's update (seen 2026-11-20: tried 4 times, open for 20 s), and it
+    /// was asked for an item the bot meant to throw / sell anyway. Any other question and a shop: Esc; the bag: its key.
+    /// </summary>
+    internal static BotAction TidyAction(BagLayout bag, BotProfile p, bool selling = false)
+    {
+        if (bag.Confirm is Point yes)
+            return new ClickAction(yes, Slow: true, Fast: true);
+        if (selling && bag.NpcShop > 0 && bag.OtherConfirm is Point sellYes)
+            return new ClickAction(sellYes, Slow: true, Fast: true);
+        return new KeyTapAction(bag.OtherConfirm != null || bag.NpcShop > 0 ? p.Keys.CloseWindow : p.Keys.Inventory);
+    }
 
     /// <summary>One look while tidying: a key that closes what is left, nothing (waiting), or null when done.</summary>
     private IReadOnlyList<BotAction>? TidyTick(GameState state, BotProfile p)
@@ -318,7 +329,7 @@ internal sealed partial class BotEngine
             return [];
         _tidyActedAt = now;
         _tidyClosed++;
-        return [new KeyTapAction(TidyKey(bag, p))];
+        return [TidyAction(bag, p)];
     }
 
     private void EndTidy(bool clean)
@@ -350,8 +361,8 @@ internal sealed partial class BotEngine
                 if (left.Confirm != null || left.OtherConfirm != null)
                 {
                     _leftoverClosedAt = DateTime.Now;
-                    _log("Atma sorusu açık kalmış; kapatılıyor.");
-                    return [new KeyTapAction(p.Keys.CloseWindow)];
+                    _log(left.Confirm != null ? "Atma sorusu açık kalmış; 'Evet' ile kapatılıyor (eşya zaten atılacaktı)." : "Açık kalan soru kapatılıyor.");
+                    return [TidyAction(left, p)];
                 }
                 if (left.Open)
                 {
@@ -406,7 +417,8 @@ internal sealed partial class BotEngine
         {
             _log("Eşya atarken saldırı geldi; envanter kapatıldı, önce savaşılıyor.");
             _brain.CleanInterrupted();
-            LetGoTurn();
+            // The turn stays until nothing is left open (a question of ours open under another bot's game: seen).
+            StartTidy();
             return;
         }
         _brain.WantsClean = false;
