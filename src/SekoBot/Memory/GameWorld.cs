@@ -436,8 +436,12 @@ internal sealed partial class GameWorldReader : IDisposable
         ("m2data_C", "dropWindow", 0x1440),
         ("m2data_C", "MsgBoxShowing", 0x1680),
         ("UI_C", "pop_weaponArmor", 0x480),
-        ("pop_equp_C", "yeret", 0x330),
-        ("pop_equp_C", "slotid", 0x508),
+        ("pop_equp_C", "yeret", 0x400),
+        ("pop_equp_C", "sat", 0x388),
+        ("pop_equp_C", "slotid", 0x5D8),
+        // Since the game's update of 2026-11-20 the menu's buttons are icons in these boxes (the old ones no longer drawn).
+        ("pop_equp_C", "atBB", 0x280),
+        ("pop_equp_C", "satBB", 0x390),
         ("UI_C", "dmBox", 0x328),
         ("UI_C", "duyuruText", 0x350),
         ("TextBlock", "Text", 0x130),
@@ -1304,6 +1308,22 @@ internal sealed partial class GameWorldReader : IDisposable
         return new Rectangle((int)Math.Round(x), (int)Math.Round(y), (int)Math.Round(w * scale), (int)Math.Round(h * scale));
     }
 
+    /// <summary>
+    /// A button of the item menu (its middle), when drawn: since the game's update of 2026-11-20 an icon in
+    /// the box <paramref name="box"/> (atBB: throw away, satBB: sell; 33×33, in a row over the item), the
+    /// old text button <paramref name="old"/> kept but drawn nowhere (0×0) — so the old one only when it is drawn.
+    /// </summary>
+    private Point? MenuButton(long menu, long menuClass, string box, string old)
+    {
+        foreach (string name in new[] { box, old })
+        {
+            long widget = Pointer(menu + Offset(menuClass, "pop_equp_C", name));
+            if (Showing(widget) && DrawnAt(widget) is { Width: > 4, Height: > 4 } r)
+                return new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
+        }
+        return null;
+    }
+
     private bool Showing(long widget) =>
         MemoryReads.IsPointer(widget) && Byte(widget + Offset(Pointer(widget + ObjClass), "Widget", "Visibility")) is byte v && v is not (1 or 2);
 
@@ -1419,13 +1439,9 @@ internal sealed partial class GameWorldReader : IDisposable
             int menuSlot = -1;
             if (menuKnown && open && Showing(menu))
             {
-                long drop = Pointer(menu + Offset(menuClass, "pop_equp_C", "yeret"));
-                if (Showing(drop) && DrawnAt(drop) is { } r)
-                    dropButton = new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
+                dropButton = MenuButton(menu, menuClass, "atBB", "yeret");
                 // "Sat" shows only next to a market NPC (seen in the game).
-                long sell = Pointer(menu + Offset(menuClass, "pop_equp_C", "sat"));
-                if (Showing(sell) && DrawnAt(sell) is { } s)
-                    sellButton = new Point(s.X + s.Width / 2, s.Y + s.Height / 2);
+                sellButton = MenuButton(menu, menuClass, "satBB", "sat");
                 menuSlot = Int32(menu + Offset(menuClass, "pop_equp_C", "slotid")) ?? -1;
             }
             // A market NPC's shop window (m2data.shopWindow, seen: shopId 9001 with "Al" / "Sat").
