@@ -217,7 +217,7 @@ internal sealed partial class BotEngine
                              profile, new Size(state?.Width ?? 1920, state?.Height ?? 1080)))
                     input.Enqueue(action);
                 foreach (var (vnum, count) in cleaner.ThrownItems)
-                    _sessionItems.Thrown(vnum, count);
+                    _sessionItems.Sold(vnum, count);
                 cleaner.ThrownItems.Clear();
                 await Task.Delay(80, token);
             }

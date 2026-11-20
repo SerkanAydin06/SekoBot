@@ -8,7 +8,7 @@ namespace SekoBot.UI;
 /// <param name="HpPotions">HP and MP potions left in the bag (the ones on the potion keys), when known.</param>
 internal sealed record MiniInfo(string Name, string Status, Color StatusColor, double? Hp, double? Mp, string ExpRate, string Mobs,
     bool Running, Rectangle? Game, nint GameWindow = 0, int? HpPotions = null, int? MpPotions = null, bool Attack = true, string? Market = null,
-    string Exp10 = "", string Elapsed = "", IReadOnlyList<(string Name, int Picked, int Thrown)>? Items = null);
+    string Exp10 = "", string Elapsed = "", IReadOnlyList<(string Name, int Picked, int Thrown, int Sold)>? Items = null);
 
 /// <summary>
 /// The bot made small: one bar (420×84) under its own game window, so many bots fit on one screen
@@ -272,23 +272,26 @@ internal sealed class MiniBar : Form
         _itemsScroll = Math.Clamp(_itemsScroll, 0, Math.Max(0, rows.Count - ItemRows));
         using var head = new Font("Segoe UI", 8f, FontStyle.Bold);
         using var font = new Font("Segoe UI", 8.5f);
-        float right = W - 12, thrownW = 52, pickedW = 52;
+        float right = W - 12, soldW = 52, thrownW = 52, pickedW = 52;
         var header = new Rectangle((int)(14 * s), (int)(4 * s), (int)((W - 28) * s), (int)(ItemsHeader * s - 6 * s));
         string title = rows.Count == 0 ? "BU TUR EŞYALAR · bot başlayınca dolar" : $"BU TUR EŞYALAR · {rows.Count} çeşit, {rows.Sum(r => r.Picked):N0} alındı";
         TextRenderer.DrawText(g, title, head, header, Theme.Accent, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.EndEllipsis);
-        TextRenderer.DrawText(g, "Alınan", head, new Rectangle((int)((right - thrownW - pickedW) * s), header.Y, (int)(pickedW * s), header.Height), Theme.Muted, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
-        TextRenderer.DrawText(g, "Atılan", head, new Rectangle((int)((right - thrownW) * s), header.Y, (int)(thrownW * s), header.Height), Theme.Muted, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
+        TextRenderer.DrawText(g, "Alınan", head, new Rectangle((int)((right - soldW - thrownW - pickedW) * s), header.Y, (int)(pickedW * s), header.Height), Theme.Muted, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
+        TextRenderer.DrawText(g, "Atılan", head, new Rectangle((int)((right - soldW - thrownW) * s), header.Y, (int)(thrownW * s), header.Height), Theme.Muted, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
+        TextRenderer.DrawText(g, "Satılan", head, new Rectangle((int)((right - soldW) * s), header.Y, (int)(soldW * s), header.Height), Theme.Muted, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
         using (var inset = new SolidBrush(Theme.Inset))
             g.FillRectangle(inset, 10 * s, ItemsHeader * s, (W - 20) * s, ItemRows * ItemRowHeight * s + 2 * s);
         for (int i = 0; i < ItemRows && _itemsScroll + i < rows.Count; i++)
         {
-            var (name, picked, thrown) = rows[_itemsScroll + i];
+            var (name, picked, thrown, sold) = rows[_itemsScroll + i];
             int y = (int)((ItemsHeader + 1 + i * ItemRowHeight) * s), h = (int)(ItemRowHeight * s);
-            TextRenderer.DrawText(g, name, font, new Rectangle((int)(16 * s), y, (int)((right - thrownW - pickedW - 22) * s), h), Theme.Text,
+            TextRenderer.DrawText(g, name, font, new Rectangle((int)(16 * s), y, (int)((right - soldW - thrownW - pickedW - 22) * s), h), Theme.Text,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.EndEllipsis);
-            TextRenderer.DrawText(g, picked > 0 ? picked.ToString("N0") : "", font, new Rectangle((int)((right - thrownW - pickedW) * s), y, (int)(pickedW * s), h), Theme.Text,
+            TextRenderer.DrawText(g, picked > 0 ? picked.ToString("N0") : "", font, new Rectangle((int)((right - soldW - thrownW - pickedW) * s), y, (int)(pickedW * s), h), Theme.Text,
                 TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
-            TextRenderer.DrawText(g, thrown > 0 ? thrown.ToString("N0") : "", font, new Rectangle((int)((right - thrownW) * s), y, (int)(thrownW * s), h), Theme.Muted,
+            TextRenderer.DrawText(g, thrown > 0 ? thrown.ToString("N0") : "", font, new Rectangle((int)((right - soldW - thrownW) * s), y, (int)(thrownW * s), h), Theme.Muted,
+                TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
+            TextRenderer.DrawText(g, sold > 0 ? sold.ToString("N0") : "", font, new Rectangle((int)((right - soldW) * s), y, (int)(soldW * s), h), Theme.Green,
                 TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
         }
         if (rows.Count > ItemRows)

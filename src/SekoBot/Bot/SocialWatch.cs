@@ -86,7 +86,9 @@ internal sealed class SocialWatch
                 continue;
             var fresh = thread.Last.TakeLast(Math.Min(thread.Count - before, thread.Last.Count)).Where(m => m.Message.Length > 0).ToList();
             foreach (var message in fresh)
-                if (!SameName(message.From, me))
+                if (IsGame(message.From.Length > 0 ? message.From : thread.With))
+                    notices.Add(new($"🎮 Oyun mesajı: {message.Message}", true)); // the game's own (a level up…): no one to answer
+                else if (!SameName(message.From, me))
                     notices.Add(new($"💬 Fısıltı — {Who(message.From.Length > 0 ? message.From : thread.With, message.Level)}: {message.Message}", true));
             // The message itself isn't always readable (the DM window keeps only how many there are):
             // still told — unless it was our own answer.
@@ -159,6 +161,9 @@ internal sealed class SocialWatch
     }
 
     private static string Who(string name, int level) => level is > 0 and < 1000 ? $"{name} (Sv {level})" : name;
+
+    /// <summary>The game itself writing (a level up's congratulation, a market sale: seen as "SYSTEM").</summary>
+    internal static bool IsGame(string from) => string.Equals(from.Trim(), "SYSTEM", StringComparison.OrdinalIgnoreCase);
 
     private static bool SameName(string a, string b) => b.Length > 0 && string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
 
