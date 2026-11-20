@@ -335,7 +335,6 @@ internal sealed partial class BotEngine
     private void EndTidy(bool clean)
     {
         _tidying = false;
-        ShrinkAfterWork();
         if (_tidyClosed > 0)
             _log(clean ? "Ekranda açık kalan pencere kapatıldı; ekran temiz, sıra diğer botlara bırakıldı."
                        : "Ekranda açık kalan pencere kapatılamadı; sıra yine de bırakıldı.");
@@ -379,9 +378,6 @@ internal sealed partial class BotEngine
             // What is to be thrown goes first, here; then what was picked for its price is taken to a market NPC.
             if ((World is not { } w || !HasThrowables(w, p) || ThrowCount(w, p) <= SellFirstUpTo && BagTight(w)) && TryStartSellTrip(p) is { } letGo)
                 return letGo;
-            // A small game cuts the bag off: made big for the work first (a moment for its screens to settle).
-            if (GrowForWork())
-                return [];
             _cleaner.Start(state.Time);
             _log("Sakin bir yerdeyiz; envanter açılıp 'At' işaretli eşyalar atılıyor.");
         }
