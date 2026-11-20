@@ -113,13 +113,13 @@ public class MetinLevelTests
     private static WorldMob Stone(int level) => new(1, 8003, "Savaş Metini", level, 34050, 34050, new Vec3(0, 0, 0), IsMetin: true);
 
     [Fact]
-    public void Stones_far_below_our_level_are_left_alone()
+    public void Stones_far_below_our_level_are_cut_too()
     {
+        // The user: "even at a low level, cut the stones" (they were left 6+ levels below the character).
         var p = new BotProfile { Metins = MetinMode.Prefer };
-        Assert.False(BotEngine.Wanted(Stone(15), p, level: 21));   // 6 below
-        Assert.True(BotEngine.Wanted(Stone(15), p, level: 20));    // 5 below: still worth it
+        Assert.True(BotEngine.Wanted(Stone(15), p, level: 26));
         Assert.True(BotEngine.Wanted(Stone(25), p, level: 20));
-        Assert.True(BotEngine.Wanted(Stone(5), p));                 // level unknown: as before
+        Assert.True(BotEngine.Wanted(Stone(5), p));
         p.Metins = MetinMode.Skip;
         Assert.False(BotEngine.Wanted(Stone(25), p, level: 20));
     }

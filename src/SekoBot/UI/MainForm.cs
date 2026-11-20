@@ -1019,7 +1019,7 @@ internal sealed class MainForm : Form
         // Everything a size smaller (the window was bigger than needed).
         Compact(this, UiScale);
         // List columns don't scale with the window: fit them to the list.
-        int number = 48, nameWidth = _runItems.ClientSize.Width - 3 * number;
+        int number = 56, nameWidth = _runItems.ClientSize.Width - 3 * number; // "Satılan" fits
         _runItems.Columns[0].Width = nameWidth;
         _runItems.Columns[1].Width = number;
         _runItems.Columns[2].Width = number;
