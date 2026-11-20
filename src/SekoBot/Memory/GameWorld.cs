@@ -511,6 +511,8 @@ internal sealed partial class GameWorldReader : IDisposable
         ("PrivateShopView_C", "closed", 0x568),
         ("PrivateShopView_C", "playerLevel", 0x56C),
         ("m2data_C", "loginok", 0x11C0),
+        // The game's texts by number (TMap<int, FString>; seen: 2372 of them), for its own "SYSTEM" messages.
+        ("m2data_C", "Locale", 0xE20),
         ("m2data_C", "loginMain", 0x11A0),
         ("m2data_C", "charSelect", 0x1580),
         ("m2data_C", "charSelectNew", 0x1768),
@@ -1067,7 +1069,7 @@ internal sealed partial class GameWorldReader : IDisposable
                 for (int k = Math.Max(0, count - 5); k < count; k++)
                 {
                     long message = messages + (long)k * DmMessageSize;
-                    last.Add(new Whisper(ReadFString(message + 0x10, 64), Int32(message + 0x8) ?? 0, ReadFString(message + 0x20, 512)));
+                    last.Add(new Whisper(ReadFString(message + 0x10, 64), Int32(message + 0x8) ?? 0, Said(ReadFString(message + 0x20, 512))));
                 }
                 threads.Add(new WhisperThread(with, count, last));
             }
@@ -1195,7 +1197,7 @@ internal sealed partial class GameWorldReader : IDisposable
                 for (int k = Math.Max(0, messages - 5); k < messages; k++)
                 {
                     long message = list + (long)k * DmMessageSize;
-                    last.Add(new Whisper(ReadFString(message + 0x10, 64), Int32(message + 0x8) ?? 0, ReadFString(message + 0x20, 512)));
+                    last.Add(new Whisper(ReadFString(message + 0x10, 64), Int32(message + 0x8) ?? 0, Said(ReadFString(message + 0x20, 512))));
                 }
             threads.Add(new WhisperThread(name, messages, last, Int32(thread + 0x28) ?? 0));
         }
@@ -2006,6 +2008,38 @@ internal sealed partial class GameWorldReader : IDisposable
     }
 
     /// <summary>An Unreal FString (pointer to UTF-16 text, length with the closing zero).</summary>
+    /// <summary>Where each of the game's texts is (number → its FString), read once; null until read.</summary>
+    private Dictionary<int, long>? _texts;
+    private const int TextEntrySize = 32; // TSetElement<TPair<int, FString>>: key, pad, FString (16), hash next / index
+
+    /// <summary>A message as the game shows it: its own "SYSTEM" messages are text numbers (see <see cref="GameTexts"/>).</summary>
+    private string Said(string raw) => GameTexts.Decode(raw, GameText);
+
+    /// <summary>One of the game's texts by its number (m2data.Locale); null when there is none.</summary>
+    private string? GameText(int id)
+    {
+        if (_texts == null)
+        {
+            var texts = new Dictionary<int, long>();
+            long instance = Pointer(_moduleBase + _gameInstance);
+            long cls = Pointer(instance + ObjClass);
+            long map = instance + Offset(cls, "m2data_C", "Locale");
+            long data = Pointer(map);
+            int count = Int32(map + 8) ?? 0;
+            if (MemoryReads.IsPointer(data) && count is > 0 and < 100_000)
+            {
+                var bytes = new byte[count * TextEntrySize];
+                if (_memory.Read(data, bytes, bytes.Length))
+                    for (int i = 0; i < count; i++)
+                        texts.TryAdd(BitConverter.ToInt32(bytes, i * TextEntrySize), data + (long)i * TextEntrySize + 8);
+            }
+            if (texts.Count == 0)
+                return null; // not read yet (loading): tried again next time
+            _texts = texts;
+        }
+        return _texts.TryGetValue(id, out long at) ? ReadFString(at, 400) is { Length: > 0 } text ? text : null : null;
+    }
+
     private string ReadFString(long address, int maxLength)
     {
         long text = Pointer(address);

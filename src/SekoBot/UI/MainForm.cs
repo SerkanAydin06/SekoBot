@@ -842,6 +842,7 @@ internal sealed class MainForm : Form
         _runItems.Columns.Add("Eşya", 200);
         _runItems.Columns.Add("Alınan", 58, HorizontalAlignment.Right);
         _runItems.Columns.Add("Atılan", 58, HorizontalAlignment.Right);
+        _runItems.Columns.Add("Satılan", 58, HorizontalAlignment.Right);
         itemsCard.Controls.Add(_runItems);
         _runItemsInfo = Theme.Label(itemsCard, "Bot başlayınca dolar; her turda yenilenir.", new Rectangle(16, 336, 326, 20), 8f, Theme.Muted);
         _log = new RichTextBox
@@ -1018,10 +1019,11 @@ internal sealed class MainForm : Form
         // Everything a size smaller (the window was bigger than needed).
         Compact(this, UiScale);
         // List columns don't scale with the window: fit them to the list.
-        int number = 52, nameWidth = _runItems.ClientSize.Width - 2 * number;
+        int number = 48, nameWidth = _runItems.ClientSize.Width - 3 * number;
         _runItems.Columns[0].Width = nameWidth;
         _runItems.Columns[1].Width = number;
         _runItems.Columns[2].Width = number;
+        _runItems.Columns[3].Width = number;
         _dashBottomFarm = _dashBottom.Bounds;
         _logCardFarm = _logCard.Bounds;
         _logFarm = _log.Bounds;
@@ -1604,7 +1606,7 @@ internal sealed class MainForm : Form
             }, game,
             _engine is { } e && Win32.IsWindow(e.Window.Handle) ? e.Window.Handle : 0, hpPotions, mpPotions, Attack: _profile.Attack, Market: market,
             Exp10: Exp10(), Elapsed: ElapsedNow(),
-            Items: _engine?.SessionItems.Rows().Select(r => (r.Name, r.Picked, r.Thrown)).ToList());
+            Items: _engine?.SessionItems.Rows().Select(r => (r.Name, r.Picked, r.Thrown, r.Sold)).ToList());
     }
 
     protected override void WndProc(ref Message m)
@@ -2130,14 +2132,14 @@ internal sealed class MainForm : Form
         var rows = list.Rows();
         _runItems.BeginUpdate();
         _runItems.Items.Clear();
-        foreach (var (_, name, picked, thrown) in rows)
-            _runItems.Items.Add(new ListViewItem([name, picked > 0 ? picked.ToString("N0") : "", thrown > 0 ? thrown.ToString("N0") : ""])
+        foreach (var (_, name, picked, thrown, sold) in rows)
+            _runItems.Items.Add(new ListViewItem([name, picked > 0 ? picked.ToString("N0") : "", thrown > 0 ? thrown.ToString("N0") : "", sold > 0 ? sold.ToString("N0") : ""])
             {
-                ForeColor = thrown > 0 && picked <= thrown ? Theme.Muted : Theme.Text,
+                ForeColor = thrown + sold > 0 && picked <= thrown + sold ? Theme.Muted : Theme.Text,
             });
         _runItems.EndUpdate();
         _runItemsInfo.Text = rows.Count == 0 ? "Bot başlayınca dolar; her turda yenilenir."
-            : $"{rows.Count} çeşit · alınan {rows.Sum(r => r.Picked):N0} · atılan {rows.Sum(r => r.Thrown):N0}";
+            : $"{rows.Count} çeşit · alınan {rows.Sum(r => r.Picked):N0} · atılan {rows.Sum(r => r.Thrown):N0} · satılan {rows.Sum(r => r.Sold):N0}";
     }
 
     /// <summary>
