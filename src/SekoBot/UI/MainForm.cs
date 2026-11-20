@@ -1399,11 +1399,20 @@ internal sealed class MainForm : Form
     /// </summary>
     private void LoginTick()
     {
-        if (_engine is not { } e || !_profile.AutoLogin || e.BotRunning || e.Fishing || e.ScanningMarket || !Win32.IsWindow(e.Window.Handle))
+        if (_engine is not { } e || !Win32.IsWindow(e.Window.Handle))
             return;
-        if (e.LoginNow() is not { } s)
-            return;
+        var s = _profile.AutoLogin && !e.BotRunning && !e.Fishing && !e.ScanningMarket ? e.LoginNow() : null;
         var now = DateTime.Now;
+        // Made big for a try: put back as soon as the try is answered (the button back), at the latest after 30 s —
+        // whatever else happens (seen: windows left big).
+        if (_loginEnlarged)
+        {
+            bool answered = _pressedAt > _enlargedAt && now - _pressedAt > TimeSpan.FromSeconds(2.5) && s is { Waiting: false };
+            if (s is not { Showing: true } || s.LoggedIn || answered || now - _enlargedAt > TimeSpan.FromSeconds(30))
+                PutGameBack(e);
+        }
+        if (s == null)
+            return;
         if (s.LoggedIn)
         {
             if (_loginSeen)
@@ -1412,10 +1421,6 @@ internal sealed class MainForm : Form
                 string text = $"🟢 Sunucu açıldı: giriş yapıldı ({_loginTries} deneme), karakter seçim ekranında.";
                 WriteLog(text);
                 e.Notify(text);
-                if (_loginEnlarged)
-                    WindowLayout.PutBack(e.Window.Handle, _beforeEnlarged);
-                _loginEnlarged = false;
-                WindowLayout.TellAllMini();
             }
             return;
         }
@@ -1429,26 +1434,18 @@ internal sealed class MainForm : Form
             _nextLoginAt = now + TimeSpan.FromSeconds(10 + 25 * (Instance.Number - 1));
             WriteLog($"Oyun giriş ekranında. Sunucu açılana kadar her {_profile.AutoLoginMinutes:0.#} dakikada bir giriş denenecek (oyunun kayıtlı bilgileriyle; şifreye dokunulmaz).");
         }
-        if (s.Waiting)
-            return; // a try going on: the server answers
-        if (now < _nextLoginAt)
-        {
-            // Tried and refused: the game back to its place among the others.
-            if (_loginEnlarged && now - _enlargedAt > TimeSpan.FromSeconds(12))
-            {
-                _loginEnlarged = false;
-                WindowLayout.PutBack(e.Window.Handle, _beforeEnlarged);
-                WindowLayout.TellAllMini();
-            }
+        if (s.Waiting || now < _nextLoginAt)
             return;
-        }
         Win32.GetClientRect(e.Window.Handle, out var client);
         bool cut = s.Button is not { } b || b.Bottom > client.Bottom - client.Top || b.Right > client.Right - client.Left || b.Width < 4;
         if (cut)
         {
             if (!_loginEnlarged)
             {
-                // The button is under the window's bottom edge: the game made big for a moment.
+                // The button is under the window's bottom edge: the game made big for a moment —
+                // one SekoBot at a time (seen: two games big at once, the screen a mess).
+                if (!TakeLoginTurn())
+                    return;
                 _loginEnlarged = true;
                 _enlargedAt = now;
                 _beforeEnlarged = WindowLayout.Visible(e.Window.Handle);
@@ -1456,18 +1453,56 @@ internal sealed class MainForm : Form
                 WindowLayout.TellAllMini();
                 return;
             }
-            if (now - _enlargedAt < TimeSpan.FromSeconds(20))
+            if (now - _enlargedAt < TimeSpan.FromSeconds(15))
                 return; // drawing after the resize
             _nextLoginAt = now + TimeSpan.FromMinutes(Math.Max(1, _profile.AutoLoginMinutes));
             WriteLog("Giriş düğmesi görünmüyor; bir sonraki denemede yeniden bakılacak.");
+            PutGameBack(e);
             return;
         }
         e.PressLogin(s.Button!.Value);
         _loginTries++;
-        _enlargedAt = now;
+        _pressedAt = now;
         _nextLoginAt = now + TimeSpan.FromMinutes(Math.Max(1, _profile.AutoLoginMinutes));
         if (_loginTries == 1 || _loginTries % 10 == 0)
             WriteLog($"Giriş denendi ({_loginTries}. kez); sunucu açılmadıysa {_profile.AutoLoginMinutes:0.#} dakika sonra yeniden.");
+    }
+
+    private DateTime _pressedAt = DateTime.MinValue;
+    private Mutex? _loginTurn;
+    private bool _haveLoginTurn;
+
+    /// <summary>Only one SekoBot makes its game big for a login try at a time (a mutex shared by them all).</summary>
+    private bool TakeLoginTurn()
+    {
+        try
+        {
+            _loginTurn ??= new Mutex(false, @"Local\SekoBot.LoginTry");
+            _haveLoginTurn = _loginTurn.WaitOne(0);
+        }
+        catch (AbandonedMutexException) { _haveLoginTurn = true; } // a SekoBot closed while holding it
+        return _haveLoginTurn;
+    }
+
+    private void LetGoLoginTurn()
+    {
+        if (!_haveLoginTurn)
+            return;
+        _haveLoginTurn = false;
+        try { _loginTurn?.ReleaseMutex(); } catch (ApplicationException) { }
+    }
+
+    /// <summary>The game made big for a login try back where it was (unless the user moved it meanwhile).</summary>
+    private void PutGameBack(BotEngine e)
+    {
+        _loginEnlarged = false;
+        var seen = WindowLayout.Visible(e.Window.Handle);
+        var work = Screen.FromRectangle(seen).WorkingArea;
+        // Still big (the user didn't put it elsewhere): back to its place.
+        if (seen.Width >= work.Width - 40 && !_beforeEnlarged.IsEmpty)
+            WindowLayout.PutBack(e.Window.Handle, _beforeEnlarged);
+        WindowLayout.TellAllMini();
+        LetGoLoginTurn();
     }
 
     /// <summary>This SekoBot's game big (a band left under it for the bar); already big: all arranged again.</summary>
