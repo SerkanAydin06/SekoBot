@@ -456,6 +456,7 @@ internal sealed partial class BotEngine : IDisposable
         input.HoldFront = false;
         input.Dispose();
         _tidying = false;
+        ShrinkAfterWork();
         FrontTurn.Shared.LetGo(); // another bot waiting can go on
         _log("Bot durdu: " + reason);
         WriteSessionReport(reason);
