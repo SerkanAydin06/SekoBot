@@ -73,6 +73,11 @@ internal sealed class BagCleaner
         _pageClicks.Clear();
     }
 
+    /// <summary>Whether an item's middle is inside the game's window (unknown window size: yes).</summary>
+    internal static bool Inside(Rectangle r, Size client) =>
+        client.Width <= 0 || client.Height <= 0 ||
+        r.X + r.Width / 2 is var x && r.Y + r.Height / 2 is var y && x >= 0 && y >= 0 && x < client.Width && y < client.Height;
+
     /// <summary>Stops at once (attacked, died); closes the inventory if it is open.</summary>
     public IReadOnlyList<BotAction> Abort(BagLayout? bag, BotProfile p, string why)
     {
@@ -252,7 +257,8 @@ internal sealed class BagCleaner
                     Close(Thrown == 0 ? "atılacak eşya atılamadı" : null);
                     goto case Step.Close;
                 }
-                if (left.Where(i => i.Page == bag.Page && !i.Rect.IsEmpty).OrderBy(i => i.Slot)
+                // Only what is inside the game's window (a small game cuts the bag off: seen, clicks beside the items).
+                if (left.Where(i => i.Page == bag.Page && !i.Rect.IsEmpty && Inside(i.Rect, client)).OrderBy(i => i.Slot)
                         .Select(i => (BagSlotView?)i).FirstOrDefault() is { } here)
                 {
                     var from = new Point(here.Rect.X + here.Rect.Width / 2, here.Rect.Y + here.Rect.Height / 2);
