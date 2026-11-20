@@ -61,19 +61,9 @@ internal sealed class MiniBar : Form
         ClientSize = new Size(LogicalWidth, LogicalHeight);
         DoubleBuffered = true;
         Text = "SekoBot";
-        var menu = new ContextMenuStrip();
-        menu.Items.Add("⛶  Bu oyunu büyüt", null, (_, _) => _fill());
-        menu.Items.Add("⤢  SekoBot'u büyüt", null, (_, _) => _big());
-        menu.Items.Add("⊞  Pencereleri diz", null, (_, _) => _arrange());
-        menu.Items.Add("▶  Başlat / duraklat", null, (_, _) => _start());
-        menu.Items.Add("■  Durdur", null, (_, _) => _stop());
-        menu.Items.Add(new ToolStripSeparator());
-        foreach (ToolStripItem item in WindowLayout.AllMenu().Items.Cast<ToolStripItem>().ToList())
-            menu.Items.Add(item);
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("⚔  Saldırı aç / sadece eşya topla", null, (_, _) => _attack());
-        menu.Items.Add("✕  SekoBot'u kapat", null, (_, _) => _close());
-        ContextMenuStrip = menu;
+        _menu = new ContextMenuStrip { ShowImageMargin = false, Font = new Font("Segoe UI", 9.5f) };
+        _menu.Opening += (_, _) => FillMenu();
+        ContextMenuStrip = _menu;
         _timer.Tick += (_, _) => Pull(true);
         FormClosed += (_, _) =>
         {
@@ -184,18 +174,46 @@ internal sealed class MiniBar : Form
     /// <summary>Narrowest the bar gets (small games in a big grid): still everything readable.</summary>
     private const int MinWidth = 440;
 
-    private const int Buttons = 9;
-    /// <summary>The buttons: 0 the tab's own, 1 start/pause, 2 stop, 3 all bots, 8 this run's items (drawn 5th),
-    /// 4 the game big, 5 arrange all, 6 SekoBot big, 7 close. In the bar's own coordinates (under the item list).</summary>
+    /// <summary>Four buttons with words (the user: icons alone were hard to tell apart): start / pause, stop,
+    /// this run's items, the menu with the rest.</summary>
+    private const int Buttons = 4;
+    private const int StartButton = 0, StopButton = 1, ItemsButton = 2, MenuButton = 3;
+    private static readonly int[] ButtonWidths = [84, 70, 78, 64];
+    private const int ButtonGap = 4;
+    private static int ButtonsWidth => ButtonWidths.Sum() + ButtonGap * (Buttons - 1) + 6;
+    /// <summary>A button, in the bar's own coordinates (under the item list).</summary>
     private Rectangle Button(int i)
     {
-        int at = i <= 3 ? i : i == ItemsButton ? 4 : i + 1;
-        return new((int)((W - ButtonsWidth + at * ButtonStep) * S), (int)(3 * S), (int)(32 * S), (int)(28 * S));
+        int x = (int)W - ButtonsWidth;
+        for (int k = 0; k < i; k++)
+            x += ButtonWidths[k] + ButtonGap;
+        return new((int)(x * S), (int)(4 * S), (int)(ButtonWidths[i] * S), (int)(26 * S));
     }
-    private const int ItemsButton = 8;
-    private const int ButtonStep = 35;
-    private const int ButtonsWidth = Buttons * ButtonStep + 4;
-    private readonly ContextMenuStrip _allMenu = WindowLayout.AllMenu();
+
+    private readonly ContextMenuStrip _menu;
+
+    /// <summary>The menu's lines, written for what this bot does now (its tab's own action first).</summary>
+    private void FillMenu()
+    {
+        _menu.Items.Clear();
+        void Add(string text, Action act) => _menu.Items.Add(text, null, (_, _) => { act(); Pull(false); });
+        bool fishing = _info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true;
+        // Fishing has no action of its own here (BALIK TUT is the start button).
+        if (_info.Market != null && !fishing)
+            Add("🔍  Pazar penceresini aç", _attack);
+        else if (_info.Market == null)
+            Add(_info.Attack ? "✋  Saldırıyı kapat (sadece yerdeki eşyaları topla)" : "⚔  Saldırıyı aç", _attack);
+        if (_menu.Items.Count > 0)
+            _menu.Items.Add(new ToolStripSeparator());
+        foreach (ToolStripItem item in WindowLayout.AllMenu().Items.Cast<ToolStripItem>().ToList())
+            _menu.Items.Add(item);
+        _menu.Items.Add(new ToolStripSeparator());
+        Add("⛶  Bu oyunu büyüt (tekrar: hepsini diz)", _fill);
+        Add("⊞  Tüm oyunları ve botları diz", _arrange);
+        Add("⤢  SekoBot panelini aç (ayarlar, günlük)", _big);
+        _menu.Items.Add(new ToolStripSeparator());
+        Add("✕  Bu SekoBot'u kapat", _close);
+    }
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -301,79 +319,28 @@ internal sealed class MiniBar : Form
 
     private void DrawButtons(Graphics g, float s, MiniInfo info)
     {
-        bool market = info.Market != null;
         bool fishing = info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true;
-        // 0: the tab's own button · 1: start / pause · 2: stop · 3: all bots · 4: the game big · 5: arrange · 6: SekoBot big · 7: close — the shapes drawn, all centred alike.
-        string first = fishing ? "🎣" : market ? "🔍" : info.Attack ? "⚔" : "✋";
-        Color[] backs = [market ? Theme.Secondary : info.Attack ? Theme.Secondary : Theme.Accent, Theme.Primary, Theme.Danger, Theme.Secondary, Theme.Secondary, Theme.Secondary, Theme.Secondary, Theme.Surface,
-            _itemsOpen ? Theme.Primary : Theme.Secondary];
+        string startText = info.Running ? "❚❚  Duraklat" : fishing ? "▶  Balık tut" : info.Market != null ? "▶  Takip" : "▶  Başlat";
+        (string Text, Color Back)[] buttons =
+        [
+            (startText, info.Running ? Theme.Secondary : Theme.Primary),
+            ("■  Durdur", Theme.Danger),
+            ("🎒  Eşyalar", _itemsOpen ? Theme.Primary : Theme.Secondary),
+            ("☰  Menü", Theme.Secondary),
+        ];
+        using var font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
         g.SmoothingMode = SmoothingMode.AntiAlias;
         for (int i = 0; i < Buttons; i++)
         {
             var r = Button(i);
-            using var back = new SolidBrush(_hover == i ? ControlPaint.Light(backs[i], 0.25f) : backs[i]);
+            var back = buttons[i].Back;
+            using var brush = new SolidBrush(_hover == i ? ControlPaint.Light(back, 0.25f) : back);
             using var path = Rounded(r, 6 * s);
-            g.FillPath(back, path);
-            float cx = r.X + r.Width / 2f, cy = r.Y + r.Height / 2f, u = 5.5f * s;
-            using var white = new SolidBrush(Theme.Text);
-            using var pen = new Pen(Theme.Text, 2f * s) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-            switch (i)
-            {
-                case 0:
-                    using (var glyph = new Font("Segoe UI Symbol", 11f, FontStyle.Bold))
-                        TextRenderer.DrawText(g, first, glyph, r, Theme.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
-                    break;
-                case 1 when info.Running: // pause: two bars
-                    g.FillRectangle(white, cx - u, cy - u, u * 0.7f, u * 2);
-                    g.FillRectangle(white, cx + u * 0.3f, cy - u, u * 0.7f, u * 2);
-                    break;
-                case 1: // start: a triangle
-                    g.FillPolygon(white, [new PointF(cx - u * 0.7f, cy - u), new PointF(cx - u * 0.7f, cy + u), new PointF(cx + u, cy)]);
-                    break;
-                case 2: // stop: a square
-                    g.FillRectangle(white, cx - u * 0.85f, cy - u * 0.85f, u * 1.7f, u * 1.7f);
-                    break;
-                case 3: // all bots: two small triangles over a line
-                    float t = u * 0.62f;
-                    g.FillPolygon(white, [new PointF(cx - u * 1.1f, cy - t - 1), new PointF(cx - u * 1.1f, cy + t - 1), new PointF(cx - u * 1.1f + t * 1.4f, cy - 1)]);
-                    g.FillPolygon(white, [new PointF(cx - u * 0.1f, cy - t - 1), new PointF(cx - u * 0.1f, cy + t - 1), new PointF(cx - u * 0.1f + t * 1.4f, cy - 1)]);
-                    g.DrawLine(pen, cx - u * 1.1f, cy + u * 1.05f, cx + u * 1.1f, cy + u * 1.05f);
-                    break;
-                case 4: // the game big: a screen with a bar under it
-                    g.DrawRectangle(pen, cx - u, cy - u * 0.9f, u * 2, u * 1.35f);
-                    g.DrawLine(pen, cx - u, cy + u * 0.85f, cx + u, cy + u * 0.85f);
-                    break;
-                case 5: // arrange all: four small windows
-                    float q = u * 0.8f;
-                    foreach (var (dx, dy) in new[] { (-1, -1), (1, -1), (-1, 1), (1, 1) })
-                        g.FillRectangle(white, cx + (dx < 0 ? -q - 1 : 1), cy + (dy < 0 ? -q - 1 : 1), q, q);
-                    break;
-                case 6: // SekoBot big: two corners
-                    g.DrawLines(pen, [new PointF(cx - u, cy - u * 0.2f), new PointF(cx - u, cy - u), new PointF(cx - u * 0.2f, cy - u)]);
-                    g.DrawLines(pen, [new PointF(cx + u, cy + u * 0.2f), new PointF(cx + u, cy + u), new PointF(cx + u * 0.2f, cy + u)]);
-                    break;
-                case ItemsButton: // this run's items: a bag
-                    g.DrawRectangle(pen, cx - u * 0.9f, cy - u * 0.35f, u * 1.8f, u * 1.35f);
-                    g.DrawArc(pen, cx - u * 0.5f, cy - u * 1.05f, u, u * 1.2f, 180, 180);
-                    break;
-                case 7: // close: an X
-                    g.DrawLine(pen, cx - u * 0.8f, cy - u * 0.8f, cx + u * 0.8f, cy + u * 0.8f);
-                    g.DrawLine(pen, cx - u * 0.8f, cy + u * 0.8f, cx + u * 0.8f, cy - u * 0.8f);
-                    break;
-            }
+            g.FillPath(brush, path);
+            TextRenderer.DrawText(g, buttons[i].Text, font, r, Theme.Text,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
         }
         g.SmoothingMode = SmoothingMode.Default;
-    }
-
-    private static void Bar(Graphics g, string caption, double? value, Color fill, RectangleF r, Font font)
-    {
-        using (var back = new SolidBrush(Theme.Inset))
-            g.FillRectangle(back, r);
-        if (value is double v)
-            using (var front = new SolidBrush(fill))
-                g.FillRectangle(front, r.X, r.Y, r.Width * (float)Math.Clamp(v, 0, 1), r.Height);
-        string text = value is double p ? $"{caption} {p * 100:0}%" : $"{caption} —";
-        TextRenderer.DrawText(g, text, font, Rectangle.Round(r), Theme.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
     }
 
     private static GraphicsPath Rounded(Rectangle r, float radius)
@@ -407,19 +374,10 @@ internal sealed class MiniBar : Form
             Cursor = hit >= 0 ? Cursors.Hand : Cursors.Default;
             _tip.SetToolTip(this, hit switch
             {
-                0 when _info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true => "Balık tutma",
-                0 when _info.Market != null => "Pazar penceresini aç",
-                0 => _info.Attack ? "Saldırı açık. Tıkla: sadece yerdeki eşyaları topla" : "Sadece eşya topluyor. Tıkla: saldırıyı aç",
-                1 when _info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true => _info.Running ? "Duraklat (sayaçlar korunur)" : "Balık tutmayı başlat / sürdür",
-                1 when _info.Market != null => _info.Running ? "Duraklat" : "Sürekli pazar takibini başlat",
-                1 => _info.Running ? "Duraklat (F10)" : "Başlat (F10)",
-                2 => $"Durdur ve sıfırla ({(Instance.IsFirst ? "F11 / " : "")}Ctrl+Shift+{Math.Min(Instance.Number, 9)})",
-                3 => "Tüm botlar: hepsini başlat, duraklat ya da durdur",
-                4 => "Bu oyunu büyüt (bot altında kalır); tekrar bas: hepsini diz",
-                5 => "Tüm oyunları ve botları diz",
-                6 => "SekoBot'u büyüt (çift tık da olur)",
-                7 => "SekoBot'u kapat",
-                ItemsButton => _itemsOpen ? "Eşya listesini kapat" : "Bu tur toplanan ve atılan eşyalar (şerit yukarı doğru açılır)",
+                StartButton => _info.Running ? "Duraklat: kaldığı yerden sürdürülebilir (F10)" : "Başlat ya da kaldığı yerden sürdür (F10)",
+                StopButton => $"Durdur ve sıfırla ({(Instance.IsFirst ? "F11 / " : "")}Ctrl+Shift+{Math.Min(Instance.Number, 9)})",
+                ItemsButton => _itemsOpen ? "Eşya listesini kapat" : "Bu tur alınan, atılan ve satılan eşyalar (şerit yukarı doğru açılır)",
+                MenuButton => "Tüm botlar, saldırı aç / kapat, oyunu büyüt, diz, paneli aç, kapat",
                 _ => Details(),
             });
             Invalidate();
@@ -440,7 +398,7 @@ internal sealed class MiniBar : Form
             lines.Add($"HP {Pct(i.Hp)} · MP {Pct(i.Mp)}  ·  İksir HP {Count(i.HpPotions)} · MP {Count(i.MpPotions)}");
             lines.Add($"{i.ExpRate} EXP/sa" + (i.Exp10.Length > 0 ? $" · son 10 dk {i.Exp10}" : "") + $" · {i.Mobs} mob");
         }
-        lines.Add("Sağ tık: pencereleri diz, büyüt");
+        lines.Add("Çift tık: SekoBot panelini aç · sağ tık: menü");
         return string.Join("\n", lines);
     }
 
@@ -458,20 +416,18 @@ internal sealed class MiniBar : Form
             return;
         switch (HitButton(e.Location))
         {
-            case 0: _attack(); break;
-            case 1: _start(); break;
-            case 2: _stop(); break;
-            case 3: _allMenu.Show(this, new Point(Button(3).Left, Button(3).Bottom + Top)); return;
+            case StartButton: _start(); break;
+            case StopButton: _stop(); break;
             case ItemsButton:
                 _itemsOpen = !_itemsOpen;
                 _itemsScroll = 0;
                 _hover = -1;
                 Pull(true);
                 return;
-            case 4: _fill(); break;
-            case 5: _arrange(); break;
-            case 6: _big(); break;
-            case 7: _close(); return;
+            case MenuButton:
+                FillMenu();
+                _menu.Show(this, new Point(Button(MenuButton).Left, Button(MenuButton).Bottom + Top));
+                return;
         }
         Pull(false);
     }

@@ -245,13 +245,9 @@ internal sealed partial class BotEngine
             .Any(n => info.Name.Contains(n, StringComparison.CurrentCultureIgnoreCase));
     }
 
-    /// <summary>A Metin stone more than this many levels below the character is left alone: nothing
-    /// dropped from 5 level-15 stones at level 20, and a stone takes a minute for 2000 EXP.</summary>
-    internal const int MetinLevelGap = 5;
-
     /// <summary>Whether the bot should go for this mob, by the profile's choices. A mob that is
     /// attacking us is always fought back, and a Metin stone set to "first" is always gone for
-    /// (the level and name filters are for mobs) — unless it is far below our level.</summary>
+    /// (the level and name filters are for mobs), low-level ones too (the user wants every stone cut).</summary>
     /// <param name="level">The character's level (0: unknown, no level check for stones).</param>
     /// <param name="fit">Leave out mobs too strong for the character (when "Güçlü moblara gitme"
     /// is on and no top level is set by hand).</param>
@@ -260,8 +256,7 @@ internal sealed partial class BotEngine
         if (fit && profile.AutoArea && profile.MaxMobLevel <= 0 && !mob.AttacksMe && MobFit.TooHard(mob, profile, level))
             return false;
         if (mob.IsMetin)
-            return profile.Metins != MetinMode.Skip && (level <= 0 || mob.Level <= 0 || mob.Level >= level - MetinLevelGap) &&
-                   (profile.Metins == MetinMode.Prefer || WantedByFilters(mob, profile));
+            return profile.Metins != MetinMode.Skip && (profile.Metins == MetinMode.Prefer || WantedByFilters(mob, profile));
         if (mob.AttacksMe)
             return true;
         return WantedByFilters(mob, profile);
