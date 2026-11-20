@@ -1311,7 +1311,7 @@ internal sealed class MainForm : Form
         if (IsDisposed)
             return;
         _mini ??= new MiniBar(MiniInfoNow, ToggleBot, () => StopBot("kullanıcı durdurdu", byUser: true), GoBig, ArrangeAll,
-            () => { if (_mode == MarketMode) OpenMarketWindow(); else if (_mode == FarmMode) ToggleAttack(); }, CloseFromMini);
+            () => { if (_mode == MarketMode) OpenMarketWindow(); else if (_mode == FarmMode) ToggleAttack(); }, CloseFromMini, FillWithGame);
         if (!_mini.Visible)
             _mini.Show();
         if (Visible)
@@ -1382,6 +1382,19 @@ internal sealed class MainForm : Form
             _profile.MiniMode = false;
             SaveProfile();
         }
+    }
+
+    /// <summary>This SekoBot's game big (a band left under it for the bar); already big: all arranged again.</summary>
+    private void FillWithGame()
+    {
+        if (_engine is not { } e || !Win32.IsWindow(e.Window.Handle))
+        {
+            WriteLog("Oyun bağlı değil.");
+            return;
+        }
+        if (!WindowLayout.FillWithGame(e.Window.Handle, MiniBar.HeightAt(DeviceDpi) + 2))
+            ArrangeAll();
+        WindowLayout.TellAllMini();
     }
 
     /// <summary>Every game window side by side (a band left at the bottom), every SekoBot small under its game.</summary>

@@ -22,14 +22,15 @@ internal sealed class MiniBar : Form
     public const int LogicalWidth = 420, LogicalHeight = 84;
 
     private readonly Func<MiniInfo> _read;
-    private readonly Action _start, _stop, _big, _arrange, _attack, _close;
+    private readonly Action _start, _stop, _big, _arrange, _attack, _close, _fill;
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 300 };
     private MiniInfo _info = new("", "", Theme.Muted, null, null, "—", "—", false, null);
     private int _hover = -1;
     private readonly ToolTip _tip = new();
 
-    public MiniBar(Func<MiniInfo> read, Action start, Action stop, Action big, Action arrange, Action attack, Action close)
+    public MiniBar(Func<MiniInfo> read, Action start, Action stop, Action big, Action arrange, Action attack, Action close, Action fill)
     {
+        _fill = fill;
         _close = close;
         _attack = attack;
         _read = read;
@@ -48,7 +49,8 @@ internal sealed class MiniBar : Form
         DoubleBuffered = true;
         Text = "SekoBot";
         var menu = new ContextMenuStrip();
-        menu.Items.Add("⤢  Büyüt", null, (_, _) => _big());
+        menu.Items.Add("⛶  Bu oyunu büyüt", null, (_, _) => _fill());
+        menu.Items.Add("⤢  SekoBot'u büyüt", null, (_, _) => _big());
         menu.Items.Add("⊞  Pencereleri diz", null, (_, _) => _arrange());
         menu.Items.Add("▶  Başlat / duraklat", null, (_, _) => _start());
         menu.Items.Add("■  Durdur", null, (_, _) => _stop());
@@ -159,9 +161,9 @@ internal sealed class MiniBar : Form
     /// <summary>Narrowest the bar gets (small games in a big grid): still everything readable.</summary>
     private const int MinWidth = 340;
 
-    private const int Buttons = 5;
-    /// <summary>The buttons: attack on/off, start, stop, big, close.</summary>
-    private Rectangle Button(int i) => new((int)((W - 194 + i * 38) * S), (int)(6 * S), (int)(32 * S), (int)(28 * S));
+    private const int Buttons = 7;
+    /// <summary>The buttons: the tab's own, start/pause, stop, the game big, arrange all, SekoBot big, close.</summary>
+    private Rectangle Button(int i) => new((int)((W - 270 + i * 38) * S), (int)(6 * S), (int)(32 * S), (int)(28 * S));
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -181,7 +183,7 @@ internal sealed class MiniBar : Form
         using var smallBold = new Font("Segoe UI", 8.5f, FontStyle.Bold);
         // Every bar shows its SekoBot's number (the 1st too), so they can be told apart.
         string name = $"{Instance.Number} · " + (info.Name.Length > 0 ? info.Name : "SekoBot");
-        var nameRow = new Rectangle((int)(14 * s), (int)(6 * s), (int)((W - 226) * s), (int)(22 * s));
+        var nameRow = new Rectangle((int)(14 * s), (int)(6 * s), (int)((W - 302) * s), (int)(22 * s));
         if (info.Elapsed.Length > 0)
         {
             // How long it has run, at the right of the name row.
@@ -193,7 +195,7 @@ internal sealed class MiniBar : Form
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         bool market = info.Market != null;
         string status = info.Attack || market ? info.Status : "✋ Sadece eşya · " + info.Status;
-        TextRenderer.DrawText(g, status, small, new Rectangle((int)(14 * s), (int)(29 * s), (int)((W - 214) * s), (int)(20 * s)), info.Attack || market ? info.StatusColor : Theme.Accent,
+        TextRenderer.DrawText(g, status, small, new Rectangle((int)(14 * s), (int)(29 * s), (int)((W - 290) * s), (int)(20 * s)), info.Attack || market ? info.StatusColor : Theme.Accent,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         if (market)
         {
@@ -207,7 +209,7 @@ internal sealed class MiniBar : Form
         string Count(int? n) => n is int c ? c.ToString("N0") : "—";
         bool low = info.HpPotions is < 20 || info.MpPotions is < 10;
         TextRenderer.DrawText(g, $"İksir  HP {Count(info.HpPotions)} · MP {Count(info.MpPotions)}", smallBold,
-            new Rectangle((int)((W - 210) * s), (int)(38 * s), (int)(204 * s), (int)(18 * s)), low ? Theme.Red : Theme.Text,
+            new Rectangle((int)((W - 286) * s), (int)(38 * s), (int)(280 * s), (int)(18 * s)), low ? Theme.Red : Theme.Text,
             TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
         // Wider bar: longer HP and MP bars (the experience stays at the right).
@@ -228,7 +230,7 @@ internal sealed class MiniBar : Form
         bool fishing = info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true;
         // 0: the tab's own button · 1: start ▶ / pause ⏸ · 2: stop ■ · 3: big · 4: close — the shapes drawn, all centred alike.
         string first = fishing ? "🎣" : market ? "🔍" : info.Attack ? "⚔" : "✋";
-        Color[] backs = [market ? Theme.Secondary : info.Attack ? Theme.Secondary : Theme.Accent, Theme.Primary, Theme.Danger, Theme.Secondary, Theme.Surface];
+        Color[] backs = [market ? Theme.Secondary : info.Attack ? Theme.Secondary : Theme.Accent, Theme.Primary, Theme.Danger, Theme.Secondary, Theme.Secondary, Theme.Secondary, Theme.Surface];
         g.SmoothingMode = SmoothingMode.AntiAlias;
         for (int i = 0; i < Buttons; i++)
         {
@@ -255,11 +257,20 @@ internal sealed class MiniBar : Form
                 case 2: // stop: a square
                     g.FillRectangle(white, cx - u * 0.85f, cy - u * 0.85f, u * 1.7f, u * 1.7f);
                     break;
-                case 3: // big: two corners
+                case 3: // the game big: a screen with a bar under it
+                    g.DrawRectangle(pen, cx - u, cy - u * 0.9f, u * 2, u * 1.35f);
+                    g.DrawLine(pen, cx - u, cy + u * 0.85f, cx + u, cy + u * 0.85f);
+                    break;
+                case 4: // arrange all: four small windows
+                    float q = u * 0.8f;
+                    foreach (var (dx, dy) in new[] { (-1, -1), (1, -1), (-1, 1), (1, 1) })
+                        g.FillRectangle(white, cx + (dx < 0 ? -q - 1 : 1), cy + (dy < 0 ? -q - 1 : 1), q, q);
+                    break;
+                case 5: // SekoBot big: two corners
                     g.DrawLines(pen, [new PointF(cx - u, cy - u * 0.2f), new PointF(cx - u, cy - u), new PointF(cx - u * 0.2f, cy - u)]);
                     g.DrawLines(pen, [new PointF(cx + u, cy + u * 0.2f), new PointF(cx + u, cy + u), new PointF(cx + u * 0.2f, cy + u)]);
                     break;
-                case 4: // close: an X
+                case 6: // close: an X
                     g.DrawLine(pen, cx - u * 0.8f, cy - u * 0.8f, cx + u * 0.8f, cy + u * 0.8f);
                     g.DrawLine(pen, cx - u * 0.8f, cy + u * 0.8f, cx + u * 0.8f, cy - u * 0.8f);
                     break;
@@ -316,8 +327,10 @@ internal sealed class MiniBar : Form
                 1 when _info.Market != null => _info.Running ? "Duraklat" : "Sürekli pazar takibini başlat",
                 1 => _info.Running ? "Duraklat (F10)" : "Başlat (F10)",
                 2 => $"Durdur ve sıfırla ({(Instance.IsFirst ? "F11 / " : "")}Ctrl+Shift+{Math.Min(Instance.Number, 9)})",
-                3 => "Büyüt (çift tık da olur)",
-                4 => "SekoBot'u kapat",
+                3 => "Bu oyunu büyüt (bot altında kalır); tekrar bas: hepsini diz",
+                4 => "Tüm oyunları ve botları diz",
+                5 => "SekoBot'u büyüt (çift tık da olur)",
+                6 => "SekoBot'u kapat",
                 _ => "Sağ tık: pencereleri diz, büyüt",
             });
             Invalidate();
@@ -341,8 +354,10 @@ internal sealed class MiniBar : Form
             case 0: _attack(); break;
             case 1: _start(); break;
             case 2: _stop(); break;
-            case 3: _big(); break;
-            case 4: _close(); return;
+            case 3: _fill(); break;
+            case 4: _arrange(); break;
+            case 5: _big(); break;
+            case 6: _close(); return;
         }
         Pull(false);
     }

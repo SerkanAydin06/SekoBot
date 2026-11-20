@@ -114,6 +114,24 @@ internal static class WindowLayout
             Win32.SWP_NOZORDER | Win32.SWP_NOACTIVATE | Win32.SWP_NOOWNERZORDER);
     }
 
+    /// <summary>
+    /// One game made big: its screen's whole work area but a band at the bottom for its bar (the bar stays
+    /// under the game, never over it). Already big: false (the caller arranges them all again).
+    /// </summary>
+    public static bool FillWithGame(nint hwnd, int band)
+    {
+        if (!Win32.IsWindow(hwnd))
+            return false;
+        var seen = Visible(hwnd);
+        var work = Screen.FromRectangle(seen.IsEmpty ? Rectangle.Empty : seen).WorkingArea;
+        var target = new Rectangle(work.Left, work.Top, work.Width, work.Height - band);
+        if (Math.Abs(seen.Width - target.Width) < 12 && Math.Abs(seen.Height - target.Height) < 12 && Math.Abs(seen.Left - target.Left) < 12)
+            return false;
+        MoveVisible(hwnd, target);
+        Win32.SetForegroundWindow(hwnd);
+        return true;
+    }
+
     /// <summary>Arranges every game window on the screen of <paramref name="near"/>, leaving <paramref name="band"/> pixels free under every row.</summary>
     /// <returns>How many game windows were arranged.</returns>
     public static int ArrangeGames(Rectangle near, int band)
