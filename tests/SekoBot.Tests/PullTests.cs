@@ -432,4 +432,24 @@ public class PullAreaTests
         Assert.DoesNotContain(back, x => x is NoteAction n && n.Text.Contains("Gruba ulaşılamadı"));
         Assert.Contains(back, x => x is KeyDownAction d && d.Key == p.Keys.MoveRight);
     }
+    [Fact]
+    public void Gathering_goes_on_with_a_group_next_to_the_character()
+    {
+        // Seen by the user: groups beside the character left asleep. The first group was 3 m to the right; the
+        // next one is 7 m to the left — next to us, though 10 m from the first group: it is gathered too.
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = false, PullMaxMobs = 9, Breaks = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        GameState State(double ms, TargetInfo[] mobs) => new(TimeSpan.FromMilliseconds(ms), W, H, 1, 1, 0, 1) { Targets = mobs, Walking = true, AttackPower = 189 };
+        TargetInfo[] first = [At(10, 10, 300, 300), At(11, 10, 320, 300), At(12, 10, 340, 300)];
+        for (double t = 0; t < 1000; t += 100)
+            brain.Tick(State(t, first));
+        TargetInfo Coming(int id, double x) => new(id, new Point(Center.X + (int)(x / 5), Center.Y), Math.Abs(x), 130, 300, 305, 305, 56, true, true, 10, new Vec3(x, 0, 0));
+        TargetInfo[] next = [Coming(10, 100), Coming(11, 120), Coming(12, 140), At(20, 20, -700, 300), At(21, 20, -720, 300), At(22, 20, -740, 300)];
+        var actions = new List<BotAction>();
+        for (double t = 1000; t < 2500; t += 100)
+            actions.AddRange(brain.Tick(State(t, next)));
+        Assert.DoesNotContain(actions, x => x is NoteAction n && n.Text.Contains("başka grup yok"));
+        Assert.Contains(actions, x => x is KeyDownAction d && d.Key == p.Keys.MoveLeft);
+    }
 }
