@@ -30,6 +30,10 @@ internal sealed partial class Brain
     /// <summary>The last tick spent walking to the group; a longer gap than <see cref="PullPausedMs"/>: something else came between.</summary>
     private TimeSpan _pullWalkTickAt = Never;
     internal const int PullPausedMs = 1500;
+    /// <summary>How much nearness counts when the first group is chosen (world units): a group this far is worth
+    /// half as much as one next to us (was 1000 — seen by the user: off to a far group with one right beside).</summary>
+    internal const double PullNearWeight = 250;
+    private TimeSpan _pullHeldToldAt = Never;
     internal const double PullProgress = 150;
     /// <summary>A group that couldn't be reached is left this long.</summary>
     internal const int PullUnreachableMs = 300_000;
@@ -189,7 +193,16 @@ internal sealed partial class Brain
             return EndPull(actions, null);
         int chasing = state.Targets.Count(t => t.AttacksMe);
         if (state.Hp is double hp && hp < p.PullMinHp)
+        {
+            // Not starting with too little HP — told (once a minute) when a group is right beside us, so it
+            // shows why mobs are cut one by one (it didn't show before).
+            if (!_pulling && now - _pullHeldToldAt > Ms(60_000) && GroupBeside(state, p))
+            {
+                _pullHeldToldAt = now;
+                actions.Add(new NoteAction($"Yanda uyuyan grup var ama can %{hp * 100:0}; toplamaya başlamak için en az %{p.PullMinHp * 100:0} isteniyor (Saldırı ayarlarında)."));
+            }
             return EndPull(actions, $"Can azaldı; toplanan {chasing} mob kesiliyor.");
+        }
         if (chasing >= PullCap(p))
             return EndPull(actions, $"{chasing} mob toplandı; hepsi birden kesiliyor.");
         // Mobs hitting us right here and hurt: finish them first (recorded: a gathering started
@@ -240,7 +253,7 @@ internal sealed partial class Brain
 
         double dps = Math.Max(50, state.AttackPower);
         double Worth(IGrouping<int, TargetInfo> g) =>
-            g.Sum(t => (t.Exp > 0 ? t.Exp : t.MaxHp * 0.3) / (t.Hp / dps + 1)) / (1 + g.Min(t => t.Distance) / 1000);
+            g.Sum(t => (t.Exp > 0 ? t.Exp : t.MaxHp * 0.3) / (t.Hp / dps + 1)) / (1 + g.Min(t => t.Distance) / PullNearWeight);
         // Keep the group being pulled; else the first one by worth, the next ones nearest to us.
         var group = fresh.FirstOrDefault(g => g.Key == _pullGroup)
                     ?? (_pullAnchor == null ? fresh.MaxBy(Worth)! : fresh.MinBy(g => g.Min(t => t.Distance))!);
