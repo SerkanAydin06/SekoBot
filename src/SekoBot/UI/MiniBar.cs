@@ -63,8 +63,9 @@ internal sealed class MiniBar : Form
         Text = "SekoBot";
         _menu = new ContextMenuStrip { ShowImageMargin = false, Font = new Font("Segoe UI", 9.5f) };
         _menu.Opening += (_, _) => FillMenu();
+        _menu.Closed += (_, _) => { _menuClosedAt = DateTime.Now; Invalidate(); };
         ContextMenuStrip = _menu;
-        _timer.Tick += (_, _) => Pull(true);
+        _timer.Tick += (_, _) => { Pull(true); CloseMenuWhenLeft(); };
         FormClosed += (_, _) =>
         {
             _timer.Dispose();
@@ -176,9 +177,9 @@ internal sealed class MiniBar : Form
 
     /// <summary>Four buttons with words (the user: icons alone were hard to tell apart): start / pause, stop,
     /// this run's items, the menu with the rest.</summary>
-    private const int Buttons = 4;
-    private const int StartButton = 0, StopButton = 1, ItemsButton = 2, MenuButton = 3;
-    private static readonly int[] ButtonWidths = [84, 70, 78, 64];
+    private const int Buttons = 6;
+    private const int StartButton = 0, StopButton = 1, ItemsButton = 2, FillButton = 3, ArrangeButton = 4, MenuButton = 5;
+    private static readonly int[] ButtonWidths = [74, 62, 68, 60, 46, 60];
     private const int ButtonGap = 4;
     private static int ButtonsWidth => ButtonWidths.Sum() + ButtonGap * (Buttons - 1) + 6;
     /// <summary>A button, in the bar's own coordinates (under the item list).</summary>
@@ -191,6 +192,38 @@ internal sealed class MiniBar : Form
     }
 
     private readonly ContextMenuStrip _menu;
+    private DateTime _menuClosedAt = DateTime.MinValue, _menuLeftAt = DateTime.MinValue;
+
+    /// <summary>The menu under its button (opened by the mouse coming over the button, or a click).</summary>
+    private void OpenMenu()
+    {
+        if (_menu.Visible)
+            return;
+        _menuLeftAt = DateTime.MinValue;
+        _menu.Show(this, new Point(Button(MenuButton).Left, Button(MenuButton).Bottom + Top));
+        Invalidate();
+    }
+
+    /// <summary>The menu closes once the mouse has been off both it and its button for a moment.</summary>
+    private void CloseMenuWhenLeft()
+    {
+        if (!_menu.Visible)
+            return;
+        var at = Cursor.Position;
+        var button = RectangleToScreen(Button(MenuButton) with { Y = Button(MenuButton).Y + Top });
+        button.Inflate(6, 6);
+        var menu = _menu.Bounds;
+        menu.Inflate(6, 6);
+        if (button.Contains(at) || menu.Contains(at))
+        {
+            _menuLeftAt = DateTime.MinValue;
+            return;
+        }
+        if (_menuLeftAt == DateTime.MinValue)
+            _menuLeftAt = DateTime.Now;
+        else if (DateTime.Now - _menuLeftAt > TimeSpan.FromMilliseconds(400))
+            _menu.Close();
+    }
 
     /// <summary>The menu's lines, written for what this bot does now (its tab's own action first).</summary>
     private void FillMenu()
@@ -250,8 +283,15 @@ internal sealed class MiniBar : Form
         TextRenderer.DrawText(g, "◆ " + name, nameFont, nameRow, Theme.Text, Left);
         bool market = info.Market != null;
         string status = market ? info.Market! : info.Attack ? info.Status : "✋ Sadece eşya · " + info.Status;
-        TextRenderer.DrawText(g, status, small, new Rectangle((int)(10 * s), (int)(16 * s), (int)(textW * s), (int)(13 * s)),
-            market ? Theme.Text : info.Attack ? info.StatusColor : Theme.Accent, Left);
+        var statusRow = new Rectangle((int)(10 * s), (int)(16 * s), (int)(textW * s), (int)(13 * s));
+        if (!market && info.ExpRate is { Length: > 0 } rate && rate != "—")
+        {
+            // The experience per hour, always in sight (the user wants it on the bar, not only in the tip).
+            string exp = rate + " EXP/sa";
+            TextRenderer.DrawText(g, exp, smallBold, statusRow, Theme.Yellow, Right);
+            statusRow.Width -= TextRenderer.MeasureText(exp, smallBold).Width + (int)(6 * s);
+        }
+        TextRenderer.DrawText(g, status, small, statusRow, market ? Theme.Text : info.Attack ? info.StatusColor : Theme.Accent, Left);
         if (!market)
         {
             // HP and MP: two thin lines under the text, red / blue (darker when few potions are left).
@@ -325,10 +365,12 @@ internal sealed class MiniBar : Form
         [
             (startText, info.Running ? Theme.Secondary : Theme.Primary),
             ("■  Durdur", Theme.Danger),
-            ("🎒  Eşyalar", _itemsOpen ? Theme.Primary : Theme.Secondary),
-            ("☰  Menü", Theme.Secondary),
+            ("🎒 Eşyalar", _itemsOpen ? Theme.Primary : Theme.Secondary),
+            ("⛶ Büyüt", Theme.Secondary),
+            ("⊞ Diz", Theme.Secondary),
+            ("☰ Menü", _menu.Visible ? Theme.Primary : Theme.Secondary),
         ];
-        using var font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+        using var font = new Font("Segoe UI", 8f, FontStyle.Bold);
         g.SmoothingMode = SmoothingMode.AntiAlias;
         for (int i = 0; i < Buttons; i++)
         {
@@ -368,6 +410,9 @@ internal sealed class MiniBar : Form
     {
         base.OnMouseMove(e);
         int hit = HitButton(e.Location);
+        // The menu opens as the mouse comes over its button (no click needed).
+        if (hit == MenuButton && hit != _hover && DateTime.Now - _menuClosedAt > TimeSpan.FromMilliseconds(350))
+            OpenMenu();
         if (hit != _hover)
         {
             _hover = hit;
@@ -377,7 +422,9 @@ internal sealed class MiniBar : Form
                 StartButton => _info.Running ? "Duraklat: kaldığı yerden sürdürülebilir (F10)" : "Başlat ya da kaldığı yerden sürdür (F10)",
                 StopButton => $"Durdur ve sıfırla ({(Instance.IsFirst ? "F11 / " : "")}Ctrl+Shift+{Math.Min(Instance.Number, 9)})",
                 ItemsButton => _itemsOpen ? "Eşya listesini kapat" : "Bu tur alınan, atılan ve satılan eşyalar (şerit yukarı doğru açılır)",
-                MenuButton => "Tüm botlar, saldırı aç / kapat, oyunu büyüt, diz, paneli aç, kapat",
+                FillButton => "Bu oyunu ekrana büyüt (bot altında kalır); tekrar bas: hepsini diz",
+                ArrangeButton => "Tüm oyunları ve botları diz",
+                MenuButton => "Tüm botlar, saldırı aç / kapat, paneli aç, kapat",
                 _ => Details(),
             });
             Invalidate();
@@ -424,9 +471,14 @@ internal sealed class MiniBar : Form
                 _hover = -1;
                 Pull(true);
                 return;
+            case FillButton: _fill(); break;
+            case ArrangeButton: _arrange(); break;
             case MenuButton:
-                FillMenu();
-                _menu.Show(this, new Point(Button(MenuButton).Left, Button(MenuButton).Bottom + Top));
+                // A click with the menu open (it closed on that same click): stays closed.
+                if (_menu.Visible || DateTime.Now - _menuClosedAt < TimeSpan.FromMilliseconds(350))
+                    _menu.Close();
+                else
+                    OpenMenu();
                 return;
         }
         Pull(false);
