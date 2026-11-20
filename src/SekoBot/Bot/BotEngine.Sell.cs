@@ -135,6 +135,7 @@ internal sealed partial class BotEngine
         _log($"💰 Çantada satılacak {toSell} eşya var: {at.DistanceXY(start.Player) / 100:0} m ötedeki {name} NPC'sine gidiliyor.");
         // Walking takes no mouse: the turn is let go meanwhile, so the other bots can empty their bags
         // (seen: two bots waiting 3–4 minutes while one walked to the NPC). Taken again at the shop.
+        ShrinkAfterWork(); // grown for emptying the bag just before: back in its place for the walk
         FrontTurn.Shared.LetGo();
         using var input = new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
         int stuck = await WalkRouteAsync(input, at, TimeSpan.FromMinutes(3), token, near: 250);
@@ -170,8 +171,12 @@ internal sealed partial class BotEngine
         }
         if (!await WaitForTurnAsync(token))
             return Failed("sıra gelmedi (başka bir bot uzun süre fareyi kullandı)");
+        // A small game cuts the bag and the shop off: made big for the sale, a moment for its screens to settle.
+        while (GrowForWork())
+            await Task.Delay(200, token);
         if (!await OpenShopAsync())
         {
+            ShrinkAfterWork();
             FrontTurn.Shared.LetGo();
             return Failed($"{name} dükkanı açılamadı");
         }
@@ -235,6 +240,7 @@ internal sealed partial class BotEngine
         // Nothing of the sale left on the screen (a question, the bag, an item's menu), then the turn to the
         // others while walking back.
         await TidyAsync(input, profile, token);
+        ShrinkAfterWork();
         FrontTurn.Shared.LetGo();
         await WalkRouteAsync(input, home, TimeSpan.FromMinutes(3), token, near: 300);
         if (sold == 0)
