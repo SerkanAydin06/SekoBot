@@ -34,6 +34,11 @@ internal sealed partial class Brain
     /// half as much as one next to us (was 1000 — seen by the user: off to a far group with one right beside).</summary>
     internal const double PullNearWeight = 250;
     private TimeSpan _pullHeldToldAt = Never;
+
+    /// <summary>The least HP a group right beside us is gathered with: the setting less 25 points, never under 45 %.</summary>
+    internal static double BesideMinHp(BotProfile p) => Math.Max(0.45, p.PullMinHp - 0.25);
+    /// <summary>With less HP than the setting, a group beside is gathered only while this many mobs (or fewer) are after us.</summary>
+    internal const int BesideMaxChasing = 3;
     internal const double PullProgress = 150;
     /// <summary>A group that couldn't be reached is left this long.</summary>
     internal const int PullUnreachableMs = 300_000;
@@ -192,14 +197,17 @@ internal sealed partial class Brain
         if (state.Targets.Any(t => t.Priority && !t.AttacksMe))
             return EndPull(actions, null);
         int chasing = state.Targets.Count(t => t.AttacksMe);
-        if (state.Hp is double hp && hp < p.PullMinHp)
+        // A group right beside us is gathered with less HP too (the user: "keep gathering what is around, leave
+        // no mob near"); only the far ones need the full setting. How many is still learned from the fights.
+        bool besideOnly = state.Hp is double hpNow && hpNow < p.PullMinHp && hpNow >= BesideMinHp(p) && chasing <= BesideMaxChasing && GroupBeside(state, p);
+        if (state.Hp is double hp && hp < p.PullMinHp && !besideOnly)
         {
             // Not starting with too little HP — told (once a minute) when a group is right beside us, so it
             // shows why mobs are cut one by one (it didn't show before).
             if (!_pulling && now - _pullHeldToldAt > Ms(60_000) && GroupBeside(state, p))
             {
                 _pullHeldToldAt = now;
-                actions.Add(new NoteAction($"Yanda uyuyan grup var ama can %{hp * 100:0}; toplamaya başlamak için en az %{p.PullMinHp * 100:0} isteniyor (Saldırı ayarlarında)."));
+                actions.Add(new NoteAction($"Yanda uyuyan grup var ama can %{hp * 100:0}; yandaki grubu toplamak için en az %{BesideMinHp(p) * 100:0} isteniyor."));
             }
             return EndPull(actions, $"Can azaldı; toplanan {chasing} mob kesiliyor.");
         }
@@ -240,6 +248,7 @@ internal sealed partial class Brain
             .GroupBy(t => t.Group)
             .Where(g => g.All(t => !t.AttacksMe && t.Hp >= t.MaxHp))
             .Where(g => g.Key == _pullGroup || PullInsideArea(g, p))
+            .Where(g => !besideOnly || g.Min(t => t.Distance) <= PullBeside)
             // The first group within 15 m; the next ones only around the first.
             .Where(g => _pullAnchor is not Memory.Vec3 anchor
                 ? g.Min(t => t.Distance) <= (leftovers ? Math.Max(area, PullNextWithChasers) : startingWithChasers ? area : PullRange)

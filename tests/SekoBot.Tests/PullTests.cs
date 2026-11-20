@@ -467,4 +467,18 @@ public class PullAreaTests
             actions.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), W, H, 1, 1, 0, 1) { Targets = mobs, Walking = true, AttackPower = 189 }));
         Assert.DoesNotContain(actions, x => x is KeyDownAction d && d.Key == p.Keys.MoveLeft);
     }
+    [Theory]
+    [InlineData(500, true)]    // 5 m beside us: gathered at 55 % HP
+    [InlineData(1200, false)]  // 12 m off: needs the full 70 %
+    public void With_less_HP_only_a_group_beside_is_gathered(double x, bool gathered)
+    {
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = false, PullMaxMobs = 9, Breaks = false, PullMinHp = 0.7 };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        TargetInfo[] group = [At(10, 10, x, 300), At(11, 10, x + 20, 300), At(12, 10, x + 40, 300)];
+        var actions = new List<BotAction>();
+        for (double t = 0; t < 1000; t += 100)
+            actions.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), W, H, 0.55, 1, 0, 1) { Targets = group, Walking = true, AttackPower = 189 }));
+        Assert.Equal(gathered, actions.Any(a => a is NoteAction n && n.Text.Contains("toplanıyor")));
+    }
 }
