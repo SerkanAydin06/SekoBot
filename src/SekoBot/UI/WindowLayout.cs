@@ -132,6 +132,47 @@ internal static class WindowLayout
         return true;
     }
 
+    /// <summary>
+    /// The game's own rule (measured 2026-11-20): its screens get smaller with the window only while the
+    /// picture's short side is at least 480 pixels; below that they stay as big and are cut off at the
+    /// edges (the login button drops off the bottom of a 358-pixel-high window).
+    /// </summary>
+    public const int GameUiMinHeight = 480;
+
+    /// <summary>
+    /// Where a game goes when it must show its screens whole: in its own shape, the picture just
+    /// <see cref="GameUiMinHeight"/> high, grown from where it stands and kept on the work area.
+    /// </summary>
+    /// <param name="seen">The window as it is seen now.</param>
+    /// <param name="picture">Its picture (the client area) now.</param>
+    /// <returns>The window as it should be seen; <paramref name="seen"/> when it is already big enough.</returns>
+    public static Rectangle UiWhole(Rectangle seen, Size picture, Rectangle work)
+    {
+        if (picture.Width <= 0 || picture.Height <= 0 || Math.Min(picture.Width, picture.Height) >= GameUiMinHeight)
+            return seen;
+        double aspect = picture.Width / (double)picture.Height;
+        int picH = aspect >= 1 ? GameUiMinHeight : (int)Math.Round(GameUiMinHeight / aspect);
+        int picW = aspect >= 1 ? (int)Math.Round(GameUiMinHeight * aspect) : GameUiMinHeight;
+        int w = Math.Min(work.Width, picW + seen.Width - picture.Width), h = Math.Min(work.Height, picH + seen.Height - picture.Height);
+        int x = Math.Clamp(seen.Left, work.Left, work.Right - w), y = Math.Clamp(seen.Top, work.Top, work.Bottom - h);
+        return new Rectangle(x, y, w, h);
+    }
+
+    /// <summary>A game grown just enough to show its screens whole (see <see cref="UiWhole"/>), brought to the front.</summary>
+    /// <returns>Where it now is; empty when it was big enough already.</returns>
+    public static Rectangle GrowForUi(nint hwnd)
+    {
+        if (!Win32.IsWindow(hwnd) || !Win32.GetClientRect(hwnd, out var c))
+            return Rectangle.Empty;
+        var seen = Visible(hwnd);
+        var target = UiWhole(seen, new Size(c.Right - c.Left, c.Bottom - c.Top), Screen.FromRectangle(seen).WorkingArea);
+        if (target == seen)
+            return Rectangle.Empty;
+        MoveVisible(hwnd, target);
+        Win32.SetForegroundWindow(hwnd);
+        return target;
+    }
+
     /// <summary>Puts a game back where it was (what is seen of it).</summary>
     public static void PutBack(nint hwnd, Rectangle seen)
     {
