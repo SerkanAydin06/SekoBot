@@ -232,7 +232,9 @@ internal sealed partial class BotEngine
             input.Enqueue(new KeyTapAction(profile.Keys.CloseWindow));
             await Task.Delay(800, token);
         }
-        // The mouse is done with: the turn to the others while walking back.
+        // Nothing of the sale left on the screen (a question, the bag, an item's menu), then the turn to the
+        // others while walking back.
+        await TidyAsync(input, profile, token);
         FrontTurn.Shared.LetGo();
         await WalkRouteAsync(input, home, TimeSpan.FromMinutes(3), token, near: 300);
         if (sold == 0)
@@ -245,6 +247,37 @@ internal sealed partial class BotEngine
         if (profile.NotifySells)
             Notify(done);
         return done;
+    }
+
+    /// <summary>Closes what a sale left open (see <see cref="LeftOpen"/>) until the screen stays clean a second, 8 s at most.</summary>
+    private async Task TidyAsync(InputExecutor input, BotProfile profile, CancellationToken token)
+    {
+        var until = DateTime.Now + TidyFor;
+        DateTime clearSince = DateTime.MinValue, actedAt = DateTime.MinValue;
+        int closed = 0;
+        while (DateTime.Now < until)
+        {
+            if (ReadBagNow() is not { } bag || !LeftOpen(bag))
+            {
+                if (clearSince == DateTime.MinValue)
+                    clearSince = DateTime.Now;
+                if (DateTime.Now - clearSince >= TidyClearFor)
+                    break;
+            }
+            else
+            {
+                clearSince = DateTime.MinValue;
+                if (DateTime.Now - actedAt >= TimeSpan.FromMilliseconds(1200))
+                {
+                    actedAt = DateTime.Now;
+                    closed++;
+                    input.Enqueue(new KeyTapAction(TidyKey(bag, profile)));
+                }
+            }
+            await Task.Delay(200, token);
+        }
+        if (closed > 0)
+            _log("💰 Satıştan sonra ekranda açık kalan pencere kapatıldı.");
     }
 
     /// <summary>At the NPC: the turn to use the mouse, waited for (another bot emptying its bag takes a minute or so).</summary>
