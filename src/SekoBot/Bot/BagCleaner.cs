@@ -22,13 +22,16 @@ internal sealed class BagCleaner
     /// <summary>No question this long after the drag: it didn't take.</summary>
     public static readonly TimeSpan QuestionTimeout = TimeSpan.FromMilliseconds(4500);
     public static readonly TimeSpan AfterClick = TimeSpan.FromMilliseconds(1800);
-    /// <summary>After "Evet" in the item menu's question: the item goes within a second (seen).</summary>
-    public static readonly TimeSpan AfterYes = TimeSpan.FromMilliseconds(1000);
+    /// <summary>After "Evet" in the item menu's question: looked at again this soon (the item goes within a second, seen);
+    /// still there then, waited for up to <see cref="GoneWithin"/> before it counts as not taken.</summary>
+    public static readonly TimeSpan AfterYes = TimeSpan.FromMilliseconds(700);
+    public static readonly TimeSpan GoneWithin = TimeSpan.FromMilliseconds(1800);
     public static readonly TimeSpan AfterKey = TimeSpan.FromMilliseconds(1200);
     public const int TriesPerItem = 2;
     /// <summary>The item's menu shows a moment after the click; not there after this: dragged instead.</summary>
     public static readonly TimeSpan MenuTimeout = TimeSpan.FromMilliseconds(2500);
-    public static readonly TimeSpan AfterItemClick = TimeSpan.FromMilliseconds(500);
+    /// <summary>The menu shows some 60 ms after the click (recorded 2026-11-20); looked for this soon, waited for up to <see cref="MenuTimeout"/>.</summary>
+    public static readonly TimeSpan AfterItemClick = TimeSpan.FromMilliseconds(250);
 
     private enum Step { Open, Pick, Menu, Dragged, Confirmed, Close }
     private TimeSpan _clickedAt;
@@ -36,7 +39,7 @@ internal sealed class BagCleaner
     private bool _menuTried, _viaMenu;
 
     private Step _step;
-    private TimeSpan _started, _waitUntil, _draggedAt;
+    private TimeSpan _started, _waitUntil, _draggedAt, _yesAt;
     private int _slot, _vnum, _opens, _closes, _noLayout, _yesClicks, _escapes;
     private readonly Dictionary<int, int> _failed = [];
     private readonly Dictionary<int, int> _pageClicks = [];
@@ -102,6 +105,7 @@ internal sealed class BagCleaner
             {
                 actions.Add(new ClickAction(yes, Slow: true, Fast: _viaMenu));
                 _yesClicks++;
+                _yesAt = now;
                 _step = Step.Confirmed;
                 _waitUntil = now + (_viaMenu ? AfterYes : AfterClick);
             }
@@ -196,7 +200,9 @@ internal sealed class BagCleaner
                 break;
 
             case Step.Confirmed:
-                // The question is gone: the item should be too.
+                // The question is gone: the item should be too (a moment more given when it is still there).
+                if (bag.Items.Any(i => i.Slot == _slot && i.Vnum == _vnum) && now - _yesAt < GoneWithin)
+                    break;
                 if (bag.Items.Any(i => i.Slot == _slot && i.Vnum == _vnum))
                     Failed(_slot);
                 else

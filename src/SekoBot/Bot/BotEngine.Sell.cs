@@ -133,6 +133,9 @@ internal sealed partial class BotEngine
         var at = new Vec3(npc.X, npc.Y, npc.Z);
         string name = NpcBook.Shops.GetValueOrDefault(npc.Vnum, "Market");
         _log($"💰 Çantada satılacak {toSell} eşya var: {at.DistanceXY(start.Player) / 100:0} m ötedeki {name} NPC'sine gidiliyor.");
+        // Walking takes no mouse: the turn is let go meanwhile, so the other bots can empty their bags
+        // (seen: two bots waiting 3–4 minutes while one walked to the NPC). Taken again at the shop.
+        FrontTurn.Shared.LetGo();
         using var input = new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
         int stuck = await WalkRouteAsync(input, at, TimeSpan.FromMinutes(3), token, near: 250);
         if (World is { } w && w.Player.DistanceXY(at) > 600)
@@ -165,8 +168,13 @@ internal sealed partial class BotEngine
         }
         return open;
         }
+        if (!await WaitForTurnAsync(token))
+            return Failed("sıra gelmedi (başka bir bot uzun süre fareyi kullandı)");
         if (!await OpenShopAsync())
+        {
+            FrontTurn.Shared.LetGo();
             return Failed($"{name} dükkanı açılamadı");
+        }
         int reopened = 0, soldBefore = 0;
         _log($"💰 {name} dükkanı açıldı; eşyalar tek tek satılıyor (Sat → Evet).");
 
@@ -211,7 +219,7 @@ internal sealed partial class BotEngine
                 foreach (var (vnum, count) in cleaner.ThrownItems)
                     _sessionItems.Thrown(vnum, count);
                 cleaner.ThrownItems.Clear();
-                await Task.Delay(150, token);
+                await Task.Delay(80, token);
             }
         }
         finally { input.HoldFront = false; }
@@ -224,6 +232,8 @@ internal sealed partial class BotEngine
             input.Enqueue(new KeyTapAction(profile.Keys.CloseWindow));
             await Task.Delay(800, token);
         }
+        // The mouse is done with: the turn to the others while walking back.
+        FrontTurn.Shared.LetGo();
         await WalkRouteAsync(input, home, TimeSpan.FromMinutes(3), token, near: 300);
         if (sold == 0)
             return Failed("satılacak eşya satılamadı" + (cleaner.Problem is { } why ? $" ({why})" : ""));
@@ -235,6 +245,19 @@ internal sealed partial class BotEngine
         if (profile.NotifySells)
             Notify(done);
         return done;
+    }
+
+    /// <summary>At the NPC: the turn to use the mouse, waited for (another bot emptying its bag takes a minute or so).</summary>
+    private async Task<bool> WaitForTurnAsync(CancellationToken token)
+    {
+        var since = _clock.Elapsed;
+        while (!TakeTurn())
+        {
+            if (_clock.Elapsed - since > FrontTurn.MaxHold)
+                return false;
+            await Task.Delay(1000, token);
+        }
+        return true;
     }
 
     private bool _toldWalkedWay;
