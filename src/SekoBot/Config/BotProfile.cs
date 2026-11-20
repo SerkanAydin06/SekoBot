@@ -240,6 +240,11 @@ internal sealed class BotProfile
 
     /// <summary>Fishing: the quick slot key the bait is on (pressed when a cast doesn't take); None = not used.</summary>
     public System.Windows.Forms.Keys FishBaitKey { get; set; } = System.Windows.Forms.Keys.None;
+    /// <summary>On the login screen (a maintenance): the login button pressed every few minutes until the server opens.</summary>
+    public bool AutoLogin { get; set; } = true;
+    /// <summary>Minutes between two login tries.</summary>
+    public double AutoLoginMinutes { get; set; } = 3;
+
     /// <summary>Fishing: the mini game's upright picture is clicked by the bot.</summary>
     public bool FishAutoPick { get; set; } = true;
     /// <summary>Fishing: a Telegram message when a fish is hooked and the picture question waits.</summary>

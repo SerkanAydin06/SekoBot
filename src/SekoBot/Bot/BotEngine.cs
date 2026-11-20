@@ -563,6 +563,7 @@ internal sealed partial class BotEngine : IDisposable
         _scanCts?.Cancel();
         _marketCts?.Cancel();
         _fishCts?.Cancel();
+        _loginInput?.Dispose();
         _cts.Cancel();
         _capture?.Dispose();
         try { _loop?.Wait(1500); } catch { }
