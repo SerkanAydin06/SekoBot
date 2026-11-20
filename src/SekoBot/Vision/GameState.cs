@@ -132,6 +132,9 @@ internal sealed record GameState(
 
     /// <summary>A window covers the game (e.g. the advert after a level-up).</summary>
     public bool PopupOpen { get; init; }
+    /// <summary>The window open is the bag (with its equipment beside it): closed with the bag's key, not Esc
+    /// (seen since the game's update: Esc left the equipment open, and the next Esc opened the game menu).</summary>
+    public bool PopupIsBag { get; init; }
 
     /// <summary>The game's message window is open: someone may be typing in it, so no key is pressed
     /// (they would end up in the text: "ggggg").</summary>

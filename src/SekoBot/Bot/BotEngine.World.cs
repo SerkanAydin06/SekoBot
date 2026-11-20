@@ -109,8 +109,12 @@ internal sealed partial class BotEngine
             if (open.Count > 0)
                 _log($"Açık pencere (bellekten): {seen}");
         }
+        _popupIsBag = open.Count > 0 && open.All(w => w is "inventory" or "equipment");
         return open.Count > 0;
     }
+
+    /// <summary>The last <see cref="PopupOpen"/> found only the bag (and its equipment) open.</summary>
+    private bool _popupIsBag;
 
     private readonly HotspotMap _hotspots = new();
     private string _hotspotMap = "";

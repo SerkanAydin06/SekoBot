@@ -35,4 +35,15 @@ public class TidyTests
         Assert.Equal(new KeyTapAction(p.Keys.CloseWindow), BotEngine.TidyAction(Bag(open: true, shop: 9001), p));
         Assert.Equal(new KeyTapAction(p.Keys.Inventory), BotEngine.TidyAction(Bag(open: true), p));
     }
+
+    [Fact]
+    public void An_item_outside_a_small_game_window_is_not_clicked()
+    {
+        // A game arranged 636×358 cuts the bag off at the bottom (seen: clicks beside the items).
+        var client = new Size(636, 358);
+        Assert.True(BagCleaner.Inside(new Rectangle(500, 300, 40, 40), client));
+        Assert.False(BagCleaner.Inside(new Rectangle(500, 350, 40, 40), client));   // its middle under the edge
+        Assert.False(BagCleaner.Inside(new Rectangle(630, 100, 40, 40), client));   // off the right
+        Assert.True(BagCleaner.Inside(new Rectangle(630, 100, 40, 40), Size.Empty)); // size unknown: tried
+    }
 }

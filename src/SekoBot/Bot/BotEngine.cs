@@ -193,6 +193,7 @@ internal sealed partial class BotEngine : IDisposable
                             state = state with
                             {
                                 PopupOpen = !_cleaner.Active && !_brain.ReadyToClean && PopupOpen(world),
+                                PopupIsBag = _popupIsBag,
                                 Typing = world?.OpenWindows?.Contains(GameWorldReader.MessageWindow) == true,
                             };
                         var view = MemoryView(world, profile, frame.Width, frame.Height, DumpSpot(now), fit: !_fitRelaxed);
@@ -455,6 +456,7 @@ internal sealed partial class BotEngine : IDisposable
         input.HoldFront = false;
         input.Dispose();
         _tidying = false;
+        ShrinkAfterWork();
         FrontTurn.Shared.LetGo(); // another bot waiting can go on
         _log("Bot durdu: " + reason);
         WriteSessionReport(reason);
