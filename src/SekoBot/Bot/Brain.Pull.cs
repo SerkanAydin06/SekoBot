@@ -161,7 +161,7 @@ internal sealed partial class Brain
 
     /// <summary>A whole sleeping group right beside us (not left a moment ago, inside the area).</summary>
     private bool GroupBeside(GameState state, BotProfile p) =>
-        state.Targets.Where(t => t.Group != 0 && !_pulled.ContainsKey(t.Group)).GroupBy(t => t.Group)
+        state.Targets.Where(t => t.Group != 0 && !Left(state, t.Group)).GroupBy(t => t.Group)
             .Any(g => g.All(t => !t.AttacksMe && t.Hp >= t.MaxHp) && g.Min(t => t.Distance) <= PullBeside && PullInsideArea(g, p));
 
     /// <summary>Groups are gathered only this far into the area (its radius), so walking to one — around
@@ -171,6 +171,19 @@ internal sealed partial class Brain
     private bool PullInsideArea(IEnumerable<TargetInfo> group, BotProfile p) =>
         p.LeashMeters <= 0 || _home is not Memory.Vec3 home || Centre(group) is not Memory.Vec3 c ||
         c.DistanceXY(home) <= p.LeashMeters * 100 * PullInArea;
+
+    /// <summary>A group left a moment ago (it didn't wake up, or came and was fought): not gone for again for a
+    /// minute — but one right beside us after <see cref="PullBesideRetryMs"/> already (seen: groups 1–7 m away
+    /// skipped as "left a moment ago" while the gathering ended).</summary>
+    private bool Left(GameState state, int group)
+    {
+        if (!_pulled.TryGetValue(group, out var when))
+            return false;
+        if (state.Time - when <= Ms(PullBesideRetryMs))
+            return true;
+        return !(state.Targets.Where(t => t.Group == group).Select(t => t.Distance).DefaultIfEmpty(double.MaxValue).Min() <= PullBeside);
+    }
+    internal const int PullBesideRetryMs = 15_000;
 
     /// <summary>For the log: how far the nearest whole sleeping group is (why it wasn't gathered can be seen).</summary>
     private string NearestSleeping(GameState state)
@@ -244,7 +257,7 @@ internal sealed partial class Brain
 
         double area = Math.Max(1, p.PullAreaMetres) * 100;
         var fresh = state.Targets
-            .Where(t => t.Group != 0 && t.Distance <= PullRange * 1.5 && !_pulled.ContainsKey(t.Group))
+            .Where(t => t.Group != 0 && t.Distance <= PullRange * 1.5 && !Left(state, t.Group))
             .GroupBy(t => t.Group)
             .Where(g => g.All(t => !t.AttacksMe && t.Hp >= t.MaxHp))
             .Where(g => g.Key == _pullGroup || PullInsideArea(g, p))
