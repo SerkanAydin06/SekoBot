@@ -23,11 +23,16 @@ public class TidyTests
     }
 
     [Fact]
-    public void A_question_is_closed_before_the_bag()
+    public void The_throw_question_is_answered_yes_the_rest_closed()
     {
+        // Since the game's update the question doesn't close with Esc (seen: 4 tries, open for 20 s): "Evet" —
+        // it was asked for an item the bot meant to throw anyway.
         var p = new BotProfile();
-        Assert.Equal(p.Keys.CloseWindow, BotEngine.TidyKey(Bag(open: true, confirm: new Point(1, 1)), p));
-        Assert.Equal(p.Keys.CloseWindow, BotEngine.TidyKey(Bag(open: true, shop: 9001), p));
-        Assert.Equal(p.Keys.Inventory, BotEngine.TidyKey(Bag(open: true), p));
+        Assert.Equal(new ClickAction(new Point(5, 6), Slow: true, Fast: true), BotEngine.TidyAction(Bag(open: true, confirm: new Point(5, 6)), p));
+        // At a shop while selling: "sell it?" answered yes too; away from one, another question is closed.
+        Assert.Equal(new ClickAction(new Point(7, 8), Slow: true, Fast: true), BotEngine.TidyAction(Bag(other: new Point(7, 8), shop: 9001), p, selling: true));
+        Assert.Equal(new KeyTapAction(p.Keys.CloseWindow), BotEngine.TidyAction(Bag(other: new Point(7, 8)), p));
+        Assert.Equal(new KeyTapAction(p.Keys.CloseWindow), BotEngine.TidyAction(Bag(open: true, shop: 9001), p));
+        Assert.Equal(new KeyTapAction(p.Keys.Inventory), BotEngine.TidyAction(Bag(open: true), p));
     }
 }

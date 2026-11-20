@@ -40,7 +40,7 @@ internal sealed class BagCleaner
 
     private Step _step;
     private TimeSpan _started, _waitUntil, _draggedAt, _yesAt;
-    private int _slot, _vnum, _opens, _closes, _noLayout, _yesClicks, _escapes;
+    private int _slot, _vnum, _opens, _closes, _noLayout, _yesClicks, _escapes, _leftoverYes;
     private readonly Dictionary<int, int> _failed = [];
     private readonly Dictionary<int, int> _pageClicks = [];
 
@@ -63,7 +63,7 @@ internal sealed class BagCleaner
         _step = Step.Open;
         _started = now;
         _waitUntil = now;
-        _opens = _closes = _noLayout = _yesClicks = _escapes = Thrown = _menuMisses = 0;
+        _opens = _closes = _noLayout = _yesClicks = _escapes = _leftoverYes = Thrown = _menuMisses = 0;
         Problem = null;
         _failed.Clear();
         _pageClicks.Clear();
@@ -75,8 +75,11 @@ internal sealed class BagCleaner
         Active = false;
         Problem = why;
         var actions = new List<BotAction>();
-        // The throw / sell question left showing (seen: it stayed open while the bot fought on): no to it first.
-        if (bag?.Confirm != null || bag?.OtherConfirm != null)
+        // The throw / sell question left showing (seen: it stayed open while the bot fought on): the throw question
+        // answered "Evet" (Esc doesn't close it since the game's update; the item was to go anyway), another one closed.
+        if (bag?.Confirm is Point yes)
+            actions.Add(new ClickAction(yes, Slow: true, Fast: true));
+        else if (bag?.OtherConfirm != null)
             actions.Add(new KeyTapAction(p.Keys.CloseWindow));
         if (bag?.Open == true)
             actions.Add(new KeyTapAction(p.Keys.Inventory));
@@ -108,6 +111,14 @@ internal sealed class BagCleaner
                 _yesAt = now;
                 _step = Step.Confirmed;
                 _waitUntil = now + (_viaMenu ? AfterYes : AfterClick);
+            }
+            else if (bag.Confirm is Point leftover && _step is Step.Open or Step.Pick && _leftoverYes < 2)
+            {
+                // Our own "throw it away?" left from before (cut short by a mob): Esc doesn't close it since the
+                // game's update (seen: "onay penceresi kapanmıyor") — answered "Evet", the item was to go anyway.
+                actions.Add(new ClickAction(leftover, Slow: true, Fast: true));
+                _leftoverYes++;
+                _waitUntil = now + AfterClick;
             }
             else if (_escapes < 3)
             {

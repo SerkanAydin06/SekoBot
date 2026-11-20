@@ -271,7 +271,7 @@ internal sealed partial class BotEngine
                 {
                     actedAt = DateTime.Now;
                     closed++;
-                    input.Enqueue(new KeyTapAction(TidyKey(bag, profile)));
+                    input.Enqueue(TidyAction(bag, profile, selling: true));
                 }
             }
             await Task.Delay(200, token);
