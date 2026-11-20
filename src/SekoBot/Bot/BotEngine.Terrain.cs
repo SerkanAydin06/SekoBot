@@ -39,7 +39,7 @@ internal sealed partial class BotEngine
             return;
         string map = world.MapName;
         // "_none" and the like: between maps (teleporting, loading).
-        if (map.StartsWith('_') || map.Equals("none", StringComparison.OrdinalIgnoreCase))
+        if (map.StartsWith('_') || map.Equals("none", StringComparison.OrdinalIgnoreCase) || IsLoginScreen(map))
             return;
         if (map != _terrainMap && now - _terrainTriedAt >= TimeSpan.FromSeconds(10))
         {

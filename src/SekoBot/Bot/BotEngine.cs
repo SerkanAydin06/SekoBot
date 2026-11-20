@@ -66,10 +66,18 @@ internal sealed partial class BotEngine : IDisposable
             ItemBook.Load(Path.Combine(ProfileStore.Directory, "esya-bilgisi.json"));
         _session.PotionsRanOut += kind =>
         {
+            if (World is { } w && IsLoginScreen(w.MapName))
+                return; // the login screen shows an empty bag: not out of potions
             _log($"⚠ {kind} iksiri bitti! Envanterde kalmadı.");
             Notify($"⚠ {kind} iksiri bitti!");
         };
     }
+
+    /// <summary>The game's login / character screen (map "loginMain"): kicked out — maintenance or the connection lost.</summary>
+    internal static bool IsLoginScreen(string map) => map.Contains("login", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The world last seen in the game (not on the login screen): the session's map and level.</summary>
+    private WorldSnapshot? _lastInGame;
 
     public WindowInfo Window => _window;
     public bool GameMinimized => WindowService.IsMinimized(_window);
@@ -245,8 +253,16 @@ internal sealed partial class BotEngine : IDisposable
         {
             if (_input == null)
                 return (BotPhase.Stopped, Array.Empty<BotAction>());
+            // Kicked to the login screen (maintenance, the connection lost): the bag reads empty there — not
+            // "out of potions" (seen 2026-11-20 10:03, every bot); stopped with the real reason.
+            var seen = World;
+            if (seen != null && !IsLoginScreen(seen.MapName))
+                _lastInGame = seen;
+            if (seen != null && IsLoginScreen(seen.MapName))
+                actions = [new StopAction("oyundan atıldı, giriş ekranında (bakım ya da bağlantı koptu)")];
             // Off to a market NPC to sell: that trip drives the character, the brain waits.
-            actions = _selling ? [] : WhisperTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);
+            else
+                actions = _selling ? [] : WhisperTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);
             phase = _brain.Phase;
             // Throwing items away: the game stays in front for all the clicks, not back and forth for each.
             _input.HoldFront = _cleaner.Active;
@@ -334,6 +350,11 @@ internal sealed partial class BotEngine : IDisposable
             error = "Oyunun belleği okunamıyor (" + _memoryStatus + "). SekoBot'u yönetici olarak aç ve karakterle oyuna gir.";
             return false;
         }
+        if (IsLoginScreen(World.MapName))
+        {
+            error = "Oyun giriş ekranında; önce karakterle oyuna gir.";
+            return false;
+        }
         if (ScanningArea || ScanningMarket || Fishing)
         {
             error = ScanningArea ? "Alan taranıyor; bitmesini bekle." : Fishing ? "Balık tutuluyor; önce onu durdur." : "Pazar taranıyor; önce onu durdur.";
@@ -419,7 +440,8 @@ internal sealed partial class BotEngine : IDisposable
         var duration = DateTime.Now - _sessionStartedAt;
         if (!_sessionStarted || duration < TimeSpan.FromMinutes(1))
             return;
-        var report = _session.Report(World, _clock.Elapsed);
+        var world = World is { } now && !IsLoginScreen(now.MapName) ? now : _lastInGame ?? World;
+        var report = _session.Report(world, _clock.Elapsed);
         _lastSummary = SessionLog.Summary(duration, report, _brain.Deaths);
         _log("Oturum: " + _lastSummary);
         if (_brain.Detours + _brain.NoWayMobs > 0)
@@ -427,7 +449,7 @@ internal sealed partial class BotEngine : IDisposable
                  $"{_brain.NoWayMobs} mob ya da yerdeki eşyaya kısa yol olmadığı için gidilmedi.");
         try
         {
-            SessionLog.Append(SessionLog.Line(_sessionStartedAt, DateTime.Now, World?.MapName ?? "", report, _brain.Deaths, reason));
+            SessionLog.Append(SessionLog.Line(_sessionStartedAt, DateTime.Now, world?.MapName ?? "", report, _brain.Deaths, reason));
         }
         catch (IOException ex)
         {

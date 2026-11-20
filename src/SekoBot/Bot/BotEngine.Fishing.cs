@@ -65,6 +65,8 @@ internal sealed partial class BotEngine
             error = "Oyun simge durumunda; önce oyunu aç.";
         else if (World == null)
             error = "Oyunun belleği okunamıyor (" + _memoryStatus + ").";
+        else if (IsLoginScreen(World.MapName))
+            error = "Oyun giriş ekranında; önce karakterle oyuna gir.";
         else if (FishingNow() is not { } state)
             error = "Balık tutma bilgisi bellekten okunamadı.";
         else if (!state.RodInHand)
@@ -134,6 +136,11 @@ internal sealed partial class BotEngine
             }
             if (World is { Dead: true })
                 return "🎣 Karakter öldü; balık tutma durdu.";
+            if (World is { } there && IsLoginScreen(there.MapName))
+            {
+                Notify("🎣 Oyundan atıldı (giriş ekranı: bakım ya da bağlantı koptu); balık tutma durdu.");
+                return "🎣 Oyundan atıldı, giriş ekranında (bakım ya da bağlantı koptu); balık tutma durdu.";
+            }
             if (state.Asking)
             {
                 if (!await WaitForAnswerAsync(state, profile, token))
