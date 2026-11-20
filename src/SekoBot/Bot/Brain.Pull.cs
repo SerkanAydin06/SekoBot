@@ -157,11 +157,20 @@ internal sealed partial class Brain
 
     /// <summary>Groups are gathered only this far into the area (its radius), so walking to one — around
     /// whatever is in the way — doesn't take the character over the edge (and home again, half way).</summary>
-    internal const double PullInArea = 0.75;
+    internal const double PullInArea = 0.85;
 
     private bool PullInsideArea(IEnumerable<TargetInfo> group, BotProfile p) =>
         p.LeashMeters <= 0 || _home is not Memory.Vec3 home || Centre(group) is not Memory.Vec3 c ||
         c.DistanceXY(home) <= p.LeashMeters * 100 * PullInArea;
+
+    /// <summary>For the log: how far the nearest whole sleeping group is (why it wasn't gathered can be seen).</summary>
+    private string NearestSleeping(GameState state)
+    {
+        var near = state.Targets.Where(t => t.Group != 0).GroupBy(t => t.Group)
+            .Where(g => g.All(t => !t.AttacksMe && t.Hp >= t.MaxHp)).Select(g => (g.Key, Metres: g.Min(t => t.Distance) / 100))
+            .OrderBy(g => g.Metres).FirstOrDefault();
+        return near.Key == 0 ? "" : $" (en yakın uyuyan grup {near.Metres:0} m{(_pulled.ContainsKey(near.Key) ? ", az önce bırakılmıştı" : "")})";
+    }
 
     private static Memory.Vec3? Centre(IEnumerable<TargetInfo> group)
     {
@@ -221,13 +230,13 @@ internal sealed partial class Brain
             // The first group within 15 m; the next ones only around the first.
             .Where(g => _pullAnchor is not Memory.Vec3 anchor
                 ? g.Min(t => t.Distance) <= (leftovers ? Math.Max(area, PullNextWithChasers) : startingWithChasers ? area : PullRange)
-                : Centre(g) is Memory.Vec3 c ? c.DistanceXY(anchor) <= area : g.Min(t => t.Distance) <= area)
+                : g.Min(t => t.Distance) <= area || Centre(g) is Memory.Vec3 c && c.DistanceXY(anchor) <= area)
             .ToList();
         // Mobs after us: the next group only when it is close (else they are fought now).
         if (chasing > 0 && _pullGroup == 0)
             fresh = [.. fresh.Where(g => g.Min(t => t.Distance) <= PullNextWithChasers)];
         if (fresh.Count == 0)
-            return EndPull(actions, chasing > 0 ? $"Bu bölgede başka grup yok; toplanan {chasing} mob kesiliyor." : null);
+            return EndPull(actions, chasing > 0 ? $"Bu bölgede başka grup yok; toplanan {chasing} mob kesiliyor.{NearestSleeping(state)}" : null);
 
         double dps = Math.Max(50, state.AttackPower);
         double Worth(IGrouping<int, TargetInfo> g) =>
