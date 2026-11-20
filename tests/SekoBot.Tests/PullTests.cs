@@ -128,17 +128,17 @@ public class PullTests
     {
         var (brain, p) = Ready(max: 9);
         p.PullAreaMetres = 8;
-        // Cheap bears 3 m to the right; black bears (384 EXP) 10 m to the left.
+        // Cheap bears 3 m to the right; black bears (1500 EXP: far more than the cheap ones, so worth the walk) 10 m to the left.
         TargetInfo[] cheap = [At(10, 10, 300, 0), At(11, 10, 320, 50), At(12, 10, 340, -50)];
-        TargetInfo[] black = [At(20, 20, -1000, 0, 384, 624), At(21, 20, -1020, 50, 384, 624), At(22, 20, -1040, -50, 384, 624)];
+        TargetInfo[] black = [At(20, 20, -1000, 0, 1500, 624), At(21, 20, -1020, 50, 1500, 624), At(22, 20, -1040, -50, 1500, 624)];
         var first = Run(brain, 0, 1000, [.. cheap, .. black]);
         Assert.Contains(first, x => x is KeyDownAction d && d.Key == p.Keys.MoveLeft);   // to the black bears
         Assert.DoesNotContain(first, x => x is KeyDownAction d && d.Key == p.Keys.MoveRight);
 
         // Black bears woken (we're next to them now at x = -900). The cheap bears are 12 m from them:
         // outside the 8 m area, so they're not gathered — fight what came.
-        TargetInfo[] blackComing = [At(20, 20, -100, 0, 384, 624, attacks: true), At(21, 20, -120, 50, 384, 624, attacks: true),
-            At(22, 20, -140, -50, 384, 624, attacks: true)];
+        TargetInfo[] blackComing = [At(20, 20, -100, 0, 1500, 624, attacks: true), At(21, 20, -120, 50, 1500, 624, attacks: true),
+            At(22, 20, -140, -50, 1500, 624, attacks: true)];
         TargetInfo[] cheapFar = [At(10, 10, 1200, 0), At(11, 10, 1220, 50), At(12, 10, 1240, -50)];
         var next = Run(brain, 1000, 2000, [.. blackComing, .. cheapFar]);
         Assert.Contains(next, x => x is NoteAction n && n.Text.Contains("Bu bölgede başka grup yok"));
@@ -451,5 +451,20 @@ public class PullAreaTests
             actions.AddRange(brain.Tick(State(t, next)));
         Assert.DoesNotContain(actions, x => x is NoteAction n && n.Text.Contains("başka grup yok"));
         Assert.Contains(actions, x => x is KeyDownAction d && d.Key == p.Keys.MoveLeft);
+    }
+    [Fact]
+    public void The_group_beside_comes_before_a_somewhat_richer_one_far_off()
+    {
+        // Seen by the user: off to a far group with one right beside. 3 m to the right: 300 EXP mobs; 10 m to the
+        // left: 384 EXP ones with twice the HP — the one beside is gathered first.
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = false, PullMaxMobs = 9, Breaks = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        TargetInfo Rich(int id, double x) => new(id, new Point(Center.X + (int)(x / 5), Center.Y), Math.Abs(x), 130, 384, 624, 624, 56, false, false, 20, new Vec3(x, 0, 0));
+        TargetInfo[] mobs = [At(10, 10, 300, 300), At(11, 10, 320, 300), At(12, 10, 340, 300), Rich(20, -1000), Rich(21, -1020), Rich(22, -1040)];
+        var actions = new List<BotAction>();
+        for (double t = 0; t < 1000; t += 100)
+            actions.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), W, H, 1, 1, 0, 1) { Targets = mobs, Walking = true, AttackPower = 189 }));
+        Assert.DoesNotContain(actions, x => x is KeyDownAction d && d.Key == p.Keys.MoveLeft);
     }
 }
