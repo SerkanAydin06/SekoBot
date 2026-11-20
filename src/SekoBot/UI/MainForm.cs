@@ -1389,7 +1389,7 @@ internal sealed class MainForm : Form
     // ── Logging in again after a maintenance ──
     private bool _loginSeen, _loginEnlarged;
     private DateTime _nextLoginAt = DateTime.MinValue, _enlargedAt;
-    private Rectangle _beforeEnlarged;
+    private Rectangle _beforeEnlarged, _grownTo;
     private int _loginTries;
 
     /// <summary>
@@ -1442,14 +1442,21 @@ internal sealed class MainForm : Form
         {
             if (!_loginEnlarged)
             {
-                // The button is under the window's bottom edge: the game made big for a moment —
-                // one SekoBot at a time (seen: two games big at once, the screen a mess).
+                // The button is under the window's bottom edge (the game doesn't shrink its screens below
+                // 480 pixels): the game grown in its place just enough to show the screen whole, for a
+                // moment — one SekoBot at a time (seen: two games big at once, the screen a mess).
                 if (!TakeLoginTurn())
                     return;
+                _beforeEnlarged = WindowLayout.Visible(e.Window.Handle);
+                _grownTo = WindowLayout.GrowForUi(e.Window.Handle);
+                if (_grownTo.IsEmpty)
+                {
+                    // Big enough already, still cut off: the whole work area as before.
+                    WindowLayout.FillWithGame(e.Window.Handle, MiniBar.HeightAt(DeviceDpi) + 2);
+                    _grownTo = WindowLayout.Visible(e.Window.Handle);
+                }
                 _loginEnlarged = true;
                 _enlargedAt = now;
-                _beforeEnlarged = WindowLayout.Visible(e.Window.Handle);
-                WindowLayout.FillWithGame(e.Window.Handle, MiniBar.HeightAt(DeviceDpi) + 2);
                 WindowLayout.TellAllMini();
                 return;
             }
@@ -1497,9 +1504,10 @@ internal sealed class MainForm : Form
     {
         _loginEnlarged = false;
         var seen = WindowLayout.Visible(e.Window.Handle);
-        var work = Screen.FromRectangle(seen).WorkingArea;
-        // Still big (the user didn't put it elsewhere): back to its place.
-        if (seen.Width >= work.Width - 40 && !_beforeEnlarged.IsEmpty)
+        // Still where it was grown to (the user didn't put it elsewhere): back to its place.
+        bool same = Math.Abs(seen.Left - _grownTo.Left) < 12 && Math.Abs(seen.Top - _grownTo.Top) < 12
+                    && Math.Abs(seen.Width - _grownTo.Width) < 12 && Math.Abs(seen.Height - _grownTo.Height) < 12;
+        if (same && !_beforeEnlarged.IsEmpty)
             WindowLayout.PutBack(e.Window.Handle, _beforeEnlarged);
         WindowLayout.TellAllMini();
         LetGoLoginTurn();

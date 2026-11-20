@@ -11,6 +11,20 @@ public class WindowLayoutTests
     private static readonly Size Frame = new(2, 32);   // title bar and borders
     private const int Band = 86;                        // the bot's bar under each game
 
+    [Fact]
+    public void A_small_game_grows_in_its_place_just_enough_for_whole_screens()
+    {
+        // A borderless 636×358 game at the right edge: 853×480 in its shape, kept on the work area.
+        var grown = WindowLayout.UiWhole(new Rectangle(1284, 519, 636, 358), new Size(636, 358), Work);
+        Assert.Equal(new Rectangle(1920 - 853, 519, 853, 480), grown);
+        // With a title bar: the picture is what gets 480 high.
+        grown = WindowLayout.UiWhole(new Rectangle(10, 20, 638, 390), new Size(636, 358), Work);
+        Assert.Equal(new Rectangle(10, 20, 855, 512), grown);
+        // Big enough already: left as it is.
+        var big = new Rectangle(0, 0, 1920, 1032);
+        Assert.Equal(big, WindowLayout.UiWhole(big, new Size(1920, 1032), Work));
+    }
+
     private static void Tidy(List<Rectangle> cells, int games)
     {
         Assert.Equal(games, cells.Count);
