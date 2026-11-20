@@ -15,6 +15,23 @@ public class DeathTests
         };
 
     [Fact]
+    public void Attacked_while_healing_after_a_revive_it_fights_back()
+    {
+        // Seen: waiting for HP where the mobs are aggressive, the character was killed again and again.
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5] };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        brain.Tick(At(0, 1));
+        brain.Tick(At(100, 0, dead: true));
+        brain.Tick(At(200, 0, dead: true, ready: true));
+        brain.Tick(At(300, 0.3));
+        Assert.Equal(BotPhase.Recovering, brain.Phase);
+        var hit = brain.Tick(new GameState(TimeSpan.FromMilliseconds(400), 1920, 1080, 0.3, 1, null, 1) { Attackers = [new Point(1000, 540)] });
+        Assert.NotEqual(BotPhase.Recovering, brain.Phase);
+        Assert.Contains(hit, a => a is NoteAction n && n.Text.Contains("karşılık"));
+    }
+
+    [Fact]
     public void Dies_waits_clicks_revive_here_heals_then_carries_on()
     {
         var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5] };

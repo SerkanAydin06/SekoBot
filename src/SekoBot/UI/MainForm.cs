@@ -1625,7 +1625,8 @@ internal sealed class MainForm : Form
             }, game,
             _engine is { } e && Win32.IsWindow(e.Window.Handle) ? e.Window.Handle : 0, hpPotions, mpPotions, Attack: _profile.Attack, Market: market,
             Exp10: Exp10(), Elapsed: ElapsedNow(),
-            Items: _engine?.SessionItems.Rows().Select(r => (r.Name, r.Picked, r.Thrown, r.Sold)).ToList());
+            Items: _engine?.SessionItems.Rows().Select(r => (r.Name, r.Picked, r.Thrown, r.Sold)).ToList(),
+            Level: _engine?.World?.Level ?? 0);
     }
 
     protected override void WndProc(ref Message m)
