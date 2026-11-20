@@ -97,6 +97,36 @@ internal static class WindowLayout
         return near?.Key ?? DefaultAspect;
     }
 
+    /// <summary>The narrowest picture of a game in the whole-screens grid (4:3 at 480 high).</summary>
+    public const int UiWholeMinWidth = 640;
+
+    /// <summary>
+    /// The games laid out so their screens show whole: every picture <see cref="GameUiMinHeight"/> high and as wide
+    /// as the columns allow (at least 4:3), side by side without gaps, <paramref name="band"/> free under each row.
+    /// Null when they don't fit so.
+    /// </summary>
+    public static List<Rectangle>? UiWholeGrid(Rectangle area, int count, int band, Size frame = default)
+    {
+        if (count <= 0)
+            return null;
+        int columns = Math.Min(count, Math.Max(1, area.Width / (UiWholeMinWidth + frame.Width)));
+        int rows = (int)Math.Ceiling(count / (double)columns);
+        int winH = GameUiMinHeight + frame.Height;
+        if (rows * (winH + band) > area.Height)
+            return null;
+        int winW = area.Width / columns;
+        int top = area.Top + (area.Height - rows * (winH + band)) / 2;
+        var cells = new List<Rectangle>();
+        for (int i = 0; i < count; i++)
+        {
+            int r = i / columns, c = i % columns;
+            int inRow = Math.Min(columns, count - r * columns);
+            int left = area.Left + (area.Width - inRow * winW) / 2;
+            cells.Add(new Rectangle(left + c * winW, top + r * (winH + band), winW, winH));
+        }
+        return cells;
+    }
+
     /// <summary>Where a bot's bar goes: just under its game, else over the game's bottom edge; always on the screen.</summary>
     public static Point BarPlace(Rectangle game, Size bar, Rectangle work)
     {
@@ -219,6 +249,10 @@ internal static class WindowLayout
                 frame = new Size(Math.Max(0, seen.Width - pictures[i].Width), Math.Max(0, seen.Height - pictures[i].Height));
         }
         var cells = Grid(work, ordered.Count, band, Aspect(pictures), frame);
+        // Smaller than the game's screens need (cut off: the bag's bottom out of the window, seen): the games
+        // 480 high side by side, without gaps, when they fit so (6 on 1920×1032: 640×480 each, a slim bar under each).
+        if (cells.Count > 0 && cells[0].Height - frame.Height < GameUiMinHeight && UiWholeGrid(work, ordered.Count, band, frame) is { } whole)
+            cells = whole;
         for (int i = 0; i < ordered.Count; i++)
             MoveVisible(ordered[i].Handle, cells[i]);
         return ordered.Count;

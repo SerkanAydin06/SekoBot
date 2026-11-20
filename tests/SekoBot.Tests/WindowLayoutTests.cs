@@ -12,6 +12,24 @@ public class WindowLayoutTests
     private const int Band = 86;                        // the bot's bar under each game
 
     [Fact]
+    public void Six_games_are_laid_out_480_high_so_their_screens_show_whole()
+    {
+        // The game cuts its screens off below 480 (seen: the bag's bottom out of a 358-high window): 6 games on
+        // 1920×1032 go 640×480, side by side without gaps, a 36-pixel bar under each — the whole height used.
+        var cells = WindowLayout.UiWholeGrid(Work, 6, 36)!;
+        Assert.Equal(6, cells.Count);
+        Assert.All(cells, c => Assert.Equal(new Size(640, 480), c.Size));
+        Assert.Equal(new Rectangle(0, 0, 640, 480), cells[0]);
+        Assert.Equal(new Rectangle(1280, 516, 640, 480), cells[5]);
+        Assert.All(cells, c => Assert.True(Work.Contains(new Rectangle(c.X, c.Y, c.Width, c.Height + 36))));
+        // Fewer games: wider pictures, still 480 high, centred.
+        var two = WindowLayout.UiWholeGrid(Work, 2, 36)!;
+        Assert.All(two, c => Assert.Equal(480, c.Height));
+        // Too many to fit 480 high: none (the usual grid is kept).
+        Assert.Null(WindowLayout.UiWholeGrid(Work, 9, 36));
+    }
+
+    [Fact]
     public void A_small_game_grows_in_its_place_just_enough_for_whole_screens()
     {
         // A borderless 636×358 game at the right edge: 853×480 in its shape, kept on the work area.
