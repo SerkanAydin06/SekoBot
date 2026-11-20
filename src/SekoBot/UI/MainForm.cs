@@ -720,7 +720,7 @@ internal sealed class MainForm : Form
             () => _profile.NotifyBonusItems, v => _profile.NotifyBonusItems = v);
         Check(notify, "Seviye atlayınca", 0, 212, 170, () => _profile.NotifyLevelUp, v => _profile.NotifyLevelUp = v);
         Check(notify, "Şehre gidip eşya satınca", 176, 212, 240, () => _profile.NotifySells, v => _profile.NotifySells = v);
-        Check(notify, "Bakımda giriş ekranına düşünce sunucu açılana kadar girişi dene (şifreye dokunmaz; açılınca haber verir)", 0, 240, 700,
+        Check(notify, "Bot çalışırken oyundan atılırsa (bakım) sunucu açılana kadar girişi dene (şifreye dokunmaz; açılınca haber verir)", 0, 240, 700,
             () => _profile.AutoLogin, v => _profile.AutoLogin = v);
 
         var keys = _tabPages[6];
@@ -940,7 +940,7 @@ internal sealed class MainForm : Form
         Theme.Label(fishCard, "NASIL", new Rectangle(16, 246, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
         Theme.Label(fishCard,
             "1. Oyunda oltayı kuşan, yemi kısayola koy (Yem tuşu), suyun kenarında suya dönük dur.\n" +
-            "2. \"🎣 BALIK TUT\"a bas. Bot yemi takar, oltayı Space ile atar; başın üstünde balık balonu çıkınca Space ile çeker.\n" +
+            "2. BALIK TUT'a bas. Bot yemi takar, oltayı Space ile atar; başın üstünde balık balonu çıkınca Space ile çeker.\n" +
             "3. Balık takılınca çıkan 4 resimden düz olanı bot seçer (kapalıysa ses çıkarıp seni bekler).\n" +
             "    YAKALANAN = yakalanan / atış; her çekişin süresi ve sonucu balik-cekis.csv dosyasına yazılır.",
             new Rectangle(16, 268, 728, 100), 9f, Theme.Text, FontStyle.Regular, ContentAlignment.TopLeft);
@@ -952,6 +952,7 @@ internal sealed class MainForm : Form
         _scanTimer.Tick += (_, _) => { if (_engine == null) RefreshWindows(); else LoginTick(); };
         _previewTimer = new System.Windows.Forms.Timer { Interval = 33 };
         _previewTimer.Tick += (_, _) => RenderPreview();
+        VisibleChanged += (_, _) => _engine?.ShowingPreview(Visible);
         _statsTimer = new System.Windows.Forms.Timer { Interval = 400 };
         _statsTimer.Tick += (_, _) => UpdateStats();
         _updateTimer = new System.Windows.Forms.Timer { Interval = (int)TimeSpan.FromHours(2).TotalMilliseconds };
@@ -1121,7 +1122,7 @@ internal sealed class MainForm : Form
         bool fishing = engine?.Fishing == true;
         _fState.Text = engine == null ? "Oyun bağlı değil."
             : fishing || engine.FishingStatus.Length > 0 ? engine.FishingStatus
-            : $"Kapalı. Oltayı kuşan, suya dönük dur, sonra \"🎣 BALIK TUT\"a bas ({StartKey}).";
+            : $"Kapalı. Oltayı kuşan, suya dönük dur, sonra BALIK TUT'a bas ({StartKey}).";
         _fState.ForeColor = !fishing ? Theme.Muted : _fState.Text.Contains("takıldı") ? Theme.Yellow : Theme.Green;
         var (casts, _, _, missed, caught) = engine?.FishCounts ?? default;
         _fTime.Text = engine is { } fe && (fe.Fishing || fe.FishingPaused || fe.FishingTime > TimeSpan.Zero) ? fe.FishingTime.ToString(@"hh\:mm\:ss") : "—";
@@ -1401,7 +1402,8 @@ internal sealed class MainForm : Form
     {
         if (_engine is not { } e || !Win32.IsWindow(e.Window.Handle))
             return;
-        var s = _profile.AutoLogin && !e.BotRunning && !e.Fishing && !e.ScanningMarket ? e.LoginNow() : null;
+        // Only for a game kicked out while its bot was working; a bot left standing doesn't log in.
+        var s = _profile.AutoLogin && (e.KickedWhileWorking || _loginEnlarged) && !e.BotRunning && !e.Fishing && !e.ScanningMarket ? e.LoginNow() : null;
         var now = DateTime.Now;
         // Made big for a try: put back as soon as the try is answered (the button back), at the latest after 30 s —
         // whatever else happens (seen: windows left big).
@@ -1415,6 +1417,7 @@ internal sealed class MainForm : Form
             return;
         if (s.LoggedIn)
         {
+            e.KickedWhileWorking = false;
             if (_loginSeen)
             {
                 _loginSeen = false;
@@ -1693,6 +1696,7 @@ internal sealed class MainForm : Form
             _engine = engine;
             Instance.TakeGame(window.ProcessId);
             engine.Start(previewFps: 30);
+            engine.ShowingPreview(Visible);
             _frameSequence = 0;
             _gameMinimized = false;
             _autoAttached = true;
@@ -2020,7 +2024,8 @@ internal sealed class MainForm : Form
             _preview.State = null;
             _preview.Invalidate();
         }
-        if (minimized)
+        // Hidden (the small bar): no picture to draw.
+        if (minimized || !Visible)
             return;
         if (_engine.TryCopyLatest(ref _frameBitmap, ref _frameSequence))
         {

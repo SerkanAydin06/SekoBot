@@ -76,6 +76,10 @@ internal sealed partial class BotEngine : IDisposable
     /// <summary>The game's login / character screen (map "loginMain"): kicked out — maintenance or the connection lost.</summary>
     internal static bool IsLoginScreen(string map) => map.Contains("login", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>The bot (or fishing) was working when the game fell to the login screen: only then is the
+    /// login tried again by itself (a bot left standing has no reason to log in).</summary>
+    public bool KickedWhileWorking { get; set; }
+
     /// <summary>The world last seen in the game (not on the login screen): the session's map and level.</summary>
     private WorldSnapshot? _lastInGame;
 
@@ -102,9 +106,24 @@ internal sealed partial class BotEngine : IDisposable
         _loop = Task.Run(() => RunAsync(channel.Reader, _cts.Token));
     }
 
+    private bool _previewShown = true;
+
+    /// <summary>
+    /// The live picture on screen or not (the small bar hides it): unseen, the game is captured only as
+    /// often as the bot looks (Perception fps) instead of 30 times a second — less work with many bots.
+    /// </summary>
+    public void ShowingPreview(bool shown)
+    {
+        _previewShown = shown;
+        if (_capture is { } c)
+            c.MaxFps = shown ? _previewFps : Math.Clamp(Profile.PerceptionFps, 1, _previewFps);
+    }
+
     private void StartCapture(ICaptureSource capture)
     {
         _capture = capture;
+        if (!_previewShown)
+            capture.MaxFps = Math.Clamp(Profile.PerceptionFps, 1, _previewFps);
         capture.Failed += message => OnCaptureFailed(capture, message);
         _log("Yakalama yöntemi: " + capture.Name);
         capture.Start(_writer!);
@@ -145,7 +164,8 @@ internal sealed partial class BotEngine : IDisposable
 
                 var now = _clock.Elapsed;
                 var profile = Profile;
-                if (now - lastAnalysis >= TimeSpan.FromSeconds(1.0 / Math.Clamp(profile.PerceptionFps, 1, 30)))
+                // 0.8: a frame coming a little early still counts (captured at just this rate when the picture is hidden).
+                if (now - lastAnalysis >= TimeSpan.FromSeconds(0.8 / Math.Clamp(profile.PerceptionFps, 1, 30)))
                 {
                     lastAnalysis = now;
                     try
@@ -259,7 +279,10 @@ internal sealed partial class BotEngine : IDisposable
             if (seen != null && !IsLoginScreen(seen.MapName))
                 _lastInGame = seen;
             if (seen != null && IsLoginScreen(seen.MapName))
+            {
+                KickedWhileWorking = true;
                 actions = [new StopAction("oyundan atıldı, giriş ekranında (bakım ya da bağlantı koptu)")];
+            }
             // Off to a market NPC to sell: that trip drives the character, the brain waits.
             else
                 actions = _selling ? [] : WhisperTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);

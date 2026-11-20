@@ -138,6 +138,7 @@ internal sealed partial class BotEngine
                 return "🎣 Karakter öldü; balık tutma durdu.";
             if (World is { } there && IsLoginScreen(there.MapName))
             {
+                KickedWhileWorking = true;
                 Notify("🎣 Oyundan atıldı (giriş ekranı: bakım ya da bağlantı koptu); balık tutma durdu.");
                 return "🎣 Oyundan atıldı, giriş ekranında (bakım ya da bağlantı koptu); balık tutma durdu.";
             }
