@@ -132,6 +132,13 @@ internal static class WindowLayout
         return true;
     }
 
+    /// <summary>Puts a game back where it was (what is seen of it).</summary>
+    public static void PutBack(nint hwnd, Rectangle seen)
+    {
+        if (Win32.IsWindow(hwnd) && !seen.IsEmpty)
+            MoveVisible(hwnd, seen);
+    }
+
     /// <summary>Arranges every game window on the screen of <paramref name="near"/>, leaving <paramref name="band"/> pixels free under every row.</summary>
     /// <returns>How many game windows were arranged.</returns>
     public static int ArrangeGames(Rectangle near, int band)

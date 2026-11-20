@@ -720,6 +720,8 @@ internal sealed class MainForm : Form
             () => _profile.NotifyBonusItems, v => _profile.NotifyBonusItems = v);
         Check(notify, "Seviye atlayınca", 0, 212, 170, () => _profile.NotifyLevelUp, v => _profile.NotifyLevelUp = v);
         Check(notify, "Şehre gidip eşya satınca", 176, 212, 240, () => _profile.NotifySells, v => _profile.NotifySells = v);
+        Check(notify, "Bakımda giriş ekranına düşünce sunucu açılana kadar girişi dene (şifreye dokunmaz; açılınca haber verir)", 0, 240, 700,
+            () => _profile.AutoLogin, v => _profile.AutoLogin = v);
 
         var keys = _tabPages[6];
         var k = _profile.Keys;
@@ -947,7 +949,7 @@ internal sealed class MainForm : Form
 
         // ── Timers & hotkeys ─────────────────────────────────────
         _scanTimer = new System.Windows.Forms.Timer { Interval = 2000 };
-        _scanTimer.Tick += (_, _) => { if (_engine == null) RefreshWindows(); };
+        _scanTimer.Tick += (_, _) => { if (_engine == null) RefreshWindows(); else LoginTick(); };
         _previewTimer = new System.Windows.Forms.Timer { Interval = 33 };
         _previewTimer.Tick += (_, _) => RenderPreview();
         _statsTimer = new System.Windows.Forms.Timer { Interval = 400 };
@@ -1382,6 +1384,90 @@ internal sealed class MainForm : Form
             _profile.MiniMode = false;
             SaveProfile();
         }
+    }
+
+    // ── Logging in again after a maintenance ──
+    private bool _loginSeen, _loginEnlarged;
+    private DateTime _nextLoginAt = DateTime.MinValue, _enlargedAt;
+    private Rectangle _beforeEnlarged;
+    private int _loginTries;
+
+    /// <summary>
+    /// Every 2 s: on the login screen the login button is pressed every few minutes (the game's own saved
+    /// name and password; the button is cut off in a small window, so the game is made big for the press);
+    /// through to the character select: a message, the windows arranged again.
+    /// </summary>
+    private void LoginTick()
+    {
+        if (_engine is not { } e || !_profile.AutoLogin || e.BotRunning || e.Fishing || e.ScanningMarket || !Win32.IsWindow(e.Window.Handle))
+            return;
+        if (e.LoginNow() is not { } s)
+            return;
+        var now = DateTime.Now;
+        if (s.LoggedIn)
+        {
+            if (_loginSeen)
+            {
+                _loginSeen = false;
+                string text = $"🟢 Sunucu açıldı: giriş yapıldı ({_loginTries} deneme), karakter seçim ekranında.";
+                WriteLog(text);
+                e.Notify(text);
+                if (_loginEnlarged)
+                    WindowLayout.PutBack(e.Window.Handle, _beforeEnlarged);
+                _loginEnlarged = false;
+                WindowLayout.TellAllMini();
+            }
+            return;
+        }
+        if (!s.Showing)
+            return;
+        if (!_loginSeen)
+        {
+            _loginSeen = true;
+            _loginTries = 0;
+            // The SekoBots one after the other, not all at the same moment.
+            _nextLoginAt = now + TimeSpan.FromSeconds(10 + 25 * (Instance.Number - 1));
+            WriteLog($"Oyun giriş ekranında. Sunucu açılana kadar her {_profile.AutoLoginMinutes:0.#} dakikada bir giriş denenecek (oyunun kayıtlı bilgileriyle; şifreye dokunulmaz).");
+        }
+        if (s.Waiting)
+            return; // a try going on: the server answers
+        if (now < _nextLoginAt)
+        {
+            // Tried and refused: the game back to its place among the others.
+            if (_loginEnlarged && now - _enlargedAt > TimeSpan.FromSeconds(12))
+            {
+                _loginEnlarged = false;
+                WindowLayout.PutBack(e.Window.Handle, _beforeEnlarged);
+                WindowLayout.TellAllMini();
+            }
+            return;
+        }
+        Win32.GetClientRect(e.Window.Handle, out var client);
+        bool cut = s.Button is not { } b || b.Bottom > client.Bottom - client.Top || b.Right > client.Right - client.Left || b.Width < 4;
+        if (cut)
+        {
+            if (!_loginEnlarged)
+            {
+                // The button is under the window's bottom edge: the game made big for a moment.
+                _loginEnlarged = true;
+                _enlargedAt = now;
+                _beforeEnlarged = WindowLayout.Visible(e.Window.Handle);
+                WindowLayout.FillWithGame(e.Window.Handle, MiniBar.HeightAt(DeviceDpi) + 2);
+                WindowLayout.TellAllMini();
+                return;
+            }
+            if (now - _enlargedAt < TimeSpan.FromSeconds(20))
+                return; // drawing after the resize
+            _nextLoginAt = now + TimeSpan.FromMinutes(Math.Max(1, _profile.AutoLoginMinutes));
+            WriteLog("Giriş düğmesi görünmüyor; bir sonraki denemede yeniden bakılacak.");
+            return;
+        }
+        e.PressLogin(s.Button!.Value);
+        _loginTries++;
+        _enlargedAt = now;
+        _nextLoginAt = now + TimeSpan.FromMinutes(Math.Max(1, _profile.AutoLoginMinutes));
+        if (_loginTries == 1 || _loginTries % 10 == 0)
+            WriteLog($"Giriş denendi ({_loginTries}. kez); sunucu açılmadıysa {_profile.AutoLoginMinutes:0.#} dakika sonra yeniden.");
     }
 
     /// <summary>This SekoBot's game big (a band left under it for the bar); already big: all arranged again.</summary>
