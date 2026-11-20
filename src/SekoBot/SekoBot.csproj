@@ -23,4 +23,12 @@
   <ItemGroup>
     <InternalsVisibleTo Include="SekoBot.Tests" />
   </ItemGroup>
+
+  <!-- Many SekoBots run at once: the memory kept small (no background GC thread and its spare heap; the heap compacted sooner). -->
+  <PropertyGroup>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+  </PropertyGroup>
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
+  </ItemGroup>
 </Project>

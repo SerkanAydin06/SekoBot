@@ -53,6 +53,9 @@ internal sealed partial class BotEngine : IDisposable
     private DateTime _sessionStartedAt;
     /// <summary>The summary of the last run (for the stop message), or null.</summary>
     private string? _lastSummary;
+
+    /// <summary>The last farm run's summary (minutes, mobs, EXP, yang, potions, deaths), once one ended.</summary>
+    public string? LastSummary => _lastSummary;
     private bool _statsOk = true, _statsWarned;
     private TimeSpan _statsFailSince = TimeSpan.FromDays(-1);
 
