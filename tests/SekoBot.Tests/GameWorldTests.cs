@@ -10,7 +10,7 @@ public class GameWorldTests
     private const long Module = 0x1_4000_0000;
     private const long Heap = 0x2000_0000;
     /// <summary>The readable part of the fake exe (around the two fixed places).</summary>
-    private const long ModuleStart = 0x4CE0000, ModuleSize = 0x4D90000;
+    private const long ModuleStart = 0x4CE0000, ModuleSize = 0x4DB0000;
 
     /// <summary>A tiny Unreal Engine 4.27 game in fake memory, laid out like Mobile2.</summary>
     private sealed class FakeGame
@@ -411,6 +411,25 @@ public class GameWorldTests
 
         Assert.NotNull(world);
         Assert.True(reader.Searched);
+        Assert.Equal("Kurt", Assert.Single(world.Mobs).Name);
+    }
+
+    [Fact]
+    public void The_empty_template_of_the_game_data_is_not_taken_for_it()
+    {
+        // Seen 2026-11-21: two SekoBots of six found a pointer to "Default__m2data_C" first and saw no world.
+        var (game, level, actors, npc) = World(out long gameData);
+        actors.Add(Npc(game, npc, "Kurt", 3, 162, 162, 19700, 18000));
+        SetActors(game, level, actors);
+        long template = game.Object(BitConverter.ToInt64(Read(game, gameData + GameWorldReader.ObjClass, 8)), 0x1200);
+        game.Int(template + GameWorldReader.ObjName, game.Name("Default__m2data_C"));
+        game.Memory.WriteLong(Module + ModuleStart + 0x40, template); // before the real one in the exe
+        using var reader = new GameWorldReader(game.Memory, Module, ModuleSize);
+        reader.UseOffsets(GameWorldReader.NamePoolOffset, ModuleStart + 0x200);
+
+        var world = reader.Read();
+
+        Assert.NotNull(world);
         Assert.Equal("Kurt", Assert.Single(world.Mobs).Name);
     }
 

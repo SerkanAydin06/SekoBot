@@ -371,9 +371,9 @@ internal sealed partial class GameWorldReader : IDisposable
 {
     // ── Fixed places in the tested game build (searched for when they don't fit) ──
     /// <summary>Static pointer to the game instance ("m2data_C").</summary>
-    internal const long GameInstanceOffset = 0x04CED428;
+    internal const long GameInstanceOffset = 0x04D087F8; // the game of 2026-11-20
     /// <summary>FNamePool (all object and field names); its block pointers start at +0x10.</summary>
-    internal const long NamePoolOffset = 0x04D8AFC0;
+    internal const long NamePoolOffset = 0x04DA6380; // the game of 2026-11-20
     // UObject
     internal const int ObjClass = 0x10, ObjName = 0x18, ObjOuter = 0x20;
     // UStruct / UClass
@@ -1877,10 +1877,13 @@ internal sealed partial class GameWorldReader : IDisposable
                BitConverter.ToUInt16(bytes, 6) >> 6 == 12 && Encoding.ASCII.GetString(bytes, 8, 12) == "ByteProperty";
     }
 
+    /// <summary>A pointer to the game's own data (an m2data_C) — not to the class' empty template
+    /// ("Default__m2data_C"): seen 2026-11-21, two SekoBots of six found that one first and saw no world.</summary>
     private bool IsGameInstancePointer(long address)
     {
         long instance = Pointer(address);
-        return MemoryReads.IsPointer(instance) && ClassName(Pointer(instance + ObjClass)) == "m2data_C";
+        return MemoryReads.IsPointer(instance) && ClassName(Pointer(instance + ObjClass)) == "m2data_C" &&
+               !(Int32(instance + ObjName) is int name && Name(name).StartsWith("Default__", StringComparison.Ordinal));
     }
 
     /// <summary>Goes through every pointer-sized slot of the exe; returns the offset of the first one that passes.</summary>
