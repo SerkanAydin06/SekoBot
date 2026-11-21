@@ -52,7 +52,91 @@ internal sealed partial class BotEngine
         if (now - _mapNpcsLookedAt < TimeSpan.FromSeconds(2) || _mapPeekSince != null || _mapPeekReadAt != null)
             return;
         _mapNpcsLookedAt = now;
-        ReadMapNpcsNow(world);
+        // The user opened the M map in a big game: the roads are read too.
+        if (ReadMapNpcsNow(world) && _terrain.RoadsOf(world.MapName) == null)
+        {
+            MapPicture? picture;
+            lock (_worldGate)
+                picture = _world?.ReadMapPicture();
+            if (picture != null && Math.Min(picture.Drawn.Width, picture.Drawn.Height) >= RoadPictureMin && ReadRoads(world.MapName, picture) != null)
+                _log($"🛣 {world.MapName} haritasının yolları açık M haritasından okundu; uzun yürüyüşlerde yollar kullanılacak.");
+        }
+    }
+
+    // ── The roads, off the M map's picture ──
+    private bool _roadsDone, _roadsGrown;
+    private DateTime _roadsSince = DateTime.MinValue, _roadsGrownAt;
+    private Rectangle _roadsFrom;
+    /// <summary>The M map's picture this big (pixels) at least to tell its roads (in a 640×480 game it is ~120: grown for it).</summary>
+    internal const int RoadPictureMin = 300;
+
+    /// <summary>One step of reading the roads off the open M map; null when done (or nothing to do).</summary>
+    private IReadOnlyList<BotAction>? RoadTick(WorldSnapshot world, DateTime now)
+    {
+        if (_roadsDone || _terrain.RoadsOf(world.MapName) != null)
+        {
+            _roadsDone = true;
+            return null;
+        }
+        if (_roadsSince == DateTime.MinValue)
+            _roadsSince = now;
+        if (now - _roadsSince > TimeSpan.FromSeconds(20))
+            return Give("sıra gelmedi ya da harita küçük kaldı; sonra yeniden denenecek");
+        // Growing the game takes the screen: one bot at a time.
+        if (!TakeTurn())
+            return [];
+        MapPicture? picture;
+        lock (_worldGate)
+            picture = _world?.ReadMapPicture();
+        if (picture == null)
+            return [];
+        if (Math.Min(picture.Drawn.Width, picture.Drawn.Height) < RoadPictureMin)
+        {
+            if (_roadsGrown)
+                return now - _roadsGrownAt < TimeSpan.FromSeconds(6) ? [] : Give("harita küçük kaldı");
+            _roadsFrom = UI.WindowLayout.Visible(_window.Handle);
+            UI.WindowLayout.FillWithGame(_window.Handle, 40);
+            _roadsGrown = true;
+            _roadsGrownAt = now;
+            return [];
+        }
+        // A moment for the picture to be drawn at its new size (and captured).
+        if (_roadsGrown && now - _roadsGrownAt < TimeSpan.FromSeconds(2))
+            return [];
+        if (ReadRoads(world.MapName, picture) is null)
+            return Give("harita resmi okunamadı");
+        _log($"🛣 {world.MapName} haritasının yolları M haritasından okundu; uzun yürüyüşlerde yollar kullanılacak.");
+        EndRoads();
+        return null;
+
+        IReadOnlyList<BotAction>? Give(string why)
+        {
+            _log($"🛣 Haritadaki yollar okunamadı ({why}).");
+            EndRoads();
+            return null;
+        }
+    }
+
+    /// <summary>The roads off the picture in the newest frame; kept (on disk, for every SekoBot) when they look right.</summary>
+    private RoadMap? ReadRoads(string map, MapPicture picture)
+    {
+        var roads = WithLatestFrame(frame => RoadMap.FromPicture(map, frame, picture.Drawn, picture.OffsetX, picture.OffsetY,
+            picture.ScaleX, picture.ScaleY, picture.Texture));
+        if (roads != null)
+            _terrain.SetRoads(roads);
+        return roads;
+    }
+
+    private void EndRoads()
+    {
+        _roadsDone = true;
+        _roadsSince = DateTime.MinValue;
+        if (_roadsGrown)
+        {
+            _roadsGrown = false;
+            UI.WindowLayout.PutBack(_window.Handle, _roadsFrom);
+        }
+        LetGoTurn();
     }
 
     /// <summary>
@@ -102,8 +186,13 @@ internal sealed partial class BotEngine
             if (!open)
             {
                 _mapPeekReadAt = _mapCloseTapAt = null;
+                if (!_roadsDone)
+                    EndRoads();
                 return null; // closed: the brain goes on
             }
+            // The roads taken off the map before it is closed (once per map, for every SekoBot).
+            if (_mapCloseTapAt == null && World is { } here && RoadTick(here, now) is { } reading)
+                return reading;
             if (_mapCloseTapAt is DateTime tapped ? now - tapped < MapCloseCheck : now - readAt < MapCloseAfter)
                 return [];
             if (_mapCloseTaps >= MapCloseTaps)
@@ -138,6 +227,9 @@ internal sealed partial class BotEngine
             // Didn't show (another key? a window in the way?): not pressed again, tried later.
             return null;
         }
+        // The map's shops and roads already known (shared by every SekoBot): no need to open the M map at all (the user: "zaten belli").
+        if (World is { } known && known.MapName.Length > 0 && NpcBook.Shared.On(known.MapName).Count > 0 && _terrain.RoadsOf(known.MapName) != null)
+            return null;
         if (World is not { } world || world.MapName.Length == 0 || _mapNpcsRead.Contains(world.MapName) || IsLoginScreen(world.MapName)
             || world.MapName.StartsWith('_') || now - _mapSeenSince < MapPeekAfter || now - _mapPeekLastTry < MapPeekRetry
             || _mapPeeks.GetValueOrDefault(world.MapName) >= MapPeekTries)
@@ -146,6 +238,7 @@ internal sealed partial class BotEngine
             || _brain.Traveling || MapOpenNow())
             return null;
         _mapPeeks[world.MapName] = _mapPeeks.GetValueOrDefault(world.MapName) + 1;
+        _roadsDone = false;
         _mapPeekLastTry = now;
         _mapPeekSince = now;
         var actions = new List<BotAction> { new KeyUpAction(p.Keys.Attack) };
