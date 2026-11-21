@@ -78,6 +78,9 @@ internal static class Win32
     internal const uint MOUSEEVENTF_MOVE = 0x0001;
     internal const uint MOUSEEVENTF_VIRTUALDESK = 0x4000;
     internal const uint MOUSEEVENTF_ABSOLUTE = 0x8000;
+    [DllImport("user32.dll")]
+    internal static extern short GetAsyncKeyState(int key);
+
     internal const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
     internal const uint MOUSEEVENTF_LEFTUP = 0x0004;
     internal const uint MOUSEEVENTF_RIGHTDOWN = 0x0008, MOUSEEVENTF_RIGHTUP = 0x0010;
