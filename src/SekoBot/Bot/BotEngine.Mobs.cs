@@ -188,8 +188,9 @@ internal sealed partial class BotEngine
     {
         LootKind.Yang => profile.LootYang,
         LootKind.Potion => profile.LootPotions,
-        LootKind.Equipment => profile.LootEquipment || MayCarryWantedBonus(item.Vnum, profile) ||
-                              profile.LootEquipmentMinGold > 0 && ItemBook.Get(item.Vnum)?.Sell >= profile.LootEquipmentMinGold,
+        // Only what the character's class can wear (no daggers, fans or bells for a warrior).
+        LootKind.Equipment => Loot.FitsClass(item.Vnum) && (profile.LootEquipment || MayCarryWantedBonus(item.Vnum, profile) ||
+                              profile.LootEquipmentMinGold > 0 && ItemBook.Get(item.Vnum)?.Sell >= profile.LootEquipmentMinGold),
         LootKind.Other => profile.LootOther,
         _ => true,
     });
@@ -238,6 +239,9 @@ internal sealed partial class BotEngine
     internal static bool AlwaysLoot(int vnum, BotProfile profile)
     {
         if (vnum > 1 && (profile.LootPick.Contains(vnum) || profile.EventLoot && Array.IndexOf(Loot.EventItems, vnum) >= 0))
+            return true;
+        // Rewards and specials: always — unless the user ticked them "At" or "Alma" (their choice wins).
+        if (vnum > 1 && Loot.IsReward(vnum) && !profile.LootThrow.Contains(vnum) && !profile.LootSkip.Contains(vnum))
             return true;
         if (profile.LootAlways.Length == 0 || vnum <= 1 || ItemBook.Get(vnum) is not { } info)
             return false;
