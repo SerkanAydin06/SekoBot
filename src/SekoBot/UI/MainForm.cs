@@ -1820,6 +1820,11 @@ internal sealed partial class MainForm : Form
     /// <summary>The "all bots" message: this SekoBot starts, pauses or stops its own tab's work.</summary>
     private void AllBots(int what)
     {
+        if (what == WindowLayout.AllUpdate)
+        {
+            _ = UpdateAndResumeAsync();
+            return;
+        }
         if (_engine == null)
             return;
         switch (what)
