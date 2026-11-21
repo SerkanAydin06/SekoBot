@@ -49,3 +49,16 @@ public class RoadMapTests
         Assert.Null(new MapTerrain("t", [], DateTime.Now).WayTo(from, to, roads: true) is { Count: > 1 } ? "corners" : null); // no roads: straight
     }
 }
+
+public class AimTests
+{
+    [Fact]
+    public void Along_the_roads_the_aim_moves_on_past_each_corner_never_back()
+    {
+        var t = new MapTerrain("t", [], DateTime.Now) { Roads = new RoadMap("t", 0, 0, 10, 10, new System.Collections.BitArray(100)) };
+        Vec3[] way = [new(1000, 0, 0), new(1000, 1000, 0), new(2000, 1000, 0)];
+        Assert.Equal(way[0], t.Aim(way, new Vec3(0, 0, 0)));
+        Assert.Equal(way[1], t.Aim(way, new Vec3(1000, 300, 0)));    // past the first corner: on to the second
+        Assert.Equal(way[2], t.Aim(way, new Vec3(1400, 1000, 0)));   // past the second: the third, not back
+    }
+}
