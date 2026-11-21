@@ -135,6 +135,8 @@ internal sealed record GameState(
     /// <summary>The window open is the bag (with its equipment beside it): closed with the bag's key, not Esc
     /// (seen since the game's update: Esc left the equipment open, and the next Esc opened the game menu).</summary>
     public bool PopupIsBag { get; init; }
+    /// <summary>The only window open is the M map: closed with the map key (Esc doesn't close it, it opens the game menu).</summary>
+    public bool PopupIsMap { get; init; }
 
     /// <summary>The game's message window is open: someone may be typing in it, so no key is pressed
     /// (they would end up in the text: "ggggg").</summary>

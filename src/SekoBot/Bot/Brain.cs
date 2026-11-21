@@ -162,8 +162,9 @@ internal sealed partial class Brain
             }
             if (now - _lastEsc >= Ms(3000))
             {
-                actions.Add(new KeyTapAction(state.PopupIsBag ? p.Keys.Inventory : p.Keys.CloseWindow));
-                actions.Add(new NoteAction(state.PopupIsBag ? "Envanter açık kalmış; envanter tuşuyla kapatılıyor." : "Açılır pencere görüldü; Esc ile kapatılıyor."));
+                actions.Add(new KeyTapAction(state.PopupIsBag ? p.Keys.Inventory : state.PopupIsMap ? p.Keys.Map : p.Keys.CloseWindow));
+                actions.Add(new NoteAction(state.PopupIsBag ? "Envanter açık kalmış; envanter tuşuyla kapatılıyor."
+                    : state.PopupIsMap ? "M haritası açık kalmış; harita tuşuyla kapatılıyor." : "Açılır pencere görüldü; Esc ile kapatılıyor."));
                 _lastEsc = now;
             }
             return actions;
