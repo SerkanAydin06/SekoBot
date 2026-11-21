@@ -41,6 +41,9 @@ internal sealed class MiniBar : Form
     /// <summary>The list's height now (pixels): 0 when closed. The bar itself is drawn under it.</summary>
     private int Top => _itemsOpen ? (int)(ItemsLogicalHeight * S) : 0;
 
+    /// <summary>Changes the channel now (the bot running).</summary>
+    public Action? ChangeChannel { get; set; }
+
     public MiniBar(Func<MiniInfo> read, Action start, Action stop, Action big, Action arrange, Action attack, Action close, Action fill)
     {
         _fill = fill;
@@ -241,6 +244,8 @@ internal sealed class MiniBar : Form
         if (_info.Running)
         {
             Add("❚❚  Duraklat (kaldığı yerden sürer)", _start);
+            if (ChangeChannel != null && _info.Market == null)
+                Add("🔀  Kanal değiştir (botlarımızın olmadığı en boş kanala)", ChangeChannel);
             _menu.Items.Add(new ToolStripSeparator());
         }
         bool fishing = _info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true;

@@ -1356,6 +1356,7 @@ internal sealed partial class MainForm : Form
             return;
         _mini ??= new MiniBar(MiniInfoNow, ToggleBot, () => StopBot("kullanıcı durdurdu", byUser: true), GoBig, ArrangeAll,
             () => { if (_mode == MarketMode) OpenMarketWindow(); else if (_mode == FarmMode) ToggleAttack(); }, CloseFromMini, FillWithGame);
+        _mini.ChangeChannel ??= () => WriteLog(_engine?.ChangeChannelNow() ?? "Önce oyunu bağla.");
         if (!_mini.Visible)
             _mini.Show();
         if (Visible)

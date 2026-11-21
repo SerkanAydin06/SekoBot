@@ -46,6 +46,7 @@ internal sealed partial class BotEngine
     private DateTime _channelActedAt = DateTime.MinValue;
     private bool _channelGrown;
     private DateTime _changePressedAt = DateTime.MinValue;
+    private int _menuWaits;
     /// <summary>The menu didn't open while dead: revived first (the brain), the channel changed once alive.</summary>
     private bool _channelAfterRevive;
 
@@ -202,6 +203,7 @@ internal sealed partial class BotEngine
         _channelSince = now;
         _channelActedAt = DateTime.MinValue;
         _changePressedAt = DateTime.MinValue;
+        _menuWaits = 0;
         if (_input != null)
             _input.HoldFront = true; // the menus clicked with the game in front the whole time
         _escTries = 0;
@@ -291,6 +293,10 @@ internal sealed partial class BotEngine
         }
         if (screen?.MenuButton is { } menuButton)
             return [new ClickAction(Middle(menuButton), Slow: true)];
+        // The game menu is up but its button not drawn yet (it slides in): waited on, not Esc'd shut again
+        // (seen on VaSPeN: the menu opened and shut three times, no channel change).
+        if (World?.OpenWindows?.Contains("EscMenu") == true && _menuWaits++ < 5)
+            return [];
         // Nothing open: Esc opens the game menu (tried a few times).
         if (_escTries++ < 3)
             return [new KeyTapAction(p.Keys.CloseWindow)];
