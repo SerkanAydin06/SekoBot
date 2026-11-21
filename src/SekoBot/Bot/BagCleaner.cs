@@ -182,7 +182,9 @@ internal sealed class BagCleaner
                     if (bag.Items.FirstOrDefault(i => i.Slot == _slot && i.Vnum == _vnum) is not { Vnum: > 0 } still || !throwIt(still))
                     {
                         _failed[_slot] = TriesPerItem;
-                        actions.Add(new KeyTapAction(p.Keys.CloseWindow));
+                        // At a shop Esc shuts the shop too (seen): the menu is left, the next item's click replaces it.
+                        if (!Selling)
+                            actions.Add(new KeyTapAction(p.Keys.CloseWindow));
                         _step = Step.Pick;
                         _waitUntil = now + AfterKey;
                         break;
@@ -209,9 +211,9 @@ internal sealed class BagCleaner
                 {
                     if (Selling)
                     {
-                        // No "Sat" in its menu (the shop closed, or the item can't be sold): left.
+                        // No "Sat" in its menu (the shop closed, or the item can't be sold): left — without Esc, which
+                        // would shut the shop as well (seen: "Market penceresi kapandı", the potions then not bought).
                         _failed[_slot] = TriesPerItem;
-                        actions.Add(new KeyTapAction(p.Keys.CloseWindow));
                         _step = Step.Pick;
                         _waitUntil = now + AfterKey;
                         break;
