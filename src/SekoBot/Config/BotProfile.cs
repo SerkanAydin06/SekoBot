@@ -227,6 +227,10 @@ internal sealed class BotProfile
     public string LootAlways { get; set; } = "";
     /// <summary>Items ticked "Topla" in the item list: always picked up (item numbers).</summary>
     public List<int> LootPick { get; set; } = [];
+    /// <summary>Only the weapons and armour the character's class can wear are picked up.</summary>
+    public bool LootOwnClass { get; set; } = true;
+    /// <summary>Rewards and specials (boxes, keys, books, quest items, scrolls…) always picked up.</summary>
+    public bool LootRewards { get; set; } = true;
     /// <summary>Which loot upgrade the character's choices had (see <see cref="CharacterSettings.UpgradeLoot"/>).</summary>
     public int LootVersion { get; set; }
     /// <summary>Items ticked "Alma" in the item list: never walked to (item numbers).</summary>
@@ -453,6 +457,7 @@ internal static class CharacterSettings
         nameof(BotProfile.LootOther), nameof(BotProfile.LootEquipmentMinGold), nameof(BotProfile.LootBonuses),
         nameof(BotProfile.LootAlways), nameof(BotProfile.LootPick), nameof(BotProfile.LootSkip),
         nameof(BotProfile.LootThrow), nameof(BotProfile.DropRangeMetres), nameof(BotProfile.EventLoot), nameof(BotProfile.LootVersion),
+        nameof(BotProfile.LootOwnClass), nameof(BotProfile.LootRewards),
         nameof(BotProfile.SkillGapLearnedMs), nameof(BotProfile.MobFights), nameof(BotProfile.AutoArea), nameof(BotProfile.Attack), nameof(BotProfile.FollowName),
     ];
 
@@ -476,7 +481,7 @@ internal static class CharacterSettings
         nameof(BotProfile.LootEquipment), nameof(BotProfile.LootOther), nameof(BotProfile.LootEquipmentMinGold),
         nameof(BotProfile.LootBonuses), nameof(BotProfile.LootAlways), nameof(BotProfile.LootPick),
         nameof(BotProfile.LootSkip), nameof(BotProfile.LootThrow), nameof(BotProfile.EventLoot), nameof(BotProfile.AutoSkills),
-        nameof(BotProfile.LootVersion),
+        nameof(BotProfile.LootVersion), nameof(BotProfile.LootOwnClass), nameof(BotProfile.LootRewards),
     ];
 
     /// <summary>
@@ -493,16 +498,19 @@ internal static class CharacterSettings
     /// <returns>True when something changed.</returns>
     internal static bool UpgradeLoot(BotProfile profile)
     {
-        if (profile.LootVersion >= 1)
+        if (profile.LootVersion >= LootUpgrade)
             return false;
         if (profile.LootEquipmentMinGold is > 0 and < 4000)
             profile.LootEquipmentMinGold = 4000;
         foreach (int vnum in ValuableMaterials)
             if (!profile.LootPick.Contains(vnum) && !profile.LootThrow.Contains(vnum) && !profile.LootSkip.Contains(vnum))
                 profile.LootPick.Add(vnum);
-        profile.LootVersion = 1;
+        profile.LootVersion = LootUpgrade;
         return true;
     }
+
+    /// <summary>The loot upgrade's number (2: the first one was marked done in the files without being applied).</summary>
+    internal const int LootUpgrade = 2;
 
     /// <summary>A new character: everything but <see cref="Kept"/> back to the defaults.</summary>
     internal static void Fresh(BotProfile profile)
@@ -544,6 +552,10 @@ internal static class CharacterSettings
             }
             catch (JsonException) { }
         }
+        // A character file without the loot upgrade's mark hasn't had it (whatever the SekoBot's own settings say:
+        // seen, the mark came from there and the upgrade was skipped for every character).
+        if (!mine.ContainsKey(nameof(BotProfile.LootVersion)))
+            profile.LootVersion = 0;
         ProfileStore.Normalize(profile);
     }
 
