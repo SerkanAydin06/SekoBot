@@ -14,8 +14,11 @@ internal readonly record struct MapNpc(int Vnum, double X, double Y);
 internal sealed partial class GameWorldReader
 {
     /// <summary>A point on the M map's picture (its size <paramref name="size"/>) in the world.</summary>
-    internal static (double X, double Y) PictureToWorld(double px, double py, double offsetX, double offsetY, double scaleX, double scaleY, double size) =>
-        (px / (scaleX * size / 1000) - offsetX, py / (scaleY * size / 1000) - offsetY);
+    /// <param name="size">How big the picture is drawn in the M map window (bigMap_C.MapImgSize).</param>
+    /// <param name="texture">How big the map's picture itself is (the minimap's MapImgSize: c3 1000, c2 756 — seen: taken
+    /// for 1000 on c2, the shops came out 1.32 times too far from the map's corner and the bot walked to nowhere).</param>
+    internal static (double X, double Y) PictureToWorld(double px, double py, double offsetX, double offsetY, double scaleX, double scaleY, double size, double texture = 1000) =>
+        (px * texture / (scaleX * size) - offsetX, py * texture / (scaleY * size) - offsetY);
 
     /// <summary>The NPCs on the open M map; null when it isn't open (or can't be read).</summary>
     public List<MapNpc>? ReadMapNpcs()
@@ -51,6 +54,13 @@ internal sealed partial class GameWorldReader
                 || Float(gm + scaleAt) is not double sx || Float(gm + scaleAt + 4) is not double sy || Float(map + sizeAt) is not double size
                 || sx <= 0 || sy <= 0 || size <= 0)
                 return null;
+            // The map picture's own size, from the minimap (always there): c3 1000, c2 756.
+            double texture = 0;
+            if (Offset(uiClass, "UI_C", "miniMap") is int miniAt and > 0 && Pointer(ui + miniAt) is long mini && MemoryReads.IsPointer(mini)
+                && Offset(Pointer(mini + ObjClass), "miniMap_C", "MapImgSize") is int miniSizeAt and > 0 && Float(mini + miniSizeAt) is double t)
+                texture = t;
+            if (texture is < 100 or > 8000)
+                return null; // not known: no NPC places (a wrong size puts them in the wrong place)
             long area = Pointer(map + areaAt);
             if (!MemoryReads.IsPointer(area))
                 return null;
@@ -74,7 +84,7 @@ internal sealed partial class GameWorldReader
                 if (layoutAt <= 0 || mobAt <= 0 || Int32(dot + mobAt) is not int vnum || vnum <= 0
                     || Float(slot + layoutAt) is not double px || Float(slot + layoutAt + 4) is not double py)
                     continue;
-                var (x, y) = PictureToWorld(px, py, ox, oy, sx, sy, size);
+                var (x, y) = PictureToWorld(px, py, ox, oy, sx, sy, size, texture);
                 npcs.Add(new MapNpc(vnum, x, y));
             }
             return npcs;

@@ -30,6 +30,8 @@ internal sealed partial class Brain
     /// </summary>
     internal const double FarFrom = 5000;
     internal const int FarWayRefreshMs = 8000;
+    /// <summary>How far round a way is looked for when none was found close by (world units, 200 m).</summary>
+    internal const double FarRoom = 20000;
     /// <summary>Off the far way by this much (pushed aside, a fight): found again at once.</summary>
     internal const double OffTheWay = 1500;
 
@@ -50,11 +52,15 @@ internal sealed partial class Brain
             return null;
         }
         bool far = me.DistanceXY(goal) > FarFrom;
-        if (_way is not { } w || w.Goal.DistanceXY(goal) > 150 || state.Time - w.At > Ms(far ? FarWayRefreshMs : WayRefreshMs)
+        if (_way is not { } w || w.Goal.DistanceXY(goal) > 150 || state.Time - w.At > Ms(far || w.Way == null && me.DistanceXY(goal) > 1500 ? FarWayRefreshMs : WayRefreshMs)
             || far && w.Way is { Count: > 0 } kept && OffWay(me, kept))
         {
             bool newGoal = _way is not { } old || old.Goal.DistanceXY(goal) > 150;
-            _way = w = (goal, state.Time, map.WayTo(me, goal, room: far ? Math.Max(WayRoom, me.DistanceXY(goal)) : WayRoom));
+            var found = map.WayTo(me, goal, room: far ? Math.Max(WayRoom, me.DistanceXY(goal)) : WayRoom);
+            // No way within 50 m (a slope to go round, seen: stuck below one 50 m from the area): the whole map.
+            if (found == null && !far && me.DistanceXY(goal) > 1500)
+                found = map.WayTo(me, goal, room: FarRoom);
+            _way = w = (goal, state.Time, found);
             if (newGoal && w.Way is { Count: > 1 })
                 Detours++;
         }

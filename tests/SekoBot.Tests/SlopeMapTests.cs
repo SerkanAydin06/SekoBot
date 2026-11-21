@@ -117,4 +117,16 @@ public class MapNpcTests
         Assert.InRange(x, 21715 - 10, 21715 + 10);
         Assert.InRange(y, 22602 - 10, 22602 + 10);
     }
+
+    [Fact]
+    public void On_a_map_with_a_smaller_picture_the_dots_land_right_too()
+    {
+        // c2, read 2026-11-21: the picture is 756 wide; the weapon seller (seen standing at 21593, 29833) — taken for
+        // 1000 it came out at (28253, 39099), 1.32 times too far.
+        double size = 645.1613, scale = 0.016434783;
+        double px = (28253 - 959.4389) * scale * size / 1000, py = (39099 - 1123.7399) * scale * size / 1000;
+        var (x, y) = GameWorldReader.PictureToWorld(px, py, -959.4389, -1123.7399, scale, scale, size, 756);
+        Assert.InRange(x, 21593 - 15, 21593 + 15);
+        Assert.InRange(y, 29833 - 15, 29833 + 15);
+    }
 }

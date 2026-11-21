@@ -65,7 +65,14 @@ internal sealed partial class GameWorldReader
                         return null;
                     Buffer.BlockCopy(bytes, 0, heights, (int)off, len);
                 }
-                return new HeightGrid(map, sx, sy, cell, columns, cells / columns, heights);
+                // The game keeps the grid by X first (one run of `multi` values along Y per X; seen on c2: read the
+                // other way round every height was wrong). Turned into rows along Y here (index = y row × columns + x).
+                int xs = cells / columns, ys = columns;
+                var byY = new int[cells];
+                for (int ix = 0; ix < xs; ix++)
+                    for (int iy = 0; iy < ys; iy++)
+                        byY[iy * xs + ix] = heights[ix * ys + iy];
+                return new HeightGrid(map, sx, sy, cell, xs, ys, byY);
             }
         }
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException or OverflowException or InvalidOperationException) { }

@@ -594,6 +594,8 @@ internal sealed partial class GameWorldReader : IDisposable
         ("chBoxLogin_C", "yuzde", 0),
         ("c_Button_C", "langText", 0),
         ("UI_C", "bigMap", 0),
+        ("UI_C", "miniMap", 0),
+        ("miniMap_C", "MapImgSize", 0),
         ("bigMap_C", "MapImgSize", 0),
         ("bigMap_C", "dotArea", 0x278),
         ("gameManager", "MapOffset", 0),

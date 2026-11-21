@@ -36,6 +36,25 @@ internal sealed class NpcBook
     private Dictionary<string, List<Place>> _maps;
     private readonly object _gate = new();
     private readonly List<(string Map, Place Place)> _news = [];
+    /// <summary>Places found wrong (no such NPC there), to take out of the shared file too.</summary>
+    private readonly List<(string Map, int Vnum, double X, double Y)> _gone = [];
+
+    /// <summary>No such NPC stands there (the bot went and found none): forgotten, for every SekoBot.</summary>
+    public void Forget(string map, int vnum, double x, double y)
+    {
+        lock (_gate)
+        {
+            Remove(_maps, map, vnum, x, y);
+            _gone.Add((map, vnum, x, y));
+            _news.RemoveAll(n => n.Map == map && n.Place.Vnum == vnum && Math.Abs(n.Place.X - x) < 500 && Math.Abs(n.Place.Y - y) < 500);
+        }
+    }
+
+    private static void Remove(Dictionary<string, List<Place>> maps, string map, int vnum, double x, double y)
+    {
+        if (maps.TryGetValue(map, out var list))
+            list.RemoveAll(q => q.Vnum == vnum && Math.Abs(q.X - x) < 500 && Math.Abs(q.Y - y) < 500);
+    }
 
     public NpcBook(Dictionary<string, List<Place>>? maps = null) => _maps = maps ?? [];
 
@@ -98,17 +117,25 @@ internal sealed class NpcBook
     public void Save(string? path = null)
     {
         List<(string Map, Place Place)> news;
+        List<(string Map, int Vnum, double X, double Y)> gone;
         lock (_gate)
         {
             news = [.. _news];
             _news.Clear();
+            gone = [.. _gone];
+            _gone.Clear();
         }
-        var all = SharedFile.Update<Dictionary<string, List<Place>>>(path ?? FilePath, d => news.ForEach(n => Add(d, n.Map, n.Place)));
+        var all = SharedFile.Update<Dictionary<string, List<Place>>>(path ?? FilePath, d =>
+        {
+            gone.ForEach(g => Remove(d, g.Map, g.Vnum, g.X, g.Y));
+            news.ForEach(n => Add(d, n.Map, n.Place));
+        });
         lock (_gate)
         {
             if (all == null)
             {
                 _news.InsertRange(0, news);
+                _gone.InsertRange(0, gone);
                 return;
             }
             foreach (var n in _news)
