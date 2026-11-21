@@ -15,8 +15,14 @@ namespace SekoBot.Bot;
 /// </summary>
 internal sealed partial class BotEngine
 {
-    /// <summary>A market NPC further than this (world units, 300 m) isn't walked to.</summary>
-    internal const double SellTripRange = 30000;
+    /// <summary>
+    /// A market NPC further than this (world units, 1 km: the whole map) isn't walked to. The way there is found
+    /// across the map (around mountains, slopes, rocks), so any known one on the map will do; the nearest first.
+    /// </summary>
+    internal const double SellTripRange = 100000;
+
+    /// <summary>How long walking to <paramref name="to"/> may take: 3 minutes, and a minute more for every 100 m.</summary>
+    internal static TimeSpan WalkLimit(Vec3 from, Vec3 to) => TimeSpan.FromMinutes(3 + from.DistanceXY(to) / 10000);
     /// <summary>After a trip that sold nothing (shop didn't open…): no new one this long.</summary>
     internal static readonly TimeSpan SellRetryAfter = TimeSpan.FromMinutes(10);
 
@@ -138,7 +144,7 @@ internal sealed partial class BotEngine
         ShrinkAfterWork(); // grown for emptying the bag just before: back in its place for the walk
         FrontTurn.Shared.LetGo();
         using var input = new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
-        int stuck = await WalkRouteAsync(input, at, TimeSpan.FromMinutes(3), token, near: 250);
+        int stuck = await WalkRouteAsync(input, at, WalkLimit(start.Player, at), token, near: 250);
         if (World is { } w && w.Player.DistanceXY(at) > 600)
             _log($"💰 {name} NPC'sine varılamadı: {w.Player.DistanceXY(at) / 100:0} m kaldı, yolda {stuck} kez takıldı.");
         if (World is not { } there || there.MapName != start.MapName || there.Player.DistanceXY(at) > 600)
@@ -242,7 +248,7 @@ internal sealed partial class BotEngine
         await TidyAsync(input, profile, token);
         ShrinkAfterWork();
         FrontTurn.Shared.LetGo();
-        await WalkRouteAsync(input, home, TimeSpan.FromMinutes(3), token, near: 300);
+        await WalkRouteAsync(input, home, WalkLimit(World?.Player ?? at, home), token, near: 300);
         if (sold == 0)
             return Failed("satılacak eşya satılamadı" + (cleaner.Problem is { } why ? $" ({why})" : ""));
         lock (_botGate)

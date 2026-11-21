@@ -24,6 +24,14 @@ internal sealed partial class Brain
     internal const double DetourMost = 2.2;
     /// <summary>While farming the way round is looked for this far around (world units, 50 m): quick enough every tick.</summary>
     internal const double WayRoom = 5000;
+    /// <summary>
+    /// Further than this from where we go (walking back to the area from far off): the way is looked for across the
+    /// whole map (around mountains and slopes), and found again only this often (it takes a moment).
+    /// </summary>
+    internal const double FarFrom = 5000;
+    internal const int FarWayRefreshMs = 8000;
+    /// <summary>Off the far way by this much (pushed aside, a fight): found again at once.</summary>
+    internal const double OffTheWay = 1500;
 
     /// <summary>This run: how often a way round the map's obstacles was taken, how many mobs were left for having no short way.</summary>
     internal int Detours { get; private set; }
@@ -41,14 +49,35 @@ internal sealed partial class Brain
             _way = null;
             return null;
         }
-        if (_way is not { } w || w.Goal.DistanceXY(goal) > 150 || state.Time - w.At > Ms(WayRefreshMs))
+        bool far = me.DistanceXY(goal) > FarFrom;
+        if (_way is not { } w || w.Goal.DistanceXY(goal) > 150 || state.Time - w.At > Ms(far ? FarWayRefreshMs : WayRefreshMs)
+            || far && w.Way is { Count: > 0 } kept && OffWay(me, kept))
         {
             bool newGoal = _way is not { } old || old.Goal.DistanceXY(goal) > 150;
-            _way = w = (goal, state.Time, map.WayTo(me, goal, room: WayRoom));
+            _way = w = (goal, state.Time, map.WayTo(me, goal, room: far ? Math.Max(WayRoom, me.DistanceXY(goal)) : WayRoom));
             if (newGoal && w.Way is { Count: > 1 })
                 Detours++;
         }
         return w.Way is { Count: > 0 } way ? map.Aim(way, me) : null;
+    }
+
+    /// <summary>Whether <paramref name="me"/> is further than <see cref="OffTheWay"/> from every leg of the way (corners in turn).</summary>
+    private bool OffWay(Vec3 me, List<Vec3> way)
+    {
+        if (_way is not { } w)
+            return false;
+        // The way's legs start where it was found: the first corner is reached from there.
+        for (int i = 0; i < way.Count; i++)
+        {
+            var a = i == 0 ? way[0] : way[i - 1];
+            var b = way[i];
+            double dx = b.X - a.X, dy = b.Y - a.Y, len = dx * dx + dy * dy;
+            double t = len <= 0 ? 0 : Math.Clamp(((me.X - a.X) * dx + (me.Y - a.Y) * dy) / len, 0, 1);
+            double px = a.X + dx * t - me.X, py = a.Y + dy * t - me.Y;
+            if (px * px + py * py <= OffTheWay * OffTheWay)
+                return false;
+        }
+        return w.Way != null;
     }
 
     /// <summary>The screen direction (dx, dy) turned towards the next corner on the way to <paramref name="goal"/>.</summary>
