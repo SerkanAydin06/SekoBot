@@ -354,6 +354,8 @@ internal sealed partial class BotEngine
     {
         if (!_cleaner.Active && _tidying && TidyTick(state, p) is { } tidy)
             return tidy;
+        if (!_cleaner.Active && !_tidying && MapPeekTick(state, p) is { } peek)
+            return peek;
         if (!_cleaner.Active)
         {
             // Cut short a moment ago: the throw question (or the bag) may still be showing — closed, then fight on.

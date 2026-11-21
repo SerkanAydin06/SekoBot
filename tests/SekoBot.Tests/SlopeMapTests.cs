@@ -106,3 +106,15 @@ public class SlopeMapTests
         Assert.Equal(0, s.SteepCells);
     }
 }
+
+public class MapNpcTests
+{
+    [Fact]
+    public void A_dot_on_the_M_map_lands_where_the_NPC_stands()
+    {
+        // c3, read 2026-11-21: the weapon seller's dot at (276.2, 286.7) on the 645.16-wide picture; seen standing at (21715, 22602).
+        var (x, y) = GameWorldReader.PictureToWorld(276.2, 286.7, -1593.8798, -1713.7117, 0.021276595, 0.021276595, 645.1613);
+        Assert.InRange(x, 21715 - 10, 21715 + 10);
+        Assert.InRange(y, 22602 - 10, 22602 + 10);
+    }
+}
