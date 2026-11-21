@@ -32,6 +32,17 @@ internal sealed partial class BotEngine
     /// <summary>Channels to keep off when changing (ours are on them here).</summary>
     private readonly HashSet<int> _channelAvoid = [];
 
+    private volatile bool _channelAsked;
+
+    /// <summary>The user asked for another channel (the mini bar's menu): done on the bot's next calm moment.</summary>
+    public string ChangeChannelNow()
+    {
+        if (!BotRunning)
+            return "🔀 Kanal değiştirmek için bot çalışıyor olmalı.";
+        _channelAsked = true;
+        return "🔀 Kanal değiştirilecek (botlarımızın olmadığı en boş kanala).";
+    }
+
     internal static string PlaceFile(int number) => Path.Combine(ProfileStore.Directory, $"bot-konum-{number}.json");
 
     /// <summary>
@@ -51,6 +62,13 @@ internal sealed partial class BotEngine
         if (World is not { } world || world.MapName.Length == 0 || IsLoginScreen(world.MapName))
             return null;
         var now = DateTime.Now;
+        if (_channelAsked && !state.Dead && state.Attackers.Count == 0 && !_selling && !_cleaner.Active)
+        {
+            _channelAsked = false;
+            _channelAvoid.Clear();
+            _log("🔀 İstenildiği için kanal değiştiriliyor.");
+            return StartChannelChange(state, p, now);
+        }
         if (now - _channelReadAt > TimeSpan.FromSeconds(30) || _myChannel == 0)
         {
             _channelReadAt = now;
