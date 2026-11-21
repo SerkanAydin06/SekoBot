@@ -49,6 +49,35 @@ internal sealed partial class BotEngine
     /// <summary>The menu didn't open while dead: revived first (the brain), the channel changed once alive.</summary>
     private bool _channelAfterRevive;
 
+    /// <summary>A player who attacked us is fought only this close (world units, 6 m): further off — running away — not chased.</summary>
+    internal const double EnemyFightRange = 600;
+    /// <summary>Our bots this close on the map (world units, 100 m) farm the same part of it: their channel isn't taken.</summary>
+    internal const double SamePart = 10000;
+
+    /// <summary>
+    /// The players who attacked us (within the last half minute), close by: targets like a mob attacking us, first of
+    /// all. Beyond <see cref="EnemyFightRange"/> they are left (not chased).
+    /// </summary>
+    private List<TargetInfo> EnemyTargets(WorldSnapshot world, BotProfile p, int width, int height)
+    {
+        var targets = new List<TargetInfo>();
+        if (!p.PvpGuard || world.Camera is not CameraView camera || _enemies.Count == 0)
+            return targets;
+        var now = DateTime.Now;
+        double reach = world.AttackDistance > 0 ? world.AttackDistance : 130;
+        int i = 0;
+        foreach (var pl in (world.Players ?? []).Where(RealPlayer))
+        {
+            double away = pl.Position.DistanceXY(world.Player);
+            if (!_enemies.TryGetValue(pl.Name, out var seen) || now - seen > TimeSpan.FromSeconds(30) || away > EnemyFightRange)
+                continue;
+            var spot = camera.ToScreen(pl.Position, width, height) is PointF on && OnPlayfield(on, width, height)
+                ? Point.Round(on) : OffScreenSpot(camera, world.Player, pl.Position, width, height);
+            targets.Add(new TargetInfo(-1_000_000 - i++, spot, away, reach, 0, 1, 1, 0, Priority: true, AttacksMe: true, Position: pl.Position));
+        }
+        return targets;
+    }
+
     /// <summary>Whether this player counts as an enemy by what the game tells of it (another kingdom, PvP on).</summary>
     internal static bool LooksHostile(OtherPlayer p, int ownEmpire) =>
         p.TargetsMe || p.PvpMode != 0 || ownEmpire > 0 && p.Empire > 0 && p.Empire != ownEmpire;
@@ -110,15 +139,19 @@ internal sealed partial class BotEngine
             // "attack" by a player, the channel change instead of the fight — and dead).
             bool mobsOnUs = now - _mobHitAt <= MobHitRecently || state.Attackers.Count > 0;
             bool byPlayer = !mobsOnUs && (hitters.Any(pl => pl.TargetsMe) && lost >= 0.1 || lost >= 0.25 && !mobClose && hitters.Count > 0);
-            if (byPlayer && now - _playerHitAt > TimeSpan.FromSeconds(30))
+            // A player hitting us: fought back (the user: "saldıran ile savaşsın"); the channel is changed only if
+            // they kill us and stay. Not chased when they run (they drop out of the targets beyond EnemyFightRange).
+            if (byPlayer)
             {
-                _playerHitAt = now;
                 foreach (var pl in hitters)
                     _enemies[pl.Name] = now;
-                string names = string.Join(", ", hitters.Select(h => h.Name));
-                _log($"⚔ Bir oyuncu saldırıyor ({names}); kanal değiştiriliyor.");
-                Notify($"⚔ {world.MapName}: {CharacterName} oyuncu saldırısına uğradı ({names}); kanal değiştiriliyor.");
-                return StartChannelChange(state, p, now);
+                if (now - _playerHitAt > TimeSpan.FromSeconds(30))
+                {
+                    string names = string.Join(", ", hitters.Select(h => h.Name));
+                    _log($"⚔ Bir oyuncu saldırıyor ({names}); karşılık veriliyor (kaçarsa kovalanmaz).");
+                    Notify($"⚔ {world.MapName}: {CharacterName} oyuncu saldırısına uğradı ({names}); karşılık veriliyor.");
+                }
+                _playerHitAt = now;
             }
         }
         return null;
@@ -175,7 +208,8 @@ internal sealed partial class BotEngine
         // Whatever the reason (a player, a crowd of ours): never onto a channel one of our bots is on, on this map
         // (seen: off from a player to channel 5, right where another of ours farmed — both lost experience).
         if (World is { } here)
-            foreach (var o in ReadPlaces(SekoBot.Instance.Number).Where(o => o.Map == here.MapName && o.Channel > 0))
+            foreach (var o in ReadPlaces(SekoBot.Instance.Number).Where(o => o.Map == here.MapName && o.Channel > 0
+                         && Math.Sqrt((o.X - here.Player.X) * (o.X - here.Player.X) + (o.Y - here.Player.Y) * (o.Y - here.Player.Y)) <= SamePart))
                 _channelAvoid.Add(o.Channel);
         _channelGrown = false;
         lock (_worldGate)
