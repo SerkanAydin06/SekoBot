@@ -147,8 +147,20 @@ internal sealed partial class BotEngine
         int stuck = await WalkRouteAsync(input, at, WalkLimit(start.Player, at), token, near: 250);
         if (World is { } w && w.Player.DistanceXY(at) > 600)
             _log($"💰 {name} NPC'sine varılamadı: {w.Player.DistanceXY(at) / 100:0} m kaldı, yolda {stuck} kez takıldı.");
+        // Not sold: walked back to the farm area all the same (seen: left at a wrong shop place 50 m off, below a
+        // slope, the bot couldn't find its way back by itself).
+        async Task<string> FailedAway(string why)
+        {
+            string message = Failed(why);
+            if (World is { } away && away.MapName == start.MapName && away.Player.DistanceXY(home) > 600)
+            {
+                _log($"💰 Satış olmadı; alana dönülüyor ({away.Player.DistanceXY(home) / 100:0} m).");
+                await WalkRouteAsync(input, home, WalkLimit(away.Player, home), token, near: 300);
+            }
+            return message;
+        }
         if (World is not { } there || there.MapName != start.MapName || there.Player.DistanceXY(at) > 600)
-            return Failed("NPC'ye varılamadı");
+            return await FailedAway("NPC'ye varılamadı");
 
         // Click the NPC: its shop opens (seen in the game: straight away).
         async Task<bool> OpenShopAsync()
@@ -184,7 +196,14 @@ internal sealed partial class BotEngine
         {
             ShrinkAfterWork();
             FrontTurn.Shared.LetGo();
-            return Failed($"{name} dükkanı açılamadı");
+            // Nobody of that kind standing there (a wrong place, e.g. read off the M map wrongly): forgotten for every bot.
+            if (World is { } here && !(here.TownNpcs ?? []).Any(n => n.Vnum == npc.Vnum && n.Position.DistanceXY(at) < 1500))
+            {
+                NpcBook.Shared.Forget(here.MapName, npc.Vnum, npc.X, npc.Y);
+                NpcBook.Shared.Save();
+                _log($"💰 Orada {name} yok; bu yer satıcı listesinden silindi.");
+            }
+            return await FailedAway($"{name} dükkanı açılamadı");
         }
         int reopened = 0, soldBefore = 0;
         _log($"💰 {name} dükkanı açıldı; eşyalar tek tek satılıyor (Sat → Evet).");
