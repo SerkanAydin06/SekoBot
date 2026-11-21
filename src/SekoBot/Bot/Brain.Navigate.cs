@@ -109,8 +109,23 @@ internal sealed partial class Brain
         if (_cameraSet != null || _timed.Count > 0 || now - _lastCameraSetup < Ms(4000) ||
             state.Camera is not CameraView camera || state.Position is not Vec3 me)
             return;
-        _cameraSet = (camera.Pitch, camera.Location.DistanceXY(me) + Math.Abs(camera.Location.Z - me.Z));
+        double distance = camera.Location.DistanceXY(me) + Math.Abs(camera.Location.Z - me.Z);
+        // Not looking down from afar (the keys didn't take: seen on ProTuva): not taken as "how it should look" —
+        // set again (a few times; then left as it is, the user may want it so).
+        if (!BirdView(camera.Pitch, distance) && _cameraRetries < 4)
+        {
+            _cameraRetries++;
+            _lastCameraSetup = now - Ms(Math.Max(0, _profile().CameraRefreshMs - 6000)); // tried again in a few seconds
+            return;
+        }
+        _cameraRetries = 0;
+        _cameraSet = (camera.Pitch, distance);
     }
+
+    private int _cameraRetries;
+
+    /// <summary>Seen from above, zoomed out: about -81° and 1215 units in every game (2026-11-21).</summary>
+    internal static bool BirdView(double pitch, double distance) => pitch <= -70 && distance >= 1000;
 
     /// <summary>The camera isn't as it was set any more (turned, tilted, zoomed in). Not known: yes, set it.</summary>
     private bool CameraMoved(GameState state)
@@ -118,7 +133,8 @@ internal sealed partial class Brain
         if (_cameraSet is not { } set || state.Camera is not CameraView camera || state.Position is not Vec3 me)
             return true;
         double distance = camera.Location.DistanceXY(me) + Math.Abs(camera.Location.Z - me.Z);
-        return Math.Abs(camera.Pitch - set.Pitch) > CameraPitchTolerance ||
+        return !BirdView(camera.Pitch, distance) && BirdView(set.Pitch, set.Distance) ||
+               Math.Abs(camera.Pitch - set.Pitch) > CameraPitchTolerance ||
                set.Distance > 0 && Math.Abs(distance - set.Distance) / set.Distance > CameraDistanceTolerance;
     }
 
@@ -408,6 +424,15 @@ internal sealed partial class Brain
                 }
             }
             _toHotspot = false;
+            // Knowing where we are: a calm wait for the mobs to come back, now and then a few steps to an open spot
+            // inside the area (seen: zigzagging and turning round and round there, plainly a bot).
+            if (state.Position is Vec3 here && state.Camera is CameraView view)
+            {
+                IdleInArea(state, p, actions, refresh, here, view);
+                if (Phase != BotPhase.Searching)
+                    Enter(BotPhase.Searching, now);
+                return;
+            }
             if (now >= _exploreUntil)
             {
                 // Zigzag forward (W, D, W, A, ...) to look around; names that show up meanwhile
@@ -557,6 +582,51 @@ internal sealed partial class Brain
 
     private int _targetId;
     private bool _toHotspot;
+    private Vec3? _idleGoal;
+    private TimeSpan _idleGoalUntil = Never, _idleNextMove = Never;
+
+    /// <summary>No mob to go for: stand a while, then stroll to a random open spot inside the area, stand again.</summary>
+    private void IdleInArea(GameState state, BotProfile p, List<BotAction> actions, bool refresh, Vec3 me, CameraView camera)
+    {
+        var now = state.Time;
+        var center = _home ?? me;
+        double reach = Math.Max(600, p.LeashMeters * 100) * 0.6;
+        if (_idleGoal is Vec3 goal && me.DistanceXY(goal) > 150 && now < _idleGoalUntil)
+        {
+            var (right, up) = camera.ToScreenDirection(goal.X - me.X, goal.Y - me.Y);
+            double length = Math.Max(1e-6, Math.Sqrt(right * right + up * up));
+            SetMoves(Around(state, right / length * 100, -up / length * 100, 38, p, to: goal), p, actions, refresh);
+            if (CheckBlocked(state, p, actions))
+                _idleGoal = null;
+            Did("Mob bekleniyor; alanda yürünüyor");
+            return;
+        }
+        if (_idleGoal != null)
+        {
+            _idleGoal = null;
+            _idleNextMove = now + Ms(5000 + _random.Next(9000)); // arrived: a while standing
+        }
+        SetMoves([], p, actions, refresh);
+        Did("Mob bekleniyor");
+        if (_idleNextMove == Never)
+            _idleNextMove = now + Ms(3000 + _random.Next(5000));
+        if (now < _idleNextMove)
+            return;
+        var map = TerrainHere(state);
+        for (int i = 0; i < 10; i++)
+        {
+            double angle = _random.NextDouble() * Math.PI * 2, r = reach * (0.3 + 0.7 * _random.NextDouble());
+            var to = new Vec3(center.X + Math.Cos(angle) * r, center.Y + Math.Sin(angle) * r, me.Z);
+            if (map == null || map.LineClear(me, to))
+            {
+                _idleGoal = to;
+                _idleGoalUntil = now + Ms(12000);
+                return;
+            }
+        }
+        _idleNextMove = now + Ms(4000);
+    }
+
     private bool _atFarmSpot, _travelNoted;
     private TimeSpan _travelSince = Never;
     private double _travelLimitMs;

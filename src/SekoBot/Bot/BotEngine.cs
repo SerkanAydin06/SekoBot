@@ -325,7 +325,7 @@ internal sealed partial class BotEngine : IDisposable
                 actions = _selling ? [] : PvpTick(state, Profile) ?? CrowdTick(state, Profile) ?? WhisperTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);
             phase = _brain.Phase;
             // Throwing items away: the game stays in front for all the clicks, not back and forth for each.
-            _input.HoldFront = _cleaner.Active;
+            _input.HoldFront = _cleaner.Active || _channelSince != null;
             // Nothing (left) to do with the screen: the turn goes to the next bot.
             if (!_brain.WantsClean && !_tidying && FrontTurn.Shared.Mine)
                 LetGoTurn();

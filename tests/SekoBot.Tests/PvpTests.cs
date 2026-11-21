@@ -44,3 +44,14 @@ public class CrowdTests
         Assert.False(BotEngine.ShouldMove(me, [At(2, 5, 1000, farming: false)]));
     }
 }
+
+public class CameraTests
+{
+    [Fact]
+    public void Seen_from_above_zoomed_out_is_bird_view()
+    {
+        Assert.True(Brain.BirdView(-81.5, 1213));
+        Assert.False(Brain.BirdView(-35, 1213));   // tilted
+        Assert.False(Brain.BirdView(-81.5, 400));  // zoomed in
+    }
+}

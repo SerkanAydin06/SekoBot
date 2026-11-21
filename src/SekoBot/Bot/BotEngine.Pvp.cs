@@ -28,6 +28,8 @@ internal sealed partial class BotEngine
     internal static readonly TimeSpan MobHitRecently = TimeSpan.FromSeconds(4);
     /// <summary>A channel change not done in this time is given up.</summary>
     internal static readonly TimeSpan ChannelChangeFor = TimeSpan.FromSeconds(40);
+    /// <summary>After "Kanal değiştir" was pressed: this long for the new channel to show.</summary>
+    internal static readonly TimeSpan ChannelLoadFor = TimeSpan.FromSeconds(90);
 
     private readonly Dictionary<string, DateTime> _enemies = new(StringComparer.Ordinal);
     private DateTime? _pvpDeathAt;
@@ -102,7 +104,10 @@ internal sealed partial class BotEngine
             var hitters = players.Where(pl => pl.Position.DistanceXY(me) <= HitterRange).ToList();
             // Strictly: a mob close by (an archer, one not marked as attacking) may be the one hurting us.
             bool mobClose = world.Mobs.Any(m => m.Hp > 0 && m.Position.DistanceXY(me) <= 1000);
-            bool byPlayer = hitters.Any(pl => pl.TargetsMe) || lost >= 0.2 && now - _mobHitAt > MobHitRecently && !mobClose && hitters.Count > 0;
+            // Only with HP really going down (a player merely having us selected is no attack; seen: a channel change
+            // for an attack nobody saw): targeted and hurt, or hurt a lot with no mob anywhere near.
+            bool byPlayer = hitters.Any(pl => pl.TargetsMe) && lost >= 0.1 && (now - _mobHitAt > MobHitRecently || lost >= 0.35)
+                            || lost >= 0.25 && now - _mobHitAt > MobHitRecently && !mobClose && hitters.Count > 0;
             if (byPlayer && now - _playerHitAt > TimeSpan.FromSeconds(30))
             {
                 _playerHitAt = now;
@@ -162,6 +167,8 @@ internal sealed partial class BotEngine
         _channelSince = now;
         _channelActedAt = DateTime.MinValue;
         _changePressedAt = DateTime.MinValue;
+        if (_input != null)
+            _input.HoldFront = true; // the menus clicked with the game in front the whole time
         _escTries = 0;
         // Whatever the reason (a player, a crowd of ours): never onto a channel one of our bots is on, on this map
         // (seen: off from a player to channel 5, right where another of ours farmed — both lost experience).
@@ -184,13 +191,18 @@ internal sealed partial class BotEngine
         ChannelScreen? screen;
         lock (_worldGate)
             screen = _world?.ReadChannels();
+        // The channel we are leaving, once it can be read (0 at the start: read now).
+        if (_channelFrom == 0 && screen is { Current: > 0 } first && _changePressedAt == DateTime.MinValue)
+            _channelFrom = first.Current;
         // Changed (or the game is loading the new channel).
         if (screen is { Current: > 0 } done && _channelFrom > 0 && done.Current != _channelFrom)
         {
             EndChannelChange($"🔀 Kanal değiştirildi: {_channelFrom} → {done.Current}.", notify: true);
             return [];
         }
-        if (now - _channelSince!.Value > ChannelChangeFor)
+        // Pressed: the game takes its time to move over (more so with a death in between) — waited on longer.
+        var limit = _changePressedAt != DateTime.MinValue ? _changePressedAt + ChannelLoadFor : _channelSince!.Value + ChannelChangeFor;
+        if (now > limit)
         {
             EndChannelChange("🔀 Kanal değiştirilemedi (menü açılmadı ya da oyun izin vermedi); bot devam ediyor.", notify: true);
             return screen is { WindowOpen: true } || screen?.MenuButton != null ? [new KeyTapAction(p.Keys.CloseWindow)] : [];
@@ -256,6 +268,8 @@ internal sealed partial class BotEngine
     {
         _channelSince = null;
         _channelAfterRevive = false;
+        if (_input != null && !_cleaner.Active)
+            _input.HoldFront = false;
         _channelAvoid.Clear();
         _lastChannelChange = DateTime.Now;
         _myChannel = 0; // read again

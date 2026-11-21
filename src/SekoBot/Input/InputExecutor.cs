@@ -85,6 +85,10 @@ internal sealed class InputExecutor : IDisposable
                 Interlocked.Exchange(ref _jobGuard, MouseGuard.Hold(JobMouseHold))?.Dispose();
             else
                 Interlocked.Exchange(ref _jobGuard, null)?.Dispose();
+            // The game kept in front for the whole job: brought back at once when something else comes forward
+            // (seen: dropped behind in the middle of a job, the clicks then went in from the back and mixed up).
+            if (value)
+                _ = KeepInFrontAsync();
             if (!value)
             {
                 nint before = Interlocked.Exchange(ref _heldBefore, 0);
@@ -92,6 +96,41 @@ internal sealed class InputExecutor : IDisposable
                     Win32.SetForegroundWindow(before);
             }
         }
+    }
+
+    private async Task KeepInFrontAsync()
+    {
+        while (_holdFront && !_cts.IsCancellationRequested)
+        {
+            try { await Task.Delay(300, _cts.Token); }
+            catch (OperationCanceledException) { return; }
+            if (!_holdFront || !Win32.IsWindow(_window.Handle))
+                return;
+            nint front = Win32.GetForegroundWindow();
+            if (front == _window.Handle)
+                continue;
+            Interlocked.CompareExchange(ref _heldBefore, front, 0);
+            BringGameToFront();
+        }
+    }
+
+    /// <summary>
+    /// The game in front for a click. Held in front for a job: tried a few times — never clicked from the back then
+    /// (the click would land wherever the game happens to be behind).
+    /// </summary>
+    private async Task<bool> FrontForClickAsync(nint before, CancellationToken token)
+    {
+        if (before == _window.Handle || BringGameToFront())
+            return true;
+        if (!_holdFront)
+            return false;
+        for (int i = 0; i < 4; i++)
+        {
+            await Task.Delay(250, token);
+            if (BringGameToFront())
+                return true;
+        }
+        return false;
     }
 
     /// <summary>After an action with the game brought to the front: the window that was in front
@@ -302,10 +341,16 @@ internal sealed class InputExecutor : IDisposable
     {
         if (stillWanted?.Invoke() == false)
             return;
-        using var guard = MouseGuard.Hold(); // the user's mouse can't mix in meanwhile
+        using var guard = MouseGuard.Hold(); // the user's mouse held first, then the game brought forward
+        await LetGoOfUserButtonsAsync(token);
         Win32.GetCursorPos(out var previous);
         nint before = Win32.GetForegroundWindow();
-        bool front = before == _window.Handle || BringGameToFront();
+        bool front = await FrontForClickAsync(before, token);
+        if (!front && _holdFront)
+        {
+            _log("Oyun penceresi öne getirilemedi; tıklama yapılmadı (arkadan tıklanırsa yanlış yere basabilir).");
+            return;
+        }
         if (front && before != _window.Handle)
             await Task.Delay(300, token);
         var screen = WindowService.ClientToScreen(_window, client);
@@ -453,6 +498,16 @@ internal sealed class InputExecutor : IDisposable
             if (before != _window.Handle && before != 0)
                 Win32.SetForegroundWindow(before);
         }
+    }
+
+    /// <summary>
+    /// A mouse button the user still has down when the game comes forward would press inside the game (seen: things
+    /// clicked by mistake): waited until let go (at most a second; the guard keeps new presses out meanwhile).
+    /// </summary>
+    private static async Task LetGoOfUserButtonsAsync(CancellationToken token)
+    {
+        for (int i = 0; i < 10 && ((Win32.GetAsyncKeyState(0x01) & 0x8000) != 0 || (Win32.GetAsyncKeyState(0x02) & 0x8000) != 0); i++)
+            await Task.Delay(100, token);
     }
 
     /// <summary>Puts the game window in front. Windows only lets a program do that right after
