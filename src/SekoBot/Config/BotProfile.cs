@@ -243,6 +243,13 @@ internal sealed class BotProfile
     public bool ThrowWhenInventoryFull { get; set; } = true;
     /// <summary>Bag full: sell at a market NPC known near on this map instead of throwing (see BotEngine.Sell).</summary>
     public bool SellToNpc { get; set; } = true;
+    /// <summary>Buy the HP / MP potions on the keys at the market NPC when fewer than <see cref="BuyPotionsBelow"/> are left.</summary>
+    public bool BuyPotions { get; set; } = true;
+    public int BuyPotionsBelow { get; set; } = 300;
+    /// <summary>Bought up to about this many of each.</summary>
+    public int BuyPotionsUpTo { get; set; } = 1000;
+    /// <summary>Yang never spent on potions (kept in the bag).</summary>
+    public long KeepYang { get; set; }
     /// <summary>Another player staying this many minutes within 30 m while the experience drops: find another place (0 = off).</summary>
     public double AvoidPlayerMinutes { get; set; } = 3;
 

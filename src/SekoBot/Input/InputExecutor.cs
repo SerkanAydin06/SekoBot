@@ -218,7 +218,7 @@ internal sealed class InputExecutor : IDisposable
         switch (action)
         {
             case ClickAction { Slow: true } button:
-                await ClickButtonAsync(button.Client, token, button.Fast, button.StillWanted);
+                await ClickButtonAsync(button.Client, token, button.Fast, button.StillWanted, button.Right);
                 break;
             case ClickAction click:
                 await ClickAsync(click.Client, 30, 60, token);
@@ -298,7 +298,7 @@ internal sealed class InputExecutor : IDisposable
     /// hover, press with a real mouse event, hold, release, and wait for the game to take it.
     /// Afterwards the cursor and the window that was in front are put back.
     /// </summary>
-    private async Task ClickButtonAsync(Point client, CancellationToken token, bool fast = false, Func<bool>? stillWanted = null)
+    private async Task ClickButtonAsync(Point client, CancellationToken token, bool fast = false, Func<bool>? stillWanted = null, bool right = false)
     {
         if (stillWanted?.Invoke() == false)
             return;
@@ -324,15 +324,16 @@ internal sealed class InputExecutor : IDisposable
             await Task.Delay(fast ? 120 : 300, token);
             if (stillWanted?.Invoke() == false)
                 return; // gone while coming in: no press
+            // A right click (buying in an NPC's shop) or the usual left one.
             if (front)
-                SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);
+                SendMouse(right ? Win32.MOUSEEVENTF_RIGHTDOWN : Win32.MOUSEEVENTF_LEFTDOWN);
             else
-                Win32.PostMessage(_window.Handle, Win32.WM_LBUTTONDOWN, Win32.MK_LBUTTON, lParam);
+                Win32.PostMessage(_window.Handle, right ? Win32.WM_RBUTTONDOWN : Win32.WM_LBUTTONDOWN, right ? Win32.MK_RBUTTON : Win32.MK_LBUTTON, lParam);
             await Task.Delay(fast ? 110 : 250, token);
             if (front)
-                SendMouse(Win32.MOUSEEVENTF_LEFTUP);
+                SendMouse(right ? Win32.MOUSEEVENTF_RIGHTUP : Win32.MOUSEEVENTF_LEFTUP);
             else
-                Win32.PostMessage(_window.Handle, Win32.WM_LBUTTONUP, 0, lParam);
+                Win32.PostMessage(_window.Handle, right ? Win32.WM_RBUTTONUP : Win32.WM_LBUTTONUP, 0, lParam);
             await Task.Delay(fast ? 200 : 500, token); // keep the cursor there while the game handles it
         }
         finally

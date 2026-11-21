@@ -80,6 +80,9 @@ internal static class Win32
     internal const uint MOUSEEVENTF_ABSOLUTE = 0x8000;
     internal const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
     internal const uint MOUSEEVENTF_LEFTUP = 0x0004;
+    internal const uint MOUSEEVENTF_RIGHTDOWN = 0x0008, MOUSEEVENTF_RIGHTUP = 0x0010;
+    internal const uint WM_RBUTTONDOWN = 0x0204, WM_RBUTTONUP = 0x0205;
+    internal const nint MK_RBUTTON = 0x0002;
     internal const int WM_HOTKEY = 0x0312;
     internal const uint WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101;
     internal const uint WM_MOUSEMOVE = 0x0200, WM_LBUTTONDOWN = 0x0201, WM_LBUTTONUP = 0x0202;
