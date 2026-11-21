@@ -80,8 +80,6 @@ internal sealed partial class BotEngine
         if (state.Dead || _selling || _tidying || _cleaner.Active || _brain.Traveling || state.Attackers.Count > 0 || _channelSince != null)
             return null;
         _channelAvoid.Clear();
-        foreach (var o in others.Where(o => o.Map == me.Map && o.Channel > 0))
-            _channelAvoid.Add(o.Channel);
         string with = string.Join(", ", others.Where(o => o.Number < me.Number && o.Map == me.Map && o.Channel == me.Channel).Select(o => o.Character));
         _log($"👥 Bizim botumuz ({with}) aynı yerde, aynı kanalda ({me.Channel}); o kalıyor, bu bot başka kanala geçiyor.");
         _crowdSince = DateTime.MinValue;

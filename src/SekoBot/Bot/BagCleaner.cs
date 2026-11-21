@@ -52,6 +52,7 @@ internal sealed class BagCleaner
 
     /// <summary>Selling at a market NPC instead of throwing away: the menu's "Sat", never dragging out.</summary>
     public bool Selling { get; init; }
+    private int _openWaits;
     /// <summary>Items thrown away this time.</summary>
     public int Thrown { get; private set; }
 
@@ -67,7 +68,7 @@ internal sealed class BagCleaner
         _step = Step.Open;
         _started = now;
         _waitUntil = now;
-        _opens = _closes = _noLayout = _yesClicks = _escapes = _leftoverYes = Thrown = _menuMisses = 0;
+        _opens = _closes = _noLayout = _yesClicks = _escapes = _leftoverYes = Thrown = _menuMisses = _openWaits = 0;
         Problem = null;
         _failed.Clear();
         _pageClicks.Clear();
@@ -153,6 +154,14 @@ internal sealed class BagCleaner
                 {
                     _step = Step.Pick;
                     goto case Step.Pick;
+                }
+                // Open already (a market's shop opens it by itself) with its page not read yet: waited on, not
+                // pressed — the key would shut it (seen: the bag closed at the shop).
+                if (bag.Open && _openWaits < 4)
+                {
+                    _openWaits++;
+                    _waitUntil = now + AfterKey;
+                    break;
                 }
                 if (_opens >= 3)
                 {
