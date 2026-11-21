@@ -77,7 +77,7 @@ internal sealed partial class Brain
         NoteDropAges(state);
         HearGame(state, actions);
         NoteWalking(state);
-        _wantedDropsAround = state.Drops.Any(d => !JunkCloser(state, d.Spot));
+        _wantedDropsAround = state.Drops.Any(d => CleanPick(state, d));
 
         // The message window is open (the user writing a message): no key at all, held ones let go.
         if (state.Typing)
