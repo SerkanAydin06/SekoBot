@@ -888,6 +888,10 @@ internal sealed partial class GameWorldReader : IDisposable
                 long cls = Pointer(widget + ObjClass);
                 if (!MemoryReads.IsPointer(widget) || !IsWidget(cls))
                     continue;
+                // The M map is put here each time it opens and stays here, "visible", after it is closed (seen:
+                // three of them listed with the map shut): whether it shows is UI_C.bigMap (empty when closed).
+                if (ClassName(cls) == "bigMap_C")
+                    continue;
                 if (Byte(widget + Offset(cls, "Widget", "Visibility")) is byte visibility and not (1 or 2))
                     open.Add(ClassName(cls));
             }
