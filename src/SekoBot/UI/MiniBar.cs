@@ -293,6 +293,10 @@ internal sealed class MiniBar : Form
         string tail = info.Elapsed.Length > 0 ? "⏱ " + info.Elapsed : "";
         TextRenderer.DrawText(g, tail, small, nameRow, info.Running && info.Elapsed.Length > 0 ? Theme.Green : Theme.Muted, Right);
         nameRow.Width -= TextRenderer.MeasureText(tail, small).Width + (int)(6 * s);
+        // The version right before the time (the user: "botun süresinin hemen sol tarafına").
+        string version = "v" + BuildInfo.Version;
+        TextRenderer.DrawText(g, version, small, nameRow, Theme.Muted, Right);
+        nameRow.Width -= TextRenderer.MeasureText(version, small).Width + (int)(6 * s);
         TextRenderer.DrawText(g, "◆ " + name, nameFont, nameRow, Theme.Text, Left);
         bool market = info.Market != null;
         string status = market ? info.Market! : info.Attack ? info.Status : "✋ Sadece eşya · " + info.Status;

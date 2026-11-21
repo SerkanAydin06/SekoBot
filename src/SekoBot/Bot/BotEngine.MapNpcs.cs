@@ -55,12 +55,12 @@ internal sealed partial class BotEngine
         ReadMapNpcsNow(world);
     }
 
-    /// <summary>Whether the M map is open now.</summary>
-    private bool MapOpenNow()
-    {
-        lock (_worldGate)
-            return _world?.ReadMapNpcs() != null;
-    }
+    /// <summary>
+    /// Whether the M map shows now (the game's open windows, as the window watch reads them). Not the map object
+    /// itself: it stays in memory a moment after closing (seen: taken for still open, the key pressed again,
+    /// and the map opened again — open and shut a few times, then left open).
+    /// </summary>
+    private bool MapOpenNow() => World?.OpenWindows?.Any(IsMapWindow) == true;
 
     /// <summary>Reads the open M map's NPCs; false when it isn't open.</summary>
     private bool ReadMapNpcsNow(WorldSnapshot world)
@@ -98,7 +98,7 @@ internal sealed partial class BotEngine
         var now = DateTime.Now;
         if (_mapPeekReadAt is DateTime readAt)
         {
-            bool open = World is { } w && MapOpenNow();
+            bool open = MapOpenNow();
             if (!open)
             {
                 _mapPeekReadAt = _mapCloseTapAt = null;
@@ -127,15 +127,23 @@ internal sealed partial class BotEngine
             }
             if (now - since < MapPeekWait && state.Attackers.Count == 0 && !state.Dead)
                 return [];
-            // Didn't show (another key? a window in the way?): not pressed again, tried later.
             _mapPeekSince = null;
+            // Shown but not read (or a mob came): closed all the same.
+            if (MapOpenNow())
+            {
+                _mapPeekReadAt = now - MapCloseAfter;
+                _mapCloseTaps = 0;
+                return [];
+            }
+            // Didn't show (another key? a window in the way?): not pressed again, tried later.
             return null;
         }
         if (World is not { } world || world.MapName.Length == 0 || _mapNpcsRead.Contains(world.MapName) || IsLoginScreen(world.MapName)
             || world.MapName.StartsWith('_') || now - _mapSeenSince < MapPeekAfter || now - _mapPeekLastTry < MapPeekRetry
             || _mapPeeks.GetValueOrDefault(world.MapName) >= MapPeekTries)
             return null;
-        if (state.Dead || state.Attackers.Count > 0 || state.Targets.Any(t => t.AttacksMe) || _selling || _tidying || _cleaner.Active)
+        if (state.Dead || state.Attackers.Count > 0 || state.Targets.Any(t => t.AttacksMe) || _selling || _tidying || _cleaner.Active
+            || _brain.Traveling || MapOpenNow())
             return null;
         _mapPeeks[world.MapName] = _mapPeeks.GetValueOrDefault(world.MapName) + 1;
         _mapPeekLastTry = now;

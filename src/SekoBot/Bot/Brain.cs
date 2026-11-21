@@ -114,7 +114,7 @@ internal sealed partial class Brain
             Enter(BotPhase.Recovering, now);
             _recoverSince = now;
         }
-        if (Phase == BotPhase.Recovering && Recover(state, p, actions))
+        if (Phase == BotPhase.Recovering && !TravelPending(state, p) && Recover(state, p, actions))
             return actions;
 
         // Low HP never stops the bot: stopping would let the mobs finish us off anyway. Potions
@@ -171,7 +171,7 @@ internal sealed partial class Brain
         }
 
         // Few HP potions left: get away from the mobs and stop somewhere quiet.
-        if (RetreatTick(state, p, actions))
+        if (!TravelPending(state, p) && RetreatTick(state, p, actions))
             return actions;
 
         // How the last fight went decides how many are gathered next (also while running away).
@@ -181,15 +181,15 @@ internal sealed partial class Brain
         // HP low with several mobs on us: get away from them for a moment.
         // Gathering behind someone: running away from them is what got the character killed (seen:
         // IMEDUSA06 died twice fleeing alone); it runs to them instead (LootOnly).
-        if ((p.Attack || state.Follow == null) && FleeTick(state, p, actions))
+        if ((p.Attack || state.Follow == null) && !TravelPending(state, p) && FleeTick(state, p, actions))
             return actions;
 
         // Bag full with items to throw away: get to a quiet spot (the engine then throws them).
-        if (CleanTick(state, p, actions))
+        if (!TravelPending(state, p) && CleanTick(state, p, actions))
             return actions;
 
         // Now and then a short break, like a person would.
-        if (BreakTick(state, p, actions))
+        if (!TravelPending(state, p) && BreakTick(state, p, actions))
             return actions;
 
         // Attack off: only what lies on the ground is picked up.

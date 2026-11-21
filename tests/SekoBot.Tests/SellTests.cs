@@ -120,3 +120,39 @@ public class BagBonusTests
         Assert.True(SekoBot.Bot.BotEngine.GoodBonus(bag.Single(i => i.Slot == 17), p));
     }
 }
+
+public class PickedMemoryTests
+{
+    private const int Sword = 11, Bow = 2001;
+
+    [Fact]
+    public void A_bad_read_of_the_bag_doesnt_make_the_bot_forget_what_it_picked()
+    {
+        var now = new DateTime(2026, 11, 21, 15, 0, 0, DateTimeKind.Utc);
+        var picked = new PickedItems { Now = () => now };
+        InventoryItem[] mine = [new(20, 27001, 50), new(21, 27002, 50), new(22, 27003, 50), new(23, 50001, 1), new(24, 50002, 1)];
+        picked.Update(mine, true, (Func<InventoryItem, bool>?)null);
+        picked.Update([.. mine, new(30, Sword, 1), new(31, Bow, 1)], true, (Func<InventoryItem, bool>?)(_ => false));
+        Assert.Equal(2, picked.Picked.Count);
+        // Loading a map / reconnecting: the bag reads empty, or only partly, for a few seconds.
+        for (int i = 0; i < 30; i++)
+        {
+            now = now.AddMilliseconds(200);
+            picked.Update(i % 2 == 0 ? [] : [new(20, 27001, 50)], false, (Func<InventoryItem, bool>?)null);
+        }
+        now = now.AddMilliseconds(200);
+        picked.Update([.. mine, new(30, Sword, 1), new(31, Bow, 1)], false, (Func<InventoryItem, bool>?)null);
+        Assert.Contains((30, Sword), picked.Picked);
+        Assert.Contains((31, Bow), picked.Picked);
+    }
+
+    [Fact]
+    public void An_item_really_gone_is_forgotten()
+    {
+        var picked = new PickedItems();
+        picked.Update([new(20, 27001, 50)], true, (Func<InventoryItem, bool>?)null);
+        picked.Update([new(20, 27001, 50), new(30, Sword, 1)], true, (Func<InventoryItem, bool>?)(_ => false));
+        picked.Update([new(20, 27001, 50)], true, (Func<InventoryItem, bool>?)null);   // thrown / sold
+        Assert.Empty(picked.Picked);
+    }
+}
