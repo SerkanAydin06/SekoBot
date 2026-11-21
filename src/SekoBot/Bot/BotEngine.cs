@@ -194,6 +194,7 @@ internal sealed partial class BotEngine : IDisposable
                             {
                                 PopupOpen = !_cleaner.Active && !_brain.ReadyToClean && PopupOpen(world),
                                 PopupIsBag = _popupIsBag,
+                                PopupIsMap = _popupIsMap,
                                 Typing = world?.OpenWindows?.Contains(GameWorldReader.MessageWindow) == true,
                             };
                         var view = MemoryView(world, profile, frame.Width, frame.Height, DumpSpot(now), fit: !_fitRelaxed);

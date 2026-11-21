@@ -18,9 +18,21 @@ internal sealed partial class BotEngine
     private TimeSpan _mapNpcsLookedAt = TimeSpan.FromDays(-1);
     /// <summary>The bot's own look at the M map: when the key was pressed (null: not looking).</summary>
     private DateTime? _mapPeekSince;
+    /// <summary>When the map was read (then closed a moment later) and when the map key was last pressed to close it.</summary>
+    private DateTime? _mapPeekReadAt, _mapCloseTapAt;
+    private int _mapCloseTaps;
     private DateTime _mapPeekLastTry = DateTime.MinValue;
     private DateTime _mapSeenSince = DateTime.MinValue;
     private string _mapSeenName = "";
+
+    /// <summary>
+    /// After reading, the map is closed this much later: pressed right as it opened, the key was ignored (seen
+    /// on 4 bots: the map stayed open, and Esc — which doesn't close it — opened the game menu).
+    /// </summary>
+    internal static readonly TimeSpan MapCloseAfter = TimeSpan.FromMilliseconds(800);
+    /// <summary>Still open this long after the key: pressed again (at most <see cref="MapCloseTaps"/> times).</summary>
+    internal static readonly TimeSpan MapCloseCheck = TimeSpan.FromMilliseconds(1500);
+    internal const int MapCloseTaps = 3;
 
     /// <summary>How long the bot waits for the M map to show.</summary>
     internal static readonly TimeSpan MapPeekWait = TimeSpan.FromSeconds(2.5);
@@ -37,10 +49,17 @@ internal sealed partial class BotEngine
             _mapSeenName = world.MapName;
             _mapSeenSince = DateTime.Now;
         }
-        if (now - _mapNpcsLookedAt < TimeSpan.FromSeconds(2) || _mapPeekSince != null)
+        if (now - _mapNpcsLookedAt < TimeSpan.FromSeconds(2) || _mapPeekSince != null || _mapPeekReadAt != null)
             return;
         _mapNpcsLookedAt = now;
         ReadMapNpcsNow(world);
+    }
+
+    /// <summary>Whether the M map is open now.</summary>
+    private bool MapOpenNow()
+    {
+        lock (_worldGate)
+            return _world?.ReadMapNpcs() != null;
     }
 
     /// <summary>Reads the open M map's NPCs; false when it isn't open.</summary>
@@ -77,12 +96,34 @@ internal sealed partial class BotEngine
     private IReadOnlyList<BotAction>? MapPeekTick(GameState state, BotProfile p)
     {
         var now = DateTime.Now;
+        if (_mapPeekReadAt is DateTime readAt)
+        {
+            bool open = World is { } w && MapOpenNow();
+            if (!open)
+            {
+                _mapPeekReadAt = _mapCloseTapAt = null;
+                return null; // closed: the brain goes on
+            }
+            if (_mapCloseTapAt is DateTime tapped ? now - tapped < MapCloseCheck : now - readAt < MapCloseAfter)
+                return [];
+            if (_mapCloseTaps >= MapCloseTaps)
+            {
+                _log("🗺 M haritası harita tuşuyla kapanmadı; açık bırakıldı (elle kapatılabilir).");
+                _mapPeekReadAt = _mapCloseTapAt = null;
+                return null;
+            }
+            _mapCloseTaps++;
+            _mapCloseTapAt = now;
+            return [new KeyTapAction(p.Keys.Map)];
+        }
         if (_mapPeekSince is DateTime since)
         {
             if (World is { } open && ReadMapNpcsNow(open))
             {
                 _mapPeekSince = null;
-                return [new KeyTapAction(p.Keys.Map)];  // closed again
+                _mapPeekReadAt = now;
+                _mapCloseTaps = 0;
+                return [];
             }
             if (now - since < MapPeekWait && state.Attackers.Count == 0 && !state.Dead)
                 return [];

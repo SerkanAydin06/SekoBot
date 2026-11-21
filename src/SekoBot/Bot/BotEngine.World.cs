@@ -126,11 +126,16 @@ internal sealed partial class BotEngine
                 _log($"Açık pencere (bellekten): {seen}");
         }
         _popupIsBag = open.Count > 0 && open.All(w => w is "inventory" or "equipment");
+        _popupIsMap = open.Count > 0 && open.All(IsMapWindow);
         return open.Count > 0;
     }
 
     /// <summary>The last <see cref="PopupOpen"/> found only the bag (and its equipment) open.</summary>
     private bool _popupIsBag;
+    /// <summary>The last <see cref="PopupOpen"/> found only the M map open.</summary>
+    private bool _popupIsMap;
+
+    internal static bool IsMapWindow(string window) => window is "bigMap" or "bigMap_C";
 
     private readonly HotspotMap _hotspots = new();
     private string _hotspotMap = "";
