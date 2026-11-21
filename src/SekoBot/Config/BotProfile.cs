@@ -227,6 +227,8 @@ internal sealed class BotProfile
     public string LootAlways { get; set; } = "";
     /// <summary>Items ticked "Topla" in the item list: always picked up (item numbers).</summary>
     public List<int> LootPick { get; set; } = [];
+    /// <summary>Which loot upgrade the character's choices had (see <see cref="CharacterSettings.UpgradeLoot"/>).</summary>
+    public int LootVersion { get; set; }
     /// <summary>Items ticked "Alma" in the item list: never walked to (item numbers).</summary>
     public List<int> LootSkip { get; set; } = [];
     /// <summary>Items ticked "At" in the item list: thrown away when the bag is full, never picked up (item numbers).</summary>
@@ -347,7 +349,7 @@ internal static class ProfileStore
                 if (loaded != null)
                 {
                     Normalize(loaded);
-                    if (Upgrade(loaded))
+                    if (Upgrade(loaded) | CharacterSettings.UpgradeLoot(loaded)) // both, always
                         try { Save(loaded); } catch { }
                     return loaded;
                 }
@@ -450,7 +452,7 @@ internal static class CharacterSettings
         nameof(BotProfile.LootYang), nameof(BotProfile.LootPotions), nameof(BotProfile.LootEquipment),
         nameof(BotProfile.LootOther), nameof(BotProfile.LootEquipmentMinGold), nameof(BotProfile.LootBonuses),
         nameof(BotProfile.LootAlways), nameof(BotProfile.LootPick), nameof(BotProfile.LootSkip),
-        nameof(BotProfile.LootThrow), nameof(BotProfile.DropRangeMetres), nameof(BotProfile.EventLoot),
+        nameof(BotProfile.LootThrow), nameof(BotProfile.DropRangeMetres), nameof(BotProfile.EventLoot), nameof(BotProfile.LootVersion),
         nameof(BotProfile.SkillGapLearnedMs), nameof(BotProfile.MobFights), nameof(BotProfile.AutoArea), nameof(BotProfile.Attack), nameof(BotProfile.FollowName),
     ];
 
@@ -474,7 +476,33 @@ internal static class CharacterSettings
         nameof(BotProfile.LootEquipment), nameof(BotProfile.LootOther), nameof(BotProfile.LootEquipmentMinGold),
         nameof(BotProfile.LootBonuses), nameof(BotProfile.LootAlways), nameof(BotProfile.LootPick),
         nameof(BotProfile.LootSkip), nameof(BotProfile.LootThrow), nameof(BotProfile.EventLoot), nameof(BotProfile.AutoSkills),
+        nameof(BotProfile.LootVersion),
     ];
+
+    /// <summary>
+    /// Materials worth at least ~15 000 yang a piece in the market (read 2026-11-21, plain listings, 10 or more of
+    /// each), stacking in the bag: picked up ("Topla") by the loot upgrade.
+    /// </summary>
+    internal static readonly int[] ValuableMaterials = [30005, 30006, 30007, 30008, 30009, 30010, 30011, 30014, 30015, 30016, 30017, 30018, 30019, 30021, 30022, 30023, 30025, 30026, 30027, 30030, 30031, 30034, 30035, 30037, 30038, 30039, 30040, 30042, 30044, 30045, 30046, 30047, 30048, 30049, 30050, 30051, 30052, 30053, 30055, 30056, 30057, 30058, 30059, 30060, 30061, 30067, 30070, 30071, 30072, 30073, 30074, 30075, 30076, 30077, 30078, 30079, 30080, 30081, 30082, 30083, 30085, 30086, 30087, 30088, 30089, 30090, 30091, 30092, 30102, 30139, 30150, 30151, 30158, 30165, 30166, 30167, 30168, 30179, 30190, 30192, 30193, 30194, 30195, 30196, 30197, 30198, 30220, 30221, 30222, 30223, 30224, 30227, 50701, 50705, 50706, 50707, 50708, 71123, 71129];
+
+    /// <summary>
+    /// The user's loot review of 2026-11-21: weapons / armour sold to a shop for under 4 000 yang aren't worth the
+    /// walk (3 000 → 4 000), and the valuable materials are picked up. Runs once per character; what the user
+    /// ticked "At" or "Alma" stays so.
+    /// </summary>
+    /// <returns>True when something changed.</returns>
+    internal static bool UpgradeLoot(BotProfile profile)
+    {
+        if (profile.LootVersion >= 1)
+            return false;
+        if (profile.LootEquipmentMinGold is > 0 and < 4000)
+            profile.LootEquipmentMinGold = 4000;
+        foreach (int vnum in ValuableMaterials)
+            if (!profile.LootPick.Contains(vnum) && !profile.LootThrow.Contains(vnum) && !profile.LootSkip.Contains(vnum))
+                profile.LootPick.Add(vnum);
+        profile.LootVersion = 1;
+        return true;
+    }
 
     /// <summary>A new character: everything but <see cref="Kept"/> back to the defaults.</summary>
     internal static void Fresh(BotProfile profile)
@@ -536,6 +564,8 @@ internal static class CharacterSettings
         try
         {
             Apply(File.ReadAllText(path), profile);
+            if (UpgradeLoot(profile))
+                Save(character, profile);
             return true;
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)

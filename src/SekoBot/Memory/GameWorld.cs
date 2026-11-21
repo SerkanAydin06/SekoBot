@@ -136,6 +136,54 @@ internal enum LootKind { Unknown, Yang, Potion, Equipment, Other }
 
 internal static class Loot
 {
+    /// <summary>The character's class ("warrior", "ninja", "sura", "shaman"; empty: not known — everything fits).</summary>
+    public static volatile string CharacterClass = "";
+
+    /// <summary>The class from the animation object's class name (Warrior_C, Ninja_C, Sura_C, Shaman_C; a "2" for the other gender).</summary>
+    public static string ClassOf(string animClass)
+    {
+        string n = animClass.ToLowerInvariant();
+        return n.StartsWith("warrior") ? "warrior" : n.StartsWith("ninja") || n.StartsWith("assassin") ? "ninja"
+             : n.StartsWith("sura") ? "sura" : n.StartsWith("shaman") ? "shaman" : n.Replace("_c", "");
+    }
+
+    /// <summary>
+    /// Whether the character's class can wear this weapon or armour (anything else, or the class unknown: yes).
+    /// Weapons by kind: warrior swords and two-handed, ninja daggers, bows and swords, sura swords, shaman bells and
+    /// fans. Body armour and helmets: a warrior wears plate ("Plaka", "Zırh") and helmets ("Miğfer", "Kask").
+    /// Necklaces, earrings, bracelets, shoes and shields fit everybody.
+    /// </summary>
+    public static bool FitsClass(int vnum, string? characterClass = null)
+    {
+        string cls = characterClass ?? CharacterClass;
+        if (cls.Length == 0 || ItemBook.Get(vnum) is not { } info)
+            return true;
+        if (info.Type == "ITEM_WEAPON")
+            return info.SubType switch
+            {
+                "WEAPON_ARROW" or "WEAPON_QUIVER" => cls == "ninja",
+                "WEAPON_SWORD" => cls is "warrior" or "ninja" or "sura",
+                "WEAPON_TWO_HANDED" => cls == "warrior",
+                "WEAPON_DAGGER" or "WEAPON_BOW" => cls == "ninja",
+                "WEAPON_BELL" or "WEAPON_FAN" => cls == "shaman",
+                "WEAPON_CLAW" => false,
+                _ => true,
+            };
+        if (info.Type == "ITEM_ARMOR" && info.SubType is "ARMOR_BODY" or "ARMOR_HEAD" && cls == "warrior")
+            return info.Name.Contains("Plaka", StringComparison.OrdinalIgnoreCase) || info.Name.Contains("Zırh", StringComparison.OrdinalIgnoreCase)
+                || info.Name.Contains("Miğfer", StringComparison.OrdinalIgnoreCase) || info.Name.Contains("Kask", StringComparison.OrdinalIgnoreCase);
+        return true;
+    }
+
+    /// <summary>
+    /// Rewards and special things, always picked up (the user: "event and every kind of reward, always"): boxes,
+    /// keys, gift boxes, skill books, quest items, polymorph marbles, and the usable specials (scrolls, stones,
+    /// bonus changers, buffs). Potions and materials go by their own choices.
+    /// </summary>
+    public static bool IsReward(int vnum) => ItemBook.Get(vnum) is { } info && (info.Type is "ITEM_GIFTBOX" or "ITEM_TREASURE_BOX"
+        or "ITEM_TREASURE_KEY" or "ITEM_SKILLBOOK" or "ITEM_QUEST" or "ITEM_POLYMORPH" or "ITEM_UNIQUE" or "ITEM_SPECIAL"
+        || info.Type == "ITEM_USE" && info.SubType is "USE_SPECIAL" or "USE_AFFECT" or "USE_TUNING" or "USE_CHANGE_ATTRIBUTE"
+            or "USE_CREATE_STONE" or "USE_DETACHMENT" or "USE_POTION_NODELAY" or "SPECIAL_MAP" or "USE_ABILITY_UP" or "USE_ADD_ATTRIBUTE");
     /// <summary>The items of the drop events going on now (set by the engine): picked up like "Topla".</summary>
     public static volatile int[] EventItems = [];
     /// <summary>Every event reward ever seen, whatever the settings: never thrown away.</summary>

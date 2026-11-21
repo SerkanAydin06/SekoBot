@@ -47,6 +47,15 @@ internal sealed partial class BotEngine
             }
             var snapshot = _world.Read();
             _memoryStatus = _world.Status;
+            if (snapshot != null && now - _classReadAt > TimeSpan.FromSeconds(30))
+            {
+                _classReadAt = now;
+                if (_world.ReadCharacterClass() is { Length: > 0 } cls && cls != Loot.CharacterClass)
+                {
+                    Loot.CharacterClass = cls;
+                    _log($"Karakter sınıfı: {ClassName(cls)}; sadece bu sınıfın kullanabileceği silah ve zırhlar toplanacak.");
+                }
+            }
             if (_world.Searched && !_searchLogged)
             {
                 _searchLogged = true;
@@ -56,6 +65,13 @@ internal sealed partial class BotEngine
             return snapshot;
         }
     }
+
+    private TimeSpan _classReadAt = TimeSpan.FromDays(-1);
+
+    private static string ClassName(string cls) => cls switch
+    {
+        "warrior" => "savaşçı", "ninja" => "ninja", "sura" => "sura", "shaman" => "şaman", _ => cls,
+    };
 
     /// <summary>Whether the character moved in the last ~0.4 s (to tell walking from being stuck).</summary>
     private bool? Walking(WorldSnapshot? world, TimeSpan now)

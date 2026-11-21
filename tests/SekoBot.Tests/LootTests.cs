@@ -146,7 +146,59 @@ public class AlwaysLootTests
         Assert.True(BotEngine.WantedLoot(new GroundItem(1, new Vec3(0, 0, 0), 93006, 1), p));   // part of the name, any case
         Assert.False(BotEngine.WantedLoot(new GroundItem(2, new Vec3(0, 0, 0), 93038, 1), p));  // "other" is off
         p.LootAlways = "";
+        // A special usable item is a reward now: picked up anyway (the user: rewards and specials always) …
+        Assert.True(BotEngine.WantedLoot(new GroundItem(1, new Vec3(0, 0, 0), 93006, 1), p));
+        // … unless ticked "At" or "Alma".
+        p.LootThrow = [93006];
         Assert.False(BotEngine.WantedLoot(new GroundItem(1, new Vec3(0, 0, 0), 93006, 1), p));
+    }
+
+    [Fact]
+    public void A_warrior_picks_up_only_what_a_warrior_wears()
+    {
+        // The user: no daggers, fans, bells or bows for a warrior; accessories fit everybody.
+        ItemBook.Learn(new ItemInfo(95001, "Büyük Balta+0", "ITEM_WEAPON", "WEAPON_TWO_HANDED", 20000));
+        ItemBook.Learn(new ItemInfo(95002, "Okyanus Yelpazesi+0", "ITEM_WEAPON", "WEAPON_FAN", 20000));
+        ItemBook.Learn(new ItemInfo(95003, "Şanslı Bıçak+0", "ITEM_WEAPON", "WEAPON_DAGGER", 20000));
+        ItemBook.Learn(new ItemInfo(95004, "Abanoz Küpe+0", "ITEM_ARMOR", "ARMOR_EAR", 20000));
+        ItemBook.Learn(new ItemInfo(95005, "Aslan Plaka Zırh+0", "ITEM_ARMOR", "ARMOR_BODY", 20000));
+        ItemBook.Learn(new ItemInfo(95006, "Sema Elbisesi+0", "ITEM_ARMOR", "ARMOR_BODY", 20000));
+        Assert.True(Loot.FitsClass(95001, "warrior"));
+        Assert.False(Loot.FitsClass(95002, "warrior"));
+        Assert.False(Loot.FitsClass(95003, "warrior"));
+        Assert.True(Loot.FitsClass(95004, "warrior"));
+        Assert.True(Loot.FitsClass(95005, "warrior"));
+        Assert.False(Loot.FitsClass(95006, "warrior"));
+        Assert.True(Loot.FitsClass(95002, "shaman"));
+        Assert.True(Loot.FitsClass(95003, ""));          // class not known yet: as before
+        Assert.Equal("warrior", Loot.ClassOf("Warrior_C"));
+        Assert.Equal("ninja", Loot.ClassOf("Ninja2_C"));
+    }
+
+    [Fact]
+    public void Boxes_keys_books_and_specials_are_rewards()
+    {
+        ItemBook.Learn(new ItemInfo(95010, "Gümüş Define Sandığı", "ITEM_TREASURE_BOX", "0", 0));
+        ItemBook.Learn(new ItemInfo(95011, "Kritik İsabet", "ITEM_USE", "USE_AFFECT", 300000));
+        ItemBook.Learn(new ItemInfo(95012, "Kırmızı İksir(K)", "ITEM_USE", "USE_POTION", 30));
+        ItemBook.Learn(new ItemInfo(95013, "Kırık Porselen", "ITEM_MATERIAL", "MATERIAL_LEATHER", 300));
+        Assert.True(Loot.IsReward(95010));
+        Assert.True(Loot.IsReward(95011));
+        Assert.False(Loot.IsReward(95012)); // potions go by their own choice
+        Assert.False(Loot.IsReward(95013)); // materials too
+    }
+
+    [Fact]
+    public void The_loot_upgrade_raises_the_shop_price_and_adds_the_valuable_materials_once()
+    {
+        var p = new BotProfile { LootEquipmentMinGold = 3000, LootThrow = [30023] };
+        Assert.True(CharacterSettings.UpgradeLoot(p));
+        Assert.Equal(4000, p.LootEquipmentMinGold);
+        Assert.Contains(30010, p.LootPick);           // Ayı Safrası
+        Assert.DoesNotContain(30023, p.LootPick);     // ticked "At" by the user: stays so
+        int count = p.LootPick.Count;
+        Assert.False(CharacterSettings.UpgradeLoot(p));
+        Assert.Equal(count, p.LootPick.Count);
     }
 }
 
