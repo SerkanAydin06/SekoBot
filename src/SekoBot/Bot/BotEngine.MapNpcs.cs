@@ -100,11 +100,14 @@ internal sealed partial class BotEngine
             _roadsGrownAt = now;
             return [];
         }
-        // A moment for the picture to be drawn at its new size (and captured).
+        // A moment for the picture to be drawn at its new size — and captured at it (the capture follows a moment later).
         if (_roadsGrown && now - _roadsGrownAt < TimeSpan.FromSeconds(2))
             return [];
+        bool captured = WithLatestFrame(f => f.Width >= picture.Drawn.Right && f.Height >= picture.Drawn.Bottom);
+        if (!captured && now - _roadsGrownAt < TimeSpan.FromSeconds(10))
+            return [];
         if (ReadRoads(world.MapName, picture) is null)
-            return Give("harita resmi okunamadı");
+            return Give(captured ? "harita resminde yol rengi bulunamadı" : "büyük ekran görüntüsü gelmedi");
         _log($"🛣 {world.MapName} haritasının yolları M haritasından okundu; uzun yürüyüşlerde yollar kullanılacak.");
         EndRoads();
         return null;
@@ -144,7 +147,13 @@ internal sealed partial class BotEngine
     /// game leaves in its list of added windows stay "visible" after closing (seen: taken for still open, the
     /// key pressed again, and the map opened again — open and shut a few times, then left open); not counted.
     /// </summary>
-    private bool MapOpenNow() => World?.OpenWindows?.Any(IsMapWindow) == true;
+    private bool MapOpenNow()
+    {
+        // Read straight from memory: the window list of the last world read can lag a moment (seen: the map taken
+        // for closed right after it was read, the roads never read, the map shut by the window watch instead).
+        lock (_worldGate)
+            return _world?.ReadMapNpcs() != null;
+    }
 
     /// <summary>Reads the open M map's NPCs; false when it isn't open.</summary>
     private bool ReadMapNpcsNow(WorldSnapshot world)
