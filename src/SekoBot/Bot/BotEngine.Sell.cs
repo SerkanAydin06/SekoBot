@@ -114,6 +114,7 @@ internal sealed partial class BotEngine
             finally
             {
                 _selling = false;
+                _sellStage = "";
                 LetGoTurn();
             }
             _log(message);
@@ -139,6 +140,7 @@ internal sealed partial class BotEngine
         var at = new Vec3(npc.X, npc.Y, npc.Z);
         string name = NpcBook.Shops.GetValueOrDefault(npc.Vnum, "Market");
         _log($"💰 Çantada satılacak {toSell} eşya var: {at.DistanceXY(start.Player) / 100:0} m ötedeki {name} NPC'sine gidiliyor.");
+        _sellStage = $"💰 Satmaya gidiliyor: {name} ({at.DistanceXY(start.Player) / 100:0} m)";
         // Walking takes no mouse: the turn is let go meanwhile, so the other bots can empty their bags
         // (seen: two bots waiting 3–4 minutes while one walked to the NPC). Taken again at the shop.
         ShrinkAfterWork(); // grown for emptying the bag just before: back in its place for the walk
@@ -155,6 +157,7 @@ internal sealed partial class BotEngine
             if (World is { } away && away.MapName == start.MapName && away.Player.DistanceXY(home) > 600)
             {
                 _log($"💰 Satış olmadı; alana dönülüyor ({away.Player.DistanceXY(home) / 100:0} m).");
+                _sellStage = "💰 Satış olmadı; alana dönülüyor";
                 await WalkRouteAsync(input, home, WalkLimit(away.Player, home), token, near: 300);
             }
             return message;
@@ -207,6 +210,7 @@ internal sealed partial class BotEngine
         }
         int reopened = 0, soldBefore = 0;
         _log($"💰 {name} dükkanı açıldı; eşyalar tek tek satılıyor (Sat → Evet).");
+        _sellStage = $"💰 {name} dükkanında eşyalar satılıyor";
 
         // Sell, item by item, with the game in front the whole time (not back and forth).
         var cleaner = new BagCleaner { Selling = true };
@@ -267,6 +271,7 @@ internal sealed partial class BotEngine
         await TidyAsync(input, profile, token);
         ShrinkAfterWork();
         FrontTurn.Shared.LetGo();
+        _sellStage = "💰 Satış bitti; alana dönülüyor";
         await WalkRouteAsync(input, home, WalkLimit(World?.Player ?? at, home), token, near: 300);
         if (sold == 0)
             return Failed("satılacak eşya satılamadı" + (cleaner.Problem is { } why ? $" ({why})" : ""));

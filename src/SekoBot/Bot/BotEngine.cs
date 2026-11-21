@@ -79,6 +79,33 @@ internal sealed partial class BotEngine : IDisposable
     /// <summary>The game's login / character screen (map "loginMain"): kicked out — maintenance or the connection lost.</summary>
     internal static bool IsLoginScreen(string map) => map.Contains("login", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>The selling trip's step in words (walking there, selling, walking back).</summary>
+    private volatile string _sellStage = "";
+
+    /// <summary>
+    /// What the bot is doing now, in words, for the status line and the mini bar: the engine's own work first
+    /// (selling, throwing items, the M map, changing channel…), else the brain's (walking to the area, a mob…).
+    /// </summary>
+    public string ActivityText
+    {
+        get
+        {
+            if (_selling)
+                return _sellStage.Length > 0 ? _sellStage : "💰 Satış yapılıyor";
+            if (_holdRevive)
+                return "⚔ Öldü: öldüren oyuncunun gitmesi bekleniyor";
+            if (_channelSince != null)
+                return "🔀 Kanal değiştiriliyor";
+            if (_cleaner.Active)
+                return "🗑 Envanterdeki eşyalar atılıyor";
+            if (_tidying)
+                return "Ekranda açık kalan pencereler kapatılıyor";
+            if (_mapPeekSince != null || _mapPeekReadAt != null)
+                return "🗺 M haritası okunuyor";
+            return _brain.Doing ?? _brain.Phase.ToTurkish();
+        }
+    }
+
     /// <summary>The bot (or fishing) was working when the game fell to the login screen: only then is the
     /// login tried again by itself (a bot left standing has no reason to log in).</summary>
     public bool KickedWhileWorking { get; set; }
@@ -291,7 +318,7 @@ internal sealed partial class BotEngine : IDisposable
             }
             // Off to a market NPC to sell: that trip drives the character, the brain waits.
             else
-                actions = _selling ? [] : PvpTick(state, Profile) ?? WhisperTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);
+                actions = _selling ? [] : PvpTick(state, Profile) ?? CrowdTick(state, Profile) ?? WhisperTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);
             phase = _brain.Phase;
             // Throwing items away: the game stays in front for all the clicks, not back and forth for each.
             _input.HoldFront = _cleaner.Active;

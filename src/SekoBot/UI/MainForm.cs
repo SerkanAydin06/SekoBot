@@ -2333,10 +2333,10 @@ internal sealed partial class MainForm : Form
             _statTime.Text = s.BotUptime.ToString(@"hh\:mm\:ss");
             _statDeaths.Text = s.Deaths.ToString("N0");
             _statDeaths.ForeColor = s.Deaths > 0 ? Theme.Red : Theme.Text;
-            string line = (s.DryRun ? "KURU ÇALIŞMA · " : "") + s.Phase.ToTurkish() + "  ·  " + s.Area;
+            string line = (s.DryRun ? "KURU ÇALIŞMA · " : "") + _engine.ActivityText + "  ·  " + s.Area;
             if (!_engine.StatsOk)
                 // Without HP/MP the bot can't drink potions: make that impossible to miss.
-                SetLine("⚠ HP/MP okunamıyor, iksir içilmiyor  ·  " + s.Phase.ToTurkish(), Theme.Red);
+                SetLine("⚠ HP/MP okunamıyor, iksir içilmiyor  ·  " + _engine.ActivityText, Theme.Red);
             else
                 SetLine(line, s.DryRun ? Theme.Yellow : s.Phase == BotPhase.Dead ? Theme.Red : Theme.Green);
         }

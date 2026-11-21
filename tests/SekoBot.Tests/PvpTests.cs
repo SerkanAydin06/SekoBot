@@ -18,3 +18,29 @@ public class PvpTests
         Assert.False(BotEngine.LooksHostile(P(empire: 2), ownEmpire: 0)); // own kingdom not known
     }
 }
+
+public class CrowdTests
+{
+    private static BotEngine.BotPlace At(int n, int channel, double x, string map = "c2", bool farming = true) =>
+        new(n, "B" + n, map, channel, x, 1000, farming, DateTime.UtcNow);
+
+    [Fact]
+    public void Of_three_of_ours_in_one_place_the_lowest_number_stays_the_others_move()
+    {
+        BotEngine.BotPlace[] all = [At(2, 5, 1000), At(4, 5, 1500), At(5, 5, 2000)];
+        bool Moves(BotEngine.BotPlace me) => BotEngine.ShouldMove(me, all.Where(o => o.Number != me.Number));
+        Assert.False(Moves(all[0]));
+        Assert.True(Moves(all[1]));
+        Assert.True(Moves(all[2]));
+    }
+
+    [Fact]
+    public void Another_channel_another_map_far_away_or_not_farming_is_no_crowd()
+    {
+        var me = At(4, 5, 1000);
+        Assert.False(BotEngine.ShouldMove(me, [At(2, 3, 1000)]));
+        Assert.False(BotEngine.ShouldMove(me, [At(2, 5, 1000, "c3")]));
+        Assert.False(BotEngine.ShouldMove(me, [At(2, 5, 1000 + BotEngine.SamePlace + 100)]));
+        Assert.False(BotEngine.ShouldMove(me, [At(2, 5, 1000, farming: false)]));
+    }
+}

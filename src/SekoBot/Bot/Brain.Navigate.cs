@@ -240,6 +240,7 @@ internal sealed partial class Brain
         if (length <= 0)
             return false;
         SetMoves(Around(state, sx, sy, length * 0.38, p, to: f.Position), p, actions, refresh);
+        Did("Takip edilen oyuncunun peşinden gidiliyor");
         if (Phase != BotPhase.Moving)
             Enter(BotPhase.Moving, state.Time);
         _movingSince = Never;
@@ -487,6 +488,7 @@ internal sealed partial class Brain
         // Around the other mobs on the way (the one gone for doesn't count).
         int goal = chosen?.Id ?? 0;
         SetMoves(Around(state, dx, dy, radius * 0.5, p, m => m.Id == goal, chosen?.Position), p, actions, refresh);
+        Did("Moba yürüyor");
         if (Phase != BotPhase.Moving)
         {
             Enter(BotPhase.Moving, now);
@@ -602,6 +604,7 @@ internal sealed partial class Brain
             actions.Add(new NoteAction($"Farm alanına {_travelLimitMs / 60_000:0} dakikadır gidiliyor, {distance / 100:0} m kaldı; gitmeye devam ediliyor."));
         }
         Traveling = true;
+        Did($"🚶 Kayıtlı farm alanına gidiliyor ({distance / 100:0} m)");
         if (!_travelNoted)
         {
             _travelNoted = true;
@@ -909,6 +912,7 @@ internal sealed partial class Brain
         if (Phase != BotPhase.Looting)
             Enter(BotPhase.Looting, now);
         _movingSince = Never;
+        Did(drop.Special ? "🎁 Özel eşyaya gidiliyor" : "Yerdeki eşya alınıyor");
         return true;
     }
 
