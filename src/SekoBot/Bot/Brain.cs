@@ -75,6 +75,7 @@ internal sealed partial class Brain
         var now = state.Time;
         var actions = new List<BotAction>();
         NoteDropAges(state);
+        LeaveBadDropSpots(state);
         HearGame(state, actions);
         NoteWalking(state);
         _wantedDropsAround = state.Drops.Any(d => CleanPick(state, d));

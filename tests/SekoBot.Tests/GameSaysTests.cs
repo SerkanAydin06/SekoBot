@@ -80,7 +80,27 @@ public class GameSaysTests
         brain.Start(TimeSpan.Zero);
         var all = Loot(brain, 0, Brain.DropGiveUpMs + 2000, [new(7, new Point(Center.X - 300, Center.Y))]);
         Assert.DoesNotContain(all, a => a is NoteAction n && n.Text.Contains("başkasının"));
-        Assert.Contains(all, a => a is NoteAction n && n.Text.Contains("tekrar denenecek"));
+        Assert.Contains(all, a => a is NoteAction n && n.Text.Contains("bir kez daha denenecek"));
+    }
+
+    [Fact]
+    public void An_item_not_reached_twice_is_left_for_good_and_so_is_its_spot()
+    {
+        // Seen: an item in a tree, the bot back at it every 20 s, stuck on the tree.
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = true, PullGroups = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        var tree = new Vec3(5000, 5000, 0);
+        GroundSpot[] inTree = [new(7, new Point(Center.X - 300, Center.Y), At: tree)];
+        double end = Brain.DropGiveUpMs + 2000 + Brain.DropRetryMs + Brain.DropGiveUpMs + 2000;
+        var all = Loot(brain, 0, end, inTree);
+        Assert.Contains(all, a => a is NoteAction n && n.Text.Contains("iki kez ulaşılamadı"));
+        // Left for good: no more going for it.
+        var later = Loot(brain, end, end + 60_000, inTree);
+        Assert.DoesNotContain(later, a => a is NoteAction n && n.Text.Contains("ulaşılamadı"));
+        // Another item fallen into the same tree is left at once.
+        var another = Loot(brain, end + 60_000, end + 70_000, [new(8, new Point(Center.X - 300, Center.Y), At: tree with { X = tree.X + 50 })]);
+        Assert.DoesNotContain(another, a => a is KeyTapAction k && k.Key == p.Keys.Pickup);
     }
 
     [Fact]

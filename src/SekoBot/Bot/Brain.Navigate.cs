@@ -697,6 +697,45 @@ internal sealed partial class Brain
 
     /// <summary>Going for an item this long without getting it: left for DropRetryMs, then tried again.</summary>
     internal const int DropGiveUpMs = 8000, DropRetryMs = 20000;
+    /// <summary>
+    /// An item not reached twice is left for good (seen: an item inside a tree, the bot back at it every 20 s,
+    /// stuck on the tree); where it lies is a place items aren't gone for (<see cref="BadDropSpotMs"/>, within
+    /// <see cref="BadDropSpotRange"/>): another item falling into the same tree is left at once.
+    /// </summary>
+    internal const int DropTries = 2, BadDropSpotMs = 30 * 60_000;
+    internal const double BadDropSpotRange = 150;
+    private readonly Dictionary<long, int> _dropFails = [];
+    private readonly List<(Vec3 At, TimeSpan Until)> _badDropSpots = [];
+
+    /// <summary>The item couldn't be reached: left for a while, or for good the second time (its place noted).</summary>
+    private void DropFailed(GroundSpot drop, TimeSpan now, List<BotAction> actions)
+    {
+        int fails = _dropFails[drop.Id] = _dropFails.GetValueOrDefault(drop.Id) + 1;
+        if (fails < DropTries)
+        {
+            _ignoredDrops[drop.Id] = now + Ms(DropRetryMs);
+            actions.Add(new NoteAction("Yerdeki eşyaya ulaşılamadı; biraz sonra bir kez daha denenecek."));
+            return;
+        }
+        _ignoredDrops[drop.Id] = now + Ms(BadDropSpotMs);
+        if (drop.At is Vec3 at)
+            _badDropSpots.Add((at, now + Ms(BadDropSpotMs)));
+        actions.Add(new NoteAction("Yerdeki eşyaya iki kez ulaşılamadı (ağacın, kayanın içinde olabilir); bırakıldı, o noktaya düşenler de alınmayacak."));
+    }
+
+    /// <summary>Items lying where one couldn't be reached before are left at once.</summary>
+    private void LeaveBadDropSpots(GameState state)
+    {
+        var now = state.Time;
+        _badDropSpots.RemoveAll(s => now >= s.Until);
+        if (_badDropSpots.Count == 0)
+            return;
+        foreach (var d in state.Drops)
+            if (d.At is Vec3 at && !_ignoredDrops.ContainsKey(d.Id) && _badDropSpots.Any(s => s.At.DistanceXY(at) <= BadDropSpotRange))
+                _ignoredDrops[d.Id] = now + Ms(BadDropSpotMs);
+        if (_dropFails.Count > 200)
+            _dropFails.Clear();
+    }
     /// <summary>An item the game said isn't ours is left this long (by then it is everyone's, or gone).</summary>
     internal const int NotOursMs = 180_000;
     /// <summary>Gathering only (attack off): someone else's item (the group's killer) is free for everyone
@@ -819,8 +858,7 @@ internal sealed partial class Brain
         // isn't taken after a while (something in the way): left for a little, then tried again.
         if (_dropTrying > Ms(drop.Special ? 20000 : DropGiveUpMs))
         {
-            _ignoredDrops[drop.Id] = now + Ms(DropRetryMs);
-            actions.Add(new NoteAction("Yerdeki eşyaya ulaşılamadı; biraz sonra tekrar denenecek."));
+            DropFailed(drop, now, actions);
             return false;
         }
         // Nothing to hit here: let go of the attack key, straight to the item.
