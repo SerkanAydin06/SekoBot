@@ -235,6 +235,19 @@ internal sealed partial class BotEngine
         _log($"💰 {name} dükkanı açıldı; eşyalar tek tek satılıyor (Sat → Evet).");
         _sellStage = $"💰 {name} dükkanında eşyalar satılıyor";
 
+        // Potions first, while the shop is surely open (seen: closed after the sale and the buying skipped).
+        string bought = "";
+        if (PotionShops.Contains(npc.Vnum) && ReadBagNow() is { NpcShop: > 0 })
+        {
+            _sellStage = $"🧪 {name} dükkanından iksir alınıyor";
+            input.HoldFront = true;
+            try { bought = await BuyPotionsAsync(input, profile, token); }
+            finally { input.HoldFront = false; }
+            if (bought.Length > 0)
+                _log($"🧪 İksir alındı: {bought}.");
+            _sellStage = $"💰 {name} dükkanında eşyalar satılıyor";
+        }
+
         // Sell, item by item, with the game in front the whole time (not back and forth).
         var cleaner = new BagCleaner { Selling = true };
         cleaner.Start(_clock.Elapsed);
@@ -285,14 +298,15 @@ internal sealed partial class BotEngine
         finally { input.HoldFront = false; }
         _sessionItems.Save();
         int sold = soldBefore + cleaner.Thrown;
-        // Potions filled up at the shop that sells them.
-        string bought = "";
-        if (PotionShops.Contains(npc.Vnum) && ReadBagNow() is { NpcShop: > 0 })
+        // Still short (the bag was full before the sale): once more, when the shop is still open.
+        if (PotionShops.Contains(npc.Vnum) && World is { } after && PotionNeeds(after, profile, topUp: true).Count > 0 && ReadBagNow() is { NpcShop: > 0 })
         {
-            _sellStage = $"🧪 {name} dükkanından iksir alınıyor";
-            bought = await BuyPotionsAsync(input, profile, token);
-            if (bought.Length > 0)
-                _log($"🧪 İksir alındı: {bought}.");
+            string more = await BuyPotionsAsync(input, profile, token);
+            if (more.Length > 0)
+            {
+                _log($"🧪 İksir alındı: {more}.");
+                bought = bought.Length > 0 ? bought + ", " + more : more;
+            }
         }
 
         // Close the shop (the inventory was closed by the cleaner), then back to the place.
