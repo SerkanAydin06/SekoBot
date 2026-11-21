@@ -2190,6 +2190,13 @@ internal sealed partial class MainForm : Form
         ProfileStore.Character = name;
         SaveProfile();
         ReloadSettings();
+        // The character's own page (its market / farm / fishing) — unless something runs on this one now.
+        int mode = Math.Clamp(_profile.UiMode, FarmMode, FishingMode);
+        if (mode != _mode && _engine is not { BotRunning: true } && _engine is not { ScanningMarket: true } && _engine is not { Fishing: true })
+        {
+            SetMode(mode, save: false);
+            WriteLog($"👤 {name}: bu karakterin sayfası açıldı ({(mode == MarketMode ? "Pazar" : mode == FishingMode ? "Balık" : "Farm")}).");
+        }
         if (known)
         {
             WriteLog($"👤 {name}: bu karakterin kendi ayarları yüklendi (toplanacak mob {_profile.PullMaxMobs}, HP iksiri %{_profile.PotionHpBelow * 100:0}" +
