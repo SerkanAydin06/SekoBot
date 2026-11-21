@@ -303,6 +303,8 @@ internal sealed partial class BotEngine
 
     /// <summary>Mobs on the way are passed this far off (world units, 3 m).</summary>
     internal const double PassMobsBy = 300;
+    /// <summary>A town NPC is passed this far off (world units): not walked into.</summary>
+    internal const double PassNpcsBy = 120;
 
     /// <summary>
     /// A long walk (to a market NPC and back) on a planned route: around the map's walls, houses, rocks
@@ -366,11 +368,13 @@ internal sealed partial class BotEngine
                     continue;
                 }
                 last = me;
-                if (way == null || _clock.Elapsed - wayAt > TimeSpan.FromSeconds(1))
+                // Far off the way is found less often (across the map it takes a moment: worked out aside, the walking goes on).
+                if (way == null || _clock.Elapsed - wayAt > TimeSpan.FromSeconds(me.DistanceXY(target) > 6000 ? 4 : 1))
                 {
                     // A way walked before (over the slopes up to the town…) first; else drawn around what is known.
                     walked = _walked.Way(world.MapName, me, target, stuckHere);
-                    way = walked ?? Route(world, target, stuckHere);
+                    var avoid = stuckHere.ToList();
+                    way = walked ?? await Task.Run(() => Route(world, target, avoid), token);
                     wayAt = _clock.Elapsed;
                     if (walked != null && !_toldWalkedWay)
                     {
@@ -421,7 +425,10 @@ internal sealed partial class BotEngine
                 .Select(p => new MapTerrain.Circle(p.X, p.Y, NoGoMap.Radius * 0.6)))
             .Concat(stuckHere).ToList();
         var mobs = world.Mobs.Where(m => m.Hp > 0 && m.Position.DistanceXY(me) < reach)
-            .Select(m => new MapTerrain.Circle(m.Position.X, m.Position.Y, PassMobsBy)).ToList();
+            .Select(m => new MapTerrain.Circle(m.Position.X, m.Position.Y, PassMobsBy))
+            // The town's NPCs too (the one we go to stands in the goal's circle and doesn't count).
+            .Concat((world.TownNpcs ?? []).Where(n => n.Position.DistanceXY(me) < reach)
+                .Select(n => new MapTerrain.Circle(n.Position.X, n.Position.Y, PassNpcsBy))).ToList();
         return map.WayTo(me, target, avoid: [.. learned, .. mobs])
                ?? map.WayTo(me, target, avoid: learned)
                ?? map.WayTo(me, target, avoid: stuckHere)

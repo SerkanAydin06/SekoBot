@@ -63,6 +63,24 @@ internal sealed class WalkedPaths
         }
     }
 
+    /// <summary>Every walked link on the map: the two cells' middles (world units).</summary>
+    public List<(double AX, double AY, double BX, double BY)> Links(string map)
+    {
+        lock (_gate)
+        {
+            if (!_maps.TryGetValue(map, out var links))
+                return [];
+            var all = new List<(double, double, double, double)>(links.Count);
+            foreach (string link in links)
+            {
+                var p = link.Split(',');
+                if (p.Length == 4 && int.TryParse(p[0], out int a) && int.TryParse(p[1], out int b) && int.TryParse(p[2], out int c) && int.TryParse(p[3], out int d))
+                    all.Add(((a + 0.5) * Cell, (b + 0.5) * Cell, (c + 0.5) * Cell, (d + 0.5) * Cell));
+            }
+            return all;
+        }
+    }
+
     public int Count(string map)
     {
         lock (_gate)

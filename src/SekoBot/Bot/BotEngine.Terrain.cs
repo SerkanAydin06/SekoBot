@@ -54,6 +54,7 @@ internal sealed partial class BotEngine
                 read = [];
             if (read.Count > 0)
             {
+                ReadSlopes(map);
                 _terrainLevel = level;
                 _terrainMap = map;
                 int before = _terrain.Of(map)?.Blocks.Count ?? -1;
@@ -67,6 +68,7 @@ internal sealed partial class BotEngine
         {
             _walkedSeenAt = now;
             _walked.Saw(map, world.Player);
+            _terrain.SlopesOf(map)?.Walked(world.Player.X, world.Player.Y);
         }
         if (now - _walkedSavedAt >= TimeSpan.FromSeconds(30))
         {
@@ -83,6 +85,26 @@ internal sealed partial class BotEngine
             _terrainSavedAt = now;
             SaveTerrainChanges(world);
         }
+    }
+
+    /// <summary>
+    /// The map's ground heights, read from the game once per map: where it is too steep to walk (mountain sides,
+    /// hills) is kept off by every way found. What the characters walked before is walkable whatever the heights say.
+    /// </summary>
+    private void ReadSlopes(string map)
+    {
+        if (_terrain.SlopesOf(map) != null)
+            return;
+        HeightGrid? grid;
+        lock (_worldGate)
+            grid = _world?.ReadHeights(map);
+        if (grid == null)
+            return;
+        var slopes = new SlopeMap(grid);
+        foreach (var (ax, ay, bx, by) in _walked.Links(map))
+            slopes.WalkedLine(ax, ay, bx, by, 30);
+        _terrain.SetSlopes(slopes);
+        _log($"🗺 {map} haritasının yükseklikleri okundu: dik yamaç ve tepeler (haritanın %{slopes.SteepShare * 100:0}'i) yol bulunurken dolaşılıyor.");
     }
 
     private void SaveTerrain(MapTerrain terrain, Vec3? me)
