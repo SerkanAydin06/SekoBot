@@ -1,3 +1,4 @@
+using SekoBot.Capture;
 using SekoBot.Input;
 using SekoBot.Memory;
 
@@ -37,6 +38,44 @@ internal sealed partial class BotEngine
         _loginInput ??= new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
         var at = new Point(button.X + button.Width / 2, button.Y + button.Height / 2);
         _loginInput.Enqueue(new ClickAction(at, Slow: true, Fast: true, StillWanted: () => CharSelectNow() is { Start: not null }));
+    }
+
+    /// <summary>
+    /// The game's own small update question at its start ("Başlamadan önce ek kaynak indirmesi gerekiyor. İndirme
+    /// Boyutu: 62MB" — Onayla / Çıkış; seen 2026-11-21 after v1.3.0), told from the picture (the game isn't readable
+    /// yet then): a dark box in the middle, two lines of text, two buttons with a word each. Where "Onayla" is; null
+    /// when the question isn't showing.
+    /// </summary>
+    public Point? UpdateQuestion() => WithLatestFrame(UpdateQuestionIn);
+
+    internal static Point? UpdateQuestionIn(Frame frame)
+    {
+        int w = frame.Width, h = frame.Height;
+        if (w < 400 || h < 300)
+            return null;
+        // The game's screens are drawn for a 480-high picture at the least (bigger with the window).
+        double s = Math.Max(1, Math.Min(w, h) / 480.0);
+        int cx = w / 2, cy = h / 2;
+        int Bright(int x0, int y0, int x1, int y1)
+        {
+            int n = 0;
+            for (int y = cy + (int)(y0 * s); y < cy + (int)(y1 * s); y++)
+                for (int x = cx + (int)(x0 * s); x < cx + (int)(x1 * s); x++)
+                    if (x >= 0 && y >= 0 && x < w && y < h && frame.Pixel(x, y) is var (b, g, r) && r > 200 && g > 200 && b > 200)
+                        n++;
+            return n;
+        }
+        double area = s * s;
+        bool shown = Bright(-90, 22, -22, 46) >= 30 * area && Bright(22, 22, 90, 46) >= 20 * area
+                     && Bright(-95, -45, 95, -2) >= 300 * area && Bright(-15, 22, 15, 46) <= 3 * area;
+        return shown ? new Point(cx - (int)(56 * s), cy + (int)(34 * s)) : null;
+    }
+
+    /// <summary>Presses a point of the game (client pixels), e.g. "Onayla" on its update question.</summary>
+    public void PressAt(Point at)
+    {
+        _loginInput ??= new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
+        _loginInput.Enqueue(new ClickAction(at, Slow: true, Fast: true));
     }
 
     /// <summary>Presses the login button (drawn at <paramref name="button"/>, client pixels): the game in front a moment.</summary>
