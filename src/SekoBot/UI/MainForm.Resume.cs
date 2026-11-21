@@ -160,6 +160,12 @@ internal sealed partial class MainForm
         _resume = null;
         _inGameSince = DateTime.MinValue;
         _wrongCharTold = _outdatedTold = false;
+        // A game started again opens big: put in its place with the others ("Diz") before the work goes on.
+        if (_gameRestarted)
+        {
+            _gameRestarted = false;
+            ArrangeAll();
+        }
         StartWork(e, resume.Mode);
     }
 
@@ -211,6 +217,19 @@ internal sealed partial class MainForm
     {
         if (_resume == null || _gameFolder == null || !_profile.AutoLogin || _gameGoneAt == DateTime.MinValue)
             return;
+        // Our folder's launcher up (started by us, the user or the game itself): its "MOBILE2'Yİ BAŞLAT" pressed once
+        // it is ready (seen 2026-11-21: the launcher updated the game, then waited on that button).
+        if (OurLauncher() is { } launcherWindow)
+        {
+            if (!_launcherStarted)
+            {
+                _launcherStarted = true;
+                _launcherAt = now;
+            }
+            PressLauncherStart(launcherWindow, now);
+            if (now - _launcherAt < LaunchWait)
+                return;
+        }
         if (_launcherStarted)
         {
             if (now - _launcherAt < LaunchWait)
@@ -242,6 +261,7 @@ internal sealed partial class MainForm
             _launcherStarted = true;
             _launcherAt = now;
             _launches++;
+            _gameRestarted = true;
             WriteLog($"🔄 Oyun başlatıcısı açıldı ({Path.GetFileName(_gameFolder)}): güncelleme varsa yüklenip oyun açılacak.");
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
@@ -250,6 +270,100 @@ internal sealed partial class MainForm
             LetGoGameTurn();
             _gameGoneAt = DateTime.MinValue;
         }
+    }
+
+    private DateTime _launcherPressedAt = DateTime.MinValue, _launcherSizedAt = DateTime.MinValue;
+    /// <summary>This SekoBot's game was started again (opens big): arranged with the others once back in the game.</summary>
+    private bool _gameRestarted;
+
+    /// <summary>The window of the launcher running from this SekoBot's game folder; null when none.</summary>
+    private nint? OurLauncher()
+    {
+        if (_gameFolder == null)
+            return null;
+        foreach (var process in Process.GetProcessesByName("Mobile2Launcher"))
+            using (process)
+            {
+                if (process.MainWindowHandle != 0 && GameFolderOf((uint)process.Id) is { } folder
+                    && folder.Equals(_gameFolder, StringComparison.OrdinalIgnoreCase))
+                    return process.MainWindowHandle;
+            }
+        return null;
+    }
+
+    /// <summary>Where "MOBILE2'Yİ BAŞLAT" is on the launcher (share of its window: measured on its 640 × 480 window).</summary>
+    internal static readonly PointF LauncherStart = new(0.78f, 0.62f);
+
+    /// <summary>
+    /// "MOBILE2'Yİ BAŞLAT" pressed when it shows ready (its blue), at most once a minute — the game coming up from
+    /// it is waited for (a second press would start a second game).
+    /// </summary>
+    private void PressLauncherStart(nint window, DateTime now)
+    {
+        if (now - _launcherAt < TimeSpan.FromSeconds(4) || now - _launcherPressedAt < TimeSpan.FromSeconds(60) || GameFromOurFolderRunning())
+            return;
+        if (!Win32.GetClientRect(window, out var client) || client.Right < 200 || client.Bottom < 150)
+            return;
+        // The launcher opens bigger than it was measured at (the user: "diz ile bu hale getirmek lazım"): made
+        // 640 × 480 where it stands first, then looked at a moment later.
+        if (client.Right != 640 || client.Bottom != 480)
+        {
+            if (_launcherSizedAt != DateTime.MinValue && now - _launcherSizedAt < TimeSpan.FromSeconds(3))
+                return;
+            var seen = WindowLayout.Visible(window);
+            Win32.SetWindowPos(window, 0, Math.Max(0, seen.Left), Math.Max(0, seen.Top), 640 + (seen.Width - client.Right), 480 + (seen.Height - client.Bottom), 0x0014);
+            _launcherSizedAt = now;
+            return;
+        }
+        var point = new Win32.POINT { X = (int)(client.Right * LauncherStart.X), Y = (int)(client.Bottom * LauncherStart.Y) };
+        Win32.ClientToScreen(window, ref point);
+        // Brought forward, the button looked at, pressed.
+        var alt = new Win32.INPUT { type = Win32.INPUT_KEYBOARD };
+        alt.u.ki.wVk = 0x12;
+        var altUp = alt;
+        altUp.u.ki.dwFlags = Win32.KEYEVENTF_KEYUP;
+        Win32.SendInput(2, [alt, altUp], System.Runtime.InteropServices.Marshal.SizeOf<Win32.INPUT>());
+        Win32.SetForegroundWindow(window);
+        System.Threading.Thread.Sleep(400);
+        Color colour;
+        using (var bmp = new Bitmap(1, 1))
+        {
+            using (var g = Graphics.FromImage(bmp))
+                g.CopyFromScreen(point.X, point.Y, 0, 0, new Size(1, 1));
+            colour = bmp.GetPixel(0, 0);
+        }
+        // Ready: the button's blue (updating it is grey / dim).
+        if (!(colour.B > 150 && colour.B > colour.R + 60))
+            return;
+        using (SekoBot.Input.MouseGuard.Hold())
+        {
+            Win32.GetCursorPos(out var previous);
+            Win32.SetCursorPos(point.X, point.Y);
+            System.Threading.Thread.Sleep(150);
+            var down = new Win32.INPUT { type = Win32.INPUT_MOUSE };
+            down.u.mi.dwFlags = Win32.MOUSEEVENTF_LEFTDOWN;
+            var up = down;
+            up.u.mi.dwFlags = Win32.MOUSEEVENTF_LEFTUP;
+            Win32.SendInput(1, [down], System.Runtime.InteropServices.Marshal.SizeOf<Win32.INPUT>());
+            System.Threading.Thread.Sleep(80);
+            Win32.SendInput(1, [up], System.Runtime.InteropServices.Marshal.SizeOf<Win32.INPUT>());
+            System.Threading.Thread.Sleep(150);
+            Win32.SetCursorPos(previous.X, previous.Y);
+        }
+        _launcherPressedAt = now;
+        _gameRestarted = true;
+        WriteLog($"🔄 Başlatıcıda 'MOBILE2'Yİ BAŞLAT'a basıldı ({Path.GetFileName(_gameFolder)}); oyun açılıyor.");
+    }
+
+    /// <summary>A game process (the game or its loader) runs from this SekoBot's folder.</summary>
+    private bool GameFromOurFolderRunning()
+    {
+        foreach (string name in new[] { "mobilemmo-Win64-Shipping", "Mobile2.bin", "Mobile2" })
+            foreach (var process in Process.GetProcessesByName(name))
+                using (process)
+                    if (SameFolder((uint)process.Id))
+                        return true;
+        return false;
     }
 
     /// <summary>Connected to a game again: logging in is done for it (the login button), the turn kept until in the game.</summary>
