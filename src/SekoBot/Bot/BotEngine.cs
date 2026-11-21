@@ -318,6 +318,10 @@ internal sealed partial class BotEngine : IDisposable
             }
             // Off to a market NPC to sell: that trip drives the character, the brain waits.
             else
+                // Dead on the way to the shop (seen: VaSPeN lay dead while the trip "walked" on for 5 minutes), or
+                // nearly so with mobs on it: the trip is given up, the brain revives / fights (the sale is tried later).
+                if (_selling && (state.Dead || state.Hp is < SellAbortHp && (state.Attackers.Count > 0 || state.Targets.Any(t => t.AttacksMe))))
+                    AbortSellTrip(state.Dead ? "karakter öldü" : "can çok azaldı, moblar saldırıyor");
                 actions = _selling ? [] : PvpTick(state, Profile) ?? CrowdTick(state, Profile) ?? WhisperTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);
             phase = _brain.Phase;
             // Throwing items away: the game stays in front for all the clicks, not back and forth for each.

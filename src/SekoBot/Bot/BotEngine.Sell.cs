@@ -21,6 +21,23 @@ internal sealed partial class BotEngine
     /// </summary>
     internal const double SellTripRange = 100000;
 
+    /// <summary>HP below this with mobs on us during a trip: the trip is given up to fight.</summary>
+    internal const double SellAbortHp = 0.35;
+
+    /// <summary>The trip given up (dead, or about to be): its task stops, the brain takes over at once.</summary>
+    private void AbortSellTrip(string why)
+    {
+        if (_sellCts is not { IsCancellationRequested: false } cts)
+            return;
+        _log($"💰 Satış gezisi bırakıldı ({why}); bot kendisi dövüşüyor / diriliyor, satış biraz sonra yeniden denenecek.");
+        cts.Cancel();
+        _selling = false;
+        _sellStage = "";
+        _sellFailedAt = _clock.Elapsed;
+        _sellFailsInRow++;
+        LetGoTurn();
+    }
+
     /// <summary>How long walking to <paramref name="to"/> may take: 3 minutes, and a minute more for every 100 m.</summary>
     internal static TimeSpan WalkLimit(Vec3 from, Vec3 to) => TimeSpan.FromMinutes(3 + from.DistanceXY(to) / 10000);
     /// <summary>After a trip that sold nothing (shop didn't open…): no new one this long.</summary>
