@@ -567,6 +567,14 @@ internal sealed partial class GameWorldReader : IDisposable
         ("m2data_C", "heiMapStartY", 0),
         ("m2data_C", "heiMapEndX", 0),
         // The M map (open only while shown) and how its picture lies over the world; 0: found by name only.
+        // The character select (seen 2026-11-21) and the game's "version old" flag; 0: found by name only.
+        ("charSelectNew_C", "Index", 0),
+        ("charSelectNew_C", "owningCharPanel", 0x3A8),
+        ("owningCharPanel_C", "Chars", 0),
+        ("selectebleOwningChar_C", "Index", 0),
+        ("selectebleOwningChar_C", "charData.playerid", 0),
+        ("c_Button_charSelect_C", "langText", 0),
+        ("m2data_C", "versionOld", 0),
         ("UI_C", "bigMap", 0),
         ("bigMap_C", "MapImgSize", 0),
         ("bigMap_C", "dotArea", 0x278),

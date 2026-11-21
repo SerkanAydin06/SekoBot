@@ -15,7 +15,7 @@ namespace SekoBot.UI;
 /// Layout: header (connection) → control bar (Start F10 / Stop F11, one-line status) →
 /// live preview + session stats → settings tabs + log.
 /// </summary>
-internal sealed class MainForm : Form
+internal sealed partial class MainForm : Form
 {
     private const int CsDropShadow = 0x00020000;
 
@@ -966,7 +966,7 @@ internal sealed class MainForm : Form
 
         // ── Timers & hotkeys ─────────────────────────────────────
         _scanTimer = new System.Windows.Forms.Timer { Interval = 2000 };
-        _scanTimer.Tick += (_, _) => { if (_engine == null) RefreshWindows(); else LoginTick(); };
+        _scanTimer.Tick += (_, _) => { if (_engine == null) RefreshWindows(); else LoginTick(); ResumeTick(); };
         _previewTimer = new System.Windows.Forms.Timer { Interval = 33 };
         _previewTimer.Tick += (_, _) => RenderPreview();
         VisibleChanged += (_, _) => _engine?.ShowingPreview(Visible);
@@ -1708,7 +1708,8 @@ internal sealed class MainForm : Form
             _preview.Invalidate();
 
             // Each SekoBot takes a game no other SekoBot is connected to (the oldest one first).
-            var free = ready.Where(w => !Instance.GameTaken(w.ProcessId)).OrderBy(w => GameStarted(w.ProcessId)).ToList();
+            // Waiting for its own game (closed, being updated): only the one from its own folder.
+            var free = ready.Where(w => !Instance.GameTaken(w.ProcessId) && MayTake(w)).OrderBy(w => GameStarted(w.ProcessId)).ToList();
             if (!_autoAttached && free.Count > 0 && (free.Count == 1 || _games.Count > 1))
             {
                 _autoAttached = true;
@@ -1742,7 +1743,10 @@ internal sealed class MainForm : Form
                 // The game closed: connect again by itself when it is back. (Not when capture
                 // failed on a live window, or it would reconnect and fail in a loop.)
                 if (!WindowService.IsAlive(engine.Window, out _))
+                {
                     _autoAttached = false;
+                    GameGone(engine);
+                }
                 Disconnect(message);
             });
             engine.AreaScanFinished += _ => PostUi(() => { SaveProfile(); UpdateControls(); UpdateStats(); });
@@ -1763,6 +1767,7 @@ internal sealed class MainForm : Form
             _frameSequence = 0;
             _gameMinimized = false;
             _autoAttached = true;
+            Reconnected(engine);
             _previewTimer.Start();
             SetStatus($"{window.Title}'e bağlı", Theme.Green);
             WriteLog($"Bağlandı: {window.Title} (PID {window.ProcessId}, {engine.Stats.CaptureName}).");
