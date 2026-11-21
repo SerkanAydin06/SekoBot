@@ -106,8 +106,10 @@ internal sealed partial class BotEngine
             bool mobClose = world.Mobs.Any(m => m.Hp > 0 && m.Position.DistanceXY(me) <= 1000);
             // Only with HP really going down (a player merely having us selected is no attack; seen: a channel change
             // for an attack nobody saw): targeted and hurt, or hurt a lot with no mob anywhere near.
-            bool byPlayer = hitters.Any(pl => pl.TargetsMe) && lost >= 0.1 && (now - _mobHitAt > MobHitRecently || lost >= 0.35)
-                            || lost >= 0.25 && now - _mobHitAt > MobHitRecently && !mobClose && hitters.Count > 0;
+            // Never while mobs are on us: their hits can't be told from a player's (seen: VaSPeN at 59 % among mobs, an
+            // "attack" by a player, the channel change instead of the fight — and dead).
+            bool mobsOnUs = now - _mobHitAt <= MobHitRecently || state.Attackers.Count > 0;
+            bool byPlayer = !mobsOnUs && (hitters.Any(pl => pl.TargetsMe) && lost >= 0.1 || lost >= 0.25 && !mobClose && hitters.Count > 0);
             if (byPlayer && now - _playerHitAt > TimeSpan.FromSeconds(30))
             {
                 _playerHitAt = now;
@@ -188,6 +190,15 @@ internal sealed partial class BotEngine
     /// <summary>One step of changing channel: Esc menu → "Kanal değiştir" → the emptiest other channel → "Kanal değiştir".</summary>
     private IReadOnlyList<BotAction> ChannelTick(GameState state, BotProfile p, DateTime now)
     {
+        // Mobs on us while alive and not yet pressed: the fight comes first (the menus would leave us standing there).
+        if (!state.Dead && _changePressedAt == DateTime.MinValue && (state.Attackers.Count > 0 || World?.Mobs.Any(m => m.AttacksMe && m.Hp > 0) == true))
+        {
+            ChannelScreen? open;
+            lock (_worldGate)
+                open = _world?.ReadChannels();
+            EndChannelChange("🔀 Moblar saldırıyor; kanal değişimi bırakıldı, önce dövüşülüyor.", notify: false);
+            return open is { WindowOpen: true } || open?.MenuButton != null ? [new KeyTapAction(p.Keys.CloseWindow)] : [];
+        }
         ChannelScreen? screen;
         lock (_worldGate)
             screen = _world?.ReadChannels();
