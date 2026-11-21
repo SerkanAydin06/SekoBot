@@ -24,7 +24,9 @@ internal sealed class MapTerrain
     /// <summary>The ground rises or falls up to this much per unit away (a slope), at most <see cref="SlopeMost"/>.</summary>
     internal const double Slope = 0.4, SlopeMost = 600;
     internal const double Cell = 40;
-    private const int MaxCells = 450, Bucket = 1000;
+    private const int MaxCells = 600, Bucket = 1000;
+    /// <summary>A coarse grid cell this much steep (share of it) is not walked through.</summary>
+    internal const double SteepCellShare = 0.3;
 
     private readonly Dictionary<(int, int), List<MapBlock>> _buckets = [];
 
@@ -57,6 +59,9 @@ internal sealed class MapTerrain
     public DateTime Read { get; }
     public bool Changed { get; set; }
 
+    /// <summary>Where the ground is too steep (hills, mountain sides), from the game's height grid; null: not known.</summary>
+    public SlopeMap? Slopes { get; set; }
+
     /// <summary>Whether the block stands in the way of a character whose position is at height <paramref name="z"/>,
     /// <paramref name="away"/> units from it.</summary>
     internal static bool InTheWay(MapBlock b, double z, double away)
@@ -66,6 +71,22 @@ internal sealed class MapTerrain
         double feet = z - FeetBelow, slope = Math.Min(away * Slope, SlopeMost);
         return b.Top > feet + Step - slope && b.Bottom < feet + Head + slope;
     }
+
+    /// <summary>
+    /// Whether the block stands in the way of a character walking from <paramref name="from"/>. With the ground's
+    /// heights known, also where the block stands: a tree's crown over the ground there, a floor down a slope
+    /// isn't in the way (it only counts when in the way both from where we stand and on the ground under it).
+    /// </summary>
+    private bool InTheWayFrom(MapBlock b, Vec3 from)
+    {
+        if (!InTheWay(b, from.Z, Away(b, from)))
+            return false;
+        var (x, y) = b.Centre;
+        return Slopes?.Ground(x, y) is not double ground || InTheWay(b, ground + FeetBelow, GroundAway);
+    }
+
+    /// <summary>The ground's height under a block is known to about this (as if this far away: <see cref="Slope"/> per unit).</summary>
+    internal const double GroundAway = 100;
 
     private IEnumerable<MapBlock> Around(double minX, double minY, double maxX, double maxY)
     {
@@ -109,9 +130,11 @@ internal sealed class MapTerrain
             foreach (var c in avoid)
                 if (!c.Holds(to, margin) && (c.Holds(from, margin) ? c.Towards(from, to) : c.Crosses(from, to, margin)))
                     return false;
+        if (Slopes is { } slopes && !slopes.LineClear(from.X, from.Y, to.X, to.Y))
+            return false;
         double length = from.DistanceXY(to);
         var near = Around(Math.Min(from.X, to.X) - margin, Math.Min(from.Y, to.Y) - margin, Math.Max(from.X, to.X) + margin, Math.Max(from.Y, to.Y) + margin)
-            .Where(b => InTheWay(b, from.Z, Away(b, from)) && !(b.Distance(from.X, from.Y) < margin * 0.6)).ToList();
+            .Where(b => InTheWayFrom(b, from) && !(b.Distance(from.X, from.Y) < margin * 0.6)).ToList();
         if (near.Count == 0)
             return true;
         int steps = Math.Max(1, (int)Math.Ceiling(length / 20));
@@ -183,7 +206,7 @@ internal sealed class MapTerrain
         var solid = new bool[w * h];
         foreach (var b in Around(ox, oy, ox + w * cell, oy + h * cell))
         {
-            if (!InTheWay(b, from.Z, Away(b, from)))
+            if (!InTheWayFrom(b, from))
                 continue;
             var (minX, minY, maxX, maxY) = b.Box;
             int x0 = Math.Max(0, (int)((minX - solidWithin - ox) / cell)), x1 = Math.Min(w - 1, (int)((maxX + solidWithin - ox) / cell));
@@ -191,6 +214,14 @@ internal sealed class MapTerrain
             for (int x = x0; x <= x1; x++)
                 for (int y = y0; y <= y1; y++)
                     if (!solid[y * w + x] && b.Distance(ox + (x + 0.5) * cell, oy + (y + 0.5) * cell) < solidWithin)
+                        solid[y * w + x] = true;
+        }
+        if (Slopes is { } slopes)
+        {
+            double share = cell <= slopes.Cell * 1.5 ? 0.5 : SteepCellShare;
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                    if (!solid[y * w + x] && slopes.SteepIn(ox + (x + 0.5) * cell, oy + (y + 0.5) * cell, cell) >= share)
                         solid[y * w + x] = true;
         }
         foreach (var c in avoid ?? [])
@@ -407,6 +438,7 @@ internal sealed class MapTerrain
 internal sealed class TerrainBook(string? folder = null)
 {
     private readonly Dictionary<string, MapTerrain?> _maps = [];
+    private readonly Dictionary<string, SlopeMap> _slopes = [];
     private readonly object _gate = new();
 
     public string Folder { get; } = folder ?? MapTerrain.Folder;
@@ -418,7 +450,11 @@ internal sealed class TerrainBook(string? folder = null)
         lock (_gate)
         {
             if (!_maps.TryGetValue(map, out var terrain))
+            {
                 _maps[map] = terrain = MapTerrain.Load(Folder, map);
+                if (terrain != null && _slopes.TryGetValue(map, out var s))
+                    terrain.Slopes = s;
+            }
             return terrain;
         }
     }
@@ -427,8 +463,29 @@ internal sealed class TerrainBook(string? folder = null)
     {
         var terrain = MapTerrain.Renew(map, read, Of(map), DateTime.Now);
         lock (_gate)
+        {
+            if (_slopes.TryGetValue(map, out var s))
+                terrain.Slopes = s;
             _maps[map] = terrain;
+        }
         return terrain;
+    }
+
+    /// <summary>The map's steep ground (read from the game's height grid).</summary>
+    public void SetSlopes(SlopeMap slopes)
+    {
+        lock (_gate)
+        {
+            _slopes[slopes.Map] = slopes;
+            if (_maps.TryGetValue(slopes.Map, out var t) && t != null)
+                t.Slopes = slopes;
+        }
+    }
+
+    public SlopeMap? SlopesOf(string map)
+    {
+        lock (_gate)
+            return _slopes.TryGetValue(map, out var s) ? s : null;
     }
 
     public IEnumerable<MapTerrain> Changed()

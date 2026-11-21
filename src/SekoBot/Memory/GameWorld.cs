@@ -561,6 +561,11 @@ internal sealed partial class GameWorldReader : IDisposable
         ("m2data_C", "loginok", 0x11C0),
         // The game's texts by number (TMap<int, FString>; seen: 2372 of them), for its own "SYSTEM" messages.
         ("m2data_C", "Locale", 0xE20),
+        // Every map's ground heights (TMap<FString, mapHEI>) and the area the grids cover; 0: found by name only.
+        ("m2data_C", "heiMAP", 0),
+        ("m2data_C", "heiMapStartX", 0),
+        ("m2data_C", "heiMapStartY", 0),
+        ("m2data_C", "heiMapEndX", 0),
         ("m2data_C", "loginMain", 0x11A0),
         ("m2data_C", "charSelect", 0x1580),
         ("m2data_C", "charSelectNew", 0x1768),
