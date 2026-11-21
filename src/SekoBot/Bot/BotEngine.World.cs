@@ -103,6 +103,8 @@ internal sealed partial class BotEngine
         "miniMap", "chatBox", "dmBox", "happyHourBox", "closeCinematic", "WBP_QuestingInfoPanel",
         "reSpawn", // the death window stays "visible" after reviving (seen in the game); death is read on its own
         "chatHistoryWindow_C", // the chat history: Esc doesn't close it (seen: Esc opened the game menu instead)
+        "playerProfiler", // a player's little menu (trade, message…): Esc doesn't close it either (seen: the game menu opened
+                          // again and again while fighting back a player); it goes by itself
     ];
     private readonly PopupWatch _popups = new();
     private string _windowsSeen = "";
