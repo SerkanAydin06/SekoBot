@@ -473,6 +473,9 @@ internal static class CharacterSettings
         nameof(BotProfile.LootThrow), nameof(BotProfile.DropRangeMetres), nameof(BotProfile.EventLoot), nameof(BotProfile.LootVersion),
         nameof(BotProfile.LootOwnClass), nameof(BotProfile.LootRewards),
         nameof(BotProfile.SkillGapLearnedMs), nameof(BotProfile.MobFights), nameof(BotProfile.AutoArea), nameof(BotProfile.Attack), nameof(BotProfile.FollowName),
+        // The page (farm / market / fishing) and the keys go with the character too (the user: SekoBots may come up
+        // on other games after a restart — the market character must stay on the market page).
+        nameof(BotProfile.UiMode), nameof(BotProfile.Keys),
     ];
 
     public static string Folder { get; set; } = Path.Combine(ProfileStore.Directory, "karakterler");
@@ -496,6 +499,7 @@ internal static class CharacterSettings
         nameof(BotProfile.LootBonuses), nameof(BotProfile.LootAlways), nameof(BotProfile.LootPick),
         nameof(BotProfile.LootSkip), nameof(BotProfile.LootThrow), nameof(BotProfile.EventLoot), nameof(BotProfile.AutoSkills),
         nameof(BotProfile.LootVersion), nameof(BotProfile.LootOwnClass), nameof(BotProfile.LootRewards),
+        nameof(BotProfile.UiMode), nameof(BotProfile.Keys),
     ];
 
     /// <summary>

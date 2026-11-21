@@ -11,13 +11,13 @@ namespace SekoBot.Tests;
 public class CharacterTests
 {
     [Fact]
-    public void A_character_brings_its_own_fight_and_loot_settings_but_not_the_bots_keys_or_telegram()
+    public void A_character_brings_its_own_settings_page_and_keys_but_not_the_bots_telegram()
     {
-        var strong = new BotProfile { PullMaxMobs = 15, PotionHpBelow = 0.6, LootYang = false, LootPick = [1, 2], TelegramToken = "a" };
+        var strong = new BotProfile { PullMaxMobs = 15, PotionHpBelow = 0.6, LootYang = false, LootPick = [1, 2], TelegramToken = "a", UiMode = 1 };
         strong.PullLearned["c3"] = 13;
+        strong.Keys.HpPotion = Keys.D4;
         string json = CharacterSettings.ToJson(strong);
         Assert.DoesNotContain("Telegram", json);
-        Assert.DoesNotContain("\"Keys\"", json);
 
         // The other SekoBot, set up for a weaker character, gets the strong one.
         var bot2 = new BotProfile { PullMaxMobs = 6, PotionHpBelow = 0.7, LootYang = true, TelegramToken = "b" };
@@ -29,7 +29,8 @@ public class CharacterTests
         Assert.Equal([1, 2], bot2.LootPick);
         Assert.Equal(13, bot2.PullLearned["c3"]);
         Assert.Equal("b", bot2.TelegramToken);      // stays with the SekoBot
-        Assert.Equal(Keys.D3, bot2.Keys.HpPotion);
+        Assert.Equal(Keys.D4, bot2.Keys.HpPotion);  // the character's own keys (the user: SekoBots may swap games)
+        Assert.Equal(1, bot2.UiMode);               // and its page (the market character on the market page)
     }
 
     [Fact]
