@@ -237,6 +237,10 @@ internal sealed class MiniBar : Form
     }
 
     /// <summary>The menu's lines, written for what this bot does now (its tab's own action first).</summary>
+    /// <summary>The game fills most of its screen (made big with "Büyüt").</summary>
+    private static bool GameIsBig(MiniInfo info) =>
+        info.Game is Rectangle game && game.Height > 0 && game.Height >= Screen.FromRectangle(game).WorkingArea.Height * 0.7;
+
     private void FillMenu()
     {
         _menu.Items.Clear();
@@ -259,7 +263,7 @@ internal sealed class MiniBar : Form
         foreach (ToolStripItem item in WindowLayout.AllMenu().Items.Cast<ToolStripItem>().ToList())
             _menu.Items.Add(item);
         _menu.Items.Add(new ToolStripSeparator());
-        Add("⛶  Bu oyunu büyüt (tekrar: hepsini diz)", _fill);
+        Add(GameIsBig(_info) ? "🗗  Bu oyunu küçült (hepsini diz)" : "⛶  Bu oyunu büyüt", _fill);
         Add("⊞  Tüm oyunları ve botları diz", _arrange);
         Add("⤢  SekoBot panelini aç (ayarlar, günlük)", _big);
         _menu.Items.Add(new ToolStripSeparator());
@@ -399,7 +403,8 @@ internal sealed class MiniBar : Form
             {
                 StartButton => (startText, info.Running ? Theme.Danger : Theme.Primary),
                 ItemsButton => ("🎒 Eşyalar", _itemsOpen ? Theme.Primary : Theme.Secondary),
-                FillButton => ("⛶ Büyüt", Theme.Secondary),
+                // Already big (most of its screen): the same button puts it back in its place among the others.
+                FillButton => (GameIsBig(info) ? "🗗 Küçült" : "⛶ Büyüt", Theme.Secondary),
                 ArrangeButton => ("⊞ Diz", Theme.Secondary),
                 _ => ("☰ Menü", _menu.Visible ? Theme.Primary : Theme.Secondary),
             };
