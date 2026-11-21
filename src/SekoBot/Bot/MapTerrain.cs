@@ -66,7 +66,7 @@ internal sealed class MapTerrain
     public RoadMap? Roads { get; set; }
 
     /// <summary>Walking off the roads costs this much more (a way along a road may be this much longer and is still taken).</summary>
-    internal const float OffRoadCost = 1.6f;
+    internal const float OffRoadCost = 6f;
     /// <summary>Ways longer than this (world units, 30 m) follow the roads when asked to.</summary>
     internal const double RoadsFrom = 3000;
 
