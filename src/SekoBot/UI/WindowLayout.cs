@@ -20,7 +20,7 @@ internal static class WindowLayout
 
     /// <summary>The message every SekoBot gets for all bots at once: wParam <see cref="AllStart"/>, <see cref="AllPause"/> or <see cref="AllStop"/>.</summary>
     public static readonly uint AllMessage = Win32.RegisterWindowMessage("SekoBot.All");
-    public const int AllStart = 1, AllPause = 2, AllStop = 3;
+    public const int AllStart = 1, AllPause = 2, AllStop = 3, AllUpdate = 4;
 
     /// <summary>Tells every SekoBot open (this one too) to start, pause or stop its work (each in its own tab).</summary>
     public static void TellAll(int what) => Win32.PostMessage(Win32.HWND_BROADCAST, AllMessage, what, 0);
@@ -32,6 +32,8 @@ internal static class WindowLayout
         menu.Items.Add("▶  Tüm botları başlat / sürdür", null, (_, _) => TellAll(AllStart));
         menu.Items.Add("⏸  Tüm botları duraklat", null, (_, _) => TellAll(AllPause));
         menu.Items.Add("■  Tüm botları durdur", null, (_, _) => TellAll(AllStop));
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("⬆  Tüm SekoBot'ları güncelle (kaldığı yerden devam)", null, (_, _) => TellAll(AllUpdate));
         return menu;
     }
 

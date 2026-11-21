@@ -51,6 +51,7 @@ internal sealed partial class MainForm
             return;
         }
         _gameFolder ??= GameFolderOf(e.Window.ProcessId);
+        ResumeAfterUpdateTick(e);
         var world = e.World;
         // The game's own update question at its start: "Onayla" (it downloads, then goes on to the login).
         if (_profile.AutoLogin && world == null && now - _updateYesAt > TimeSpan.FromSeconds(20) && e.UpdateQuestion() is { } yes)
