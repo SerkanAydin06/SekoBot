@@ -1,0 +1,267 @@
+using System.Drawing;
+using SekoBot.Config;
+using SekoBot.Memory;
+using SekoBot.Vision;
+
+namespace SekoBot.Bot;
+
+/// <summary>
+/// Other players killing the character (another kingdom, or one of ours with PvP on). Killed by a player
+/// (players close by and no mob on us), the bot doesn't revive at once — the killer would only kill it again:
+/// it waits, dead, watching whether they are still around. Gone for a while: it revives and goes on. Still
+/// there after a minute: it changes channel (Esc → "Kanal değiştir" → the emptiest channel) and goes on there.
+/// Hit by a player while alive (HP falling, no mob on us, a player right by): the channel is changed at once.
+/// </summary>
+internal sealed partial class BotEngine
+{
+    /// <summary>Players this close when the character dies (world units, 25 m) count as its killers.</summary>
+    internal const double KillerRange = 2500;
+    /// <summary>A killer within this (world units, 50 m) is still around.</summary>
+    internal const double EnemyAround = 5000;
+    /// <summary>A player this close (world units, 15 m) while our HP falls with no mob on us is hitting us.</summary>
+    internal const double HitterRange = 1500;
+    /// <summary>The killers out of sight this long: safe to revive.</summary>
+    internal static readonly TimeSpan EnemyGoneFor = TimeSpan.FromSeconds(20);
+    /// <summary>Still there this long after the death: the channel is changed.</summary>
+    internal static readonly TimeSpan EnemyStaysFor = TimeSpan.FromSeconds(60);
+    /// <summary>A mob hit us this recently: a death is the mob's, not a player's.</summary>
+    internal static readonly TimeSpan MobHitRecently = TimeSpan.FromSeconds(4);
+    /// <summary>A channel change not done in this time is given up.</summary>
+    internal static readonly TimeSpan ChannelChangeFor = TimeSpan.FromSeconds(40);
+
+    private readonly Dictionary<string, DateTime> _enemies = new(StringComparer.Ordinal);
+    private DateTime? _pvpDeathAt;
+    private DateTime _enemySeenAt = DateTime.MinValue, _mobHitAt = DateTime.MinValue, _playerHitAt = DateTime.MinValue;
+    private readonly List<(DateTime At, double Hp)> _hpTrail = [];
+    /// <summary>Waiting dead for the killers to leave: the brain doesn't click "Burada yeniden başla".</summary>
+    private bool _holdRevive;
+    private int _ownEmpire;
+    private DateTime _empireReadAt = DateTime.MinValue;
+
+    // ── changing channel ──
+    private DateTime? _channelSince;
+    private int _channelFrom, _escTries;
+    private DateTime _channelActedAt = DateTime.MinValue;
+    private bool _channelGrown;
+    /// <summary>The menu didn't open while dead: revived first (the brain), the channel changed once alive.</summary>
+    private bool _channelAfterRevive;
+
+    /// <summary>Whether this player counts as an enemy by what the game tells of it (another kingdom, PvP on).</summary>
+    internal static bool LooksHostile(OtherPlayer p, int ownEmpire) =>
+        p.TargetsMe || p.PvpMode != 0 || ownEmpire > 0 && p.Empire > 0 && p.Empire != ownEmpire;
+
+    /// <summary>A real player (a name, not a shop's stand-in, not a game master).</summary>
+    private static bool RealPlayer(OtherPlayer p) => p.Name.Length > 0 && !p.LooksLikeGm;
+
+    /// <summary>Inside <see cref="_botGate"/>: the actions for this tick while the PvP guard drives, or null.</summary>
+    private IReadOnlyList<BotAction>? PvpTick(GameState state, BotProfile p)
+    {
+        if (!p.PvpGuard || World is not { } world)
+        {
+            _holdRevive = false;
+            return null;
+        }
+        var now = DateTime.Now;
+        if (now - _empireReadAt > TimeSpan.FromSeconds(30))
+        {
+            _empireReadAt = now;
+            lock (_worldGate)
+                _ownEmpire = _world?.ReadOwnEmpire() ?? _ownEmpire;
+        }
+        var me = world.Player;
+        var players = (world.Players ?? []).Where(RealPlayer).ToList();
+        if (world.Mobs.Any(m => m.AttacksMe && m.Hp > 0))
+            _mobHitAt = now;
+        foreach (var pl in players)
+            if (_enemies.ContainsKey(pl.Name) && pl.Position.DistanceXY(me) <= EnemyAround)
+            {
+                _enemies[pl.Name] = now;
+                _enemySeenAt = now;
+            }
+
+        if (_channelSince != null)
+        {
+            if (state.Dead && _channelAfterRevive)
+                return null; // the brain revives first
+            _channelAfterRevive = false;
+            return ChannelTick(state, p, now);
+        }
+
+        if (state.Dead)
+            return DeadTick(state, p, world, players, now);
+        _pvpDeathAt = null;
+        _holdRevive = false;
+
+        // Alive: HP falling with no mob on us and a player right by — a player is hitting us.
+        if (state.Hp is double hp)
+        {
+            _hpTrail.Add((now, hp));
+            _hpTrail.RemoveAll(t => now - t.At > TimeSpan.FromSeconds(6));
+            double lost = _hpTrail.Max(t => t.Hp) - hp;
+            var hitters = players.Where(pl => pl.Position.DistanceXY(me) <= HitterRange).ToList();
+            // Strictly: a mob close by (an archer, one not marked as attacking) may be the one hurting us.
+            bool mobClose = world.Mobs.Any(m => m.Hp > 0 && m.Position.DistanceXY(me) <= 1000);
+            bool byPlayer = hitters.Any(pl => pl.TargetsMe) || lost >= 0.2 && now - _mobHitAt > MobHitRecently && !mobClose && hitters.Count > 0;
+            if (byPlayer && now - _playerHitAt > TimeSpan.FromSeconds(30))
+            {
+                _playerHitAt = now;
+                foreach (var pl in hitters)
+                    _enemies[pl.Name] = now;
+                string names = string.Join(", ", hitters.Select(h => h.Name));
+                _log($"⚔ Bir oyuncu saldırıyor ({names}); kanal değiştiriliyor.");
+                Notify($"⚔ {world.MapName}: {CharacterName} oyuncu saldırısına uğradı ({names}); kanal değiştiriliyor.");
+                return StartChannelChange(state, p, now);
+            }
+        }
+        return null;
+    }
+
+    private IReadOnlyList<BotAction>? DeadTick(GameState state, BotProfile p, WorldSnapshot world, List<OtherPlayer> players, DateTime now)
+    {
+        var me = world.Player;
+        if (_pvpDeathAt == DateTime.MaxValue)
+        {
+            _holdRevive = false; // this death was handled: revived as usual
+            return null;
+        }
+        if (_pvpDeathAt == null)
+        {
+            var near = players.Where(pl => pl.Position.DistanceXY(me) <= KillerRange).ToList();
+            bool known = near.Any(pl => _enemies.ContainsKey(pl.Name));
+            bool hostile = near.Any(pl => LooksHostile(pl, _ownEmpire));
+            bool noMob = now - _mobHitAt > MobHitRecently;
+            if (near.Count == 0 || !(known || hostile || noMob || now - _playerHitAt < TimeSpan.FromSeconds(30)))
+                return null; // a mob's kill: revived as usual
+            _pvpDeathAt = now;
+            _enemySeenAt = now;
+            foreach (var pl in near)
+                _enemies[pl.Name] = now;
+            string names = string.Join(", ", near.Select(pl => pl.Name));
+            _log($"⚔ Karakter oyuncu tarafından öldürüldü ({names}); hemen dirilmiyor, gidip gitmedikleri izleniyor.");
+            Notify($"⚔ {world.MapName}: {CharacterName} oyuncu tarafından öldürüldü ({names}). Bot bekliyor; giderlerse dirilecek, kalırlarsa kanal değiştirecek.");
+        }
+        _holdRevive = true;
+        if (now - _enemySeenAt >= EnemyGoneFor)
+        {
+            _log($"⚔ Öldüren oyuncu(lar) {EnemyGoneFor.TotalSeconds:0} saniyedir görünmüyor; dirilip devam ediliyor.");
+            _holdRevive = false;
+            _pvpDeathAt = DateTime.MaxValue; // this death handled: revived as usual
+            return null;
+        }
+        if (_pvpDeathAt is DateTime died && died != DateTime.MaxValue && now - died >= EnemyStaysFor)
+        {
+            _log($"⚔ Öldüren oyuncu(lar) {EnemyStaysFor.TotalSeconds:0} saniyedir hâlâ yakında; kanal değiştiriliyor.");
+            return StartChannelChange(state, p, now);
+        }
+        return null;
+    }
+
+    private IReadOnlyList<BotAction> StartChannelChange(GameState state, BotProfile p, DateTime now)
+    {
+        _channelSince = now;
+        _channelActedAt = DateTime.MinValue;
+        _escTries = 0;
+        _channelGrown = false;
+        lock (_worldGate)
+            _channelFrom = _world?.ReadChannels()?.Current ?? 0;
+        // Nothing held while the menus are clicked.
+        var actions = new List<BotAction> { new KeyUpAction(p.Keys.Attack) };
+        foreach (var key in new[] { p.Keys.MoveForward, p.Keys.MoveBack, p.Keys.MoveLeft, p.Keys.MoveRight })
+            actions.Add(new KeyUpAction(key));
+        return actions;
+    }
+
+    /// <summary>One step of changing channel: Esc menu → "Kanal değiştir" → the emptiest other channel → "Kanal değiştir".</summary>
+    private IReadOnlyList<BotAction> ChannelTick(GameState state, BotProfile p, DateTime now)
+    {
+        ChannelScreen? screen;
+        lock (_worldGate)
+            screen = _world?.ReadChannels();
+        // Changed (or the game is loading the new channel).
+        if (screen is { Current: > 0 } done && _channelFrom > 0 && done.Current != _channelFrom)
+        {
+            EndChannelChange($"🔀 Kanal değiştirildi: {_channelFrom} → {done.Current}.", notify: true);
+            return [];
+        }
+        if (now - _channelSince!.Value > ChannelChangeFor)
+        {
+            EndChannelChange("🔀 Kanal değiştirilemedi (menü açılmadı ya da oyun izin vermedi); bot devam ediyor.", notify: true);
+            return screen is { WindowOpen: true } || screen?.MenuButton != null ? [new KeyTapAction(p.Keys.CloseWindow)] : [];
+        }
+        if (now - _channelActedAt < TimeSpan.FromMilliseconds(1200))
+            return [];
+        // Clicking needs the mouse: one bot at a time; a small game made big enough to show the windows whole.
+        if (!TakeTurn())
+            return [];
+        if (!_channelGrown)
+        {
+            _channelGrown = true;
+            if (GrowForWork())
+            {
+                _channelActedAt = now;
+                return [];
+            }
+        }
+        _channelActedAt = now;
+        if (screen is { WindowOpen: true } window)
+        {
+            var target = window.Boxes.Where(b => b.Channel != window.Current).OrderBy(b => b.Full).FirstOrDefault();
+            if (target.Channel == 0)
+            {
+                EndChannelChange("🔀 Geçilecek başka kanal yok.", notify: false);
+                return [new KeyTapAction(p.Keys.CloseWindow)];
+            }
+            if (window.Selected != target.Channel)
+                return [new ClickAction(Middle(target.At), Slow: true)];
+            if (window.Change is { } change)
+            {
+                _log($"🔀 Kanal {target.Channel} seçildi (%{target.Full} dolu); 'Kanal değiştir'e basılıyor.");
+                return [new ClickAction(Middle(change), Slow: true)];
+            }
+            return [];
+        }
+        if (screen?.MenuButton is { } menuButton)
+            return [new ClickAction(Middle(menuButton), Slow: true)];
+        // Nothing open: Esc opens the game menu (tried a few times).
+        if (_escTries++ < 3)
+            return [new KeyTapAction(p.Keys.CloseWindow)];
+        if (state.Dead && _holdRevive)
+        {
+            // The menu doesn't open while dead: revived here first, then the channel is changed.
+            _log("🔀 Ölüyken menü açılmıyor; önce dirilip sonra kanal değiştirilecek.");
+            _holdRevive = false;
+            _channelAfterRevive = true;
+            _escTries = 0;
+            _channelSince = now;
+            ShrinkIfGrown();
+            LetGoTurn();
+            return [];
+        }
+        return [];
+    }
+
+    private void EndChannelChange(string message, bool notify)
+    {
+        _channelSince = null;
+        _channelAfterRevive = false;
+        _holdRevive = false;
+        _pvpDeathAt = DateTime.MaxValue;
+        _enemies.Clear(); // a new channel: other players
+        _hpTrail.Clear();
+        _log(message);
+        if (notify)
+            Notify($"{World?.MapName}: {CharacterName} — {message}");
+        ShrinkIfGrown();
+        LetGoTurn();
+    }
+
+    private void ShrinkIfGrown()
+    {
+        if (!_channelGrown)
+            return;
+        _channelGrown = false;
+        ShrinkAfterWork();
+    }
+
+    private static Point Middle(Rectangle r) => new(r.X + r.Width / 2, r.Y + r.Height / 2);
+}

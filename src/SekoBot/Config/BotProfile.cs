@@ -250,6 +250,9 @@ internal sealed class BotProfile
     public System.Windows.Forms.Keys FishBaitKey { get; set; } = System.Windows.Forms.Keys.None;
     /// <summary>On the login screen (a maintenance): the login button pressed every few minutes until the server opens.</summary>
     public bool AutoLogin { get; set; } = true;
+    /// <summary>Killed by a player: wait for them to leave before reviving, change channel if they stay;
+    /// hit by a player: change channel.</summary>
+    public bool PvpGuard { get; set; } = true;
     /// <summary>Minutes between two login tries.</summary>
     public double AutoLoginMinutes { get; set; } = 3;
 

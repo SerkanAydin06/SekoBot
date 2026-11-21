@@ -129,6 +129,8 @@ internal sealed record GameState(
 
     /// <summary>"Burada yeniden başla" can be clicked (its text turned white).</summary>
     public bool ReviveReady { get; init; }
+    /// <summary>Killed by a player who is still around: "Burada yeniden başla" waits (see BotEngine.PvpTick).</summary>
+    public bool HoldRevive { get; init; }
 
     /// <summary>A window covers the game (e.g. the advert after a level-up).</summary>
     public bool PopupOpen { get; init; }
