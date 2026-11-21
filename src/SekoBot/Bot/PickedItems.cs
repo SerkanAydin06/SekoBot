@@ -14,12 +14,19 @@ namespace SekoBot.Bot;
 /// </summary>
 internal sealed class PickedItems
 {
-    /// <summary>A bag read with this many fewer items is believed only when seen a few times (a read can fail).</summary>
-    private const int DropLimit = 3, SameReadsToBelieve = 3;
+    /// <summary>
+    /// A bag read with this many fewer items is believed only when it stays so for <see cref="BelieveAfter"/>
+    /// (a read can fail: loading a map, a reconnect). The bot throws and sells one item at a time, so a real bag
+    /// never loses several at once in a moment; forgetting on a bad read lost what the bot had picked for good.
+    /// </summary>
+    private const int DropLimit = 3;
+    internal static readonly TimeSpan BelieveAfter = TimeSpan.FromSeconds(10);
+    /// <summary>The clock (tests set it).</summary>
+    internal Func<DateTime> Now { get; set; } = () => DateTime.UtcNow;
 
     private readonly HashSet<(int Slot, int Vnum)> _picked = [];
     private Dictionary<(int Slot, int Vnum), int>? _last;
-    private int _shrunkReads;
+    private DateTime? _shrunkSince;
     private string _character = "";
     private readonly string _prefix;
 
@@ -52,17 +59,26 @@ internal sealed class PickedItems
         Gained = [];
         var bag = inventory.Where(i => i.Slot >= CharacterProgress.FirstBagSlot && i.Count > 0)
             .GroupBy(i => (i.Slot, i.Vnum)).ToDictionary(g => g.Key, g => g.Sum(i => i.Count));
+        // An empty bag while the bot's items are remembered: a read that failed (loading, character select) —
+        // believed only when it stays so.
+        if (bag.Count == 0 && _picked.Count > 0 && !Believed())
+            return;
         if (_last == null)
         {
+            // The first read: what the bot picked before and is still there is kept; a bag read much smaller than
+            // what is remembered is waited on (a partial read right after starting).
+            if (_picked.Count(k => !bag.ContainsKey(k)) > DropLimit && !Believed())
+                return;
+            _shrunkSince = null;
             _last = bag;
             if (_picked.RemoveWhere(k => !bag.ContainsKey(k)) > 0)
                 Changed = true;
             return;
         }
         // Many items gone at once: maybe a bad read; believed when it stays so.
-        if (bag.Count < _last.Count - DropLimit && ++_shrunkReads < SameReadsToBelieve)
+        if (bag.Count < _last.Count - DropLimit && !Believed())
             return;
-        _shrunkReads = 0;
+        _shrunkSince = null;
 
         var bySlot = inventory.Where(i => i.Slot >= CharacterProgress.FirstBagSlot).GroupBy(i => i.Slot).ToDictionary(g => g.Key, g => g.First());
         var cameIn = new List<InventoryItem>();
@@ -95,6 +111,13 @@ internal sealed class PickedItems
         CameIn = cameIn;
     }
 
+    /// <summary>A smaller bag has been read for <see cref="BelieveAfter"/>.</summary>
+    private bool Believed()
+    {
+        _shrunkSince ??= Now();
+        return Now() - _shrunkSince.Value >= BelieveAfter;
+    }
+
     /// <summary>The item at this slot is wanted after all (seen: its bonus wasn't read yet the moment it
     /// came in, and it was taken for junk): not the bot's to throw or sell from now on.</summary>
     public void Forget(int slot, int vnum)
@@ -117,7 +140,7 @@ internal sealed class PickedItems
         _character = character;
         _picked.Clear();
         _last = null;
-        _shrunkReads = 0;
+        _shrunkSince = null;
         Changed = false;
         try
         {

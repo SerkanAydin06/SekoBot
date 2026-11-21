@@ -438,6 +438,12 @@ internal sealed partial class BotEngine : IDisposable
         _sellCts?.Cancel(); // a sale trip stops with the bot
         ItemBook.SaveIfChanged();
         _sessionItems.Save(force: true);
+        // What the bot picked (to throw / sell) is never lost: written at once when it stops.
+        lock (_pickedItems)
+        {
+            _pickedItems.Save();
+            _lootedItems.Save();
+        }
         if (_obstacles.Changed)
             _obstacles.Save();
         if (_noGo.Changed)

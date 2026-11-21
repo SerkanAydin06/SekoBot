@@ -46,7 +46,8 @@ internal sealed partial class Brain
         _crowdTarget = _lastCrowd = null;
         _targetId = 0;
         _toHotspot = false;
-        _atFarmSpot = _travelNoted = false;
+        _atFarmSpot = _travelNoted = _travelLate = false;
+        Traveling = false;
         _travelSince = Never;
         ResetPull();
         _dropId = 0;
@@ -511,7 +512,8 @@ internal sealed partial class Brain
     /// <summary>The farm spot was moved (another player took the old one): walk to the new one.</summary>
     internal void NewFarmSpot()
     {
-        _atFarmSpot = _travelNoted = false;
+        _atFarmSpot = _travelNoted = _travelLate = false;
+        Traveling = false;
         _travelSince = Never;
         ResetLeash();
         ResetPull();
@@ -556,13 +558,23 @@ internal sealed partial class Brain
     private bool _atFarmSpot, _travelNoted;
     private TimeSpan _travelSince = Never;
     private double _travelLimitMs;
+    private bool _travelLate;
+
+    /// <summary>On the way to the saved farm spot (the engine doesn't open the M map meanwhile).</summary>
+    internal bool Traveling { get; private set; }
+
+    /// <summary>The walk to the saved farm spot isn't over yet: nothing else comes first.</summary>
+    private bool TravelPending(GameState state, BotProfile p) =>
+        p.NavigateMode && !_atFarmSpot && state.FarmSpot is Vec3 && state.Position is Vec3 && state.Follow == null;
 
     /// <summary>How long walking to the farm spot may take: 2 minutes, and a minute more for every 100 m.</summary>
     internal static double TravelLimitMs(double distance) => 120_000 + distance / 10000 * 60_000;
 
     /// <summary>
     /// Walks to the saved farm spot before farming starts (mobs met on the way follow and are
-    /// fought there). Ends within 5 m of it, after 2 minutes, or when HP falls below half.
+    /// fought there). Whatever happens — attacked, HP low, a long way — it goes on until within 5 m of it
+    /// (the user: "ne olursa olsun kayıtlı farm alanına gidecek"); running away, breaks, emptying the bag
+    /// and waiting for HP wait until then (see <see cref="TravelPending"/>). Potions are still drunk on the way.
     /// </summary>
     /// <returns>True while walking there.</returns>
     private bool TravelTick(GameState state, BotProfile p, List<BotAction> actions, bool refresh)
@@ -576,17 +588,20 @@ internal sealed partial class Brain
             _travelSince = now;
             _travelLimitMs = TravelLimitMs(distance);
         }
-        string? done = distance <= 500 ? "Farm alanına varıldı; farm başlıyor."
-            : state.Hp is < 0.5 ? "Can azaldı; farm burada başlıyor."
-            : now - _travelSince > Ms(_travelLimitMs) ? $"Farm alanına {_travelLimitMs / 60_000:0} dakikada varılamadı; burada başlanıyor."
-            : null;
-        if (done != null)
+        if (distance <= 500)
         {
             _atFarmSpot = true;
+            Traveling = false;
             if (_travelNoted)
-                actions.Add(new NoteAction(done));
+                actions.Add(new NoteAction("Farm alanına varıldı; farm başlıyor."));
             return false;
         }
+        if (!_travelLate && now - _travelSince > Ms(_travelLimitMs))
+        {
+            _travelLate = true;
+            actions.Add(new NoteAction($"Farm alanına {_travelLimitMs / 60_000:0} dakikadır gidiliyor, {distance / 100:0} m kaldı; gitmeye devam ediliyor."));
+        }
+        Traveling = true;
         if (!_travelNoted)
         {
             _travelNoted = true;
