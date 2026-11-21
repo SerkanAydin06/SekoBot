@@ -453,7 +453,10 @@ internal sealed partial class BotEngine
                 }
                 last = me;
                 // Far off the way is found less often (across the map it takes a moment: worked out aside, the walking goes on).
-                if (way == null || _clock.Elapsed - wayAt > TimeSpan.FromSeconds(me.DistanceXY(target) > 6000 ? 4 : 1))
+                // The way kept while we follow it (found anew each time it may lead another way round — seen: back and
+                // forth between two); found again when off it, stuck (way set to null), or now and then.
+                bool offWay = way is { Count: > 0 } current && OffTheWay(current, me);
+                if (way == null || offWay || _clock.Elapsed - wayAt > TimeSpan.FromSeconds(me.DistanceXY(target) > 6000 ? 20 : 2))
                 {
                     // A way walked before (over the slopes up to the town…) first; else drawn around what is known.
                     // The map's roads known: along them (the M map's roads); else a way walked before.
@@ -495,6 +498,18 @@ internal sealed partial class BotEngine
             await Task.Delay(300, CancellationToken.None);
         }
         return stuck;
+    }
+
+    /// <summary>Further than 15 m from every stretch of the way: off it.</summary>
+    private static bool OffTheWay(List<Vec3> way, Vec3 me)
+    {
+        int i = MapTerrain.NextCorner(way, me);
+        var a = i == 0 ? way[0] : way[i - 1];
+        var b = way[i];
+        double dx = b.X - a.X, dy = b.Y - a.Y, len = dx * dx + dy * dy;
+        double t = len <= 0 ? 0 : Math.Clamp(((me.X - a.X) * dx + (me.Y - a.Y) * dy) / len, 0, 1);
+        double px = a.X + dx * t - me.X, py = a.Y + dy * t - me.Y;
+        return i > 0 && px * px + py * py > 1500 * 1500; // on the way to the first corner: not off it
     }
 
     /// <summary>The route to <paramref name="target"/> around everything known (see <see cref="WalkRouteAsync"/>);

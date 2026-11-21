@@ -385,6 +385,27 @@ internal sealed class MapTerrain
         return true;
     }
 
+    /// <summary>The corner ending the stretch of <paramref name="way"/> closest to <paramref name="me"/> (the first one: from wherever we are).</summary>
+    internal static int NextCorner(IReadOnlyList<Vec3> way, Vec3 me)
+    {
+        int best = 0;
+        double bestD = me.DistanceXY(way[0]);
+        for (int i = 1; i < way.Count; i++)
+        {
+            var a = way[i - 1];
+            var b = way[i];
+            double dx = b.X - a.X, dy = b.Y - a.Y, len = dx * dx + dy * dy;
+            double t = len <= 0 ? 0 : Math.Clamp(((me.X - a.X) * dx + (me.Y - a.Y) * dy) / len, 0, 1);
+            double px = a.X + dx * t - me.X, py = a.Y + dy * t - me.Y, d = Math.Sqrt(px * px + py * py);
+            if (d < bestD)
+            {
+                bestD = d;
+                best = i;
+            }
+        }
+        return best;
+    }
+
     /// <summary>How long the way is, walked from <paramref name="from"/>.</summary>
     public static double Length(Vec3 from, IReadOnlyList<Vec3> way)
     {
@@ -401,9 +422,13 @@ internal sealed class MapTerrain
     /// <summary>Where to head now on <paramref name="way"/>: the furthest corner still in a straight free line.</summary>
     public Vec3 Aim(IReadOnlyList<Vec3> way, Vec3 me)
     {
-        // Along the roads: corner by corner (a shortcut to a further corner would cut across the fields again).
+        // Along the roads: corner by corner (a shortcut to a further corner would cut across the fields again) — the
+        // corner after the stretch we are on (seen: always the first one, the bot went back and forth past it).
         if (Roads != null && way.Count > 1)
-            return me.DistanceXY(way[0]) > 150 ? way[0] : way[1];
+        {
+            int at = NextCorner(way, me);
+            return me.DistanceXY(way[at]) < 150 && at + 1 < way.Count ? way[at + 1] : way[at];
+        }
         for (int i = way.Count - 1; i > 0; i--)
             if (LineClear(me, way[i]))
                 return way[i];
