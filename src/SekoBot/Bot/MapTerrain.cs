@@ -62,6 +62,14 @@ internal sealed class MapTerrain
     /// <summary>Where the ground is too steep (hills, mountain sides), from the game's height grid; null: not known.</summary>
     public SlopeMap? Slopes { get; set; }
 
+    /// <summary>The map's roads (off the M map); ways keep to them where they can. Null: not known.</summary>
+    public RoadMap? Roads { get; set; }
+
+    /// <summary>Walking off the roads costs this much more (a way along a road may be this much longer and is still taken).</summary>
+    internal const float OffRoadCost = 1.6f;
+    /// <summary>Ways longer than this (world units, 30 m) follow the roads when asked to.</summary>
+    internal const double RoadsFrom = 3000;
+
     /// <summary>Whether the block stands in the way of a character whose position is at height <paramref name="z"/>,
     /// <paramref name="away"/> units from it.</summary>
     internal static bool InTheWay(MapBlock b, double z, double away)
@@ -156,11 +164,13 @@ internal sealed class MapTerrain
     /// <param name="room">How far around the two points the way may lead at most (world units).</param>
     /// <param name="avoid">Round places kept away from as well (where the bot got stuck before, unreachable
     /// places, mobs on the way); one the character or the goal stands in doesn't count.</param>
-    public List<Vec3>? WayTo(Vec3 from, Vec3 to, double margin = Margin, double room = 12000, IReadOnlyList<Circle>? avoid = null)
+    /// <param name="roads">A long way: along the roads (when known) even where the straight way is free.</param>
+    public List<Vec3>? WayTo(Vec3 from, Vec3 to, double margin = Margin, double room = 12000, IReadOnlyList<Circle>? avoid = null, bool roads = false)
     {
         // One the character stands in still counts (it got stuck right there): not walked into again.
         var keep = avoid?.Where(c => !c.Holds(to, margin)).ToList();
-        if (LineClear(from, to, margin, keep))
+        bool alongRoads = roads && Roads != null && from.DistanceXY(to) > RoadsFrom;
+        if (!alongRoads && LineClear(from, to, margin, keep))
             return [to];
         // Looked for close around the two points first; a long wall needs more room to get round.
         foreach (double r in Rooms.Where(r => r <= room))
@@ -265,6 +275,15 @@ internal sealed class MapTerrain
                 return null;
             goal = best;
         }
+        // Off the roads a step costs more: ways go along the roads where they can.
+        float[]? stepCost = null;
+        if (Roads is { } roads)
+        {
+            stepCost = new float[w * h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                    stepCost[y * w + x] = roads.OnRoad(ox + (x + 0.5) * cell, oy + (y + 0.5) * cell) ? 1f : OffRoadCost;
+        }
         var cost = new float[w * h];
         Array.Fill(cost, float.MaxValue);
         var came = new int[w * h];
@@ -298,7 +317,7 @@ internal sealed class MapTerrain
                     // Diagonals don't cut a corner.
                     if (solid[n] || dx != 0 && dy != 0 && (solid[y * w + nx] || solid[ny * w + x]))
                         continue;
-                    float c = cost[i] + (dx != 0 && dy != 0 ? 1.4142f : 1f);
+                    float c = cost[i] + (dx != 0 && dy != 0 ? 1.4142f : 1f) * (stepCost?[n] ?? 1f);
                     if (c >= cost[n])
                         continue;
                     cost[n] = c;
@@ -313,6 +332,23 @@ internal sealed class MapTerrain
             cells.Add(i);
         cells.Reverse();
         Vec3 At(int i) => new(ox + (i % w + 0.5) * cell, oy + (i / w + 0.5) * cell, to.Z);
+        // A shortcut between two corners mustn't leave the road the way follows (cutting across the fields again).
+        bool KeepsToRoad(int k, int j)
+        {
+            if (stepCost == null || !cells.Skip(k).Take(j - k + 1).Any(c => stepCost[c] <= 1f))
+                return true;
+            var a = k == 0 ? from : At(cells[k - 1]);
+            var b = At(cells[j]);
+            int steps = Math.Max(1, (int)Math.Ceiling(a.DistanceXY(b) / (cell * 0.5)));
+            for (int i = 1; i < steps; i++)
+            {
+                double t = (double)i / steps;
+                int x = (int)((a.X + (b.X - a.X) * t - ox) / cell), y = (int)((a.Y + (b.Y - a.Y) * t - oy) / cell);
+                if (x >= 0 && y >= 0 && x < w && y < h && stepCost[y * w + x] > 1f)
+                    return false;
+            }
+            return true;
+        }
         // Only the corners: from each point, on to the furthest one in a straight free line.
         var way = new List<Vec3>();
         var here = from;
@@ -321,7 +357,7 @@ internal sealed class MapTerrain
         {
             int far = k;
             for (int j = cells.Count - 1; j > k; j--)
-                if (GridClear(solid, w, cell, ox, oy, here, At(cells[j])))
+                if (GridClear(solid, w, cell, ox, oy, here, At(cells[j])) && KeepsToRoad(k, j))
                 {
                     far = j;
                     break;
@@ -365,6 +401,9 @@ internal sealed class MapTerrain
     /// <summary>Where to head now on <paramref name="way"/>: the furthest corner still in a straight free line.</summary>
     public Vec3 Aim(IReadOnlyList<Vec3> way, Vec3 me)
     {
+        // Along the roads: corner by corner (a shortcut to a further corner would cut across the fields again).
+        if (Roads != null && way.Count > 1)
+            return me.DistanceXY(way[0]) > 150 ? way[0] : way[1];
         for (int i = way.Count - 1; i > 0; i--)
             if (LineClear(me, way[i]))
                 return way[i];
@@ -439,6 +478,7 @@ internal sealed class TerrainBook(string? folder = null)
 {
     private readonly Dictionary<string, MapTerrain?> _maps = [];
     private readonly Dictionary<string, SlopeMap> _slopes = [];
+    private readonly Dictionary<string, RoadMap?> _roads = [];
     private readonly object _gate = new();
 
     public string Folder { get; } = folder ?? MapTerrain.Folder;
@@ -454,6 +494,8 @@ internal sealed class TerrainBook(string? folder = null)
                 _maps[map] = terrain = MapTerrain.Load(Folder, map);
                 if (terrain != null && _slopes.TryGetValue(map, out var s))
                     terrain.Slopes = s;
+                if (terrain != null)
+                    terrain.Roads = RoadsOfLocked(map);
             }
             return terrain;
         }
@@ -466,6 +508,7 @@ internal sealed class TerrainBook(string? folder = null)
         {
             if (_slopes.TryGetValue(map, out var s))
                 terrain.Slopes = s;
+            terrain.Roads = RoadsOfLocked(map);
             _maps[map] = terrain;
         }
         return terrain;
@@ -479,6 +522,42 @@ internal sealed class TerrainBook(string? folder = null)
             _slopes[slopes.Map] = slopes;
             if (_maps.TryGetValue(slopes.Map, out var t) && t != null)
                 t.Slopes = slopes;
+        }
+    }
+
+    private readonly Dictionary<string, DateTime> _roadsLookedAt = [];
+
+    /// <summary>The map's roads; not there yet: looked for on disk again every minute (another SekoBot may read them).</summary>
+    private RoadMap? RoadsOfLocked(string map)
+    {
+        if (_roads.TryGetValue(map, out var roads) && roads != null)
+            return roads;
+        if (_roadsLookedAt.TryGetValue(map, out var looked) && DateTime.Now - looked < TimeSpan.FromMinutes(1))
+            return null;
+        _roadsLookedAt[map] = DateTime.Now;
+        _roads[map] = roads = RoadMap.Load(Folder, map);
+        if (roads != null && _maps.TryGetValue(map, out var t) && t != null)
+            t.Roads = roads;
+        return roads;
+    }
+
+    /// <summary>The map's roads (loaded from disk once; null: not read yet).</summary>
+    public RoadMap? RoadsOf(string map)
+    {
+        lock (_gate)
+            return RoadsOfLocked(map);
+    }
+
+    /// <summary>The map's roads, just read off its M map: kept on disk and used from now on.</summary>
+    public void SetRoads(RoadMap roads)
+    {
+        try { roads.Save(Folder); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        lock (_gate)
+        {
+            _roads[roads.Map] = roads;
+            if (_maps.TryGetValue(roads.Map, out var t) && t != null)
+                t.Roads = roads;
         }
     }
 

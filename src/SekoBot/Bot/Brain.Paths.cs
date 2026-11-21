@@ -46,7 +46,9 @@ internal sealed partial class Brain
     {
         if (TerrainHere(state) is not { } map || state.Position is not Vec3 me || me.DistanceXY(goal) < 60)
             return null;
-        if (map.LineClear(me, goal))
+        // Far off (walking to the area): along the roads when they are known, even where the straight way is free.
+        bool byRoad = map.Roads != null && me.DistanceXY(goal) > FarFrom;
+        if (!byRoad && map.LineClear(me, goal))
         {
             _way = null;
             return null;
@@ -56,7 +58,7 @@ internal sealed partial class Brain
             || far && w.Way is { Count: > 0 } kept && OffWay(me, kept))
         {
             bool newGoal = _way is not { } old || old.Goal.DistanceXY(goal) > 150;
-            var found = map.WayTo(me, goal, room: far ? Math.Max(WayRoom, me.DistanceXY(goal)) : WayRoom);
+            var found = map.WayTo(me, goal, room: far ? Math.Max(WayRoom, me.DistanceXY(goal)) : WayRoom, roads: byRoad);
             // No way within 50 m (a slope to go round, seen: stuck below one 50 m from the area): the whole map.
             if (found == null && !far && me.DistanceXY(goal) > 1500)
                 found = map.WayTo(me, goal, room: FarRoom);

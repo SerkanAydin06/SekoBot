@@ -3,6 +3,9 @@ namespace SekoBot.Memory;
 /// <summary>An NPC marked on the M map: its number and where it stands (world units; the height isn't on the map).</summary>
 internal readonly record struct MapNpc(int Vnum, double X, double Y);
 
+/// <summary>The M map's picture as drawn (client pixels) and how it lies over the world (see <see cref="GameWorldReader.PictureToWorld"/>).</summary>
+internal sealed record MapPicture(Rectangle Drawn, double OffsetX, double OffsetY, double ScaleX, double ScaleY, double Texture);
+
 /// <summary>
 /// The NPCs of the whole map, from the game's M map (UI.bigMap: a dot per NPC, placed on the map's picture).
 /// The game knows only the NPCs within ~50 m around the character, but its M map marks every one of the
@@ -19,6 +22,47 @@ internal sealed partial class GameWorldReader
     /// for 1000 on c2, the shops came out 1.32 times too far from the map's corner and the bot walked to nowhere).</param>
     internal static (double X, double Y) PictureToWorld(double px, double py, double offsetX, double offsetY, double scaleX, double scaleY, double size, double texture = 1000) =>
         (px * texture / (scaleX * size) - offsetX, py * texture / (scaleY * size) - offsetY);
+
+    /// <summary>The open M map's picture (the first Image of bigMap_C: the map's own texture), where it is drawn; null when closed.</summary>
+    public MapPicture? ReadMapPicture()
+    {
+        try
+        {
+            if (!_located)
+                return null;
+            long instance = Pointer(_moduleBase + _gameInstance);
+            long instanceClass = Pointer(instance + ObjClass);
+            if (ClassName(instanceClass) != "m2data_C")
+                return null;
+            long ui = Pointer(instance + Offset(instanceClass, "m2data_C", "uiMain"));
+            if (!MemoryReads.IsPointer(ui))
+                return null;
+            long uiClass = Pointer(ui + ObjClass);
+            int bigAt = ClassName(uiClass) == "UI_C" ? Offset(uiClass, "UI_C", "bigMap") : 0;
+            long map = bigAt > 0 ? Pointer(ui + bigAt) : 0;
+            if (!MemoryReads.IsPointer(map) || ClassName(Pointer(map + ObjClass)) != "bigMap_C")
+                return null;
+            long mapClass = Pointer(map + ObjClass);
+            if (NthProperty(mapClass, "Image", 0) is not int imageAt)
+                return null;
+            long image = Pointer(map + imageAt);
+            if (!Showing(image) || DrawnAt(image) is not { Width: > 20, Height: > 20 } drawn)
+                return null;
+            long gm = Pointer(instance + Offset(instanceClass, "m2data_C", "gm"));
+            long gmClass = Pointer(gm + ObjClass);
+            int offsetAt = Offset(gmClass, "gameManager", "MapOffset"), scaleAt = Offset(gmClass, "gameManager", "MapScale");
+            if (offsetAt <= 0 || scaleAt <= 0 || Float(gm + offsetAt) is not double ox || Float(gm + offsetAt + 4) is not double oy
+                || Float(gm + scaleAt) is not double sx || Float(gm + scaleAt + 4) is not double sy || sx <= 0 || sy <= 0)
+                return null;
+            double texture = 0;
+            if (Offset(uiClass, "UI_C", "miniMap") is int miniAt and > 0 && Pointer(ui + miniAt) is long mini && MemoryReads.IsPointer(mini)
+                && Offset(Pointer(mini + ObjClass), "miniMap_C", "MapImgSize") is int miniSizeAt and > 0 && Float(mini + miniSizeAt) is double t)
+                texture = t;
+            return texture is < 100 or > 8000 ? null : new MapPicture(drawn, ox, oy, sx, sy, texture);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException or OverflowException or InvalidOperationException) { }
+        return null;
+    }
 
     /// <summary>The NPCs on the open M map; null when it isn't open (or can't be read).</summary>
     public List<MapNpc>? ReadMapNpcs()

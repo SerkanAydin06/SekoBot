@@ -397,7 +397,8 @@ internal sealed partial class BotEngine
                 if (way == null || _clock.Elapsed - wayAt > TimeSpan.FromSeconds(me.DistanceXY(target) > 6000 ? 4 : 1))
                 {
                     // A way walked before (over the slopes up to the town…) first; else drawn around what is known.
-                    walked = _walked.Way(world.MapName, me, target, stuckHere);
+                    // The map's roads known: along them (the M map's roads); else a way walked before.
+                    walked = _terrain.Of(world.MapName)?.Roads != null ? null : _walked.Way(world.MapName, me, target, stuckHere);
                     var avoid = stuckHere.ToList();
                     way = walked ?? await Task.Run(() => Route(world, target, avoid), token);
                     wayAt = _clock.Elapsed;
@@ -454,8 +455,8 @@ internal sealed partial class BotEngine
             // The town's NPCs too (the one we go to stands in the goal's circle and doesn't count).
             .Concat((world.TownNpcs ?? []).Where(n => n.Position.DistanceXY(me) < reach)
                 .Select(n => new MapTerrain.Circle(n.Position.X, n.Position.Y, PassNpcsBy))).ToList();
-        return map.WayTo(me, target, avoid: [.. learned, .. mobs])
-               ?? map.WayTo(me, target, avoid: learned)
+        return map.WayTo(me, target, avoid: [.. learned, .. mobs], roads: true)
+               ?? map.WayTo(me, target, avoid: learned, roads: true)
                ?? map.WayTo(me, target, avoid: stuckHere)
                ?? map.WayTo(me, target);
     }
