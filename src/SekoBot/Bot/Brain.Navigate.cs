@@ -555,6 +555,10 @@ internal sealed partial class Brain
     private bool _toHotspot;
     private bool _atFarmSpot, _travelNoted;
     private TimeSpan _travelSince = Never;
+    private double _travelLimitMs;
+
+    /// <summary>How long walking to the farm spot may take: 2 minutes, and a minute more for every 100 m.</summary>
+    internal static double TravelLimitMs(double distance) => 120_000 + distance / 10000 * 60_000;
 
     /// <summary>
     /// Walks to the saved farm spot before farming starts (mobs met on the way follow and are
@@ -566,12 +570,15 @@ internal sealed partial class Brain
         if (_atFarmSpot || state.FarmSpot is not Vec3 spot || state.Position is not Vec3 me || state.Camera is not CameraView camera)
             return false;
         var now = state.Time;
-        if (_travelSince == Never)
-            _travelSince = now;
         double distance = me.DistanceXY(spot);
+        if (_travelSince == Never)
+        {
+            _travelSince = now;
+            _travelLimitMs = TravelLimitMs(distance);
+        }
         string? done = distance <= 500 ? "Farm alanına varıldı; farm başlıyor."
             : state.Hp is < 0.5 ? "Can azaldı; farm burada başlıyor."
-            : now - _travelSince > Ms(120_000) ? "Farm alanına 2 dakikada varılamadı; burada başlanıyor."
+            : now - _travelSince > Ms(_travelLimitMs) ? $"Farm alanına {_travelLimitMs / 60_000:0} dakikada varılamadı; burada başlanıyor."
             : null;
         if (done != null)
         {

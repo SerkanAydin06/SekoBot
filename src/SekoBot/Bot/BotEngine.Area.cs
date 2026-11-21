@@ -175,13 +175,9 @@ internal sealed partial class BotEngine
         if (!profile.UseFarmSpot || world == null)
             return null;
         // The place the user saved comes first (on its map).
+        // Anywhere on the same map: the way there is found across the whole map (around mountains, slopes, rocks).
         if (profile.MySpot is { } mine && mine.MapName == world.MapName)
-        {
-            if (mine.Position.DistanceXY(world.Player) <= 30000)
-                return mine.Position;
-            why = "Kaydettiğin alan 300 m'den uzakta; bot durduğu yerde başlıyor (karakteri alana yaklaştırıp yeniden başlat).";
-            return null;
-        }
+            return mine.Position;
         if (profile.FarmSpot is not { } spot)
         {
             why = "Kayıtlı farm alanı yok; önce \"En iyi alanı bul\"a bas. Bot durduğu yerde başlıyor.";
@@ -190,11 +186,6 @@ internal sealed partial class BotEngine
         if (spot.MapName != world.MapName)
         {
             why = $"Kayıtlı farm alanı başka haritada ({spot.MapName}); bot durduğu yerde başlıyor.";
-            return null;
-        }
-        if (spot.Position.DistanceXY(world.Player) > 30000)
-        {
-            why = "Kayıtlı farm alanı 300 m'den uzakta; bot durduğu yerde başlıyor.";
             return null;
         }
         return spot.Position;
