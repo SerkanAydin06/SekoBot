@@ -370,6 +370,11 @@ internal sealed partial class Brain
             _lastReviveClick = Never;
             _reviveTries = 0;
         }
+        if (state.HoldRevive)
+        {
+            _lastReviveClick = Never;
+            return; // killed by a player still around: waiting (the engine decides)
+        }
         if (state.ReviveReady && now - _lastReviveClick >= Ms(3000))
         {
             // Still dead after a click: the button may sit a little higher or lower on this

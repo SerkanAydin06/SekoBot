@@ -218,7 +218,10 @@ internal readonly record struct TownNpc(int Vnum, Vec3 Position);
 
 /// <summary>Another player around.</summary>
 /// <param name="IsGm">The game marks the player as a game master.</param>
-internal sealed record OtherPlayer(string Name, bool IsGm, Vec3 Position)
+/// <param name="Empire">The player's kingdom ("ırk": 1, 2, 3; 0 not known).</param>
+/// <param name="PvpMode">The player's fight mode (0: peaceful; anything else: may attack players).</param>
+/// <param name="TargetsMe">The player has us as its target.</param>
+internal sealed record OtherPlayer(string Name, bool IsGm, Vec3 Position, int Level = 0, int Empire = 0, int PvpMode = 0, bool TargetsMe = false)
 {
     /// <summary>A game master: marked as one, or "[GM]"-style tag in the name.</summary>
     public bool LooksLikeGm => IsGm || IsGmName(Name);
@@ -451,6 +454,7 @@ internal sealed partial class GameWorldReader : IDisposable
         ("loader", "charData.fullHP", 0x770 + 0x68),
         ("loader", "charData.fullSp", 0x770 + 0x88),
         ("loader", "charData.Level", 0x770 + 0x90),
+        ("loader", "charData.empire", 0),
         ("loader", "charData.Exp", 0x770 + 0x70),
         ("loader", "charData.needexp", 0x770 + 0x78),
         ("loader", "charData.yang", 0x770 + 0x48),
@@ -540,6 +544,9 @@ internal sealed partial class GameWorldReader : IDisposable
         ("NPC", "isOwnedMob", 0x7A2),
         ("NPC", "playername", 0x640),
         ("NPC", "isGM", 0x6B5),
+        ("NPC", "playerLevel", 0x660),
+        ("NPC", "playerEmpire", 0x66C),
+        ("NPC", "pvpMode", 0x6B8),
         ("NPC", "targetActorMe", 0x860),
         ("NPC", "thismob.Type", 0x348 + 0x28),
         ("NPC", "thismob.Exp", 0x348 + 0xC8),
@@ -575,6 +582,17 @@ internal sealed partial class GameWorldReader : IDisposable
         ("selectebleOwningChar_C", "charData.playerid", 0),
         ("c_Button_charSelect_C", "langText", 0),
         ("m2data_C", "versionOld", 0),
+        // Changing channel (seen 2026-11-21); 0: found by name only.
+        ("m2data_C", "Channel", 0),
+        ("m2data_C", "chChange", 0),
+        ("UI_C", "EscMenu", 0),
+        ("chChange_C", "evet", 0),
+        ("chChange_C", "selectedCh", 0),
+        ("chChange_C", "WrapBox", 0),
+        ("chBox_C", "chid", 0),
+        ("chBoxLogin_C", "chid", 0),
+        ("chBoxLogin_C", "yuzde", 0),
+        ("c_Button_C", "langText", 0),
         ("UI_C", "bigMap", 0),
         ("bigMap_C", "MapImgSize", 0),
         ("bigMap_C", "dotArea", 0x278),
@@ -898,7 +916,8 @@ internal sealed partial class GameWorldReader : IDisposable
                     continue;
                 // The M map is put here each time it opens and stays here, "visible", after it is closed (seen:
                 // three of them listed with the map shut): whether it shows is UI_C.bigMap (empty when closed).
-                if (ClassName(cls) == "bigMap_C")
+                // Same for the channel window (seen: chChange_C left here "visible" after closing; open while m2data.chChange is set).
+                if (ClassName(cls) is "bigMap_C" or "chChange_C")
                     continue;
                 if (Byte(widget + Offset(cls, "Widget", "Visibility")) is byte visibility and not (1 or 2))
                     open.Add(ClassName(cls));
@@ -1825,7 +1844,9 @@ internal sealed partial class GameWorldReader : IDisposable
         {
             long playerRoot = BitConverter.ToInt64(data, ActorRoot);
             TryVec3(playerRoot + ComponentWorldLocation, out var at);
-            return new OtherPlayer(ReadFString(actor + Offset(cls, "NPC", "playername"), 64), Flag("isGM"), at);
+            long target = BitConverter.ToInt64(data, Offset(cls, "NPC", "targetActorMe"));
+            return new OtherPlayer(ReadFString(actor + Offset(cls, "NPC", "playername"), 64), Flag("isGM"), at,
+                Int("playerLevel"), Int("playerEmpire"), Int("pvpMode"), _pawn != 0 && target == _pawn);
         }
         if (!Flag("attackable") && !Flag("isOwnedMob") && Int("thismob.vnum") is int npcVnum and >= 9000 and < 9100)
         {

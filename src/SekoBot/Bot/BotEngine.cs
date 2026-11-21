@@ -187,7 +187,7 @@ internal sealed partial class BotEngine : IDisposable
                             TargetSpot = MemoryTargetSpot(world, frame.Width, frame.Height),
                         };
                         if (world is { Dead: true })
-                            state = state with { ReviveReady = world.ReviveReady };
+                            state = state with { ReviveReady = world.ReviveReady, HoldRevive = _holdRevive };
                         if (profile.ClosePopups && BotRunning && !state.Dead)
                             // While throwing items the bag and its menu are ours (not windows to close or tell).
                             state = state with
@@ -291,7 +291,7 @@ internal sealed partial class BotEngine : IDisposable
             }
             // Off to a market NPC to sell: that trip drives the character, the brain waits.
             else
-                actions = _selling ? [] : WhisperTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);
+                actions = _selling ? [] : PvpTick(state, Profile) ?? WhisperTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);
             phase = _brain.Phase;
             // Throwing items away: the game stays in front for all the clicks, not back and forth for each.
             _input.HoldFront = _cleaner.Active;
