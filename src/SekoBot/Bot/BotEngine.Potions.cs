@@ -19,17 +19,24 @@ internal sealed partial class BotEngine
     /// <summary>A potion to buy: the key it is on, the item, how many there are, how many are wanted.</summary>
     internal readonly record struct PotionNeed(string Kind, int Vnum, int Have, int Want);
 
-    /// <summary>The potions on the HP / MP keys below the line (to fill up to the target).</summary>
-    private List<PotionNeed> PotionNeeds(WorldSnapshot world, BotProfile p)
+    /// <summary>
+    /// The potions on the HP / MP keys below the line (a trip is due). <paramref name="topUp"/>: at the shop anyway —
+    /// every one short of the target is filled up (the user: the HP potions at 500 should come along with the MP).
+    /// </summary>
+    private List<PotionNeed> PotionNeeds(WorldSnapshot world, BotProfile p, bool topUp = false)
     {
         var needs = new List<PotionNeed>();
         if (!p.BuyPotions)
             return needs;
         foreach (var (kind, key) in new[] { ("HP", p.Keys.HpPotion), ("MP", p.Keys.MpPotion) })
-            if (Potion(world, key) is { Vnum: int vnum } potion && potion.InBag < p.BuyPotionsBelow)
+            if (Potion(world, key) is { Vnum: int vnum } potion
+                && potion.InBag < (topUp ? p.BuyPotionsUpTo * TopUpShare : p.BuyPotionsBelow))
                 needs.Add(new PotionNeed(kind, vnum, potion.InBag, p.BuyPotionsUpTo));
         return needs;
     }
+
+    /// <summary>At the shop, a potion with less than this share of the target is filled up.</summary>
+    internal const double TopUpShare = 0.9;
 
     /// <summary>Running low on potions with a potion shop known on this map: a trip just for them is due.</summary>
     private bool PotionTripDue(GameState state, BotProfile p)
@@ -57,7 +64,7 @@ internal sealed partial class BotEngine
         var bought = new List<string>();
         if (World is not { } world)
             return "";
-        foreach (var need in PotionNeeds(world, p))
+        foreach (var need in PotionNeeds(world, p, topUp: true))
         {
             int have = need.Have, got = 0, fails = 0;
             long spent = 0;

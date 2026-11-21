@@ -43,6 +43,7 @@ internal sealed partial class BotEngine
     private int _channelFrom, _escTries;
     private DateTime _channelActedAt = DateTime.MinValue;
     private bool _channelGrown;
+    private DateTime _changePressedAt = DateTime.MinValue;
     /// <summary>The menu didn't open while dead: revived first (the brain), the channel changed once alive.</summary>
     private bool _channelAfterRevive;
 
@@ -160,7 +161,13 @@ internal sealed partial class BotEngine
     {
         _channelSince = now;
         _channelActedAt = DateTime.MinValue;
+        _changePressedAt = DateTime.MinValue;
         _escTries = 0;
+        // Whatever the reason (a player, a crowd of ours): never onto a channel one of our bots is on, on this map
+        // (seen: off from a player to channel 5, right where another of ours farmed — both lost experience).
+        if (World is { } here)
+            foreach (var o in ReadPlaces(SekoBot.Instance.Number).Where(o => o.Map == here.MapName && o.Channel > 0))
+                _channelAvoid.Add(o.Channel);
         _channelGrown = false;
         lock (_worldGate)
             _channelFrom = _world?.ReadChannels()?.Current ?? 0;
@@ -214,8 +221,12 @@ internal sealed partial class BotEngine
             }
             if (window.Selected != target.Channel)
                 return [new ClickAction(Middle(target.At), Slow: true)];
+            // Pressed: the game takes a while to move over (seen: 20 s); not pressed again meanwhile.
+            if (now - _changePressedAt < TimeSpan.FromSeconds(12))
+                return [];
             if (window.Change is { } change)
             {
+                _changePressedAt = now;
                 _log($"🔀 Kanal {target.Channel} seçildi (%{target.Full} dolu); 'Kanal değiştir'e basılıyor.");
                 return [new ClickAction(Middle(change), Slow: true)];
             }

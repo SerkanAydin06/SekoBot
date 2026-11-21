@@ -110,7 +110,9 @@ internal sealed partial class BotEngine
         bool potions = PotionNeeds(world, p).Count > 0 && (world.Progress?.Yang ?? 0) >= MinPotionYang && PotionShop(world) != null;
         if (toSell == 0 && !potions)
             return null;
-        var npc = potions ? PotionShop(world) : NearShop(world);
+        // Going to sell anyway: to the shop with potions when any is short of the target (filled up there).
+        bool topUp = p.BuyPotions && PotionNeeds(world, p, topUp: true).Count > 0 && (world.Progress?.Yang ?? 0) >= MinPotionYang;
+        var npc = (potions || topUp) && PotionShop(world) is { } potionShop ? potionShop : NearShop(world);
         if (npc == null)
         {
             if (_noNpcToldMap != world.MapName)
@@ -264,11 +266,14 @@ internal sealed partial class BotEngine
                     continue;
                 }
                 var picked = BotLooted;
+                var junk = BotPicked;
                 var full = (World?.Progress?.Inventory ?? []).Where(i => i.Slot >= CharacterProgress.FirstBagSlot)
                     .GroupBy(i => (i.Slot, i.Vnum)).ToDictionary(g => g.Key, g => g.First());
                 var state = State;
                 foreach (var action in cleaner.Tick(_clock.Elapsed, ReadBagNow(),
-                             i => ShouldSell(full.GetValueOrDefault((i.Slot, i.Vnum), new InventoryItem(i.Slot, i.Vnum, i.Count)), profile, picked),
+                             // At the shop the bag is emptied too: what would be thrown is sold instead (yang rather than the ground).
+                             i => full.GetValueOrDefault((i.Slot, i.Vnum), new InventoryItem(i.Slot, i.Vnum, i.Count)) is var item
+                                  && (ShouldSell(item, profile, picked) || ShouldThrow(item, profile, junk)),
                              profile, new Size(state?.Width ?? 1920, state?.Height ?? 1080)))
                     input.Enqueue(action);
                 foreach (var (vnum, count) in cleaner.ThrownItems)
