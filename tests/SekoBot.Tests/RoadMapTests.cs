@@ -9,13 +9,22 @@ namespace SekoBot.Tests;
 public class RoadMapTests
 {
     [Fact]
-    public void Brown_ways_on_the_map_picture_are_roads_grass_rock_and_water_not()
+    public void A_light_line_through_the_ground_is_road_a_speck_and_the_ground_not()
     {
-        Assert.True(RoadMap.RoadColour(91, 76, 58));
-        Assert.True(RoadMap.RoadColour(78, 66, 45));
-        Assert.False(RoadMap.RoadColour(60, 57, 41));   // grass
-        Assert.False(RoadMap.RoadColour(103, 99, 97));  // rock
-        Assert.False(RoadMap.RoadColour(61, 81, 111));  // water
+        // 120 × 120 of dark green ground (c2-like), a light grey road across it, a light speck off it, water at the edge.
+        int w = 120, h = 120;
+        var px = new (byte R, byte G, byte B)[w * h];
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                px[y * w + x] = x > 110 ? ((byte)70, (byte)90, (byte)140) : ((byte)54, (byte)64, (byte)32);
+        for (int x = 0; x < 100; x++)
+            px[60 * w + x] = px[61 * w + x] = (120, 118, 105);
+        px[20 * w + 20] = (120, 118, 105);
+        var road = RoadMap.RoadPixels(px, w, h);
+        Assert.True(road[60 * w + 50]);
+        Assert.False(road[30 * w + 50]);     // ground
+        Assert.False(road[20 * w + 20]);     // a speck
+        Assert.False(road[60 * w + 115]);    // water
     }
 
     [Fact]
