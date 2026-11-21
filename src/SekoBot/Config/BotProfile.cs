@@ -253,6 +253,8 @@ internal sealed class BotProfile
     /// <summary>Killed by a player: wait for them to leave before reviving, change channel if they stay;
     /// hit by a player: change channel.</summary>
     public bool PvpGuard { get; set; } = true;
+    /// <summary>Two or more of our bots farming the same place on the same channel: all but one change channel.</summary>
+    public bool CrowdGuard { get; set; } = true;
     /// <summary>Minutes between two login tries.</summary>
     public double AutoLoginMinutes { get; set; } = 3;
 

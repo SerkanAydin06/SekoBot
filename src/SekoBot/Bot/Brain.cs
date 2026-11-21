@@ -66,6 +66,18 @@ internal sealed partial class Brain
 
     private bool _typingTold;
 
+    private string? _doing;
+
+    /// <summary>What the bot is doing now in words (walking to the area, back to the area, a break…); null: what its phase says.</summary>
+    internal string? Doing => Volatile.Read(ref _doing);
+
+    /// <summary>Notes what this tick is spent on (for the status line); always true (used inside conditions).</summary>
+    private bool Did(string what)
+    {
+        Volatile.Write(ref _doing, what);
+        return true;
+    }
+
     public IReadOnlyList<BotAction> Tick(GameState state)
     {
         if (Phase == BotPhase.Stopped)
@@ -74,6 +86,7 @@ internal sealed partial class Brain
         var p = _profile();
         var now = state.Time;
         var actions = new List<BotAction>();
+        _doing = null;
         NoteDropAges(state);
         LeaveBadDropSpots(state);
         HearGame(state, actions);
@@ -115,7 +128,7 @@ internal sealed partial class Brain
             Enter(BotPhase.Recovering, now);
             _recoverSince = now;
         }
-        if (Phase == BotPhase.Recovering && !TravelPending(state, p) && Recover(state, p, actions))
+        if (Phase == BotPhase.Recovering && !TravelPending(state, p) && Recover(state, p, actions) && Did("Can dolduruluyor"))
             return actions;
 
         // Low HP never stops the bot: stopping would let the mobs finish us off anyway. Potions
@@ -172,7 +185,7 @@ internal sealed partial class Brain
         }
 
         // Few HP potions left: get away from the mobs and stop somewhere quiet.
-        if (!TravelPending(state, p) && RetreatTick(state, p, actions))
+        if (!TravelPending(state, p) && RetreatTick(state, p, actions) && Did("İksir az: sakin bir yere çekiliniyor"))
             return actions;
 
         // How the last fight went decides how many are gathered next (also while running away).
@@ -182,15 +195,15 @@ internal sealed partial class Brain
         // HP low with several mobs on us: get away from them for a moment.
         // Gathering behind someone: running away from them is what got the character killed (seen:
         // IMEDUSA06 died twice fleeing alone); it runs to them instead (LootOnly).
-        if ((p.Attack || state.Follow == null) && !TravelPending(state, p) && FleeTick(state, p, actions))
+        if ((p.Attack || state.Follow == null) && !TravelPending(state, p) && FleeTick(state, p, actions) && Did("Can az: moblardan uzaklaşılıyor"))
             return actions;
 
         // Bag full with items to throw away: get to a quiet spot (the engine then throws them).
-        if (!TravelPending(state, p) && CleanTick(state, p, actions))
+        if (!TravelPending(state, p) && CleanTick(state, p, actions) && Did("🗑 Eşya atmak için sakin bir yere gidiliyor"))
             return actions;
 
         // Now and then a short break, like a person would.
-        if (!TravelPending(state, p) && BreakTick(state, p, actions))
+        if (!TravelPending(state, p) && BreakTick(state, p, actions) && Did("☕ Kısa mola"))
             return actions;
 
         // Attack off: only what lies on the ground is picked up.

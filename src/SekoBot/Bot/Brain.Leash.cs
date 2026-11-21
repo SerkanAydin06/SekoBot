@@ -142,6 +142,7 @@ internal sealed partial class Brain
         SetAttack(false, p, actions, refresh);
         FinishFight(p, actions, now);
         SetMoves(Around(state, sx, sy, length * 0.38, p, to: home), p, actions, refresh);
+        Did($"↩ Alana dönülüyor ({position.DistanceXY(home) / 100:0} m)");
         if (Phase != BotPhase.Moving)
             Enter(BotPhase.Moving, now);
         _movingSince = Never; // not chasing a mob, no "can't reach" give-up

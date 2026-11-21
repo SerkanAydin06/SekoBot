@@ -85,7 +85,7 @@ internal static class BotPhaseText
     {
         BotPhase.Setup => "Kamera ayarlanıyor",
         BotPhase.Searching => "Mob arıyor",
-        BotPhase.Moving => "Moba yürüyor",
+        BotPhase.Moving => "Yürüyor",
         BotPhase.Fighting => "Saldırıyor",
         BotPhase.Looting => "Eşya toplanıyor",
         BotPhase.Turning => "Yön değiştiriyor",

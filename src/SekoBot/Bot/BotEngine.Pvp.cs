@@ -205,7 +205,8 @@ internal sealed partial class BotEngine
         _channelActedAt = now;
         if (screen is { WindowOpen: true } window)
         {
-            var target = window.Boxes.Where(b => b.Channel != window.Current).OrderBy(b => b.Full).FirstOrDefault();
+            // The emptiest other channel — one none of our bots is on here when there is such (see CrowdTick).
+            var target = window.Boxes.Where(b => b.Channel != window.Current).OrderBy(b => _channelAvoid.Contains(b.Channel)).ThenBy(b => b.Full).FirstOrDefault();
             if (target.Channel == 0)
             {
                 EndChannelChange("🔀 Geçilecek başka kanal yok.", notify: false);
@@ -244,6 +245,9 @@ internal sealed partial class BotEngine
     {
         _channelSince = null;
         _channelAfterRevive = false;
+        _channelAvoid.Clear();
+        _lastChannelChange = DateTime.Now;
+        _myChannel = 0; // read again
         _holdRevive = false;
         _pvpDeathAt = DateTime.MaxValue;
         _enemies.Clear(); // a new channel: other players
