@@ -235,7 +235,8 @@ internal sealed partial class BotEngine : IDisposable
                             Drops = view?.Drops ?? [],
                             Junk = view?.Junk ?? [],
                             Attackers = view?.Attackers ?? [],
-                            Targets = view?.Targets ?? [],
+                            // Players who attacked us, close by, are fought like a mob attacking us.
+                            Targets = world != null ? [.. view?.Targets ?? [], .. EnemyTargets(world, profile, frame.Width, frame.Height)] : view?.Targets ?? [],
                             AttackPower = world?.AttackPower ?? 0,
                             Hotspot = Hotspot(world, profile, now),
                             Follow = profile.Attack ? null : FollowWho(world?.Players, world?.Player, CharacterName, profile.FollowName),
