@@ -320,6 +320,8 @@ internal sealed class MainForm : Form
         Check(items, "İksir", 198, 38, 70, () => _profile.LootPotions, v => _profile.LootPotions = v);
         Check(items, "Silah / zırh", 272, 38, 110, () => _profile.LootEquipment, v => _profile.LootEquipment = v);
         Check(items, "Diğer (malzeme, kitap…)", 386, 38, 200, () => _profile.LootOther, v => _profile.LootOther = v);
+        Check(items, "Ödül ve özel eşyaları hep topla", 600, 38, 300, () => _profile.LootRewards, v => _profile.LootRewards = v);
+        Check(items, "Sadece kendi sınıfımın silah / zırhı", 500, 72, 330, () => _profile.LootOwnClass, v => _profile.LootOwnClass = v);
         Theme.Label(items, "Silah / zırh satışta en az", new Rectangle(0, 72, 190, 26), 9f, Theme.Muted);
         var minGold = Theme.Number(items, new Rectangle(196, 72, 100, 26), 0, 10_000_000,
             Math.Clamp(_profile.LootEquipmentMinGold, 0, 10_000_000), 0, 500);

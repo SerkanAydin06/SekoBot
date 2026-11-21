@@ -189,6 +189,30 @@ public class AlwaysLootTests
     }
 
     [Fact]
+    public void A_character_file_without_the_upgrade_mark_is_upgraded_even_when_the_SekoBot_settings_were()
+    {
+        // Seen: the SekoBot's own settings got the mark first, the character's (older) file kept it and was skipped.
+        string folder = Path.Combine(Path.GetTempPath(), "sekobot-loot-" + Guid.NewGuid().ToString("N"));
+        string before = CharacterSettings.Folder;
+        try
+        {
+            CharacterSettings.Folder = folder;
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(Path.Combine(folder, "Ali.json"), "{\"LootEquipmentMinGold\": 3000, \"LootPick\": [1]}");
+            var p = new BotProfile { LootVersion = CharacterSettings.LootUpgrade };
+            Assert.True(CharacterSettings.Load("Ali", p));
+            Assert.Equal(4000, p.LootEquipmentMinGold);
+            Assert.Contains(30010, p.LootPick);
+            Assert.Contains("LootVersion", File.ReadAllText(Path.Combine(folder, "Ali.json"))); // saved: not again
+        }
+        finally
+        {
+            CharacterSettings.Folder = before;
+            try { Directory.Delete(folder, true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
     public void The_loot_upgrade_raises_the_shop_price_and_adds_the_valuable_materials_once()
     {
         var p = new BotProfile { LootEquipmentMinGold = 3000, LootThrow = [30023] };
