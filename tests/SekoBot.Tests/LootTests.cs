@@ -134,6 +134,7 @@ public class LootWhileFightingTests
     }
 }
 
+[Collection("CharacterFolder")]
 public class AlwaysLootTests
 {
     [Fact]
@@ -291,7 +292,7 @@ public class JunkCloserTests
 {
     private static readonly Point Center = new(960, 540);
 
-    private static List<BotAction> Run(Point wanted, Point junk)
+    private static List<BotAction> Run(Point wanted, Point junk, bool special = false)
     {
         var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = true, PullGroups = false };
         var brain = new Brain(() => p);
@@ -299,7 +300,7 @@ public class JunkCloserTests
         var all = new List<BotAction>();
         for (double t = 0; t < 2000; t += 100)
             all.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
-                { Drops = [new GroundSpot(7, wanted)], Junk = [junk], Walking = true, AttackPower = 189 }));
+                { Drops = [new GroundSpot(7, wanted, Special: special)], Junk = [junk], Walking = true, AttackPower = 189 }));
         return all;
     }
 
@@ -318,9 +319,13 @@ public class JunkCloserTests
     [Fact]
     public void An_unwanted_item_lying_on_top_of_the_wanted_one_does_not_make_it_circle()
     {
-        // Seen in the game: the bot turned round and round there. Both are taken (the junk thrown later).
-        var onTop = Run(new Point(Center.X + 40, Center.Y), new Point(Center.X + 32, Center.Y + 5));
+        // Seen in the game: the bot turned round and round there. A special item: both are taken (the junk thrown later).
+        var onTop = Run(new Point(Center.X + 40, Center.Y), new Point(Center.X + 32, Center.Y + 5), special: true);
         Assert.Contains(onTop, a => a is KeyTapAction k && k.Key == Keys.Z);
+        // An ordinary one (yang, a potion, a weapon to look at): left — no junk into the bag (the user: daggers,
+        // fans and bows came in this way, the bag emptied every 7 minutes).
+        var ordinary = Run(new Point(Center.X + 40, Center.Y), new Point(Center.X + 32, Center.Y + 5));
+        Assert.DoesNotContain(ordinary, a => a is KeyTapAction k && k.Key == Keys.Z);
     }
 
     [Fact]
@@ -333,10 +338,23 @@ public class JunkCloserTests
         // The character never gets past the unwanted one (it stays closer, as the screen is seen).
         for (double t = 0; t < 4000 && firstZ < 0; t += 100)
             if (brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
-                    { Drops = [new GroundSpot(7, new Point(Center.X + 50, Center.Y))], Junk = [new Point(Center.X + 5, Center.Y)], Walking = true, AttackPower = 189 })
+                    { Drops = [new GroundSpot(7, new Point(Center.X + 50, Center.Y), Special: true)], Junk = [new Point(Center.X + 5, Center.Y)], Walking = true, AttackPower = 189 })
                 .Any(a => a is KeyTapAction k && k.Key == Keys.Z))
                 firstZ = t;
-        Assert.InRange(firstZ, Brain.JunkStepMaxMs, 4000);    // tried to step past first, then took both
+        Assert.InRange(firstZ, Brain.JunkStepMaxMs, 4000);    // a special item: tried to step past first, then took both
+    }
+
+    [Fact]
+    public void Junk_closer_for_long_an_ordinary_item_is_left()
+    {
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = true, PullGroups = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        var all = new List<BotAction>();
+        for (double t = 0; t < 6000; t += 100)
+            all.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
+                { Drops = [new GroundSpot(7, new Point(Center.X + 50, Center.Y))], Junk = [new Point(Center.X + 5, Center.Y)], Walking = true, AttackPower = 189 }));
+        Assert.DoesNotContain(all, a => a is KeyTapAction k && k.Key == Keys.Z);
     }
 }
 

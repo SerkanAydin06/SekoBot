@@ -758,7 +758,7 @@ internal sealed partial class Brain
         if (!p.PickUpDrops || now - _lastDropTap < Ms(700))
             return;
         double cx = state.Width / 2.0, cy = state.Height / 2.0;
-        bool close = state.Drops.Any(d => !_ignoredDrops.ContainsKey(d.Id) && !JunkCloser(state, d.Spot) &&
+        bool close = state.Drops.Any(d => !_ignoredDrops.ContainsKey(d.Id) && CleanPick(state, d) &&
                                           Math.Sqrt(Math.Pow(d.Spot.X - cx, 2) + Math.Pow(d.Spot.Y - cy, 2)) <= radius * 0.6);
         if (!close)
             return;
@@ -815,9 +815,20 @@ internal sealed partial class Brain
         }
         else if (!junkCloser)
             _junkStepSince = Never;
-        // Couldn't get closer to it than the unwanted one: take both (thrown away later).
-        if (junkCloser && now - _junkStepSince > Ms(JunkStepMaxMs))
+        // Couldn't get closer to it than the unwanted one, or junk lies right on it: a special item is taken with
+        // the junk (thrown away later); an ordinary one is left — not worth filling the bag with junk (the user:
+        // daggers, fans and bows came in this way, and the bag was emptied every 7 minutes).
+        if (junkCloser && now - _junkStepSince > Ms(JunkStepMaxMs) || !junkCloser && JunkOnTop(state, drop.Spot))
+        {
+            if (!drop.Special)
+            {
+                _ignoredDrops[drop.Id] = now + Ms(DropRetryMs);
+                _junkStepSince = Never;
+                SetMoves([], p, actions, refresh);
+                return false;
+            }
             junkCloser = false;
+        }
         if (junkCloser && distance > radius * 0.08)
         {
             SetMoves(Towards(dx, dy, radius * 0.04, p), p, actions, refresh);
@@ -1014,6 +1025,21 @@ internal sealed partial class Brain
         return state.Junk.Any(j => Math.Sqrt(Math.Pow(j.X - wanted.X, 2) + Math.Pow(j.Y - wanted.Y, 2)) > onTop &&
                                    Math.Sqrt(Math.Pow(j.X - cx, 2) + Math.Pow(j.Y - cy, 2)) <= mine + 4);
     }
+
+    /// <summary>An unwanted item lies right on the wanted one: the pickup key would take it too.</summary>
+    internal static bool JunkOnTop(GameState state, Point wanted)
+    {
+        double onTop = JunkOnTopPx * state.Height / 1080.0;
+        return state.Junk.Any(j => Math.Sqrt(Math.Pow(j.X - wanted.X, 2) + Math.Pow(j.Y - wanted.Y, 2)) <= onTop);
+    }
+
+    /// <summary>
+    /// The pickup key may be pressed for this item: nothing unwanted closer, and — for an ordinary item (yang,
+    /// potions, a weapon picked to look at its bonuses) — nothing unwanted lying on it either. A special one
+    /// ("Topla", rewards, valuable materials) is worth taking some junk along (thrown away later).
+    /// </summary>
+    internal static bool CleanPick(GameState state, GroundSpot drop) =>
+        !JunkCloser(state, drop.Spot) && (drop.Special || !JunkOnTop(state, drop.Spot));
 
     /// <summary>An unwanted item this close to the wanted one (screen pixels at 1080 high) lies on top of it.</summary>
     internal const double JunkOnTopPx = 20;
