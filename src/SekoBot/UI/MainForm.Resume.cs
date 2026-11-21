@@ -52,6 +52,13 @@ internal sealed partial class MainForm
         }
         _gameFolder ??= GameFolderOf(e.Window.ProcessId);
         var world = e.World;
+        // The game's own update question at its start: "Onayla" (it downloads, then goes on to the login).
+        if (_profile.AutoLogin && world == null && now - _updateYesAt > TimeSpan.FromSeconds(20) && e.UpdateQuestion() is { } yes)
+        {
+            _updateYesAt = now;
+            e.PressAt(yes);
+            WriteLog("🔄 Oyun başlamadan önce ek kaynak indirmek istiyor; 'Onayla'ya basıldı.");
+        }
         bool inGame = world != null && world.MapName.Length > 0 && !BotEngine.IsLoginScreen(world.MapName) && !world.MapName.StartsWith('_');
         if (inGame && e.CharacterName.Length > 0)
             _lastCharacter = e.CharacterName;
@@ -272,7 +279,7 @@ internal sealed partial class MainForm
         }
     }
 
-    private DateTime _launcherPressedAt = DateTime.MinValue, _launcherSizedAt = DateTime.MinValue;
+    private DateTime _launcherPressedAt = DateTime.MinValue, _launcherSizedAt = DateTime.MinValue, _updateYesAt = DateTime.MinValue;
     /// <summary>This SekoBot's game was started again (opens big): arranged with the others once back in the game.</summary>
     private bool _gameRestarted;
 
