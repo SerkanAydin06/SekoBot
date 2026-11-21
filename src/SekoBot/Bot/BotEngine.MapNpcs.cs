@@ -56,9 +56,9 @@ internal sealed partial class BotEngine
     }
 
     /// <summary>
-    /// Whether the M map shows now (the game's open windows, as the window watch reads them). Not the map object
-    /// itself: it stays in memory a moment after closing (seen: taken for still open, the key pressed again,
-    /// and the map opened again — open and shut a few times, then left open).
+    /// Whether the M map shows now: the main UI's map (UI_C.bigMap) is set only while it is open. The copies the
+    /// game leaves in its list of added windows stay "visible" after closing (seen: taken for still open, the
+    /// key pressed again, and the map opened again — open and shut a few times, then left open); not counted.
     /// </summary>
     private bool MapOpenNow() => World?.OpenWindows?.Any(IsMapWindow) == true;
 

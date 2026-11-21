@@ -135,7 +135,8 @@ internal sealed partial class BotEngine
     /// <summary>The last <see cref="PopupOpen"/> found only the M map open.</summary>
     private bool _popupIsMap;
 
-    internal static bool IsMapWindow(string window) => window is "bigMap" or "bigMap_C";
+    /// <summary>The M map showing (UI_C.bigMap: set while it is open, empty once closed).</summary>
+    internal static bool IsMapWindow(string window) => window == "bigMap";
 
     private readonly HotspotMap _hotspots = new();
     private string _hotspotMap = "";
