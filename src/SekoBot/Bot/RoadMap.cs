@@ -71,6 +71,23 @@ internal sealed class RoadMap
         return result.RoadCells > 0.02 * columns * rows ? result : null; // not a map picture (nothing road-coloured)
     }
 
+    /// <summary>The picture as it was seen (for a look when no roads came out of it).</summary>
+    public static void SavePicture(Frame frame, Rectangle drawn, string file)
+    {
+        var r = Rectangle.Intersect(drawn, new Rectangle(0, 0, frame.Width, frame.Height));
+        if (r.Width <= 0 || r.Height <= 0)
+            return;
+        using var bmp = new Bitmap(r.Width, r.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        for (int y = 0; y < r.Height; y++)
+            for (int x = 0; x < r.Width; x++)
+            {
+                var (b, g, rd) = frame.Pixel(r.Left + x, r.Top + y);
+                bmp.SetPixel(x, y, Color.FromArgb(rd, g, b));
+            }
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        bmp.Save(file, System.Drawing.Imaging.ImageFormat.Png);
+    }
+
     private int Count()
     {
         int n = 0;

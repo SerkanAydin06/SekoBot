@@ -101,7 +101,7 @@ internal sealed partial class BotEngine
             return [];
         }
         // A moment for the picture to be drawn at its new size — and captured at it (the capture follows a moment later).
-        if (_roadsGrown && now - _roadsGrownAt < TimeSpan.FromSeconds(2))
+        if (_roadsGrown && now - _roadsGrownAt < TimeSpan.FromSeconds(3))
             return [];
         bool captured = WithLatestFrame(f => f.Width >= picture.Drawn.Right && f.Height >= picture.Drawn.Bottom);
         if (!captured && now - _roadsGrownAt < TimeSpan.FromSeconds(10))
@@ -123,8 +123,14 @@ internal sealed partial class BotEngine
     /// <summary>The roads off the picture in the newest frame; kept (on disk, for every SekoBot) when they look right.</summary>
     private RoadMap? ReadRoads(string map, MapPicture picture)
     {
-        var roads = WithLatestFrame(frame => RoadMap.FromPicture(map, frame, picture.Drawn, picture.OffsetX, picture.OffsetY,
-            picture.ScaleX, picture.ScaleY, picture.Texture));
+        var roads = WithLatestFrame(frame =>
+        {
+            var read = RoadMap.FromPicture(map, frame, picture.Drawn, picture.OffsetX, picture.OffsetY, picture.ScaleX, picture.ScaleY, picture.Texture);
+            if (read == null)
+                try { RoadMap.SavePicture(frame, picture.Drawn, MapTerrain.Stem(_terrain.Folder, map) + ".yollar-okunamadi.png"); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or System.Runtime.InteropServices.ExternalException) { }
+            return read;
+        });
         if (roads != null)
             _terrain.SetRoads(roads);
         return roads;
