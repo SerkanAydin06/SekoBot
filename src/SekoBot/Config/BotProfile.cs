@@ -35,6 +35,8 @@ internal sealed class KeyBindings
     public Keys CloseWindow { get; set; } = Keys.Escape;
     /// <summary>Opens and closes the inventory (used when throwing items away).</summary>
     public Keys Inventory { get; set; } = Keys.I;
+    /// <summary>Opens and closes the M map (read once per map for the whole map's NPCs).</summary>
+    public Keys Map { get; set; } = Keys.M;
 }
 
 internal sealed class BotProfile

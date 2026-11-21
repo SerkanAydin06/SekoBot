@@ -238,6 +238,7 @@ internal sealed partial class BotEngine : IDisposable
                             {
                                 TrackPicked(world, now);
                                 NoticeTownNpcs(world, now);
+                                WatchMapNpcs(world, now);
                             }
                             WatchMarket(world, now);
                             WatchTerrain(world, now);
