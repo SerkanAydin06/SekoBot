@@ -380,8 +380,13 @@ internal sealed partial class MainForm : Form
             v => _profile.RetreatAtPotions = (int)v);
         NumberRow(potions, "Tehlikede kaç: can % altı", 0, 136, 0, 90, () => Math.Round(_profile.FleeAtHp * 100), 0, 5,
             v => _profile.FleeAtHp = v / 100);
-        Hint(potions, "Tehlikede kaç: can bu yüzdenin altına düşer ve en az 3 mob saldırırsa bot vurmayı bırakıp moblardan " +
-            "uzaklaşır (iksir içmeye devam eder); can %60'ı geçince ya da 2 sn kimse saldırmayınca (en çok 20 sn) dövüşe döner. 0 = kapalı.", 176);
+        Theme.Label(potions, "Tehlikede kaç: can bu yüzdenin altına düşer ve en az 3 mob saldırırsa bot vurmayı bırakıp moblardan " +
+            "uzaklaşır (iksir içmeye devam eder); can %60'ı geçince ya da 2 sn kimse saldırmayınca (en çok 20 sn) dövüşe döner. 0 = kapalı.", new Rectangle(0, 176, 918, 54), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+        Check(potions, "Market NPC'sinden iksir al (satışa gidince; azalınca ayrıca gider)", 0, 236, 520, () => _profile.BuyPotions, v => _profile.BuyPotions = v);
+        NumberRow(potions, "Şu sayının altına düşünce al", 0, 270, 0, 5000, () => _profile.BuyPotionsBelow, 0, 50,
+            v => _profile.BuyPotionsBelow = (int)v);
+        NumberRow(potions, "Şu sayıya tamamla", 370, 270, 0, 10000, () => _profile.BuyPotionsUpTo, 0, 100,
+            v => _profile.BuyPotionsUpTo = (int)v);
         Check(potions, "Becerileri otomatik kullan (bellekten)", 370, 0, 360, () => _profile.AutoSkills, v => _profile.AutoSkills = v);
         NumberRow(potions, "Alan becerisi: en az mob", 370, 34, 1, 15, () => _profile.AreaSkillMinMobs, 0, 1,
             v => _profile.AreaSkillMinMobs = (int)v);

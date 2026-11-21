@@ -85,13 +85,15 @@ internal sealed partial class BotEngine
     /// </summary>
     private IReadOnlyList<BotAction>? TryStartSellTrip(BotProfile p)
     {
-        if (!p.SellToNpc || _selling || World is not { } world || SellWaiting)
+        if (!p.SellToNpc && !p.BuyPotions || _selling || World is not { } world || SellWaiting)
             return null;
         var picked = BotLooted;
-        int toSell = (world.Progress?.Inventory ?? []).Count(i => ShouldSell(i, p, picked));
-        if (toSell == 0)
+        int toSell = p.SellToNpc ? (world.Progress?.Inventory ?? []).Count(i => ShouldSell(i, p, picked)) : 0;
+        // Potions running low: to the shop selling them (selling there too).
+        bool potions = PotionNeeds(world, p).Count > 0 && (world.Progress?.Yang ?? 0) >= MinPotionYang && PotionShop(world) != null;
+        if (toSell == 0 && !potions)
             return null;
-        var npc = NearShop(world);
+        var npc = potions ? PotionShop(world) : NearShop(world);
         if (npc == null)
         {
             if (_noNpcToldMap != world.MapName)
@@ -139,7 +141,9 @@ internal sealed partial class BotEngine
         var home = _botHome ?? start.Player;
         var at = new Vec3(npc.X, npc.Y, npc.Z);
         string name = NpcBook.Shops.GetValueOrDefault(npc.Vnum, "Market");
-        _log($"💰 Çantada satılacak {toSell} eşya var: {at.DistanceXY(start.Player) / 100:0} m ötedeki {name} NPC'sine gidiliyor.");
+        _log(toSell > 0
+            ? $"💰 Çantada satılacak {toSell} eşya var: {at.DistanceXY(start.Player) / 100:0} m ötedeki {name} NPC'sine gidiliyor."
+            : $"🧪 İksir azaldı: {at.DistanceXY(start.Player) / 100:0} m ötedeki {name} NPC'sinden iksir almaya gidiliyor.");
         _sellStage = $"💰 Satmaya gidiliyor: {name} ({at.DistanceXY(start.Player) / 100:0} m)";
         // Walking takes no mouse: the turn is let go meanwhile, so the other bots can empty their bags
         // (seen: two bots waiting 3–4 minutes while one walked to the NPC). Taken again at the shop.
@@ -259,6 +263,15 @@ internal sealed partial class BotEngine
         finally { input.HoldFront = false; }
         _sessionItems.Save();
         int sold = soldBefore + cleaner.Thrown;
+        // Potions filled up at the shop that sells them.
+        string bought = "";
+        if (PotionShops.Contains(npc.Vnum) && ReadBagNow() is { NpcShop: > 0 })
+        {
+            _sellStage = $"🧪 {name} dükkanından iksir alınıyor";
+            bought = await BuyPotionsAsync(input, profile, token);
+            if (bought.Length > 0)
+                _log($"🧪 İksir alındı: {bought}.");
+        }
 
         // Close the shop (the inventory was closed by the cleaner), then back to the place.
         for (int i = 0; i < 3 && ReadBagNow() is { NpcShop: > 0 }; i++)
@@ -273,6 +286,11 @@ internal sealed partial class BotEngine
         FrontTurn.Shared.LetGo();
         _sellStage = "💰 Satış bitti; alana dönülüyor";
         await WalkRouteAsync(input, home, WalkLimit(World?.Player ?? at, home), token, near: 300);
+        if (sold == 0 && bought.Length > 0)
+        {
+            _sellFailsInRow = 0;
+            return "🧪 İksir alındı; alana dönüldü, avlanmaya devam.";
+        }
         if (sold == 0)
             return Failed("satılacak eşya satılamadı" + (cleaner.Problem is { } why ? $" ({why})" : ""));
         lock (_botGate)

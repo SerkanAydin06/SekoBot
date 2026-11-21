@@ -374,7 +374,12 @@ internal sealed partial class BotEngine
                 }
             }
             if (!_brain.WantsClean || !_brain.ReadyToClean)
+            {
+                // Potions running low: a trip to the market for them (one bot at a time with the screen).
+                if (PotionTripDue(state, p) && TakeTurn() && TryStartSellTrip(p) is { } potionTrip)
+                    return potionTrip;
                 return null;
+            }
             // One bot at a time: another one emptying its bag or selling is waited for.
             if (!TakeTurn())
                 return WaitingForTurn(state);
