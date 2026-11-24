@@ -149,7 +149,11 @@ internal sealed class PickedItems
                 foreach (var pair in saved.Where(p => p.Length == 2))
                     _picked.Add((pair[0], pair[1]));
         }
-        catch { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            Config.Trouble.Tell($"{character}: botun aldığı eşyaların listesi okunamadı", ex);
+            try { File.Copy(FileOf(character), FileOf(character) + ".bozuk", true); } catch (IOException) { }
+        }
     }
 
     public void Save()
@@ -160,8 +164,13 @@ internal sealed class PickedItems
         try
         {
             System.IO.Directory.CreateDirectory(ProfileStore.Directory);
-            File.WriteAllText(FileOf(_character), JsonSerializer.Serialize(_picked.Select(k => new[] { k.Slot, k.Vnum }).ToArray()));
+            Config.Trouble.WriteSafely(FileOf(_character), JsonSerializer.Serialize(_picked.Select(k => new[] { k.Slot, k.Vnum }).ToArray()));
         }
-        catch { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Not lost: tried again at the next save.
+            Changed = true;
+            Config.Trouble.Tell($"{_character}: botun aldığı eşyaların listesi kaydedilemedi, tekrar denenecek", ex);
+        }
     }
 }
