@@ -7,8 +7,9 @@ namespace SekoBot.Capture;
 internal sealed record WindowInfo(nint Handle, uint ProcessId, string Title,
     int Width, int Height, bool IsMinimized)
 {
-    /// <summary>The game window ("Mobile2 Global", or any Metin2 client).</summary>
-    public bool IsMetin2 => WindowService.IsGameTitle(Title);
+    /// <summary>The game window ("Mobile2 Global", or any Metin2 client) — not its launcher, which has the same title
+    /// (seen: the launcher arranged among the games as one of them).</summary>
+    public bool IsMetin2 => WindowService.IsGameTitle(Title) && !WindowService.IsLauncher(ProcessId);
 
     public override string ToString() => $"{Title} · {Width}×{Height} · PID {ProcessId}";
 }
@@ -24,6 +25,30 @@ internal static class WindowService
     public static bool IsGameTitle(string title) =>
         !title.Contains("Patcher", StringComparison.OrdinalIgnoreCase) &&
         GameTitles.Any(t => t.Length > 0 && Squash(title).Contains(Squash(t), StringComparison.OrdinalIgnoreCase));
+
+    private static readonly Dictionary<uint, bool> _launchers = [];
+
+    /// <summary>Whether the process is the game's launcher (Mobile2Launcher, a patcher).</summary>
+    public static bool IsLauncher(uint processId)
+    {
+        lock (_launchers)
+        {
+            if (_launchers.TryGetValue(processId, out bool known))
+                return known;
+            bool launcher;
+            try
+            {
+                using var process = System.Diagnostics.Process.GetProcessById((int)processId);
+                launcher = process.ProcessName.Contains("Launcher", StringComparison.OrdinalIgnoreCase)
+                           || process.ProcessName.Contains("Patcher", StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { launcher = false; }
+            if (_launchers.Count > 500)
+                _launchers.Clear();
+            _launchers[processId] = launcher;
+            return launcher;
+        }
+    }
 
     public static IReadOnlyList<WindowInfo> GetOpenWindows()
     {
