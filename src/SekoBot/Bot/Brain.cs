@@ -40,10 +40,17 @@ internal sealed partial class Brain
     public int Cycles { get; private set; }
     public int Potions { get; private set; }
     public int Deaths { get; private set; }
+    /// <summary>When the character died lately (to stop a death loop).</summary>
+    private readonly List<TimeSpan> _deathTimes = [];
+    /// <summary>This many deaths within <see cref="DeathLoopMs"/>: the bot stops (the place or the settings are too
+    /// hard; going on only loses EXP).</summary>
+    internal const int DeathLoopCount = 3;
+    internal const int DeathLoopMs = 3_600_000;
 
     public void Start(TimeSpan now)
     {
         Cycles = Potions = Deaths = 0;
+        _deathTimes.Clear();
         Detours = NoWayMobs = 0;
         _lastAttackDown = Never;
         _hpLowSince = _mpLowSince = _lastEsc = Never;
@@ -383,6 +390,14 @@ internal sealed partial class Brain
             Deaths++;
             _lastReviveClick = Never;
             _reviveTries = 0;
+            _deathTimes.RemoveAll(t => now - t > Ms(DeathLoopMs));
+            _deathTimes.Add(now);
+            if (_deathTimes.Count >= DeathLoopCount)
+            {
+                actions.Add(new StopAction($"son 1 saatte {_deathTimes.Count} kez öldü; boşuna EXP kaybetmemek için durdu. " +
+                                           "Karakter ölü bekliyor: alanı ya da ayarları (toplanacak mob, iksir) kontrol edip yeniden başlat."));
+                return;
+            }
         }
         if (state.HoldRevive)
         {

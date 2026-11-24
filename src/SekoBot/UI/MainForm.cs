@@ -996,6 +996,14 @@ internal sealed partial class MainForm : Form
         Shown += async (_, _) =>
         {
             WriteLog($"SekoBot {BuildInfo.Version} başlatıldı.");
+            // Files that could not be saved or read: told here instead of silently.
+            Trouble.Listen(text =>
+            {
+                if (InvokeRequired)
+                    BeginInvoke(() => WriteLog(text));
+                else
+                    WriteLog(text);
+            });
             RefreshWindows();
             _scanTimer.Start();
             _statsTimer.Start();

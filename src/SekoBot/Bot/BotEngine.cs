@@ -258,6 +258,7 @@ internal sealed partial class BotEngine : IDisposable
                                 CheckSafety(world, profile);
                                 CheckPotionKeys(world, profile);
                                 WatchTick(world, profile, now);
+                                StuckTick(world, profile, now);
                                 if (profile.Attack)
                                     FitTick(world, profile, now);
                                 SocialTick(world, profile, now);
@@ -316,6 +317,11 @@ internal sealed partial class BotEngine : IDisposable
             {
                 KickedWhileWorking = true;
                 actions = [new StopAction("oyundan atıldı, giriş ekranında (bakım ya da bağlantı koptu)")];
+            }
+            else if (_stuckStop is { } stuck)
+            {
+                _stuckStop = null;
+                actions = [new StopAction(stuck)];
             }
             // Off to a market NPC to sell: that trip drives the character, the brain waits.
             else
@@ -448,6 +454,7 @@ internal sealed partial class BotEngine : IDisposable
                 _social.Reset();
             _session.Reset(_clock.Elapsed);
             _players.Reset();
+            ResetStuck();
             ResetFit();
             _sessionStartedAt = DateTime.Now;
             _farmSpot = UsableFarmSpot(World, Profile, out string? why);

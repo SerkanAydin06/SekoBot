@@ -173,7 +173,21 @@ internal sealed class BotProfile
     /// <summary>Send messages to the user's Telegram (GM, death, level up, potions out, bot stopped).</summary>
     public bool TelegramEnabled { get; set; }
     /// <summary>The token of the user's own Telegram bot (from @BotFather).</summary>
-    public string TelegramToken { get; set; } = "";
+    [JsonIgnore] public string TelegramToken { get; set; } = "";
+    /// <summary>The token as written to the file: encrypted for this Windows user (see <see cref="Secret"/>); a plain
+    /// one from an older version is read and written back encrypted.</summary>
+    [JsonPropertyName("TelegramToken")]
+    public string TelegramTokenStored
+    {
+        get => Secret.Protect(TelegramToken);
+        set
+        {
+            TelegramToken = Secret.Unprotect(value);
+            TokenWasPlain = !string.IsNullOrEmpty(value) && !Secret.IsProtected(value);
+        }
+    }
+    /// <summary>The file held the token unencrypted (to be saved again at once).</summary>
+    [JsonIgnore] internal bool TokenWasPlain { get; private set; }
     /// <summary>The user's chat with that bot (found with "Sohbeti bul").</summary>
     public string TelegramChatId { get; set; } = "";
 
@@ -367,8 +381,9 @@ internal static class ProfileStore
                 if (loaded != null)
                 {
                     Normalize(loaded);
-                    if (Upgrade(loaded) | CharacterSettings.UpgradeLoot(loaded)) // both, always
-                        try { Save(loaded); } catch { }
+                    if (Upgrade(loaded) | CharacterSettings.UpgradeLoot(loaded) | loaded.TokenWasPlain) // all, always
+                        try { Save(loaded); }
+                        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Trouble.Tell("Ayarlar kaydedilemedi", ex); }
                     return loaded;
                 }
             }
@@ -376,7 +391,8 @@ internal static class ProfileStore
         catch
         {
             // A broken file must never block the app; keep a copy for the user.
-            try { File.Copy(ProfilePath, ProfilePath + ".bozuk", true); } catch { }
+            try { File.Copy(ProfilePath, ProfilePath + ".bozuk", true); } catch (IOException) { }
+            Trouble.Tell($"Ayar dosyası bozuk çıktı; SekoBot varsayılan ayarlarla açıldı. Eski dosya '{Path.GetFileName(ProfilePath)}.bozuk' olarak saklandı");
         }
         return new BotProfile { Version = BotProfile.CurrentVersion };
     }
