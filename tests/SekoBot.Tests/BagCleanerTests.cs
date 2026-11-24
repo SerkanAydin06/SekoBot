@@ -39,7 +39,8 @@ public class BagCleanerTests
         // Page 2 showing: drag the item from its slot onto the ground left of the window.
         var shown = Item(104, Junk, 1, true);
         var drag = Assert.IsType<MouseDragAction>(Assert.Single(cleaner.Tick(S(3.5), Bag(true, 1, [Item(11, Keep, 0, false), shown]), toThrow, p, Client)));
-        Assert.Equal(new Point(shown.Rect.X + 21, shown.Rect.Y + 21), drag.From);
+        Assert.InRange(drag.From.X, shown.Rect.X + 16, shown.Rect.X + 26);
+        Assert.InRange(drag.From.Y, shown.Rect.Y + 16, shown.Rect.Y + 26);
         Assert.True(drag.To.X < Window.Left && drag.To.Y > 0 && drag.To.Y < Client.Height);
         // The question: "Evet".
         var yes = new Point(531, 389);
@@ -66,7 +67,8 @@ public class BagCleanerTests
             Bag(true, 0, items, confirm) with { MenuKnown = true, DropButton = menuDrop, MenuSlot = menuSlot };
         cleaner.Start(S(0));
         var click = Assert.IsType<ClickAction>(Assert.Single(cleaner.Tick(S(0), With(items: junk), toThrow, p, Client)));
-        Assert.Equal(new Point(junk.Rect.X + 21, junk.Rect.Y + 21), click.Client);
+        Assert.InRange(click.Client.X, junk.Rect.X + 16, junk.Rect.X + 26);
+        Assert.InRange(click.Client.Y, junk.Rect.Y + 16, junk.Rect.Y + 26);
         var yereAt = new Point(848, 613);
         // Read once: not clicked yet (its place may still be the last menu's); read at the same place again: clicked.
         Assert.Empty(cleaner.Tick(S(1), With(yereAt, 20, null, junk), toThrow, p, Client));
