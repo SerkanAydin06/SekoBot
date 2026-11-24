@@ -392,7 +392,7 @@ internal static class ProfileStore
         {
             // A broken file must never block the app; keep a copy for the user.
             try { File.Copy(ProfilePath, ProfilePath + ".bozuk", true); } catch (IOException) { }
-            Trouble.Tell($"Ayar dosyası bozuk çıktı; SekoBot varsayılan ayarlarla açıldı. Eski dosya '{Path.GetFileName(ProfilePath)}.bozuk' olarak saklandı");
+            Trouble.Tell($"Ayar dosyası bozuk çıktı; PARDUS varsayılan ayarlarla açıldı. Eski dosya '{Path.GetFileName(ProfilePath)}.bozuk' olarak saklandı");
         }
         return new BotProfile { Version = BotProfile.CurrentVersion };
     }

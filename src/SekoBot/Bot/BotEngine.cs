@@ -414,7 +414,7 @@ internal sealed partial class BotEngine : IDisposable
         // Memory is only read on the perception thread; here just look at what it last saw.
         if (World == null)
         {
-            error = "Oyunun belleği okunamıyor (" + _memoryStatus + "). SekoBot'u yönetici olarak aç ve karakterle oyuna gir.";
+            error = "Oyunun belleği okunamıyor (" + _memoryStatus + "). PARDUS'u yönetici olarak aç ve karakterle oyuna gir.";
             return false;
         }
         if (IsLoginScreen(World.MapName))

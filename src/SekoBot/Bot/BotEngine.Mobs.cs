@@ -307,7 +307,7 @@ internal sealed partial class BotEngine
     public string DescribeMobs()
     {
         if (World is not { } world)
-            return "Mob listesi okunamadı: " + _memoryStatus + ". SekoBot'u yönetici olarak açtığından emin ol.";
+            return "Mob listesi okunamadı: " + _memoryStatus + ". PARDUS'u yönetici olarak açtığından emin ol.";
         var mobs = world.ByDistance.ToList();
         var text = new StringBuilder();
         text.Append($"Bellekten: {mobs.Count} mob, {world.OtherPlayers} başka oyuncu (harita {world.MapName}, " +

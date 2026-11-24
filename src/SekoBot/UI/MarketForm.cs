@@ -62,7 +62,7 @@ internal sealed class MarketForm : Form
         _log = log;
         _startScan = startScan;
         _stopScan = stopScan;
-        Text = "SekoBot — Pazar";
+        Text = "PARDUS — Pazar";
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(1320, 780);
         MinimumSize = new Size(1080, 620);

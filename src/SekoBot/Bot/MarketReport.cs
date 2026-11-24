@@ -121,7 +121,7 @@ footer { color: var(--muted); font-size: 12px; padding: 0 24px 24px; }
     <div id="detail"><div class="empty">Bir eşyaya tıkla: kimde var, kaça, nerede — haritada da işaretlenir.</div></div>
   </div>
 </main>
-<footer>Bir ürünün dükkanına gitmek için: SekoBot'ta Pazar sekmesinde ara, seç ve "🚶 Dükkana götür"e bas. Fiyatlar bir tanesi için: yığınlar adede bölündü. "Ortalama", en ucuz ve en pahalı onda birler (uç / şaka fiyatlar) çıkarılarak hesaplandı. SekoBot hiçbir şey satın almaz; sadece bakar.</footer>
+<footer>Bir ürünün dükkanına gitmek için: PARDUS'ta Pazar sekmesinde ara, seç ve "🚶 Dükkana götür"e bas. Fiyatlar bir tanesi için: yığınlar adede bölündü. "Ortalama", en ucuz ve en pahalı onda birler (uç / şaka fiyatlar) çıkarılarak hesaplandı. PARDUS hiçbir şey satın almaz; sadece bakar.</footer>
 <div id="tip"></div>
 <div class="overlay" id="ov"><div class="modal" id="modal"></div></div>
 <script>

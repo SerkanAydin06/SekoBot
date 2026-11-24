@@ -238,7 +238,7 @@ internal sealed partial class BotEngine
     /// </summary>
     private bool TakeTurn()
     {
-        if (FrontTurn.Shared.TryTake(_world?.CharacterName is { Length: > 0 } me ? me : "başka bir SekoBot"))
+        if (FrontTurn.Shared.TryTake(_world?.CharacterName is { Length: > 0 } me ? me : "başka bir PARDUS"))
         {
             _turnWaitTold = "";
             return true;

@@ -1942,7 +1942,7 @@ internal sealed partial class GameWorldReader : IDisposable
         {
             if (Search(IsNamePoolCandidate) is not long pool)
             {
-                Status = "Oyunun isim tablosu bulunamadı (oyun güncellenmiş; yeni SekoBot sürümü gerekebilir)";
+                Status = "Oyunun isim tablosu bulunamadı (oyun güncellenmiş; yeni PARDUS sürümü gerekebilir)";
                 return false;
             }
             _namePool = pool - 0x10; // the found slot is the first block pointer

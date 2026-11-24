@@ -33,7 +33,7 @@ internal static class WindowLayout
         menu.Items.Add("⏸  Tüm botları duraklat", null, (_, _) => TellAll(AllPause));
         menu.Items.Add("■  Tüm botları durdur", null, (_, _) => TellAll(AllStop));
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("⬆  Tüm SekoBot'ları güncelle (kaldığı yerden devam)", null, (_, _) => TellAll(AllUpdate));
+        menu.Items.Add("⬆  Tüm PARDUS'ları güncelle (kaldığı yerden devam)", null, (_, _) => TellAll(AllUpdate));
         return menu;
     }
 

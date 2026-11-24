@@ -63,7 +63,7 @@ internal sealed class MiniBar : Form
         BackColor = Theme.Surface;
         ClientSize = new Size(LogicalWidth, LogicalHeight);
         DoubleBuffered = true;
-        Text = "SekoBot";
+        Text = "PARDUS";
         _menu = new ContextMenuStrip { ShowImageMargin = false, Font = new Font("Segoe UI", 9.5f) };
         _menu.Opening += (_, _) => FillMenu();
         _menu.Closed += (_, _) => { _menuClosedAt = DateTime.Now; Invalidate(); };
@@ -266,9 +266,9 @@ internal sealed class MiniBar : Form
         _menu.Items.Add(new ToolStripSeparator());
         Add(GameIsBig(_info) ? "🗗  Bu oyunu küçült (hepsini diz)" : "⛶  Bu oyunu büyüt", _fill);
         Add("⊞  Tüm oyunları ve botları diz", _arrange);
-        Add("⤢  SekoBot panelini aç (ayarlar, günlük)", _big);
+        Add("⤢  PARDUS panelini aç (ayarlar, günlük)", _big);
         _menu.Items.Add(new ToolStripSeparator());
-        Add("✕  Bu SekoBot'u kapat", _close);
+        Add("✕  Bu PARDUS'u kapat", _close);
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -298,7 +298,7 @@ internal sealed class MiniBar : Form
         const TextFormatFlags Right = TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform;
         float textW = W - ButtonsWidth - 16;
         // Every bar shows its SekoBot's number (the 1st too), so they can be told apart.
-        string name = $"{Instance.Number} · " + (info.Name.Length > 0 ? info.Name : "SekoBot") + (info.Level > 0 ? $" (Sv {info.Level})" : "");
+        string name = $"{Instance.Number} · " + (info.Name.Length > 0 ? info.Name : "PARDUS") + (info.Level > 0 ? $" (Sv {info.Level})" : "");
         var nameRow = new Rectangle((int)(10 * s), (int)(1 * s), (int)(textW * s), (int)(16 * s));
         string tail = info.Elapsed.Length > 0 ? "⏱ " + info.Elapsed : "";
         TextRenderer.DrawText(g, tail, small, nameRow, info.Running && info.Elapsed.Length > 0 ? Theme.Green : Theme.Muted, Right);
@@ -468,7 +468,7 @@ internal sealed class MiniBar : Form
         var i = _info;
         string Count(int? n) => n is int c ? c.ToString("N0") : "—";
         string Pct(double? v) => v is double f ? $"%{f * 100:0}" : "—";
-        var lines = new List<string> { $"{Instance.Number} · {(i.Name.Length > 0 ? i.Name : "SekoBot")}  ·  v{BuildInfo.Version}", i.Status };
+        var lines = new List<string> { $"{Instance.Number} · {(i.Name.Length > 0 ? i.Name : "PARDUS")}  ·  v{BuildInfo.Version}", i.Status };
         if (i.Market != null)
             lines.Add(i.Market);
         else
@@ -476,7 +476,7 @@ internal sealed class MiniBar : Form
             lines.Add($"HP {Pct(i.Hp)} · MP {Pct(i.Mp)}  ·  İksir HP {Count(i.HpPotions)} · MP {Count(i.MpPotions)}");
             lines.Add($"{i.ExpRate} EXP/sa" + (i.Exp10.Length > 0 ? $" · son 10 dk {i.Exp10}" : "") + $" · {i.Mobs} mob");
         }
-        lines.Add("Çift tık: SekoBot panelini aç · sağ tık: menü");
+        lines.Add("Çift tık: PARDUS panelini aç · sağ tık: menü");
         return string.Join("\n", lines);
     }
 
