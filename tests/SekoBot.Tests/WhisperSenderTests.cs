@@ -18,6 +18,15 @@ public class WhisperSenderTests
     private static DmLayout Open(params DmShown[] shown) => new(true, Opener, [Seta, Oxy], Box, Send, shown);
     private static TimeSpan S(double s) => TimeSpan.FromSeconds(s);
 
+    private static void AssertPersonClick(IReadOnlyList<BotAction> actions)
+    {
+        var click = Assert.IsType<ClickAction>(Assert.Single(actions));
+        Assert.True(Oxy.Rect.Contains(click.Client));
+        Assert.InRange(click.Client.X, 65, 75);
+        Assert.InRange(click.Client.Y, 208, 218);
+        Assert.Equal(new ClickAction(click.Client, Slow: true), click);
+    }
+
     [Fact]
     public void Opening_clicks_stay_inside_the_button_and_stop_after_it_opens()
     {
@@ -31,7 +40,7 @@ public class WhisperSenderTests
             Assert.True(bounds.Contains(click.Client));
             Assert.InRange(click.Client.X, Opener.X - 5, Opener.X + 5);
         }
-        Assert.Equal([new ClickAction(new Point(70, 213), Slow: true)], sender.Tick(S(4), Open()));
+        AssertPersonClick(sender.Tick(S(4), Open()));
     }
 
     [Fact]
@@ -40,7 +49,7 @@ public class WhisperSenderTests
         var sender = new WhisperSender();
         sender.Start(S(-1), "oxyygen", "selam, birazdan dönerim");
         Assert.Equal([new ClickAction(Opener, Slow: true)], sender.Tick(S(0), Closed));
-        Assert.Equal([new ClickAction(new Point(70, 213), Slow: true)], sender.Tick(S(2), Open()));      // the conversation
+        AssertPersonClick(sender.Tick(S(2), Open()));      // the conversation
         Assert.Equal([new ClickAction(new Point(246, 306), Slow: true)], sender.Tick(S(4), Open()));     // the text box
         Assert.Equal([new TypeTextAction("selam, birazdan dönerim", ClearFirst: true)], sender.Tick(S(6), Open()));
         Assert.Equal([new KeyTapAction(Keys.Enter)], sender.Tick(S(9), Open() with { Send = Rectangle.Empty }));

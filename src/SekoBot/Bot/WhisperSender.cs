@@ -100,7 +100,7 @@ internal sealed class WhisperSender
                     _step = Step.Focus;
                     goto case Step.Focus;
                 }
-                actions.Add(new ClickAction(Centre(person.Rect), Slow: true));
+                actions.Add(new ClickAction(BagCleaner.DropClickPoint(Centre(person.Rect), person.Rect), Slow: true));
                 _selects++;
                 _step = Step.Focus;
                 _waitUntil = now + AfterClick;
