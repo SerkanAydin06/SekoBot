@@ -5,8 +5,7 @@ namespace SekoBot.Bot;
 
 /// <summary>
 /// Throws the items ticked "At" out of a full bag, the way a person does: open the inventory,
-/// go to the page an item is on, click it and press "Yere at" in its menu (or, when that menu
-/// doesn't show, drag it out of the window onto the ground), answer "Evet" to
+/// go to the page an item is on, click it and press "Yere at" in its menu, answer "Evet" to
 /// "throw it away?", check it is gone, and at the end close the inventory. Works only from what
 /// memory shows (<see cref="BagLayout"/>): where the window, the page buttons, the slots and the
 /// "Evet" button are drawn. Each step waits for the input to be done and the game to show the
@@ -17,9 +16,7 @@ internal sealed class BagCleaner
 {
     /// <summary>Long enough for a full bag of junk (seen: 26 items took longer than 2 minutes).</summary>
     public static readonly TimeSpan GiveUpAfter = TimeSpan.FromSeconds(300);
-    /// <summary>A drag takes ~1.5 s of input; then the question needs a moment to show.</summary>
-    public static readonly TimeSpan AfterDrag = TimeSpan.FromMilliseconds(2200);
-    /// <summary>No question this long after the drag: it didn't take.</summary>
+    /// <summary>No question this long after the click: it didn't take.</summary>
     public static readonly TimeSpan QuestionTimeout = TimeSpan.FromMilliseconds(4500);
     public static readonly TimeSpan AfterClick = TimeSpan.FromMilliseconds(1800);
     /// <summary>After "Evet" in the item menu's question: looked at again this soon (the item goes within a second, seen);
@@ -28,7 +25,7 @@ internal sealed class BagCleaner
     public static readonly TimeSpan GoneWithin = TimeSpan.FromMilliseconds(1800);
     public static readonly TimeSpan AfterKey = TimeSpan.FromMilliseconds(1200);
     public const int TriesPerItem = 2;
-    /// <summary>The item's menu shows a moment after the click; not there after this: dragged instead.</summary>
+    /// <summary>The item's menu shows a moment after the click; not there after this: retry the item.</summary>
     public static readonly TimeSpan MenuTimeout = TimeSpan.FromMilliseconds(2500);
     /// <summary>The menu shows some 60 ms after the click (recorded 2026-11-20); looked for this soon, waited for up to <see cref="MenuTimeout"/>.</summary>
     public static readonly TimeSpan AfterItemClick = TimeSpan.FromMilliseconds(250);
@@ -37,7 +34,7 @@ internal sealed class BagCleaner
     private Point? _menuSeenAt;
     private TimeSpan _menuSeenWhen;
 
-    private enum Step { Open, Pick, Menu, Dragged, Confirmed, Close }
+    private enum Step { Open, Pick, Menu, AwaitQuestion, Confirmed, Close }
     /// <summary>Selling: a right click on the item brings the sell question at once (Enter says yes) — the menu's
     /// "Sat" only for an item that showed no question this long after its right click.</summary>
     public static readonly TimeSpan RightClickTimeout = TimeSpan.FromMilliseconds(1200);
@@ -49,11 +46,9 @@ internal sealed class BagCleaner
     /// <summary>Items whose right click brought no question: sold through their menu.</summary>
     private readonly HashSet<int> _menuOnly = [];
     private TimeSpan _clickedAt;
-    private int _menuMisses;
-    private bool _menuTried, _viaMenu;
 
     private Step _step;
-    private TimeSpan _started, _waitUntil, _draggedAt, _yesAt;
+    private TimeSpan _started, _waitUntil, _requestedAt, _yesAt;
     private int _slot, _vnum, _opens, _closes, _noLayout, _yesClicks, _escapes, _leftoverYes;
     private readonly Dictionary<int, int> _failed = [];
     private readonly Dictionary<int, int> _pageClicks = [];
@@ -78,7 +73,7 @@ internal sealed class BagCleaner
         _step = Step.Open;
         _started = now;
         _waitUntil = now;
-        _opens = _closes = _noLayout = _yesClicks = _escapes = _leftoverYes = Thrown = _menuMisses = _openWaits = 0;
+        _opens = _closes = _noLayout = _yesClicks = _escapes = _leftoverYes = Thrown = _openWaits = 0;
         Problem = null;
         _failed.Clear();
         _pageClicks.Clear();
@@ -140,18 +135,18 @@ internal sealed class BagCleaner
             // Enter pressed a moment ago: the question is given time to go before "Evet" is clicked as well.
             if (Selling && _rightClicked && _step == Step.Confirmed && _yesClicks == 1 && now - _yesAt < EnterTakes)
                 return actions;
-            if (_step == Step.Dragged || _step == Step.Confirmed && _yesClicks < 2)
+            if (_step == Step.AwaitQuestion || _step == Step.Confirmed && _yesClicks < 2)
             {
                 // After a right click the question is said yes to with Enter (quicker than the mouse); still showing
                 // after that, "Evet" is clicked. Only with the question up: Enter alone would open the chat.
                 if (Selling && _rightClicked && _yesClicks == 0)
                     actions.Add(new KeyTapAction(Keys.Enter));
                 else
-                    actions.Add(new ClickAction(Selling ? yes : DropClickPoint(yes, bag.ConfirmBounds), Slow: true, Fast: _viaMenu));
+                    actions.Add(new ClickAction(Selling ? yes : DropClickPoint(yes, bag.ConfirmBounds), Slow: true, Fast: true));
                 _yesClicks++;
                 _yesAt = now;
                 _step = Step.Confirmed;
-                _waitUntil = now + (Selling && _rightClicked ? AfterRightClick : _viaMenu ? AfterYes : AfterClick);
+                _waitUntil = now + (Selling && _rightClicked ? AfterRightClick : AfterYes);
             }
             else if (bag.Confirm is Point leftover && _step is Step.Open or Step.Pick && _leftoverYes < 2)
             {
@@ -205,7 +200,7 @@ internal sealed class BagCleaner
                 break;
 
             case Step.Menu:
-                // The item's menu is up: "Yere at" (the question comes next, as after a drag) — or "Sat".
+                // The item's menu is up: "Yere at" (the question comes next) — or "Sat".
                 if ((Selling ? bag.SellButton : bag.DropButton) is Point drop && bag.MenuSlot == _slot)
                 {
                     // Looked at once more, as read now, right before "Yere at" / "Sat": a bonus asked for
@@ -233,8 +228,8 @@ internal sealed class BagCleaner
                         break;
                     }
                     actions.Add(new ClickAction(Selling ? drop : DropClickPoint(drop, bag.DropBounds), Slow: true, Fast: true));
-                    _draggedAt = now;
-                    _step = Step.Dragged;
+                    _requestedAt = now;
+                    _step = Step.AwaitQuestion;
                     _waitUntil = now + AfterItemClick;
                     break;
                 }
@@ -249,13 +244,13 @@ internal sealed class BagCleaner
                         _waitUntil = now + AfterKey;
                         break;
                     }
-                    _menuMisses++; // twice no menu: drag from now on
+                    Failed(_slot);
                     _step = Step.Pick;
                     goto case Step.Pick;
                 }
                 break;
 
-            case Step.Dragged:
+            case Step.AwaitQuestion:
                 // Sold without a question: the item is gone.
                 if (Selling && !bag.Items.Any(i => i.Slot == _slot && i.Vnum == _vnum))
                 {
@@ -265,14 +260,14 @@ internal sealed class BagCleaner
                     goto case Step.Pick;
                 }
                 // Right clicked, no question: this one is sold through its menu ("Sat").
-                if (Selling && _rightClicked && now - _draggedAt >= RightClickTimeout)
+                if (Selling && _rightClicked && now - _requestedAt >= RightClickTimeout)
                 {
                     _menuOnly.Add(_slot);
                     _step = Step.Pick;
                     goto case Step.Pick;
                 }
-                // No question came up: the drag didn't take.
-                if (now - _draggedAt >= QuestionTimeout)
+                // No question came up: the click didn't take.
+                if (now - _requestedAt >= QuestionTimeout)
                 {
                     Failed(_slot);
                     _step = Step.Pick;
@@ -323,10 +318,7 @@ internal sealed class BagCleaner
                         var visible = Rectangle.Intersect(here.Rect, new Rectangle(Point.Empty, client));
                         from = DropClickPoint(from, visible);
                     }
-                    // A new item: try its menu first (faster); the same item after a missing menu: drag.
-                    bool sameItem = here.Slot == _slot && here.Vnum == _vnum && _menuTried;
                     _count = here.Count;
-                    _viaMenu = Selling || bag.MenuKnown && _menuMisses < 2 && !sameItem;
                     _rightClicked = false;
                     if (Selling && !_menuOnly.Contains(here.Slot))
                     {
@@ -336,32 +328,19 @@ internal sealed class BagCleaner
                         _vnum = here.Vnum;
                         _yesClicks = 0;
                         _rightClicked = true;
-                        _draggedAt = now;
-                        _step = Step.Dragged;
+                        _requestedAt = now;
+                        _step = Step.AwaitQuestion;
                         _waitUntil = now + AfterRightClick;
                         break;
                     }
-                    if (_viaMenu)
-                    {
-                        actions.Add(new ClickAction(from, Slow: true, Fast: true));
-                        _slot = here.Slot;
-                        _vnum = here.Vnum;
-                        _yesClicks = 0;
-                        _menuTried = true;
-                        _clickedAt = now;
-                        _menuSeenAt = null; // the last item's place counts for nothing
-                        _step = Step.Menu;
-                        _waitUntil = now + AfterItemClick;
-                        break;
-                    }
-                    _menuTried = false;
-                    actions.Add(new MouseDragAction(from, DropPoint(bag, client)));
+                    actions.Add(new ClickAction(from, Slow: true, Fast: true));
                     _slot = here.Slot;
                     _vnum = here.Vnum;
                     _yesClicks = 0;
-                    _draggedAt = now;
-                    _step = Step.Dragged;
-                    _waitUntil = now + AfterDrag;
+                    _clickedAt = now;
+                    _menuSeenAt = null;
+                    _step = Step.Menu;
+                    _waitUntil = now + AfterItemClick;
                     break;
                 }
                 // The rest is on other pages: click the page's button (left to right = pages 1–4).
@@ -394,22 +373,6 @@ internal sealed class BagCleaner
                 break;
         }
         return actions;
-    }
-
-    /// <summary>
-    /// Where to let go of an item: on the ground beside the inventory window (the wider side),
-    /// a little below the middle of the screen, away from the window and the character.
-    /// </summary>
-    internal static Point DropPoint(BagLayout bag, Size client)
-    {
-        int y = client.Height * 55 / 100;
-        var window = bag.Window;
-        if (window.IsEmpty)
-            return new Point(client.Width / 4, y);
-        int leftRoom = window.Left, rightRoom = client.Width - window.Right;
-        return leftRoom >= rightRoom
-            ? new Point(leftRoom / 2, y)
-            : new Point(window.Right + rightRoom / 2, y);
     }
 
     private void Failed(int slot) => _failed[slot] = _failed.GetValueOrDefault(slot) + 1;

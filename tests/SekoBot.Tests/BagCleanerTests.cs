@@ -23,7 +23,7 @@ public class BagCleanerTests
     private static TimeSpan S(double s) => TimeSpan.FromSeconds(s);
 
     [Fact]
-    public void Opens_the_bag_goes_to_the_page_drags_the_item_out_and_says_yes()
+    public void Opens_the_bag_goes_to_the_page_and_clicks_the_item()
     {
         var p = new BotProfile();
         var cleaner = new BagCleaner();
@@ -36,22 +36,10 @@ public class BagCleanerTests
         // Open on page 1, the item is on page 2: its button (second from the left).
         var page = cleaner.Tick(S(1.5), Bag(true, 0, [Item(11, Keep, 0, true), junkClosed]), toThrow, p, Client);
         Assert.Equal([new ClickAction(Pages[1], Slow: true)], page);
-        // Page 2 showing: drag the item from its slot onto the ground left of the window.
         var shown = Item(104, Junk, 1, true);
-        var drag = Assert.IsType<MouseDragAction>(Assert.Single(cleaner.Tick(S(3.5), Bag(true, 1, [Item(11, Keep, 0, false), shown]), toThrow, p, Client)));
-        Assert.InRange(drag.From.X, shown.Rect.X + 16, shown.Rect.X + 26);
-        Assert.InRange(drag.From.Y, shown.Rect.Y + 16, shown.Rect.Y + 26);
-        Assert.True(drag.To.X < Window.Left && drag.To.Y > 0 && drag.To.Y < Client.Height);
-        // The question: "Evet".
-        var yes = new Point(531, 389);
-        Assert.Equal([new ClickAction(yes, Slow: true)], cleaner.Tick(S(6), Bag(true, 1, [shown], yes), toThrow, p, Client));
-        // Gone: nothing else to throw, close the bag.
-        Assert.Equal([new KeyTapAction(p.Keys.Inventory)], cleaner.Tick(S(8), Bag(true, 1, [Item(11, Keep, 0, false)]), toThrow, p, Client));
-        Assert.Equal(1, cleaner.Thrown);
-        Assert.True(cleaner.Active);
-        Assert.Empty(cleaner.Tick(S(10), Bag(false, 0, [Item(11, Keep, 0, false)]), toThrow, p, Client));
-        Assert.False(cleaner.Active);
-        Assert.Null(cleaner.Problem);
+        var click = Assert.IsType<ClickAction>(Assert.Single(cleaner.Tick(S(3.5), Bag(true, 1, [shown]), toThrow, p, Client)));
+        Assert.False(click.Right);
+        Assert.True(shown.Rect.Contains(click.Client));
     }
 
     [Fact]
@@ -105,7 +93,7 @@ public class BagCleanerTests
     }
 
     [Fact]
-    public void No_menu_after_the_click_the_item_is_dragged()
+    public void No_menu_after_the_click_retries_with_a_left_click()
     {
         var p = new BotProfile();
         var cleaner = new BagCleaner();
@@ -115,7 +103,8 @@ public class BagCleanerTests
         var later = new List<BotAction>();
         for (double t = 0.5; t < 4; t += 0.5)
             later.AddRange(cleaner.Tick(S(t), bag, i => i.Vnum == Junk, p, Client));
-        Assert.Single(later.OfType<MouseDragAction>());
+        var retry = Assert.IsType<ClickAction>(Assert.Single(later));
+        Assert.False(retry.Right);
     }
 
     [Fact]
@@ -129,8 +118,8 @@ public class BagCleanerTests
         var actions = new List<BotAction>();
         for (double t = 0; t < 30 && cleaner.Active; t += 0.5)
             actions.AddRange(cleaner.Tick(S(t), cleaner.Thrown == 0 && actions.OfType<KeyTapAction>().Any() ? Bag(false, 0, []) : bag, toThrow, p, Client));
-        Assert.Equal(2, actions.OfType<MouseDragAction>().Count()); // no question came up either time
-        Assert.DoesNotContain(actions, a => a is ClickAction);
+        Assert.Equal(2, actions.OfType<ClickAction>().Count());
+        Assert.DoesNotContain(actions, a => a is MouseDragAction);
         Assert.Equal(0, cleaner.Thrown);
         Assert.False(cleaner.Active);
         Assert.Contains("atılamadı", cleaner.Problem);
@@ -157,14 +146,6 @@ public class BagCleanerTests
         Assert.Equal([new KeyTapAction(p.Keys.Inventory)], cleaner.Abort(Bag(true, 0, []), p, "saldırı geldi"));
         Assert.False(cleaner.Active);
         Assert.Empty(new BagCleaner().Abort(Bag(false, 0, []), p, "saldırı geldi"));
-    }
-
-    [Fact]
-    public void Lets_go_beside_the_window_on_the_wider_side()
-    {
-        Assert.Equal(new Point(331, 378), BagCleaner.DropPoint(Bag(true, 0, []), Client));
-        var leftWindow = new BagLayout(true, new Rectangle(10, 20, 500, 600), 0, Pages, [], null);
-        Assert.Equal(new Point(510 + 347, 378), BagCleaner.DropPoint(leftWindow, Client));
     }
 
     [Fact]
