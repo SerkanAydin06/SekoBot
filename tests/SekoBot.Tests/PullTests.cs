@@ -247,12 +247,35 @@ public class PullSizeTests
         Assert.Equal(7, brain.PullCap(p));
         Assert.Contains(notes, n => n.Contains("en fazla 7 mob"));
 
-        Run(3500, 5000, 7, 0.8);        // 7 on us, HP stayed high
+        Run(3500, 5000, 7, 0.8);        // an easy fight right after the danger: not raised yet
         Run(5000, 5500, 0, 0.8);
+        Assert.Equal(7, brain.PullCap(p));
+        Run(200_000, 201_500, 7, 0.8);  // 7 on us, HP stayed high, minutes later
+        Run(201_500, 202_000, 0, 0.8);
         Assert.Equal(8, brain.PullCap(p));
-        Run(5500, 6000, 2, 0.2);        // a small fight going badly doesn't count (fewer than 3)
-        Run(6000, 6500, 0, 0.5);
+        Run(202_000, 202_500, 2, 0.2);  // a small fight going badly doesn't count (fewer than 3)
+        Run(202_500, 203_000, 0, 0.5);
         Assert.Equal(8, brain.PullCap(p));
+    }
+
+    [Fact]
+    public void Running_away_from_a_bad_fight_does_not_make_it_count_as_easy()
+    {
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PullGroups = true, PullMaxMobs = 9 };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        void Run(double from, double to, int attackers, double hp)
+        {
+            for (double t = from; t < to; t += 100)
+                brain.Tick(Fight(t, attackers, hp));
+        }
+        Run(0, 1000, 7, 0.8);
+        Run(1000, 1500, 7, 0.25);       // danger: lowered at once
+        Assert.Equal(5, brain.PullCap(p));
+        Run(1500, 1700, 0, 0.3);        // ran away: none on us for a moment
+        Run(1700, 4000, 5, 0.75);       // back, the rest went fine
+        Run(4000, 4500, 0, 0.75);
+        Assert.Equal(5, brain.PullCap(p));
     }
 }
 
