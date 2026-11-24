@@ -39,6 +39,27 @@ internal static class UpdateService
         public long Length { get; set; }
     }
 
+    /// <summary>
+    /// This SekoBot's own exe: where it was started from, else the same file name in its folder as the program sees it
+    /// now (seen: "çalışan dosya bulunamadı" right after the folder was renamed while SekoBot ran).
+    /// </summary>
+    private static string? RunningFile()
+    {
+        string? path = Environment.ProcessPath;
+        if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            return path;
+        try
+        {
+            using var self = System.Diagnostics.Process.GetCurrentProcess();
+            if (self.MainModule?.FileName is { } module && File.Exists(module))
+                return module;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { }
+        string name = Path.GetFileName(path ?? "SekoBot.exe");
+        string inBase = Path.Combine(AppContext.BaseDirectory, name.Length > 0 ? name : "SekoBot.exe");
+        return File.Exists(inBase) ? inBase : path;
+    }
+
     public static async Task<UpdateCheckResult> CheckAndDownloadAsync(
         CancellationToken token = default)
     {
@@ -46,10 +67,11 @@ internal static class UpdateService
         if (BuildInfo.Commit.Length != 40)
             return new UpdateCheckResult(null, null);
 
-        string? executable = Environment.ProcessPath;
+        string? executable = RunningFile();
         // Any file name works ("SekoBot (1).exe" from a browser download included).
         if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable))
-            return new UpdateCheckResult(null, "Otomatik güncelleme: çalışan dosya bulunamadı.");
+            return new UpdateCheckResult(null, "Otomatik güncelleme: SekoBot'un kendi dosyası bulunamadı (klasörü taşınmış ya da " +
+                                               "adı değişmiş olabilir). SekoBot'u kapatıp yeniden açınca güncellenir.");
 
         // Clean up the backup retained by a successful previous replacement.
         try { File.Delete(executable + ".old"); } catch { }
@@ -117,7 +139,7 @@ internal static class UpdateService
     /// </summary>
     public static void InstallAfterExit(PreparedUpdate update)
     {
-        string executable = Environment.ProcessPath
+        string executable = RunningFile()
             ?? throw new InvalidOperationException("Çalıştırılabilir dosya bulunamadı.");
         if (!File.Exists(update.FilePath))
             throw new FileNotFoundException("Doğrulanmış güncelleme dosyası kayboldu.", update.FilePath);
