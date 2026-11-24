@@ -53,12 +53,12 @@ internal sealed partial class BotEngine
             return;
         _mapNpcsLookedAt = now;
         // The user opened the M map in a big game: the roads are read too.
-        if (ReadMapNpcsNow(world) && _terrain.RoadsOf(world.MapName) == null)
+        if (ReadMapNpcsNow(world) && !RoadsGood(world.MapName))
         {
             MapPicture? picture;
             lock (_worldGate)
                 picture = _world?.ReadMapPicture();
-            if (picture != null && Math.Min(picture.Drawn.Width, picture.Drawn.Height) >= RoadPictureMin && ReadRoads(world.MapName, picture) != null)
+            if (picture != null && picture.Drawn.Width >= RoadMap.GoodPicture && ReadRoads(world.MapName, picture) != null)
                 _log($"🛣 {world.MapName} haritasının yolları açık M haritasından okundu; uzun yürüyüşlerde yollar kullanılacak.");
         }
     }
@@ -71,9 +71,12 @@ internal sealed partial class BotEngine
     internal const int RoadPictureMin = 300;
 
     /// <summary>One step of reading the roads off the open M map; null when done (or nothing to do).</summary>
+    /// <summary>The map's roads are known, read off a big enough picture.</summary>
+    private bool RoadsGood(string map) => _terrain.RoadsOf(map) is { Good: true };
+
     private IReadOnlyList<BotAction>? RoadTick(WorldSnapshot world, DateTime now)
     {
-        if (_roadsDone || _terrain.RoadsOf(world.MapName) != null)
+        if (_roadsDone || RoadsGood(world.MapName))
         {
             _roadsDone = true;
             return null;
@@ -90,10 +93,12 @@ internal sealed partial class BotEngine
             picture = _world?.ReadMapPicture();
         if (picture == null)
             return [];
-        if (Math.Min(picture.Drawn.Width, picture.Drawn.Height) < RoadPictureMin)
+        if (picture.Drawn.Width < RoadMap.GoodPicture && !(_roadsGrown && now - _roadsGrownAt >= TimeSpan.FromSeconds(6)))
         {
+            // Small: the game grown to the screen first (thin roads are lost on a small picture); once grown it is
+            // read at whatever size it came to (not under RoadPictureMin).
             if (_roadsGrown)
-                return now - _roadsGrownAt < TimeSpan.FromSeconds(6) ? [] : Give("harita küçük kaldı");
+                return [];
             _roadsFrom = UI.WindowLayout.Visible(_window.Handle);
             UI.WindowLayout.FillWithGame(_window.Handle, 40);
             _roadsGrown = true;
@@ -103,6 +108,8 @@ internal sealed partial class BotEngine
         // A moment for the picture to be drawn at its new size — and captured at it (the capture follows a moment later).
         if (_roadsGrown && now - _roadsGrownAt < TimeSpan.FromSeconds(3))
             return [];
+        if (Math.Min(picture.Drawn.Width, picture.Drawn.Height) < RoadPictureMin)
+            return Give("harita küçük kaldı");
         bool captured = WithLatestFrame(f => f.Width >= picture.Drawn.Right && f.Height >= picture.Drawn.Bottom);
         if (!captured && now - _roadsGrownAt < TimeSpan.FromSeconds(10))
             return [];
@@ -125,14 +132,28 @@ internal sealed partial class BotEngine
     {
         var roads = WithLatestFrame(frame =>
         {
-            var read = RoadMap.FromPicture(map, frame, picture.Drawn, picture.OffsetX, picture.OffsetY, picture.ScaleX, picture.ScaleY, picture.Texture);
+            var read = RoadMap.FromPicture(map, frame, picture.Drawn, picture.OffsetX, picture.OffsetY, picture.ScaleX, picture.ScaleY, picture.Texture, biggest: _roadsGrown);
             if (read == null)
                 try { RoadMap.SavePicture(frame, picture.Drawn, MapTerrain.Stem(_terrain.Folder, map) + ".yollar-okunamadi.png"); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or System.Runtime.InteropServices.ExternalException) { }
             return read;
         });
-        if (roads != null)
-            _terrain.SetRoads(roads);
+        if (roads == null)
+            return null;
+        // A new read finding much less road than the one kept (a window over the map, a bad frame): the old one stays.
+        if (_terrain.RoadsOf(map) is { } before && roads.RoadCells < before.RoadCells * 0.7)
+        {
+            _log($"🛣 {map} yolları yeniden okundu ama eskisinden az yol çıktı ({roads.RoadCells} / {before.RoadCells}); eskisi kullanılıyor.");
+            return before;
+        }
+        _terrain.SetRoads(roads);
+        // The picture kept beside the roads, to be looked at.
+        WithLatestFrame(frame =>
+        {
+            try { RoadMap.SavePicture(frame, picture.Drawn, MapTerrain.Stem(_terrain.Folder, map) + ".yollar.png"); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or System.Runtime.InteropServices.ExternalException) { }
+            return true;
+        });
         return roads;
     }
 
@@ -243,9 +264,9 @@ internal sealed partial class BotEngine
             return null;
         }
         // The map's shops and roads already known (shared by every SekoBot): no need to open the M map at all (the user: "zaten belli").
-        if (World is { } known && known.MapName.Length > 0 && NpcBook.Shared.On(known.MapName).Count > 0 && _terrain.RoadsOf(known.MapName) != null)
+        if (World is { } known && known.MapName.Length > 0 && NpcBook.Shared.On(known.MapName).Count > 0 && RoadsGood(known.MapName))
             return null;
-        if (World is not { } world || world.MapName.Length == 0 || _mapNpcsRead.Contains(world.MapName) || IsLoginScreen(world.MapName)
+        if (World is not { } world || world.MapName.Length == 0 || _mapNpcsRead.Contains(world.MapName) && RoadsGood(world.MapName) || IsLoginScreen(world.MapName)
             || world.MapName.StartsWith('_') || now - _mapSeenSince < MapPeekAfter || now - _mapPeekLastTry < MapPeekRetry
             || _mapPeeks.GetValueOrDefault(world.MapName) >= MapPeekTries)
             return null;

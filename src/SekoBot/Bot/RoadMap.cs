@@ -18,8 +18,10 @@ internal sealed class RoadMap
 
     private readonly BitArray _road;
 
-    public RoadMap(string map, double startX, double startY, int columns, int rows, BitArray road)
+    public RoadMap(string map, double startX, double startY, int columns, int rows, BitArray road, int picture = 0, bool biggest = false)
     {
+        Picture = picture;
+        Biggest = biggest;
         Map = map;
         StartX = startX;
         StartY = startY;
@@ -34,6 +36,14 @@ internal sealed class RoadMap
     public int Columns { get; }
     public int Rows { get; }
     public int RoadCells { get; private set; }
+    /// <summary>How wide the M map picture was (pixels) when these roads were read (0: not known, an older file).</summary>
+    public int Picture { get; }
+    /// <summary>Roads read off a picture this wide at least are kept; from a smaller one (thin roads lost, seen on c2 at
+    /// 307 px: the town's and most side roads missing) they are read again once the M map can be shown big.</summary>
+    internal const int GoodPicture = 600;
+    /// <summary>Read with the game grown to the screen: as big as the M map gets here (not read again).</summary>
+    public bool Biggest { get; }
+    public bool Good => Picture >= GoodPicture || Biggest;
 
     public bool OnRoad(double x, double y)
     {
@@ -133,7 +143,7 @@ internal sealed class RoadMap
     /// The roads read off the M map as it is drawn in <paramref name="frame"/> at <paramref name="drawn"/> (client
     /// pixels). The picture covers the world from -offset to texture / scale - offset on each side.
     /// </summary>
-    public static RoadMap? FromPicture(string map, Frame frame, Rectangle drawn, double offsetX, double offsetY, double scaleX, double scaleY, double texture)
+    public static RoadMap? FromPicture(string map, Frame frame, Rectangle drawn, double offsetX, double offsetY, double scaleX, double scaleY, double texture, bool biggest = false)
     {
         if (drawn.Width < 50 || drawn.Height < 50 || drawn.Right > frame.Width || drawn.Bottom > frame.Height || drawn.Left < 0 || drawn.Top < 0)
             return null;
@@ -160,7 +170,7 @@ internal sealed class RoadMap
                 if (roadPixels[py * w + px])
                     road[r * columns + c] = true;
             }
-        var result = new RoadMap(map, startX, startY, columns, rows, road);
+        var result = new RoadMap(map, startX, startY, columns, rows, road, drawn.Width, biggest);
         result.RoadCells = result.Count();
         double share = (double)result.RoadCells / (columns * rows);
         return share is > MinShare and < MaxShare ? result : null;
@@ -198,8 +208,10 @@ internal sealed class RoadMap
             ground[i] = Math.Abs(r - gr) + Math.Abs(g - gg) + Math.Abs(b - gb) < 40 ? 1 : 0;
             light[i] = (r + g + b) / 3.0;
         }
-        var groundAround = Box(ground, w, h, 7);
-        var lightAround = Box(light, w, h, 4);
+        // The windows grow with the picture (set on ~300-px pictures: a road drawn wider would be its own surroundings).
+        double size = Math.Max(1, w / 307.0);
+        var groundAround = Box(ground, w, h, (int)Math.Round(7 * size));
+        var lightAround = Box(light, w, h, (int)Math.Round(4 * size));
         var road = new bool[n];
         for (int i = 0; i < n; i++)
         {
@@ -235,7 +247,7 @@ internal sealed class RoadMap
                         }
                     }
             }
-            if (part.Count < MinRoadPixels)
+            if (part.Count < MinRoadPixels * size)
                 foreach (int j in part)
                     road[j] = false;
         }
@@ -312,6 +324,8 @@ internal sealed class RoadMap
         public double StartY { get; set; }
         public int Columns { get; set; }
         public int Rows { get; set; }
+        public int Picture { get; set; }
+        public bool Biggest { get; set; }
         public string Bits { get; set; } = "";
     }
 
@@ -324,7 +338,7 @@ internal sealed class RoadMap
         Directory.CreateDirectory(folder);
         File.WriteAllText(FileOf(folder, Map), JsonSerializer.Serialize(new Saved
         {
-            Map = Map, StartX = StartX, StartY = StartY, Columns = Columns, Rows = Rows, Bits = Convert.ToBase64String(bytes),
+            Map = Map, StartX = StartX, StartY = StartY, Columns = Columns, Rows = Rows, Picture = Picture, Biggest = Biggest, Bits = Convert.ToBase64String(bytes),
         }));
     }
 
@@ -336,7 +350,7 @@ internal sealed class RoadMap
             if (!File.Exists(file) || JsonSerializer.Deserialize<Saved>(File.ReadAllText(file)) is not { } s || s.Map != map)
                 return null;
             var bits = new BitArray(Convert.FromBase64String(s.Bits)) { Length = s.Columns * s.Rows };
-            var roads = new RoadMap(map, s.StartX, s.StartY, s.Columns, s.Rows, bits);
+            var roads = new RoadMap(map, s.StartX, s.StartY, s.Columns, s.Rows, bits, s.Picture, s.Biggest);
             roads.RoadCells = roads.Count();
             return roads;
         }
