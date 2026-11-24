@@ -191,7 +191,7 @@ internal sealed partial class MainForm
 
     private static string ModeName(int mode) => mode switch { FishingMode => "balık", MarketMode => "pazar", _ => "farm" };
 
-    private void StartWork(BotEngine e, int mode)
+    private void StartWork(BotEngine e, int mode, string why = "Oyuna yeniden girildi")
     {
         string error = "";
         bool ok = mode switch
@@ -200,8 +200,8 @@ internal sealed partial class MainForm
             MarketMode => e.StartMarketScan(out error, true),
             _ => e.StartBot(false, background: true, out error),
         };
-        string text = ok ? $"🟢 Oyuna yeniden girildi; kaldığı yerden devam ediliyor ({ModeName(mode)})."
-                         : $"Oyuna yeniden girildi ama iş başlatılamadı: {error}";
+        string text = ok ? $"🟢 {why}; kaldığı yerden devam ediliyor ({ModeName(mode)})."
+                         : $"{why} ama iş başlatılamadı: {error}";
         WriteLog(text);
         e.Notify(text);
         LetGoGameTurn();

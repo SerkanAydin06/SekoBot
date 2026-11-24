@@ -101,7 +101,6 @@ internal sealed partial class MainForm
         });
         if (mine is not { Running: true } work)
             return;
-        WriteLog($"⬆ Güncellemeden sonra {character} kaldığı yerden devam ediyor.");
-        StartWork(e, Math.Clamp(work.Mode, FarmMode, FishingMode));
+        StartWork(e, Math.Clamp(work.Mode, FarmMode, FishingMode), $"SekoBot {BuildInfo.Version} sürümüne güncellendi");
     }
 }
