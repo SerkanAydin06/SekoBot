@@ -88,6 +88,8 @@ internal sealed partial class Brain
         // remember the spot, the next choice avoids going this way again.
         if (_walkGoal != null)
             StuckHere(state, solid: true);
+        else if (_way != null || Traveling)
+            StuckOnWay(state);
         _sidesteps++;
         bool vertical = _heldMoves.Contains(p.Keys.MoveForward) || _heldMoves.Contains(p.Keys.MoveBack);
         bool first = _sidesteps % 2 == 1;

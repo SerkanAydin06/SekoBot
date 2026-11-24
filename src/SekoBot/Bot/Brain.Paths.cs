@@ -39,6 +39,31 @@ internal sealed partial class Brain
     internal int Detours { get; private set; }
     internal int NoWayMobs { get; private set; }
 
+    /// <summary>Where the character got stuck on the current long way (just ahead of it): the way is found round
+    /// them at once (seen on c2: held by a ledge not in the map, it stepped aside and walked into it again for minutes —
+    /// the way kept leading there).</summary>
+    private readonly List<Vec3> _wayStuck = [];
+    /// <summary>A stuck spot on the way is kept away from by this much (world units).</summary>
+    internal const double WayStuckRadius = 120;
+
+    /// <summary>Held up on a long way: the spot ahead noted (for this way and in the shared obstacle map), the way
+    /// found again round it.</summary>
+    private void StuckOnWay(GameState state)
+    {
+        if (state.Position is not Vec3 me || HeldDirection(state) is not var (wx, wy))
+            return;
+        var spot = new Vec3(me.X + wx * ObstacleMap.Ahead, me.Y + wy * ObstacleMap.Ahead, me.Z);
+        if (state.Targets.Any(t => t.Position is Vec3 m && (m.DistanceXY(spot) < MobFreeAround || m.DistanceXY(me) < MobFreeAround)))
+            return; // a mob in the way, not the ground
+        _wayStuck.Add(spot);
+        if (_wayStuck.Count > 30)
+            _wayStuck.RemoveAt(0);
+        if (Obstacles != null && state.MapName.Length > 0)
+            Obstacles.Stuck(state.MapName, spot.X, spot.Y, DateTime.Now);
+        if (_way is { } w)
+            _way = (w.Goal, Never, w.Way); // found again on the next look
+    }
+
     private MapTerrain? TerrainHere(GameState state) => state.MapName.Length > 0 ? Terrain?.Of(state.MapName) : null;
 
     /// <summary>The next corner on the way to <paramref name="goal"/> when the straight way is blocked; else null.</summary>
@@ -48,7 +73,8 @@ internal sealed partial class Brain
             return null;
         // Far off (walking to the area): along the roads when they are known, even where the straight way is free.
         bool byRoad = map.Roads != null && me.DistanceXY(goal) > FarFrom;
-        if (!byRoad && map.LineClear(me, goal))
+        if (!byRoad && map.LineClear(me, goal)
+            && !_wayStuck.Any(s => new MapTerrain.Circle(s.X, s.Y, WayStuckRadius).Crosses(me, goal, MapTerrain.Margin)))
         {
             _way = null;
             return null;
@@ -58,7 +84,14 @@ internal sealed partial class Brain
             || far && w.Way is { Count: > 0 } kept && OffWay(me, kept))
         {
             bool newGoal = _way is not { } old || old.Goal.DistanceXY(goal) > 150;
-            var found = map.WayTo(me, goal, room: far ? Math.Max(WayRoom, me.DistanceXY(goal)) : WayRoom, roads: byRoad);
+            if (newGoal)
+                _wayStuck.Clear();
+            // Round where we got stuck on this way, and the obstacles learned around here.
+            var avoid = _wayStuck.Select(s => new MapTerrain.Circle(s.X, s.Y, WayStuckRadius))
+                .Concat(KnownObstacles(state).Select(o => new MapTerrain.Circle(o.X, o.Y, 60))).ToList();
+            double room = far ? Math.Max(WayRoom, me.DistanceXY(goal)) : WayRoom;
+            var found = (avoid.Count > 0 ? map.WayTo(me, goal, room: room, avoid: avoid, roads: byRoad) : null)
+                        ?? map.WayTo(me, goal, room: room, roads: byRoad);
             // No way within 50 m (a slope to go round, seen: stuck below one 50 m from the area): the whole map.
             if (found == null && !far && me.DistanceXY(goal) > 1500)
                 found = map.WayTo(me, goal, room: FarRoom);
