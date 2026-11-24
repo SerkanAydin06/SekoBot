@@ -52,6 +52,43 @@ internal sealed class MapTerrain
                     list.Add(b);
                 }
         }
+        // What lies under a walkable deck (a bridge's beams over the river): walked over, not into.
+        foreach (var b in blocks)
+        {
+            if (b.Passable)
+                continue;
+            var (minX, minY, maxX, maxY) = b.Box;
+            double area = Math.Max(1, (maxX - minX) * (maxY - minY));
+            foreach (var d in Near(minX, minY, maxX, maxY))
+            {
+                if (!d.Passable || d.Bottom < b.Top - UnderDeckSlack)
+                    continue;
+                var (dx0, dy0, dx1, dy1) = d.Box;
+                double ox = Math.Min(maxX, dx1) - Math.Max(minX, dx0), oy = Math.Min(maxY, dy1) - Math.Max(minY, dy0);
+                if (ox > 0 && oy > 0 && ox * oy >= area * 0.6)
+                {
+                    _underDeck.Add(b);
+                    break;
+                }
+            }
+        }
+    }
+
+    /// <summary>Solid blocks lying under a walkable deck (seen on c2: a bridge's beam, 15–318 high under its deck at
+    /// 390–550, made every bridge "blocked" — the ground there is the river bed — and the ways went round the river).</summary>
+    private readonly HashSet<MapBlock> _underDeck = [];
+    /// <summary>A deck this much lower than the top of what is under it still covers it.</summary>
+    internal const double UnderDeckSlack = 80;
+
+    private IEnumerable<MapBlock> Near(double minX, double minY, double maxX, double maxY)
+    {
+        var seen = new HashSet<MapBlock>();
+        for (int x = (int)Math.Floor(minX / Bucket); x <= (int)Math.Floor(maxX / Bucket); x++)
+            for (int y = (int)Math.Floor(minY / Bucket); y <= (int)Math.Floor(maxY / Bucket); y++)
+                if (_buckets.TryGetValue((x, y), out var list))
+                    foreach (var b in list)
+                        if (seen.Add(b))
+                            yield return b;
     }
 
     public string Map { get; }
@@ -87,6 +124,9 @@ internal sealed class MapTerrain
     /// </summary>
     private bool InTheWayFrom(MapBlock b, Vec3 from)
     {
+        // Under a bridge's deck, and we are above it: crossed on the deck.
+        if (_underDeck.Contains(b) && from.Z > b.Top)
+            return false;
         if (!InTheWay(b, from.Z, Away(b, from)))
             return false;
         var (x, y) = b.Centre;
