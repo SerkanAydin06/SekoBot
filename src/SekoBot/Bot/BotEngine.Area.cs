@@ -168,6 +168,11 @@ internal sealed partial class BotEngine
                $"alan sınırı ({profile.LeashMeters:0} m) bu noktanın çevresidir.";
     }
 
+    /// <summary>A farm area is saved on this map and we are not in it: the bot is (or will be) walking there — through
+    /// the town too, which doesn't stop it (seen: started in town, "güvenli bölge" stopped it before it got out).</summary>
+    private bool GoingToFarm(WorldSnapshot world, BotProfile profile) =>
+        UsableFarmSpot(world, profile, out _) is Vec3 spot && spot.DistanceXY(world.Player) > Math.Max(profile.LeashMeters * 100, 2000);
+
     /// <summary>The saved farm spot, when it is to be used now (same map, not too far).</summary>
     private Vec3? UsableFarmSpot(WorldSnapshot? world, BotProfile profile, out string? why)
     {
