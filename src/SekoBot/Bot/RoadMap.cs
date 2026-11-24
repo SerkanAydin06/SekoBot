@@ -268,6 +268,38 @@ internal sealed class RoadMap
                 }
         }
         JoinGaps(road, label, w, h, (int)Math.Round(GapPixels * size));
+        // Down to the middle lines, the dead ends cut off (the user: roads leading nowhere are no place to walk), the
+        // pieces apart from the net dropped; then as wide as a road again.
+        // Widened first: pieces a pixel or two apart (a bridge's planks and the road) join before thinning.
+        var joined = new bool[n];
+        for (int i = 0; i < n; i++)
+            if (road[i])
+            {
+                int x = i % w, y = i / w;
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        int nx = x + dx, ny = y + dy;
+                        if (nx >= 0 && ny >= 0 && nx < w && ny < h)
+                            joined[ny * w + nx] = true;
+                    }
+            }
+        var middle = Thin(joined, w, h);
+        PruneDeadEnds(middle, w, h, (int)Math.Round(DeadEndPixels * size));
+        DropSmallPieces(middle, w, h, (int)Math.Round(MinNetPixels * size));
+        road = new bool[n];
+        for (int i = 0; i < n; i++)
+            if (middle[i])
+            {
+                int x = i % w, y = i / w;
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        int nx = x + dx, ny = y + dy;
+                        if (nx >= 0 && ny >= 0 && nx < w && ny < h)
+                            road[ny * w + nx] = true;
+                    }
+            }
         // A pixel wider.
         var wide = new bool[n];
         for (int i = 0; i < n; i++)
@@ -283,6 +315,154 @@ internal sealed class RoadMap
                     }
             }
         return wide;
+    }
+
+    /// <summary>A road ending nowhere shorter than this (pixels of its middle line, on a ~300-px picture: ~45 m) is cut
+    /// off: a stub into a field, the edge of a rock, a house: the way would lead into it and stop.</summary>
+    internal const double DeadEndPixels = 30;
+    /// <summary>A piece of road apart from the rest with a middle line shorter than this is dropped.</summary>
+    internal const double MinNetPixels = 40;
+
+    private static int Neighbours(bool[] a, int w, int h, int x, int y)
+    {
+        int count = 0;
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                if (dx == 0 && dy == 0)
+                    continue;
+                int nx = x + dx, ny = y + dy;
+                if (nx >= 0 && ny >= 0 && nx < w && ny < h && a[ny * w + nx])
+                    count++;
+            }
+        return count;
+    }
+
+    /// <summary>The middle lines of the roads, one pixel wide (Zhang-Suen thinning).</summary>
+    internal static bool[] Thin(bool[] img, int w, int h)
+    {
+        var a = (bool[])img.Clone();
+        var remove = new List<int>();
+        bool changed = true;
+        bool P(int x, int y) => x >= 0 && y >= 0 && x < w && y < h && a[y * w + x];
+        while (changed)
+        {
+            changed = false;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                remove.Clear();
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < w; x++)
+                    {
+                        if (!a[y * w + x])
+                            continue;
+                        bool p2 = P(x, y - 1), p3 = P(x + 1, y - 1), p4 = P(x + 1, y), p5 = P(x + 1, y + 1),
+                             p6 = P(x, y + 1), p7 = P(x - 1, y + 1), p8 = P(x - 1, y), p9 = P(x - 1, y - 1);
+                        int b = (p2 ? 1 : 0) + (p3 ? 1 : 0) + (p4 ? 1 : 0) + (p5 ? 1 : 0) + (p6 ? 1 : 0) + (p7 ? 1 : 0) + (p8 ? 1 : 0) + (p9 ? 1 : 0);
+                        if (b < 2 || b > 6)
+                            continue;
+                        bool[] ring = [p2, p3, p4, p5, p6, p7, p8, p9, p2];
+                        int t = 0;
+                        for (int k = 0; k < 8; k++)
+                            if (!ring[k] && ring[k + 1])
+                                t++;
+                        if (t != 1)
+                            continue;
+                        if (pass == 0 ? (p2 && p4 && p6) || (p4 && p6 && p8) : (p2 && p4 && p8) || (p2 && p6 && p8))
+                            continue;
+                        remove.Add(y * w + x);
+                    }
+                foreach (int i in remove)
+                    a[i] = false;
+                changed |= remove.Count > 0;
+            }
+        }
+        return a;
+    }
+
+    /// <summary>
+    /// Cuts the branches of the middle lines that end nowhere and are shorter than <paramref name="length"/>: from
+    /// every end, followed back to the crossing it comes from. Done twice (a cut can leave a new short end).
+    /// </summary>
+    internal static void PruneDeadEnds(bool[] a, int w, int h, int length)
+    {
+        for (int round = 0; round < 2; round++)
+        {
+            var ends = new List<int>();
+            for (int i = 0; i < a.Length; i++)
+                if (a[i] && Neighbours(a, w, h, i % w, i / w) == 1)
+                    ends.Add(i);
+            foreach (int end in ends)
+            {
+                if (!a[end])
+                    continue;
+                var branch = new List<int> { end };
+                var seen = new HashSet<int> { end };
+                int at = end;
+                bool reachedCrossing = false;
+                while (branch.Count <= length)
+                {
+                    int x = at % w, y = at / w, next = -1, count = 0;
+                    for (int dy = -1; dy <= 1; dy++)
+                        for (int dx = -1; dx <= 1; dx++)
+                        {
+                            int nx = x + dx, ny = y + dy;
+                            if ((dx != 0 || dy != 0) && nx >= 0 && ny >= 0 && nx < w && ny < h && a[ny * w + nx] && !seen.Contains(ny * w + nx))
+                            {
+                                count++;
+                                next = ny * w + nx;
+                            }
+                        }
+                    if (count == 0)
+                        break; // a piece on its own (dropped later when small)
+                    if (count > 1 || Neighbours(a, w, h, next % w, next / w) > 2)
+                    {
+                        reachedCrossing = true;
+                        break;
+                    }
+                    seen.Add(next);
+                    branch.Add(next);
+                    at = next;
+                }
+                if (reachedCrossing && branch.Count < length)
+                    foreach (int i in branch)
+                        a[i] = false;
+            }
+        }
+    }
+
+    /// <summary>Drops the pieces of middle line (joined pixels) shorter than <paramref name="least"/>.</summary>
+    internal static void DropSmallPieces(bool[] a, int w, int h, int least)
+    {
+        var seen = new bool[a.Length];
+        var stack = new Stack<int>();
+        for (int i = 0; i < a.Length; i++)
+        {
+            if (!a[i] || seen[i])
+                continue;
+            var part = new List<int>();
+            stack.Push(i);
+            seen[i] = true;
+            while (stack.Count > 0)
+            {
+                int j = stack.Pop();
+                part.Add(j);
+                int x = j % w, y = j / w;
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        int nx = x + dx, ny = y + dy;
+                        if (nx >= 0 && ny >= 0 && nx < w && ny < h && a[ny * w + nx] && !seen[ny * w + nx])
+                        {
+                            seen[ny * w + nx] = true;
+                            stack.Push(ny * w + nx);
+                        }
+                    }
+            }
+            if (part.Count < least)
+                foreach (int j in part)
+                    a[j] = false;
+        }
     }
 
     /// <summary>Fewer joined road pixels than this: a speck, not a road.</summary>
