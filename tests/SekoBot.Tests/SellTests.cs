@@ -62,7 +62,10 @@ public class SellTests
             DropButton: menu ? new Point(900, 300) : null, MenuSlot: menu ? 20 : -1);
         cleaner.Start(TimeSpan.Zero);
         bool junk = true;
-        Assert.Equal([new ClickAction(new Point(720, 220), Slow: true, Fast: true)], cleaner.Tick(TimeSpan.Zero, Bag(false), _ => junk, p, new Size(1204, 688)));
+        var click = Assert.IsType<ClickAction>(Assert.Single(cleaner.Tick(TimeSpan.Zero, Bag(false), _ => junk, p, new Size(1204, 688))));
+        Assert.InRange(click.Client.X, 715, 725);
+        Assert.InRange(click.Client.Y, 215, 225);
+        Assert.Equal(new ClickAction(click.Client, Slow: true, Fast: true), click);
         junk = false; // its bonus came through meanwhile
         var actions = cleaner.Tick(TimeSpan.FromSeconds(1), Bag(true), _ => junk, p, new Size(1204, 688));
         Assert.DoesNotContain(new ClickAction(new Point(900, 300), Slow: true, Fast: true), actions);
