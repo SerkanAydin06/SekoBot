@@ -307,6 +307,17 @@ internal sealed class BagCleaner
                         .Select(i => (BagSlotView?)i).FirstOrDefault() is { } here)
                 {
                     var from = new Point(here.Rect.X + here.Rect.Width / 2, here.Rect.Y + here.Rect.Height / 2);
+                    if (!Selling)
+                    {
+                        var visible = Rectangle.Intersect(here.Rect, new Rectangle(Point.Empty, client));
+                        if (visible.Width > 0 && visible.Height > 0)
+                        {
+                            const int radius = 5;
+                            from = new Point(
+                                Random.Shared.Next(Math.Max(visible.Left, from.X - radius), Math.Min(visible.Right - 1, from.X + radius) + 1),
+                                Random.Shared.Next(Math.Max(visible.Top, from.Y - radius), Math.Min(visible.Bottom - 1, from.Y + radius) + 1));
+                        }
+                    }
                     // A new item: try its menu first (faster); the same item after a missing menu: drag.
                     bool sameItem = here.Slot == _slot && here.Vnum == _vnum && _menuTried;
                     _count = here.Count;
