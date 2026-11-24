@@ -688,6 +688,7 @@ internal sealed partial class Brain
             Enter(BotPhase.Moving, now);
         _movingSince = Never;
         CheckBlocked(state, p, actions);
+        CheckTravelProgress(state, me, spot);
         return true;
     }
     /// <summary>Mobs attacking us this close (world units, 5 m) are fought before walking back into the area.</summary>

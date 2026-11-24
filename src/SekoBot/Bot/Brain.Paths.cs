@@ -52,7 +52,45 @@ internal sealed partial class Brain
     {
         if (state.Position is not Vec3 me || HeldDirection(state) is not var (wx, wy))
             return;
-        var spot = new Vec3(me.X + wx * ObstacleMap.Ahead, me.Y + wy * ObstacleMap.Ahead, me.Z);
+        StuckToward(state, me, wx, wy, ObstacleMap.Ahead);
+    }
+
+    /// <summary>Not getting anywhere on the way for <see cref="TravelNoProgressMs"/> although walking (seen on c2:
+    /// sliding up and down along a ledge not in the map — the game says "walking", the blocked check never fired): the
+    /// spot towards the next corner is noted, the way found again round it.</summary>
+    internal const int TravelNoProgressMs = 4000;
+    internal const double TravelProgress = 250;
+    private Vec3? _travelCheckAt;
+    private TimeSpan _travelCheckTime = Never;
+
+    private void CheckTravelProgress(GameState state, Vec3 me, Vec3 goal)
+    {
+        var now = state.Time;
+        if (_travelCheckAt is not Vec3 was || now - _travelCheckTime > Ms(TravelNoProgressMs * 3))
+        {
+            _travelCheckAt = me;
+            _travelCheckTime = now;
+            return;
+        }
+        if (me.DistanceXY(was) >= TravelProgress)
+        {
+            _travelCheckAt = me;
+            _travelCheckTime = now;
+            return;
+        }
+        if (now - _travelCheckTime < Ms(TravelNoProgressMs))
+            return;
+        var aim = NextCorner(state, goal) ?? goal;
+        double dx = aim.X - me.X, dy = aim.Y - me.Y, len = Math.Sqrt(dx * dx + dy * dy);
+        if (len > 1)
+            StuckToward(state, me, dx / len, dy / len, 150);
+        _travelCheckAt = me;
+        _travelCheckTime = now;
+    }
+
+    private void StuckToward(GameState state, Vec3 me, double wx, double wy, double ahead)
+    {
+        var spot = new Vec3(me.X + wx * ahead, me.Y + wy * ahead, me.Z);
         if (state.Targets.Any(t => t.Position is Vec3 m && (m.DistanceXY(spot) < MobFreeAround || m.DistanceXY(me) < MobFreeAround)))
             return; // a mob in the way, not the ground
         _wayStuck.Add(spot);
