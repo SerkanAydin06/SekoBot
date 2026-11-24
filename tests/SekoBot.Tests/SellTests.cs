@@ -82,7 +82,31 @@ public class SellTests
     }
 
     [Fact]
-    public void Selling_clicks_the_item_then_its_Sat_and_counts_it_when_it_is_gone()
+    public void Selling_right_clicks_the_item_and_says_yes_with_Enter()
+    {
+        var cleaner = new BagCleaner { Selling = true };
+        var p = new BotProfile();
+        var item = new BagSlotView(20, Sword, 1, 0, new Rectangle(700, 200, 40, 40));
+        var window = new Rectangle(662, 20, 520, 599);
+        var size = new Size(1204, 688);
+        BagLayout Bag(bool question, bool itemThere, int shop = 9001) => new(true, window, 0, [], itemThere ? [item] : [], null,
+            MenuKnown: true, NpcShop: shop, OtherConfirm: question ? new Point(600, 380) : null);
+        cleaner.Start(TimeSpan.Zero);
+        // The shop closed: nothing clicked.
+        Assert.Empty(cleaner.Tick(TimeSpan.Zero, Bag(false, true, shop: 0), _ => true, p, size));
+        Assert.Equal([new ClickAction(new Point(720, 220), Slow: true, Fast: true, Right: true)],
+            cleaner.Tick(TimeSpan.FromSeconds(0.5), Bag(false, true), _ => true, p, size));
+        // "Satılsın mı?": Enter.
+        Assert.Equal([new KeyTapAction(Keys.Enter)], cleaner.Tick(TimeSpan.FromSeconds(0.7), Bag(true, true), _ => true, p, size));
+        // Still showing a moment later: waited on, not clicked as well.
+        Assert.Empty(cleaner.Tick(TimeSpan.FromSeconds(0.9), Bag(true, true), _ => true, p, size));
+        // Gone with the item: sold.
+        cleaner.Tick(TimeSpan.FromSeconds(1.1), Bag(false, false), _ => true, p, size);
+        Assert.Equal(1, cleaner.Thrown);
+    }
+
+    [Fact]
+    public void Selling_falls_back_to_the_menus_Sat_when_a_right_click_brings_no_question()
     {
         var cleaner = new BagCleaner { Selling = true };
         var p = new BotProfile();
@@ -91,12 +115,15 @@ public class SellTests
         BagLayout Bag(bool menu, bool itemThere) => new(true, window, 0, [], itemThere ? [item] : [], null, MenuKnown: true,
             DropButton: menu ? new Point(900, 300) : null, MenuSlot: menu ? 20 : -1, SellButton: menu ? new Point(900, 340) : null, NpcShop: 9001);
         cleaner.Start(TimeSpan.Zero);
-        Assert.Equal([new ClickAction(new Point(720, 220), Slow: true, Fast: true)], cleaner.Tick(TimeSpan.Zero, Bag(false, true), _ => true, p, new Size(1204, 688)));
+        Assert.Equal([new ClickAction(new Point(720, 220), Slow: true, Fast: true, Right: true)], cleaner.Tick(TimeSpan.Zero, Bag(false, true), _ => true, p, new Size(1204, 688)));
+        // No question after the right click: the item's menu instead.
+        Assert.Equal([new ClickAction(new Point(720, 220), Slow: true, Fast: true)], cleaner.Tick(TimeSpan.FromSeconds(1.5), Bag(false, true), _ => true, p, new Size(1204, 688)));
+        var t0 = 1.5;
         // The menu: "Sat", not "Yere at".
-        Assert.Empty(cleaner.Tick(TimeSpan.FromSeconds(1), Bag(true, true), _ => true, p, new Size(1204, 688))); // read once: waits
-        Assert.Equal([new ClickAction(new Point(900, 340), Slow: true, Fast: true)], cleaner.Tick(TimeSpan.FromSeconds(1.5), Bag(true, true), _ => true, p, new Size(1204, 688)));
+        Assert.Empty(cleaner.Tick(TimeSpan.FromSeconds(t0 + 1), Bag(true, true), _ => true, p, new Size(1204, 688))); // read once: waits
+        Assert.Equal([new ClickAction(new Point(900, 340), Slow: true, Fast: true)], cleaner.Tick(TimeSpan.FromSeconds(t0 + 1.5), Bag(true, true), _ => true, p, new Size(1204, 688)));
         // No question; the item is gone: sold.
-        cleaner.Tick(TimeSpan.FromSeconds(2), Bag(false, false), _ => true, p, new Size(1204, 688));
+        cleaner.Tick(TimeSpan.FromSeconds(t0 + 2), Bag(false, false), _ => true, p, new Size(1204, 688));
         Assert.Equal(1, cleaner.Thrown);
     }
 }

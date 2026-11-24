@@ -63,6 +63,7 @@ internal sealed class MarketForm : Form
         _startScan = startScan;
         _stopScan = stopScan;
         Text = "PARDUS — Pazar";
+        AppIcon.Use(this);
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(1320, 780);
         MinimumSize = new Size(1080, 620);

@@ -10,6 +10,7 @@
     <AssemblyName>SekoBot</AssemblyName>
     <RootNamespace>SekoBot</RootNamespace>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon>pardus.ico</ApplicationIcon>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <Version>0.4.0</Version>
     <!-- Version checks for newer WGC properties are done at runtime. -->
