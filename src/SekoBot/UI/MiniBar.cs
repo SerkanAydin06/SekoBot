@@ -68,7 +68,8 @@ internal sealed class MiniBar : Form
         _menu.Opening += (_, _) => FillMenu();
         _menu.Closed += (_, _) => { _menuClosedAt = DateTime.Now; Invalidate(); };
         ContextMenuStrip = _menu;
-        _timer.Tick += (_, _) => { Pull(true); CloseMenuWhenLeft(); };
+        // The menu opens and closes with a click (the user: not by the mouse coming over it).
+        _timer.Tick += (_, _) => Pull(true);
         FormClosed += (_, _) =>
         {
             _timer.Dispose();
@@ -205,7 +206,7 @@ internal sealed class MiniBar : Form
     private readonly ContextMenuStrip _menu;
     private DateTime _menuClosedAt = DateTime.MinValue, _menuLeftAt = DateTime.MinValue;
 
-    /// <summary>The menu under its button (opened by the mouse coming over the button, or a click).</summary>
+    /// <summary>The menu under its button (opened by a click on it; a click elsewhere closes it).</summary>
     private void OpenMenu()
     {
         if (_menu.Visible)
@@ -443,9 +444,6 @@ internal sealed class MiniBar : Form
     {
         base.OnMouseMove(e);
         int hit = HitButton(e.Location);
-        // The menu opens as the mouse comes over its button (no click needed).
-        if (hit == MenuButton && hit != _hover && DateTime.Now - _menuClosedAt > TimeSpan.FromMilliseconds(350))
-            OpenMenu();
         if (hit != _hover)
         {
             _hover = hit;
