@@ -104,6 +104,30 @@ public class GameSaysTests
     }
 
     [Fact]
+    public void Stuck_on_the_way_to_an_item_it_is_left_for_good_within_seconds()
+    {
+        // Seen: the bot kept walking at an item inside a tree, stepping aside again and again.
+        var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5], AutoSkills = false, PickUpDrops = true, PullGroups = false };
+        var brain = new Brain(() => p);
+        brain.Start(TimeSpan.Zero);
+        var me = new Vec3(1000, 1000, 0);
+        GroundSpot[] inTree = [new(7, new Point(Center.X - 300, Center.Y), At: new Vec3(1600, 1000, 0))];
+        List<BotAction> Stuck(double from, double to)
+        {
+            var all = new List<BotAction>();
+            for (double t = from; t < to; t += 100)
+                all.AddRange(brain.Tick(new GameState(TimeSpan.FromMilliseconds(t), 1920, 1080, 1, 1, 0, 1)
+                    { Drops = inTree, Walking = false, AttackPower = 189, Position = me }));
+            return all;
+        }
+        var first = Stuck(0, Brain.DropNoProgressMs + 1500);
+        Assert.Contains(first, a => a is NoteAction n && n.Text.Contains("takıldı (ağaç"));
+        // Not gone for again.
+        var later = Stuck(Brain.DropNoProgressMs + 1500, 40_000);
+        Assert.DoesNotContain(later, a => a is NoteAction n && n.Text.Contains("Yerdeki eşya"));
+    }
+
+    [Fact]
     public void After_wait_the_skill_is_pressed_less_often()
     {
         var p = new BotProfile { LeashMeters = 0, SkillEverySec = [5, 0, 0, 0, 0] };

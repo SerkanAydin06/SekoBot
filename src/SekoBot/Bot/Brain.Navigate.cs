@@ -778,12 +778,32 @@ internal sealed partial class Brain
     internal const int DropTries = 2, BadDropSpotMs = 30 * 60_000;
     internal const double BadDropSpotRange = 150;
     private readonly Dictionary<long, int> _dropFails = [];
+    /// <summary>Walking to an item without getting this much closer (world units) for <see cref="DropNoProgressMs"/>
+    /// (side steps included): stuck on a tree or a rock — the item is left for good at once (the user: it kept walking
+    /// at an item inside a tree; the side steps didn't count towards giving up).</summary>
+    internal const double DropProgress = 40;
+    internal const int DropNoProgressMs = 3000, SpecialNoProgressMs = 6000;
+    /// <summary>This close to the item, standing still is picking it up, not being stuck.</summary>
+    internal const double DropAtFeet = 100;
+    /// <summary>Not gone for this long (a fight came between): the progress clock starts again.</summary>
+    internal const int DropResumeMs = 4000;
+    private double _dropBest = double.MaxValue;
+    private TimeSpan _dropProgressAt = Never;
     private readonly List<(Vec3 At, TimeSpan Until)> _badDropSpots = [];
 
     /// <summary>The item couldn't be reached: left for a while, or for good the second time (its place noted).</summary>
-    private void DropFailed(GroundSpot drop, TimeSpan now, List<BotAction> actions)
+    private void DropFailed(GroundSpot drop, TimeSpan now, List<BotAction> actions, bool stuck = false)
     {
         int fails = _dropFails[drop.Id] = _dropFails.GetValueOrDefault(drop.Id) + 1;
+        _dropId = 0;
+        if (stuck)
+        {
+            _ignoredDrops[drop.Id] = now + Ms(BadDropSpotMs);
+            if (drop.At is Vec3 spot)
+                _badDropSpots.Add((spot, now + Ms(BadDropSpotMs)));
+            actions.Add(new NoteAction("Yerdeki eşyaya gidilirken takıldı (ağaç, kaya içinde ya da arkasında); bırakıldı, o noktaya düşenler de alınmayacak."));
+            return;
+        }
         if (fails < DropTries)
         {
             _ignoredDrops[drop.Id] = now + Ms(DropRetryMs);
@@ -923,10 +943,30 @@ internal sealed partial class Brain
             _dropId = drop.Id;
             _dropSince = now;
             _dropTrying = TimeSpan.Zero;
+            _dropBest = double.MaxValue;
+            _dropProgressAt = now;
         }
         else if (now - _dropTriedAt < Ms(1000))
             _dropTrying += now - _dropTriedAt;
+        else if (now - _dropTriedAt > Ms(DropResumeMs))
+            _dropProgressAt = now; // back to it after a fight: the progress clock starts again
         _dropTriedAt = now;
+        // Getting closer? Counted in real time, side steps around a tree included.
+        if (state.Position is Vec3 me && drop.At is Vec3 there)
+        {
+            double away = me.DistanceXY(there);
+            if (away < _dropBest - DropProgress || away <= DropAtFeet)
+            {
+                _dropBest = Math.Min(_dropBest, away);
+                _dropProgressAt = now;
+            }
+            else if (now - _dropProgressAt > Ms(drop.Special ? SpecialNoProgressMs : DropNoProgressMs))
+            {
+                DropFailed(drop, now, actions, stuck: true);
+                SetMoves([], p, actions, refresh);
+                return false;
+            }
+        }
         // Someone else's item is told by the game ("toplayamazsın", see HearGame). One that still
         // isn't taken after a while (something in the way): left for a little, then tried again.
         if (_dropTrying > Ms(drop.Special ? 20000 : DropGiveUpMs))
