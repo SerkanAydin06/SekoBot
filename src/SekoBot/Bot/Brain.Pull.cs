@@ -85,6 +85,11 @@ internal sealed partial class Brain
         ProfileChanged = true;
     }
     private int _fightMostAttackers;
+    /// <summary>The last time a fight took HP below <see cref="PullDangerHp"/>.</summary>
+    private TimeSpan _dangerAt = Never;
+    private bool _fightLowered;
+    /// <summary>After a danger the number gathered isn't raised for this long.</summary>
+    internal const int PullCalmMs = 180_000;
 
     /// <summary>How many mobs are gathered at most now (lowered after a fight that went badly).</summary>
     public int PullCap(BotProfile p) => _pullCap is > 0 ? Math.Min(_pullCap, p.PullMaxMobs) : p.PullMaxMobs;
@@ -108,18 +113,28 @@ internal sealed partial class Brain
             _fightMostAttackers = Math.Max(_fightMostAttackers, attackers);
             if (state.Hp is double hp)
                 _fightLowHp = Math.Min(_fightLowHp, hp);
+            // Lowered at once: running away the fight looked over for a moment and the bad part was lost, the
+            // rest then counted as an easy fight (seen: can %25 → "rahat geçti" → 4 mobs → can %23).
+            if (!_fightLowered && _fightLowHp < PullDangerHp && _fightMostAttackers >= PullMinMobs && p.PullGroups)
+            {
+                _dangerAt = state.Time;
+                _fightLowered = true;
+                int cap = PullCap(p);
+                if (cap > PullMinMobs)
+                {
+                    _pullCap = Math.Max(PullMinMobs, Math.Min(cap, _fightMostAttackers) - 2);
+                    KeepPullCap(p);
+                    actions.Add(new NoteAction($"{_fightMostAttackers} mobla can %{_fightLowHp * 100:0}'e düştü; bundan sonra en fazla {_pullCap} mob toplanacak."));
+                }
+            }
             return;
         }
         if (_fightMostAttackers >= PullMinMobs && p.PullGroups)
         {
             int cap = PullCap(p);
-            if (_fightLowHp < PullDangerHp && cap > PullMinMobs)
-            {
-                _pullCap = Math.Max(PullMinMobs, Math.Min(cap, _fightMostAttackers) - 2);
-                KeepPullCap(p);
-                actions.Add(new NoteAction($"{_fightMostAttackers} mobla can %{_fightLowHp * 100:0}'e düştü; bundan sonra en fazla {_pullCap} mob toplanacak."));
-            }
-            else if (_fightLowHp > PullSafeHp && cap < p.PullMaxMobs && _fightMostAttackers >= cap - 1)
+            // Raised only well after the last danger.
+            if (_fightLowHp > PullSafeHp && cap < p.PullMaxMobs && _fightMostAttackers >= cap - 1
+                && state.Time - _dangerAt > Ms(PullCalmMs))
             {
                 _pullCap = Math.Min(p.PullMaxMobs, cap + (_fightLowHp > PullVerySafeHp ? 2 : 1));
                 KeepPullCap(p);
@@ -127,6 +142,7 @@ internal sealed partial class Brain
             }
         }
         _fightMostAttackers = 0;
+        _fightLowered = false;
         _fightLowHp = 1;
     }
 
@@ -136,6 +152,7 @@ internal sealed partial class Brain
         _pullMap = null;
         _fightLowHp = 1;
         _fightMostAttackers = 0;
+        _fightLowered = false;
         _pulled.Clear();
         _pullGroup = 0;
         _pullHitSince = Never;
