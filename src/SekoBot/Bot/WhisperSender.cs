@@ -112,7 +112,7 @@ internal sealed class WhisperSender
                     Close("yazı kutusu bulunamadı");
                     goto case Step.Close;
                 }
-                actions.Add(new ClickAction(Centre(dm.TextBox), Slow: true));
+                actions.Add(new ClickAction(BagCleaner.ClickPoint(dm.TextBox), Slow: true));
                 _step = Step.Type;
                 _waitUntil = now + TimeSpan.FromMilliseconds(1200);
                 break;
@@ -158,7 +158,7 @@ internal sealed class WhisperSender
                     break;
                 }
                 if (_closes < 2 && dm.Opener is Point button)
-                    actions.Add(new ClickAction(button, Slow: true));
+                    actions.Add(new ClickAction(BagCleaner.DropClickPoint(button, dm.OpenerBounds), Slow: true));
                 else
                     actions.Add(new KeyTapAction(Keys.Escape));
                 _closes++;

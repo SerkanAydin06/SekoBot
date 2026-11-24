@@ -36,8 +36,8 @@ internal sealed partial class BotEngine
     public void PressStart(Rectangle button)
     {
         _loginInput ??= new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
-        var at = new Point(button.X + button.Width / 2, button.Y + button.Height / 2);
-        _loginInput.Enqueue(new ClickAction(at, Slow: true, Fast: true, StillWanted: () => CharSelectNow() is { Start: not null }));
+        var at = BagCleaner.ClickPoint(button);
+        _loginInput.Enqueue(new ClickAction(at, Slow: true, Fast: true, StillWanted: () => CharSelectNow()?.Start is { } current && current.Contains(at)));
     }
 
     /// <summary>
@@ -82,7 +82,7 @@ internal sealed partial class BotEngine
     public void PressLogin(Rectangle button)
     {
         _loginInput ??= new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
-        var at = new Point(button.X + button.Width / 2, button.Y + button.Height / 2);
+        var at = BagCleaner.ClickPoint(button);
         _loginInput.Enqueue(new ClickAction(at, Slow: true, Fast: true,
             StillWanted: () => LoginNow() is { Showing: true, Waiting: false, LoggedIn: false }));
     }

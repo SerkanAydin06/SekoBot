@@ -50,7 +50,10 @@ public class WhisperSenderTests
         sender.Start(S(-1), "oxyygen", "selam, birazdan dönerim");
         Assert.Equal([new ClickAction(Opener, Slow: true)], sender.Tick(S(0), Closed));
         AssertPersonClick(sender.Tick(S(2), Open()));      // the conversation
-        Assert.Equal([new ClickAction(new Point(246, 306), Slow: true)], sender.Tick(S(4), Open()));     // the text box
+        var focus = Assert.IsType<ClickAction>(Assert.Single(sender.Tick(S(4), Open())));
+        Assert.True(Box.Contains(focus.Client));
+        Assert.InRange(focus.Client.X, 241, 251);
+        Assert.InRange(focus.Client.Y, 301, 311);
         Assert.Equal([new TypeTextAction("selam, birazdan dönerim", ClearFirst: true)], sender.Tick(S(6), Open()));
         Assert.Equal([new KeyTapAction(Keys.Enter)], sender.Tick(S(9), Open() with { Send = Rectangle.Empty }));
         // It shows up as ours: close the window (we opened it).

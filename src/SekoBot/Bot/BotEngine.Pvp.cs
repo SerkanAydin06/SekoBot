@@ -279,7 +279,7 @@ internal sealed partial class BotEngine
                 return [new KeyTapAction(p.Keys.CloseWindow)];
             }
             if (window.Selected != target.Channel)
-                return [new ClickAction(Middle(target.At), Slow: true)];
+                return [new ClickAction(BagCleaner.ClickPoint(target.At), Slow: true)];
             // Pressed: the game takes a while to move over (seen: 20 s); not pressed again meanwhile.
             if (now - _changePressedAt < TimeSpan.FromSeconds(12))
                 return [];
@@ -287,12 +287,12 @@ internal sealed partial class BotEngine
             {
                 _changePressedAt = now;
                 _log($"🔀 Kanal {target.Channel} seçildi (%{target.Full} dolu); 'Kanal değiştir'e basılıyor.");
-                return [new ClickAction(Middle(change), Slow: true)];
+                return [new ClickAction(BagCleaner.ClickPoint(change), Slow: true)];
             }
             return [];
         }
         if (screen?.MenuButton is { } menuButton)
-            return [new ClickAction(Middle(menuButton), Slow: true)];
+            return [new ClickAction(BagCleaner.ClickPoint(menuButton), Slow: true)];
         // The game menu is up but its button not drawn yet (it slides in): waited on, not Esc'd shut again
         // (seen on VaSPeN: the menu opened and shut three times, no channel change).
         if (World?.OpenWindows?.Contains("EscMenu") == true && _menuWaits++ < 5)
@@ -343,5 +343,4 @@ internal sealed partial class BotEngine
         ShrinkAfterWork();
     }
 
-    private static Point Middle(Rectangle r) => new(r.X + r.Width / 2, r.Y + r.Height / 2);
 }

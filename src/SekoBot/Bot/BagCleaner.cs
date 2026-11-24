@@ -86,6 +86,9 @@ internal sealed class BagCleaner
         client.Width <= 0 || client.Height <= 0 ||
         r.X + r.Width / 2 is var x && r.Y + r.Height / 2 is var y && x >= 0 && y >= 0 && x < client.Width && y < client.Height;
 
+    internal static Point ClickPoint(Rectangle bounds) =>
+        DropClickPoint(new Point(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2), bounds);
+
     internal static Point DropClickPoint(Point center, Rectangle bounds)
     {
         if (!bounds.Contains(center))
@@ -344,7 +347,9 @@ internal sealed class BagCleaner
                 int page = left.Min(i => i.Page);
                 if (page >= 0 && page < bag.PageButtons.Count && _pageClicks.GetValueOrDefault(page) < 3)
                 {
-                    actions.Add(new ClickAction(bag.PageButtons[page], Slow: true));
+                    var target = bag.PageButtonBounds is { } bounds && page < bounds.Count
+                        ? ClickPoint(bounds[page]) : bag.PageButtons[page];
+                    actions.Add(new ClickAction(target, Slow: true));
                     _pageClicks[page] = _pageClicks.GetValueOrDefault(page) + 1;
                     _waitUntil = now + AfterClick;
                 }

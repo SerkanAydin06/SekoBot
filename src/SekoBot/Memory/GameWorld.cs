@@ -130,7 +130,7 @@ internal readonly record struct BagSlotView(int Slot, int Vnum, int Count, int P
 internal sealed record BagLayout(bool Open, Rectangle Window, int Page, IReadOnlyList<Point> PageButtons,
     IReadOnlyList<BagSlotView> Items, Point? Confirm, bool MenuKnown = false, Point? DropButton = null, int MenuSlot = -1,
     Point? SellButton = null, int NpcShop = 0, Point? OtherConfirm = null, Rectangle DropBounds = default, Rectangle ConfirmBounds = default,
-    Rectangle SellBounds = default, Rectangle OtherConfirmBounds = default);
+    Rectangle SellBounds = default, Rectangle OtherConfirmBounds = default, IReadOnlyList<Rectangle>? PageButtonBounds = null);
 
 /// <summary>What kind of thing an item is, by its number (Metin2's item numbers).</summary>
 internal enum LootKind { Unknown, Yang, Potion, Equipment, Other }
@@ -1497,7 +1497,7 @@ internal sealed partial class GameWorldReader : IDisposable
 
             // The page buttons are four "invButton" fields; their order in memory isn't the order on
             // screen (seen), so they are sorted left to right.
-            var buttons = new List<Point>();
+            var pageBounds = new List<Rectangle>();
             if (!_widgetFields.TryGetValue(inventoryClass, out var inventoryFields))
                 _widgetFields[inventoryClass] = inventoryFields = ObjectFields(inventoryClass);
             if (open)
@@ -1507,9 +1507,10 @@ internal sealed partial class GameWorldReader : IDisposable
                         continue;
                     long button = Pointer(inventory + offset);
                     if (Showing(button) && DrawnAt(button) is { } r)
-                        buttons.Add(new Point(r.X + r.Width / 2, r.Y + r.Height / 2));
+                        pageBounds.Add(r);
                 }
-            buttons.Sort((a, b) => a.X.CompareTo(b.X));
+            pageBounds.Sort((a, b) => (a.X + a.Width / 2).CompareTo(b.X + b.Width / 2));
+            var buttons = pageBounds.Select(r => new Point(r.X + r.Width / 2, r.Y + r.Height / 2)).ToArray();
 
             // "Throw this item away?": m2data.dropWindow (a msgbox_C) with its "evet" button.
             Point? confirm = null;
@@ -1563,7 +1564,7 @@ internal sealed partial class GameWorldReader : IDisposable
             long shopClass = Pointer(shopWindow + ObjClass);
             if (MemoryReads.IsPointer(shopWindow) && ClassName(shopClass) == "shopWindow_C" && Showing(shopWindow))
                 npcShop = Int32(shopWindow + Offset(shopClass, "shopWindow_C", "shopId")) ?? 0;
-            return new BagLayout(open, window, showing, buttons, items, confirm, menuKnown, dropButton, menuSlot, sellButton, npcShop, otherConfirm, dropBounds, confirmBounds, sellBounds, otherConfirmBounds);
+            return new BagLayout(open, window, showing, buttons, items, confirm, menuKnown, dropButton, menuSlot, sellButton, npcShop, otherConfirm, dropBounds, confirmBounds, sellBounds, otherConfirmBounds, pageBounds);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
