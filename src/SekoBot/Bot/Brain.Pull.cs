@@ -220,7 +220,9 @@ internal sealed partial class Brain
             if (!_pulling && now - _pullHeldToldAt > Ms(60_000) && GroupBeside(state, p))
             {
                 _pullHeldToldAt = now;
-                actions.Add(new NoteAction($"Yanda uyuyan grup var ama can %{hp * 100:0}; yandaki grubu toplamak için en az %{BesideMinHp(p) * 100:0} isteniyor."));
+                actions.Add(new NoteAction(hp >= BesideMinHp(p)
+                    ? $"Yanda uyuyan grup var ama zaten {chasing} mob peşimizde ve can %{hp * 100:0}; önce bunlar kesiliyor."
+                    : $"Yanda uyuyan grup var ama can %{hp * 100:0}; yandaki grubu toplamak için en az %{BesideMinHp(p) * 100:0} isteniyor."));
             }
             return EndPull(actions, $"Can azaldı; toplanan {chasing} mob kesiliyor.");
         }
