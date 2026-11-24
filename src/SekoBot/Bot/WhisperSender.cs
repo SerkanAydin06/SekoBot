@@ -77,7 +77,7 @@ internal sealed class WhisperSender
                     Abort("mesaj penceresi açılamadı");
                     break;
                 }
-                actions.Add(new ClickAction(opener, Slow: true));
+                actions.Add(new ClickAction(BagCleaner.DropClickPoint(opener, dm.OpenerBounds), Slow: true));
                 _openedByUs = true;
                 _opens++;
                 _waitUntil = now + AfterClick;

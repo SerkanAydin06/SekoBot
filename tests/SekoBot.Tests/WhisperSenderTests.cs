@@ -19,6 +19,22 @@ public class WhisperSenderTests
     private static TimeSpan S(double s) => TimeSpan.FromSeconds(s);
 
     [Fact]
+    public void Opening_clicks_stay_inside_the_button_and_stop_after_it_opens()
+    {
+        var sender = new WhisperSender();
+        sender.Start(S(-1), "oxyygen", "selam");
+        var bounds = new Rectangle(Opener.X - 9, Opener.Y - 2, 18, 4);
+        var closed = Closed with { OpenerBounds = bounds };
+        foreach (double time in new[] { 0d, 2d })
+        {
+            var click = Assert.IsType<ClickAction>(Assert.Single(sender.Tick(S(time), closed)));
+            Assert.True(bounds.Contains(click.Client));
+            Assert.InRange(click.Client.X, Opener.X - 5, Opener.X + 5);
+        }
+        Assert.Equal([new ClickAction(new Point(70, 213), Slow: true)], sender.Tick(S(4), Open()));
+    }
+
+    [Fact]
     public void Opens_the_window_picks_the_player_types_sends_checks_and_closes_it_again()
     {
         var sender = new WhisperSender();

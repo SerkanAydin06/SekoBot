@@ -1352,7 +1352,7 @@ internal sealed partial class GameWorldReader : IDisposable
                 textBox = DrawnAt(Pointer(box + Offset(cls, "dmBox_C", "textbox"))) ?? Rectangle.Empty;
                 send = DrawnAt(Pointer(box + Offset(cls, "dmBox_C", "c_Button"))) ?? Rectangle.Empty;
             }
-            return new DmLayout(open, opener, people, textBox, send, shown);
+            return new DmLayout(open, opener, people, textBox, send, shown, left.Count == 3 ? left[1] : Rectangle.Empty);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

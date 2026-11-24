@@ -12,4 +12,4 @@ internal readonly record struct DmShown(string Name, string Message, bool Mine);
 /// of the conversation showing.
 /// </summary>
 internal sealed record DmLayout(bool Open, Point? Opener, IReadOnlyList<DmPerson> People, Rectangle TextBox, Rectangle Send,
-    IReadOnlyList<DmShown> Shown);
+    IReadOnlyList<DmShown> Shown, Rectangle OpenerBounds = default);
