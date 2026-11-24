@@ -64,6 +64,7 @@ internal sealed class MiniBar : Form
         ClientSize = new Size(LogicalWidth, LogicalHeight);
         DoubleBuffered = true;
         Text = "PARDUS";
+        AppIcon.Use(this);
         _menu = new ContextMenuStrip { ShowImageMargin = false, Font = new Font("Segoe UI", 9.5f) };
         _menu.Opening += (_, _) => FillMenu();
         _menu.Closed += (_, _) => { _menuClosedAt = DateTime.Now; Invalidate(); };

@@ -232,7 +232,7 @@ internal sealed partial class BotEngine
             return await FailedAway($"{name} dükkanı açılamadı");
         }
         int reopened = 0, soldBefore = 0;
-        _log($"💰 {name} dükkanı açıldı; eşyalar tek tek satılıyor (Sat → Evet).");
+        _log($"💰 {name} dükkanı açıldı; eşyalar sağ tık + Enter ile satılıyor.");
         _sellStage = $"💰 {name} dükkanında eşyalar satılıyor";
 
         // Potions first, while the shop is surely open (seen: closed after the sale and the buying skipped).

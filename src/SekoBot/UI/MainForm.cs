@@ -114,6 +114,7 @@ internal sealed partial class MainForm : Form
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
         Text = "PARDUS";
+        AppIcon.Use(this);
         ClientSize = new Size(1180, 920);
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;

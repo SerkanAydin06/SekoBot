@@ -38,6 +38,16 @@ internal sealed class BagCleaner
     private TimeSpan _menuSeenWhen;
 
     private enum Step { Open, Pick, Menu, Dragged, Confirmed, Close }
+    /// <summary>Selling: a right click on the item brings the sell question at once (Enter says yes) — the menu's
+    /// "Sat" only for an item that showed no question this long after its right click.</summary>
+    public static readonly TimeSpan RightClickTimeout = TimeSpan.FromMilliseconds(1200);
+    /// <summary>Looked at again this soon after the right click / the Enter.</summary>
+    public static readonly TimeSpan AfterRightClick = TimeSpan.FromMilliseconds(120);
+    /// <summary>After Enter the question goes within this (else "Evet" is clicked).</summary>
+    public static readonly TimeSpan EnterTakes = TimeSpan.FromMilliseconds(600);
+    private bool _rightClicked;
+    /// <summary>Items whose right click brought no question: sold through their menu.</summary>
+    private readonly HashSet<int> _menuOnly = [];
     private TimeSpan _clickedAt;
     private int _menuMisses;
     private bool _menuTried, _viaMenu;
@@ -72,6 +82,8 @@ internal sealed class BagCleaner
         Problem = null;
         _failed.Clear();
         _pageClicks.Clear();
+        _menuOnly.Clear();
+        _rightClicked = false;
     }
 
     /// <summary>Whether an item's middle is inside the game's window (unknown window size: yes).</summary>
@@ -114,13 +126,21 @@ internal sealed class BagCleaner
         // The "throw it away?" question is showing (selling: "sell it?", another window).
         if ((bag.Confirm ?? (Selling ? bag.OtherConfirm : null)) is Point yes)
         {
+            // Enter pressed a moment ago: the question is given time to go before "Evet" is clicked as well.
+            if (Selling && _rightClicked && _step == Step.Confirmed && _yesClicks == 1 && now - _yesAt < EnterTakes)
+                return actions;
             if (_step == Step.Dragged || _step == Step.Confirmed && _yesClicks < 2)
             {
-                actions.Add(new ClickAction(yes, Slow: true, Fast: _viaMenu));
+                // After a right click the question is said yes to with Enter (quicker than the mouse); still showing
+                // after that, "Evet" is clicked. Only with the question up: Enter alone would open the chat.
+                if (Selling && _rightClicked && _yesClicks == 0)
+                    actions.Add(new KeyTapAction(Keys.Enter));
+                else
+                    actions.Add(new ClickAction(yes, Slow: true, Fast: _viaMenu));
                 _yesClicks++;
                 _yesAt = now;
                 _step = Step.Confirmed;
-                _waitUntil = now + (_viaMenu ? AfterYes : AfterClick);
+                _waitUntil = now + (Selling && _rightClicked ? AfterRightClick : _viaMenu ? AfterYes : AfterClick);
             }
             else if (bag.Confirm is Point leftover && _step is Step.Open or Step.Pick && _leftoverYes < 2)
             {
@@ -233,6 +253,13 @@ internal sealed class BagCleaner
                     _step = Step.Pick;
                     goto case Step.Pick;
                 }
+                // Right clicked, no question: this one is sold through its menu ("Sat").
+                if (Selling && _rightClicked && now - _draggedAt >= RightClickTimeout)
+                {
+                    _menuOnly.Add(_slot);
+                    _step = Step.Pick;
+                    goto case Step.Pick;
+                }
                 // No question came up: the drag didn't take.
                 if (now - _draggedAt >= QuestionTimeout)
                 {
@@ -262,6 +289,13 @@ internal sealed class BagCleaner
                     _step = Step.Open;
                     break;
                 }
+                // Selling: the bag and the shop both open, checked before every item (read now, no waiting); the shop
+                // gone, nothing is clicked (the engine opens it again).
+                if (Selling && bag.NpcShop == 0)
+                {
+                    _waitUntil = now + AfterRightClick;
+                    break;
+                }
                 var left = bag.Items.Where(i => throwIt(i) && _failed.GetValueOrDefault(i.Slot) < TriesPerItem).ToList();
                 if (left.Count == 0)
                 {
@@ -277,6 +311,20 @@ internal sealed class BagCleaner
                     bool sameItem = here.Slot == _slot && here.Vnum == _vnum && _menuTried;
                     _count = here.Count;
                     _viaMenu = Selling || bag.MenuKnown && _menuMisses < 2 && !sameItem;
+                    _rightClicked = false;
+                    if (Selling && !_menuOnly.Contains(here.Slot))
+                    {
+                        // Right click: the sell question comes straight up.
+                        actions.Add(new ClickAction(from, Slow: true, Fast: true, Right: true));
+                        _slot = here.Slot;
+                        _vnum = here.Vnum;
+                        _yesClicks = 0;
+                        _rightClicked = true;
+                        _draggedAt = now;
+                        _step = Step.Dragged;
+                        _waitUntil = now + AfterRightClick;
+                        break;
+                    }
                     if (_viaMenu)
                     {
                         actions.Add(new ClickAction(from, Slow: true, Fast: true));
