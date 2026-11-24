@@ -27,7 +27,7 @@ public class WhisperSenderTests
         Assert.Equal([new ClickAction(new Point(70, 213), Slow: true)], sender.Tick(S(2), Open()));      // the conversation
         Assert.Equal([new ClickAction(new Point(246, 306), Slow: true)], sender.Tick(S(4), Open()));     // the text box
         Assert.Equal([new TypeTextAction("selam, birazdan dönerim", ClearFirst: true)], sender.Tick(S(6), Open()));
-        Assert.Equal([new ClickAction(new Point(390, 306), Slow: true)], sender.Tick(S(9), Open()));     // Gönder
+        Assert.Equal([new KeyTapAction(Keys.Enter)], sender.Tick(S(9), Open() with { Send = Rectangle.Empty }));
         // It shows up as ours: close the window (we opened it).
         Assert.Equal([new ClickAction(Opener, Slow: true)], sender.Tick(S(11), Open(new DmShown("KAiZER06", "selam, birazdan dönerim", true))));
         Assert.Empty(sender.Tick(S(13), Closed));

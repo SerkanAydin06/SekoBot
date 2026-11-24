@@ -5,8 +5,8 @@ namespace SekoBot.Bot;
 
 /// <summary>
 /// Sends a private message the way a person does in this game's message (DM) window: open it with the
-/// "Mesaj" button on the left, click the conversation with the player, click the text box, type, click
-/// "Gönder", check the message shows up as ours, and close the window again if we opened it. Works from
+/// "Mesaj" button on the left, click the conversation with the player, click the text box, type, press
+/// Enter, check the message shows up as ours, and close the window again if we opened it. Works from
 /// what memory shows (<see cref="DmLayout"/>). Pure logic: the engine reads the layout and sends the actions.
 /// </summary>
 internal sealed class WhisperSender
@@ -124,12 +124,12 @@ internal sealed class WhisperSender
                 break;
 
             case Step.Send:
-                if (dm.Send.IsEmpty)
+                if (!dm.Open || dm.TextBox.IsEmpty)
                 {
-                    Close("Gönder düğmesi bulunamadı");
+                    Close("mesaj yazı alanı kapandı");
                     goto case Step.Close;
                 }
-                actions.Add(new ClickAction(Centre(dm.Send), Slow: true));
+                actions.Add(new KeyTapAction(Keys.Enter));
                 _step = Step.Check;
                 _waitUntil = now + AfterClick;
                 break;
