@@ -596,15 +596,35 @@ internal sealed class TerrainBook(string? folder = null)
     }
 
     private readonly Dictionary<string, DateTime> _roadsLookedAt = [];
+    private readonly Dictionary<string, DateTime> _roadsFileTime = [];
+
+    /// <summary>When the map's road files were last written (the roads and the removed ones).</summary>
+    private DateTime RoadFilesTime(string map)
+    {
+        try
+        {
+            var a = File.GetLastWriteTimeUtc(RoadMap.FileOf(Folder, map));
+            var b = File.GetLastWriteTimeUtc(RoadMap.RemovedFileOf(Folder, map));
+            return a > b ? a : b;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return DateTime.MinValue; }
+    }
 
     /// <summary>The map's roads; not there yet: looked for on disk again every minute (another SekoBot may read them).</summary>
     private RoadMap? RoadsOfLocked(string map)
     {
-        if (_roads.TryGetValue(map, out var roads) && roads != null)
+        bool fresh = _roadsLookedAt.TryGetValue(map, out var looked) && DateTime.Now - looked < TimeSpan.FromMinutes(1);
+        if (_roads.TryGetValue(map, out var roads) && roads != null && (fresh || RoadFilesTime(map) == _roadsFileTime.GetValueOrDefault(map)))
+        {
+            if (!fresh)
+                _roadsLookedAt[map] = DateTime.Now;
             return roads;
-        if (_roadsLookedAt.TryGetValue(map, out var looked) && DateTime.Now - looked < TimeSpan.FromMinutes(1))
-            return null;
+        }
+        if (fresh)
+            return roads;
+        // Not read yet, or its files changed (read again by another PARDUS, a road removed): loaded again.
         _roadsLookedAt[map] = DateTime.Now;
+        _roadsFileTime[map] = RoadFilesTime(map);
         _roads[map] = roads = RoadMap.Load(Folder, map);
         if (roads != null && _maps.TryGetValue(map, out var t) && t != null)
             t.Roads = roads;
@@ -621,6 +641,7 @@ internal sealed class TerrainBook(string? folder = null)
     /// <summary>The map's roads, just read off its M map: kept on disk and used from now on.</summary>
     public void SetRoads(RoadMap roads)
     {
+        roads.ApplyRemoved(Folder);
         try { roads.Save(Folder); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         lock (_gate)

@@ -628,6 +628,72 @@ internal sealed class RoadMap
         }));
     }
 
+    /// <summary>The roads the user took off this map (haritalar\[map].yollar-silinen.json): round places (world
+    /// units: x, y, radius) where no road counts, whatever the M map shows (seen on c2: a side road leading the way
+    /// into a dead end the bot got stuck in).</summary>
+    /// <summary>After roads were removed, pieces of road smaller than this (cells) are dropped too.</summary>
+    internal const int RemovedLeftover = 150;
+
+    public static string RemovedFileOf(string folder, string map) => MapTerrain.Stem(folder, map) + ".yollar-silinen.json";
+
+    /// <summary>Takes the roads the user removed off this net (kept for every reading of the M map).</summary>
+    public void ApplyRemoved(string folder)
+    {
+        string file = RemovedFileOf(folder, Map);
+        if (!File.Exists(file))
+            return;
+        double[][]? places;
+        try { places = JsonSerializer.Deserialize<double[][]>(File.ReadAllText(file)); }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { return; }
+        foreach (var p in places ?? [])
+        {
+            if (p.Length < 3)
+                continue;
+            double x = p[0], y = p[1], r = p[2];
+            int c0 = (int)Math.Floor((x - r - StartX) / Cell), c1 = (int)Math.Floor((x + r - StartX) / Cell);
+            int r0 = (int)Math.Floor((y - r - StartY) / Cell), r1 = (int)Math.Floor((y + r - StartY) / Cell);
+            for (int row = Math.Max(0, r0); row <= Math.Min(Rows - 1, r1); row++)
+                for (int col = Math.Max(0, c0); col <= Math.Min(Columns - 1, c1); col++)
+                {
+                    double cx = StartX + (col + 0.5) * Cell - x, cy = StartY + (row + 0.5) * Cell - y;
+                    if (cx * cx + cy * cy <= r * r)
+                        _road[row * Columns + col] = false;
+                }
+        }
+        // What is left of a removed road (its edges) is no road either: pieces of a few cells dropped.
+        var seen = new BitArray(_road.Length);
+        var stack = new Stack<int>();
+        for (int i = 0; i < _road.Length; i++)
+        {
+            if (!_road[i] || seen[i])
+                continue;
+            var part = new List<int>();
+            stack.Push(i);
+            seen[i] = true;
+            while (stack.Count > 0)
+            {
+                int j = stack.Pop();
+                part.Add(j);
+                int x = j % Columns, y = j / Columns;
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        int nx = x + dx, ny = y + dy;
+                        if (nx >= 0 && ny >= 0 && nx < Columns && ny < Rows && _road[ny * Columns + nx] && !seen[ny * Columns + nx])
+                        {
+                            seen[ny * Columns + nx] = true;
+                            stack.Push(ny * Columns + nx);
+                        }
+                    }
+            }
+            if (part.Count < RemovedLeftover)
+                foreach (int j in part)
+                    _road[j] = false;
+        }
+        _cost = null;
+        RoadCells = Count();
+    }
+
     public static RoadMap? Load(string folder, string map)
     {
         try
@@ -637,6 +703,7 @@ internal sealed class RoadMap
                 return null;
             var bits = new BitArray(Convert.FromBase64String(s.Bits)) { Length = s.Columns * s.Rows };
             var roads = new RoadMap(map, s.StartX, s.StartY, s.Columns, s.Rows, bits, s.Picture, s.Biggest);
+            roads.ApplyRemoved(folder);
             roads.RoadCells = roads.Count();
             return roads;
         }

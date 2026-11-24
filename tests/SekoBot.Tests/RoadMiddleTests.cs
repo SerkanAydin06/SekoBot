@@ -58,4 +58,21 @@ public class RoadMiddleTests
         Assert.True(onRoad > all * 0.8, $"on the road {onRoad}/{all}");
         Assert.True(middle > onRoad * 0.85, $"near the middle {middle}/{onRoad}");
     }
+
+    [Fact]
+    public void A_road_the_user_removed_stays_off_the_map()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "pardus-yol-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var roads = Bend();
+            Assert.True(roads.OnRoad(6050, 4000));                       // the northern stretch
+            File.WriteAllText(RoadMap.RemovedFileOf(folder, "t"), "[[6050,4000,600],[6050,5000,600]]");
+            roads.ApplyRemoved(folder);
+            Assert.False(roads.OnRoad(6050, 4000));
+            Assert.True(roads.OnRoad(2050, 1250));                       // the rest stays
+        }
+        finally { Directory.Delete(folder, true); }
+    }
 }
