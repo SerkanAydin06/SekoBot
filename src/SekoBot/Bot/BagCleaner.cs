@@ -142,7 +142,7 @@ internal sealed class BagCleaner
                 if (Selling && _rightClicked && _yesClicks == 0)
                     actions.Add(new KeyTapAction(Keys.Enter));
                 else
-                    actions.Add(new ClickAction(Selling ? yes : DropClickPoint(yes, bag.ConfirmBounds), Slow: true, Fast: true));
+                    actions.Add(new ClickAction(DropClickPoint(yes, bag.Confirm.HasValue ? bag.ConfirmBounds : bag.OtherConfirmBounds), Slow: true, Fast: true));
                 _yesClicks++;
                 _yesAt = now;
                 _step = Step.Confirmed;
@@ -227,7 +227,7 @@ internal sealed class BagCleaner
                         }
                         break;
                     }
-                    actions.Add(new ClickAction(Selling ? drop : DropClickPoint(drop, bag.DropBounds), Slow: true, Fast: true));
+                    actions.Add(new ClickAction(DropClickPoint(drop, Selling ? bag.SellBounds : bag.DropBounds), Slow: true, Fast: true));
                     _requestedAt = now;
                     _step = Step.AwaitQuestion;
                     _waitUntil = now + AfterItemClick;
@@ -313,11 +313,8 @@ internal sealed class BagCleaner
                         .Select(i => (BagSlotView?)i).FirstOrDefault() is { } here)
                 {
                     var from = new Point(here.Rect.X + here.Rect.Width / 2, here.Rect.Y + here.Rect.Height / 2);
-                    if (!Selling)
-                    {
-                        var visible = Rectangle.Intersect(here.Rect, new Rectangle(Point.Empty, client));
-                        from = DropClickPoint(from, visible);
-                    }
+                    var visible = Rectangle.Intersect(here.Rect, new Rectangle(Point.Empty, client));
+                    from = DropClickPoint(from, visible);
                     _count = here.Count;
                     _rightClicked = false;
                     if (Selling && !_menuOnly.Contains(here.Slot))
