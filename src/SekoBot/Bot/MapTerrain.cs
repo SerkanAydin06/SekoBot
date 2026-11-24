@@ -66,7 +66,7 @@ internal sealed class MapTerrain
     public RoadMap? Roads { get; set; }
 
     /// <summary>Walking off the roads costs this much more (a way along a road may be this much longer and is still taken).</summary>
-    internal const float OffRoadCost = 6f;
+    internal const float OffRoadCost = 10f;
     /// <summary>Ways longer than this (world units, 30 m) follow the roads when asked to.</summary>
     internal const double RoadsFrom = 3000;
 
@@ -282,7 +282,7 @@ internal sealed class MapTerrain
             stepCost = new float[w * h];
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++)
-                    stepCost[y * w + x] = roads.OnRoad(ox + (x + 0.5) * cell, oy + (y + 0.5) * cell) ? 1f : OffRoadCost;
+                    stepCost[y * w + x] = roads.CostIn(ox + (x + 0.5) * cell, oy + (y + 0.5) * cell, cell) is > 0 and var onRoad ? onRoad : OffRoadCost;
         }
         var cost = new float[w * h];
         Array.Fill(cost, float.MaxValue);
@@ -335,8 +335,10 @@ internal sealed class MapTerrain
         // A shortcut between two corners mustn't leave the road the way follows (cutting across the fields again).
         bool KeepsToRoad(int k, int j)
         {
-            if (stepCost == null || !cells.Skip(k).Take(j - k + 1).Any(c => stepCost[c] <= 1f))
+            if (stepCost == null || !cells.Skip(k).Take(j - k + 1).Any(c => stepCost[c] < OffRoadCost))
                 return true;
+            // Kept as near the road's middle as the way itself is there: each point of the shortcut no worse than the
+            // way's step at the same share of the stretch (a shortcut across a bend would reach the edge or the fields).
             var a = k == 0 ? from : At(cells[k - 1]);
             var b = At(cells[j]);
             int steps = Math.Max(1, (int)Math.Ceiling(a.DistanceXY(b) / (cell * 0.5)));
@@ -344,7 +346,10 @@ internal sealed class MapTerrain
             {
                 double t = (double)i / steps;
                 int x = (int)((a.X + (b.X - a.X) * t - ox) / cell), y = (int)((a.Y + (b.Y - a.Y) * t - oy) / cell);
-                if (x >= 0 && y >= 0 && x < w && y < h && stepCost[y * w + x] > 1f)
+                if (x < 0 || y < 0 || x >= w || y >= h)
+                    continue;
+                float there = stepCost[cells[Math.Clamp(k + (int)Math.Round(t * (j - k)), k, j)]];
+                if (stepCost[y * w + x] > Math.Max(RoadMap.MiddleCost, there) + 0.01f)
                     return false;
             }
             return true;

@@ -41,6 +41,93 @@ internal sealed class RoadMap
         return c >= 0 && r >= 0 && c < Columns && r < Rows && _road[r * Columns + c];
     }
 
+    // ── The middle of the road (the user: "yolu ortalayıp gitsin") ──
+
+    /// <summary>A step on the road's middle line costs this; off it, <see cref="EdgeStep"/> more per cell towards the edge.</summary>
+    internal const float MiddleCost = 1f, EdgeStep = 0.6f;
+    private float[]? _cost;
+
+    /// <summary>
+    /// What a step on each cell costs (1 on the road's middle, more towards its edges, 0 off the road): the distance of
+    /// every road cell to the road's edge, the middle being where it is the largest across the road.
+    /// </summary>
+    private float[] Costs()
+    {
+        if (_cost != null)
+            return _cost;
+        int w = Columns, h = Rows, n = w * h;
+        var depth = new int[n];
+        const int Far = 1 << 20;
+        for (int i = 0; i < n; i++)
+            depth[i] = _road[i] ? Far : 0;
+        // Two passes: cells to the edge (a road cell beside a non-road one is 1).
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                int i = y * w + x;
+                if (depth[i] == 0)
+                    continue;
+                int d = Far;
+                if (x > 0) d = Math.Min(d, depth[i - 1] + 1); else d = 1;
+                if (y > 0) d = Math.Min(d, depth[i - w] + 1); else d = 1;
+                depth[i] = d;
+            }
+        for (int y = h - 1; y >= 0; y--)
+            for (int x = w - 1; x >= 0; x--)
+            {
+                int i = y * w + x;
+                if (depth[i] == 0)
+                    continue;
+                int d = depth[i];
+                if (x < w - 1) d = Math.Min(d, depth[i + 1] + 1); else d = 1;
+                if (y < h - 1) d = Math.Min(d, depth[i + w] + 1); else d = 1;
+                depth[i] = d;
+            }
+        var cost = new float[n];
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                int i = y * w + x;
+                if (depth[i] == 0)
+                    continue;
+                // The deepest across the road here (within 2 cells): the middle line.
+                int most = depth[i];
+                for (int dy = -2; dy <= 2; dy++)
+                    for (int dx = -2; dx <= 2; dx++)
+                    {
+                        int nx = x + dx, ny = y + dy;
+                        if (nx >= 0 && ny >= 0 && nx < w && ny < h)
+                            most = Math.Max(most, depth[ny * w + nx]);
+                    }
+                cost[i] = MiddleCost + EdgeStep * (most - depth[i]);
+            }
+        return _cost = cost;
+    }
+
+    /// <summary>What a step at (x, y) costs on the road (0: not on the road).</summary>
+    public float CostAt(double x, double y)
+    {
+        int c = (int)Math.Floor((x - StartX) / Cell), r = (int)Math.Floor((y - StartY) / Cell);
+        return c >= 0 && r >= 0 && c < Columns && r < Rows ? Costs()[r * Columns + c] : 0;
+    }
+
+    /// <summary>The cheapest road step within a square of <paramref name="size"/> around (x, y) (0: no road in it) — a
+    /// coarse cell of a long way holds a narrow road even when its middle point misses it.</summary>
+    public float CostIn(double x, double y, double size)
+    {
+        if (size <= Cell * 1.5)
+            return CostAt(x, y);
+        var costs = Costs();
+        int c0 = (int)Math.Floor((x - size / 2 - StartX) / Cell), c1 = (int)Math.Floor((x + size / 2 - StartX) / Cell);
+        int r0 = (int)Math.Floor((y - size / 2 - StartY) / Cell), r1 = (int)Math.Floor((y + size / 2 - StartY) / Cell);
+        float best = 0;
+        for (int r = Math.Max(0, r0); r <= Math.Min(Rows - 1, r1); r++)
+            for (int c = Math.Max(0, c0); c <= Math.Min(Columns - 1, c1); c++)
+                if (costs[r * Columns + c] is > 0 and var v && (best == 0 || v < best))
+                    best = v;
+        return best;
+    }
+
 
     /// <summary>
     /// The roads read off the M map as it is drawn in <paramref name="frame"/> at <paramref name="drawn"/> (client
