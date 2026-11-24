@@ -17,7 +17,7 @@ internal sealed record ShopItem(int Slot, int Vnum, int Count, long Price, IRead
 /// screen, Esc doesn't close it). Memory shows it "visible" open or closed (seen): whether it is open
 /// has to be seen in the picture.</param>
 /// <param name="ChatHistoryClose">Its X button.</param>
-internal sealed record ScreenCover(IReadOnlyList<Rectangle> Areas, Rectangle? ChatHistory = null, Point? ChatHistoryClose = null)
+internal sealed record ScreenCover(IReadOnlyList<Rectangle> Areas, Rectangle? ChatHistory = null, Point? ChatHistoryClose = null, Rectangle CloseBounds = default)
 {
     public bool Covers(Point p) => Areas.Any(a => a.Contains(p));
 }
@@ -155,6 +155,7 @@ internal sealed partial class GameWorldReader
                 Byte(dm + Offset(dmClass, "dmBox_C", "IsOpen")) is byte dmOpen && dmOpen != 0 && DrawnAt(dm) is Rectangle dmAt)
                 areas.Add(dmAt);
             Point? close = null;
+            Rectangle closeBounds = default;
             Rectangle? history = null;
             long adds = ui + Offset(uiClass, "UI_C", "canvasAdds");
             long data = Pointer(adds);
@@ -174,11 +175,14 @@ internal sealed partial class GameWorldReader
                             history = at;
                             long x = Pointer(frame + Offset(Pointer(frame + ObjClass), "w_window_C", "X"));
                             if (DrawnAt(x) is Rectangle button)
+                            {
+                                closeBounds = button;
                                 close = new Point(button.X + button.Width / 2, button.Y + button.Height / 2);
+                            }
                         }
                     }
                 }
-            return new ScreenCover(areas, history, close);
+            return new ScreenCover(areas, history, close, closeBounds);
         }
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException or OverflowException or InvalidOperationException)
         {

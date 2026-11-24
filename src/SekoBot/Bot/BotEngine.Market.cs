@@ -269,11 +269,11 @@ internal sealed partial class BotEngine
         if (cover?.ChatHistoryClose is not Point x || !ChatHistoryShowing(cover))
             return false;
         _log("Sohbet geçmişi penceresi açık (dükkanları kapatıyor); kapatılıyor.");
-        await OpenStallAsync(input, x, yieldMouse: true, token);
+        await OpenStallAsync(input, BagCleaner.DropClickPoint(x, cover.CloseBounds), yieldMouse: true, token);
         await Task.Delay(1000, token);
         if (ChatHistoryShowing(cover))
         {
-            input.Enqueue(new ClickAction(x, Slow: true, Fast: true, Yield: true));
+            input.Enqueue(new ClickAction(BagCleaner.DropClickPoint(x, cover.CloseBounds), Slow: true, Fast: true, Yield: true));
             await Task.Delay(2500, token);
             if (ChatHistoryShowing(cover))
                 throw new InvalidOperationException("sohbet geçmişi penceresi kapanmadı; oyunda X ile kapat, sonra yeniden tara.");
@@ -583,8 +583,16 @@ internal sealed partial class BotEngine
         new Vec3(shop.X, shop.Y, world.Player.Z).DistanceXY(world.Player) <= ShopClickFrom && shop.Body is Vec3 body &&
         camera.ToScreen(body with { Z = body.Z + ShopClickHeight }, state.Width, state.Height) is PointF p &&
         OnPlayfield(p, state.Width, state.Height) && cover?.Covers(Point.Round(p)) != true
-            ? Point.Round(p)
+            ? WorldClickPoint(Point.Round(p), state.Width, state.Height, cover)
             : null;
+
+    internal static Point? WorldClickPoint(Point center, int width, int height, ScreenCover? cover = null)
+    {
+        if (!OnPlayfield(center, width, height) || cover?.Covers(center) == true)
+            return null;
+        var target = BagCleaner.DropClickPoint(center, new Rectangle(0, 0, width, height));
+        return OnPlayfield(target, width, height) && cover?.Covers(target) != true ? target : center;
+    }
 
     private bool _touchRefused;
     private DateTime _touchToldAt;

@@ -68,7 +68,10 @@ internal sealed partial class BotEngine
         double area = s * s;
         bool shown = Bright(-90, 22, -22, 46) >= 30 * area && Bright(22, 22, 90, 46) >= 20 * area
                      && Bright(-95, -45, 95, -2) >= 300 * area && Bright(-15, 22, 15, 46) <= 3 * area;
-        return shown ? new Point(cx - (int)(56 * s), cy + (int)(34 * s)) : null;
+        if (!shown)
+            return null;
+        var bounds = Rectangle.FromLTRB(cx + (int)(-90 * s), cy + (int)(22 * s), cx + (int)(-22 * s), cy + (int)(46 * s));
+        return BagCleaner.ClickPoint(bounds);
     }
 
     /// <summary>Presses a point of the game (client pixels), e.g. "Onayla" on its update question.</summary>

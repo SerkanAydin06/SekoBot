@@ -303,7 +303,9 @@ internal sealed class InputExecutor : IDisposable
             // A bar that was already showing before the click doesn't prove this click selected anything.
             bool hadTarget = _hasTarget() == true;
             double? before = _targetHp();
-            await ClickAsync(spot, 40, 70, token);
+            if (BotEngine.WorldClickPoint(spot, _window.Width, _window.Height) is not Point target)
+                continue;
+            await ClickAsync(target, 40, 70, token);
 
             // When it can't be told whether something got selected, wait a bit longer.
             int wait = _hasTarget() == null ? 1500 : 800;

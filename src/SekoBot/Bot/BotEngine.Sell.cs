@@ -203,8 +203,9 @@ internal sealed partial class BotEngine
             var npcAt = (world.TownNpcs ?? []).Where(n => n.Vnum == npc.Vnum).Select(n => (Vec3?)n.Position)
                 .OrderBy(p => p!.Value.DistanceXY(at)).FirstOrDefault() ?? at;
             // A little above its feet, a bit more each try.
-            if (camera.ToScreen(npcAt with { Z = npcAt.Z + 80 + tries * 40 }, state.Width, state.Height) is PointF p && OnPlayfield(p, state.Width, state.Height))
-                input.Enqueue(new ClickAction(Point.Round(p), Slow: true));
+            if (camera.ToScreen(npcAt with { Z = npcAt.Z + 80 + tries * 40 }, state.Width, state.Height) is PointF p &&
+                WorldClickPoint(Point.Round(p), state.Width, state.Height, ScreenCoverNow()) is Point target)
+                input.Enqueue(new ClickAction(target, Slow: true));
             for (int wait = 0; wait < 12 && !open; wait++)
             {
                 await Task.Delay(250, token);

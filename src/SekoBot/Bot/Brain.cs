@@ -295,8 +295,9 @@ internal sealed partial class Brain
                     EndFight(p, actions, now);
                     return;
                 }
-                if ((state.TargetSpot ?? state.MobCandidates.Cast<Point?>().FirstOrDefault()) is Point spot)
-                    actions.Add(new ClickAction(spot));
+                if ((state.TargetSpot ?? state.MobCandidates.Cast<Point?>().FirstOrDefault()) is Point spot &&
+                    BotEngine.WorldClickPoint(spot, state.Width, state.Height) is Point targetSpot)
+                    actions.Add(new ClickAction(targetSpot));
                 _reclicks++;
                 _lastProgress = now;
             }
