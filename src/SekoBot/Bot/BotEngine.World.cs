@@ -186,7 +186,7 @@ internal sealed partial class BotEngine
         }
 
         // Walking into the town to sell is meant (see BotEngine.Sell).
-        if (world.InSafeZone && profile.StopInSafeZone && !_selling)
+        if (world.InSafeZone && profile.StopInSafeZone && !_selling && !GoingToFarm(world, profile))
         {
             _log("⚠ Karakter güvenli bölgeye (şehre) girdi; bot durduruluyor.");
             Alert();

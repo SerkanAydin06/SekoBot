@@ -427,7 +427,8 @@ internal sealed partial class BotEngine : IDisposable
             error = ScanningArea ? "Alan taranıyor; bitmesini bekle." : Fishing ? "Balık tutuluyor; önce onu durdur." : "Pazar taranıyor; önce onu durdur.";
             return false;
         }
-        if (World.InSafeZone && Profile.StopInSafeZone)
+        // In town with a farm area saved on this map: started all the same, it walks there (the user: from anywhere).
+        if (World.InSafeZone && Profile.StopInSafeZone && !GoingToFarm(World, Profile))
         {
             error = "Karakter güvenli bölgede (şehirde). Önce avlanma alanına git.";
             return false;
