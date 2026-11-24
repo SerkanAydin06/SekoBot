@@ -23,9 +23,12 @@ internal static class WhisperInbox
     /// <summary>The character a Telegram notice was about: its first line "SekoBot · NAME".</summary>
     public static string? CharacterOf(string notice)
     {
-        const string mark = "SekoBot · ";
         string first = notice.Split('\n', 2)[0].Trim();
-        return first.StartsWith(mark, StringComparison.Ordinal) && first.Length > mark.Length ? first[mark.Length..].Trim() : null;
+        // "PARDUS · " now; "SekoBot · " on notices sent before the new name.
+        foreach (string mark in new[] { "PARDUS · ", "SekoBot · " })
+            if (first.StartsWith(mark, StringComparison.Ordinal) && first.Length > mark.Length)
+                return first[mark.Length..].Trim();
+        return null;
     }
 
     /// <summary>The SekoBot (its number) playing a character now, from the status files written within the last minute.</summary>

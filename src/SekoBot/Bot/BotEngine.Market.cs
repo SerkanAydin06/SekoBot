@@ -599,14 +599,14 @@ internal sealed partial class BotEngine
         if (busy.Count == 0)
             return;
         string who = string.Join(", ", busy.Select(n => $"{n}."));
-        _log($"⏸ {who} SekoBot fareyle bir iş yapıyor (eşya atma, satış, dirilme ya da mesaj); pazar taraması o bitene kadar bekliyor.");
+        _log($"⏸ {who} PARDUS fareyle bir iş yapıyor (eşya atma, satış, dirilme ya da mesaj); pazar taraması o bitene kadar bekliyor.");
         var began = DateTime.Now;
         while ((busy = MouseUse.Others()).Count > 0)
         {
-            _marketStatus = $"{string.Join(", ", busy.Select(n => $"{n}."))} SekoBot fareyi kullanıyor; pazar taraması bekliyor ({(DateTime.Now - began).TotalSeconds:0} sn).";
+            _marketStatus = $"{string.Join(", ", busy.Select(n => $"{n}."))} PARDUS fareyi kullanıyor; pazar taraması bekliyor ({(DateTime.Now - began).TotalSeconds:0} sn).";
             await Task.Delay(500, token);
         }
-        _log($"▶ Diğer SekoBot'un işi bitti ({(DateTime.Now - began).TotalSeconds:0} sn beklendi); pazar taraması sürüyor.");
+        _log($"▶ Diğer PARDUS'un işi bitti ({(DateTime.Now - began).TotalSeconds:0} sn beklendi); pazar taraması sürüyor.");
     }
 
     /// <summary>Opens a stall at a point of the game picture: a finger tap (the game can stay behind

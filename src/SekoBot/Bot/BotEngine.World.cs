@@ -252,7 +252,7 @@ internal sealed partial class BotEngine
                 return;
             _notified[text] = now;
         }
-        string message = $"SekoBot · {(CharacterName.Length > 0 ? CharacterName : _window.Title)}\n{text}";
+        string message = $"PARDUS · {(CharacterName.Length > 0 ? CharacterName : _window.Title)}\n{text}";
         _ = Task.Run(async () =>
         {
             string? error = await Update.TelegramNotifier.SendAsync(p.TelegramToken, p.TelegramChatId, message);

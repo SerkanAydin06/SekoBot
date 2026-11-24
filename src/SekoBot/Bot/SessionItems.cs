@@ -70,7 +70,7 @@ internal sealed class SessionItems
                 return;
             _dirty = false;
             _savedAt = DateTime.Now;
-            var lines = new List<string> { $"SekoBot · bu tur alınan, atılan ve satılan eşyalar · başlangıç {_started:dd.MM.yyyy HH:mm}", "" };
+            var lines = new List<string> { $"PARDUS · bu tur alınan, atılan ve satılan eşyalar · başlangıç {_started:dd.MM.yyyy HH:mm}", "" };
             lines.Add($"{"Eşya",-36} {"Alınan",7} {"Atılan",7} {"Satılan",7}");
             foreach (var (vnum, (picked, thrown, sold)) in _items.OrderByDescending(kv => kv.Value.Picked))
                 lines.Add($"{ItemBook.NameOf(vnum),-36} {picked,7} {thrown,7} {sold,7}");

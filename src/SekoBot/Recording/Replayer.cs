@@ -32,11 +32,11 @@ internal sealed class SessionRecording
     {
         string ticksPath = Path.Combine(directory, RecordingFormat.TicksFile);
         if (!File.Exists(ticksPath))
-            throw new FileNotFoundException("Bu klasör bir SekoBot kaydı değil (ticks.jsonl yok).", ticksPath);
+            throw new FileNotFoundException("Bu klasör bir PARDUS kaydı değil (ticks.jsonl yok).", ticksPath);
 
         var info = TryRead<RecordingInfo>(Path.Combine(directory, RecordingFormat.InfoFile)) ?? new RecordingInfo();
         if (info.Version > RecordingFormat.Version)
-            throw new InvalidDataException($"Kayıt daha yeni bir SekoBot sürümüyle yapılmış (biçim {info.Version}).");
+            throw new InvalidDataException($"Kayıt daha yeni bir PARDUS sürümüyle yapılmış (biçim {info.Version}).");
         var profile = TryRead<BotProfile>(Path.Combine(directory, RecordingFormat.ProfileFile)) ?? new BotProfile();
 
         var ticks = new List<RecordedTick>();
@@ -158,7 +158,7 @@ internal static class Replayer
 
         var duration = recording.Ticks.Count > 0 ? recording.Ticks[^1].Time - start : TimeSpan.Zero;
         var sb = new StringBuilder();
-        sb.AppendLine($"SekoBot tekrar oynatma raporu · {DateTime.Now:yyyy-MM-dd HH:mm}");
+        sb.AppendLine($"PARDUS tekrar oynatma raporu · {DateTime.Now:yyyy-MM-dd HH:mm}");
         sb.AppendLine($"Kayıt: {recording.Directory}");
         sb.AppendLine($"Kaydeden sürüm: {recording.Info.AppVersion}  ·  Oynatan sürüm: {BuildInfo.Version}");
         sb.AppendLine($"Süre {Clock(duration)}  ·  {recording.Ticks.Count:N0} tur kaydı  ·  {frames:N0} kare yeniden analiz edildi" +

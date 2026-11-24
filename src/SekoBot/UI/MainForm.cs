@@ -113,7 +113,7 @@ internal sealed partial class MainForm : Form
         SuspendLayout();
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
-        Text = "SekoBot";
+        Text = "PARDUS";
         ClientSize = new Size(1180, 920);
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
@@ -265,7 +265,7 @@ internal sealed partial class MainForm : Form
             "içindekileri); sınıra ulaşınca, alan boşalınca ya da can düşünce hepsini birden keser. Can %40'ın altına düşen bir dövüşten " +
             "sonra kendiliğinden daha az mob toplar. Mob menzildeyken yerinde vurur; yürürken yoldaki mobların etrafından dolanır.\n\n" +
             "Saldırı kapalıyken bot \"Takip edilecek\" karakterin peşinden gider ve onun kestiklerinden düşenleri toplar. Boş bırakırsan " +
-            "yakındaki kendi karakterlerinden birini (SekoBot'ta açtığın) takip eder; birden fazla ad virgülle yazılabilir.", 102);
+            "yakındaki kendi karakterlerinden birini (PARDUS'ta açtığın) takip eder; birden fazla ad virgülle yazılabilir.", 102);
 
         // İksir & Buff
         // Hedef: which mobs to go for, and loot.
@@ -715,7 +715,7 @@ internal sealed partial class MainForm : Form
         };
         var test = Theme.Button(notify, "Deneme mesajı", new Rectangle(440, 68, 130, 26), Theme.Secondary, Theme.SecondaryHover);
         test.Click += async (_, _) =>
-            WriteLog(await TelegramNotifier.SendAsync(_profile.TelegramToken, _profile.TelegramChatId, "SekoBot: deneme mesajı ✓")
+            WriteLog(await TelegramNotifier.SendAsync(_profile.TelegramToken, _profile.TelegramChatId, "PARDUS: deneme mesajı ✓")
                      ?? "Telegram deneme mesajı gönderildi ✓");
         Check(notify, "Komutlar (durum/dur/başla)", 580, 68, 156, () => _profile.TelegramCommands,
             v => _profile.TelegramCommands = v);
@@ -990,12 +990,12 @@ internal sealed partial class MainForm : Form
         if (!_hotkeys.Register(OwnStopKey, () => BeginInvoke(new Action(() => StopBot($"{OwnStopName} acil durdurma", byUser: true))), control: true, shift: true))
             WriteLog($"{OwnStopName} kısayolu başka bir uygulamada kullanılıyor; Durdur düğmesini kullan.");
         if (!Instance.IsFirst)
-            WriteLog($"Bu {Instance.Number}. SekoBot: kendi ayarlarını kullanır, kısayollar {StartKey} / {StopKey}. " +
-                     "Telegram komutları ve güncelleme 1. SekoBot'ta.");
+            WriteLog($"Bu {Instance.Number}. PARDUS: kendi ayarlarını kullanır, kısayollar {StartKey} / {StopKey}. " +
+                     "Telegram komutları ve güncelleme 1. PARDUS'ta.");
 
         Shown += async (_, _) =>
         {
-            WriteLog($"SekoBot {BuildInfo.Version} başlatıldı.");
+            WriteLog($"PARDUS {BuildInfo.Version} başlatıldı.");
             // Files that could not be saved or read: told here instead of silently.
             Trouble.Listen(text =>
             {
@@ -1380,7 +1380,7 @@ internal sealed partial class MainForm : Form
     private void CloseFromMini()
     {
         bool busy = _engine is { } e && (e.BotRunning || e.ScanningMarket || e.ScanningArea);
-        if (busy && !AskOnTop("Bot çalışıyor. SekoBot kapatılsın mı?"))
+        if (busy && !AskOnTop("Bot çalışıyor. PARDUS kapatılsın mı?"))
             return;
         Close();
     }
@@ -1401,7 +1401,7 @@ internal sealed partial class MainForm : Form
         owner.Show();
         Win32.SetForegroundWindow(owner.Handle);
         owner.Activate();
-        return MessageBox.Show(owner, question, "SekoBot", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+        return MessageBox.Show(owner, question, "PARDUS", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
             MessageBoxDefaultButton.Button2) == DialogResult.Yes;
     }
 
@@ -1606,7 +1606,7 @@ internal sealed partial class MainForm : Form
         int count = WindowLayout.ArrangeGames(near, band);
         WriteLog(count == 0
             ? "Açık oyun penceresi bulunamadı."
-            : $"{count} oyun penceresi ızgaraya dizildi (her biri kendi oranında küçüldü, sıkıştırılmadı); her SekoBot kendi oyununun altına küçüldü. Büyütmek için şeride çift tıkla.");
+            : $"{count} oyun penceresi ızgaraya dizildi (her biri kendi oranında küçüldü, sıkıştırılmadı); her PARDUS kendi oyununun altına küçüldü. Büyütmek için şeride çift tıkla.");
         WindowLayout.TellAllMini();
     }
 
@@ -2228,11 +2228,11 @@ internal sealed partial class MainForm : Form
         UseCharacter(name);
         ShareStatus(name);
         CheckWhisperInbox();
-        string identity = "v" + BuildInfo.Version + (Instance.IsFirst ? "" : $"  ·  {Instance.Number}. SekoBot") + (name.Length > 0 ? $"  ·  {name}" : "");
+        string identity = "v" + BuildInfo.Version + (Instance.IsFirst ? "" : $"  ·  {Instance.Number}. PARDUS") + (name.Length > 0 ? $"  ·  {name}" : "");
         if (_identity.Text != identity)
         {
             _identity.Text = identity;
-            Text = "SekoBot" + (Instance.IsFirst ? "" : $" {Instance.Number}") + (name.Length > 0 ? $" — {name}" : "");
+            Text = "PARDUS" + (Instance.IsFirst ? "" : $" {Instance.Number}") + (name.Length > 0 ? $" — {name}" : "");
         }
         _calibrationState.Text = _engine?.World != null ? "Her şey bellekten ✓" : "Bellek bekleniyor";
         _calibrationState.ForeColor = _engine?.World != null ? Theme.Green : Theme.Muted;
@@ -2456,9 +2456,9 @@ internal sealed partial class MainForm : Form
             return _engine?.QueueWhisper(to, text) ?? "Oyun bağlı değil.";
         if (WhisperInbox.SekoBotOf(character) is int other && other != Instance.Number)
             return WhisperInbox.Send(other, to, text)
-                ? $"✉ {character} ({other}. SekoBot) {to} kişisine yazacak: \"{text}\". Gidince ondan haber gelir."
-                : "Mesaj öbür SekoBot'a iletilemedi; birazdan tekrar dene.";
-        return $"{character} şu an açık bir SekoBot'ta görünmüyor; mesaj gönderilemedi.";
+                ? $"✉ {character} ({other}. PARDUS) {to} kişisine yazacak: \"{text}\". Gidince ondan haber gelir."
+                : "Mesaj öbür PARDUS'a iletilemedi; birazdan tekrar dene.";
+        return $"{character} şu an açık bir PARDUS'ta görünmüyor; mesaj gönderilemedi.";
     }
 
     /// <summary>Answers the first SekoBot handed to this one (its character was whispered to): written in this game.</summary>
@@ -2524,7 +2524,7 @@ internal sealed partial class MainForm : Form
     private static string StatusFile(int number) => Path.Combine(ProfileStore.Directory, $"durum-{number}.txt");
 
     private static string StatusTitle(string name) =>
-        $"👤 {(name.Length > 0 ? name : "karakter bilinmiyor")}" + (Instance.IsFirst ? "" : $" ({Instance.Number}. SekoBot)");
+        $"👤 {(name.Length > 0 ? name : "karakter bilinmiyor")}" + (Instance.IsFirst ? "" : $" ({Instance.Number}. PARDUS)");
 
     /// <summary>"durum": this SekoBot's status and every other SekoBot's open now (written within the last minute).</summary>
     private string AllStatuses()
@@ -2548,7 +2548,7 @@ internal sealed partial class MainForm : Form
     private string TelegramStatus()
     {
         if (_engine == null)
-            return "SekoBot açık; oyun bağlı değil.";
+            return "PARDUS açık; oyun bağlı değil.";
         var s = _engine.Stats;
         var world = _engine.World;
         var lines = new List<string> { _engine.BotRunning ? "▶ Bot çalışıyor" : "⏸ Bot duruyor" + (_stopReason != null ? $" ({_stopReason})" : "") };
@@ -2622,7 +2622,7 @@ internal sealed partial class MainForm : Form
         _replay.Enabled = !_replaying;
         _dryRun.Enabled = !running;
         _calibrationHint.Text = !connected
-            ? "HP/MP, konum, moblar ve hedef oyunun belleğinden okunur (SekoBot'u yönetici olarak aç)."
+            ? "HP/MP, konum, moblar ve hedef oyunun belleğinden okunur (PARDUS'u yönetici olarak aç)."
             : _engine!.MemoryStatus;
     }
 
@@ -2649,7 +2649,7 @@ internal sealed partial class MainForm : Form
         }
         if (result.Update is not PreparedUpdate update)
         {
-            if (startup) WriteLog($"SekoBot güncel (v{BuildInfo.Version}).");
+            if (startup) WriteLog($"PARDUS güncel (v{BuildInfo.Version}).");
             return;
         }
         await ApplyUpdateAsync(update);
@@ -2669,7 +2669,7 @@ internal sealed partial class MainForm : Form
         }
         _updating = true;
         SetStatus("Güncelleniyor", Theme.Yellow);
-        WriteLog($"Yeni sürüm {update.Version} doğrulandı. SekoBot yeniden başlatılıyor…");
+        WriteLog($"Yeni sürüm {update.Version} doğrulandı. PARDUS yeniden başlatılıyor…");
         await Task.Delay(1200);
         if (IsDisposed)
             return;

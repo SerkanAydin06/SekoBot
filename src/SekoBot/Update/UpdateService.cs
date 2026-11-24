@@ -70,8 +70,8 @@ internal static class UpdateService
         string? executable = RunningFile();
         // Any file name works ("SekoBot (1).exe" from a browser download included).
         if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable))
-            return new UpdateCheckResult(null, "Otomatik güncelleme: SekoBot'un kendi dosyası bulunamadı (klasörü taşınmış ya da " +
-                                               "adı değişmiş olabilir). SekoBot'u kapatıp yeniden açınca güncellenir.");
+            return new UpdateCheckResult(null, "Otomatik güncelleme: PARDUS'un kendi dosyası bulunamadı (klasörü taşınmış ya da " +
+                                               "adı değişmiş olabilir). PARDUS'u kapatıp yeniden açınca güncellenir.");
 
         // Clean up the backup retained by a successful previous replacement.
         try { File.Delete(executable + ".old"); } catch { }

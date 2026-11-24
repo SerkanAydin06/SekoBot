@@ -38,7 +38,7 @@ internal sealed partial class MainForm
         {
             // One after another (the same files are swapped).
             await Task.Delay(TimeSpan.FromSeconds(6 * Math.Max(0, Instance.Number - 1)));
-            WriteLog("⬆ Güncelleme kontrol ediliyor (tüm SekoBot'lar)…");
+            WriteLog("⬆ Güncelleme kontrol ediliyor (tüm PARDUS'lar)…");
             var result = await UpdateService.CheckAndDownloadAsync();
             if (IsDisposed)
                 return;
@@ -49,7 +49,7 @@ internal sealed partial class MainForm
             }
             if (result.Update is not PreparedUpdate update)
             {
-                WriteLog($"⬆ SekoBot güncel (v{BuildInfo.Version}); bot olduğu gibi devam ediyor.");
+                WriteLog($"⬆ PARDUS güncel (v{BuildInfo.Version}); bot olduğu gibi devam ediyor.");
                 return;
             }
             // What this one does, noted with its character, then stopped for the update.
@@ -101,6 +101,6 @@ internal sealed partial class MainForm
         });
         if (mine is not { Running: true } work)
             return;
-        StartWork(e, Math.Clamp(work.Mode, FarmMode, FishingMode), $"SekoBot {BuildInfo.Version} sürümüne güncellendi");
+        StartWork(e, Math.Clamp(work.Mode, FarmMode, FishingMode), $"PARDUS {BuildInfo.Version} sürümüne güncellendi");
     }
 }

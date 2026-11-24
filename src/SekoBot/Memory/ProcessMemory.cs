@@ -92,7 +92,7 @@ internal sealed class ProcessMemory : IMemorySource, IDisposable
             nint handle = OpenProcess(ProcessVmRead | ProcessQueryInformation, false, processId);
             if (handle == 0)
             {
-                error = "bellek erişimi reddedildi (SekoBot'u yönetici olarak aç)";
+                error = "bellek erişimi reddedildi (PARDUS'u yönetici olarak aç)";
                 return null;
             }
             return new ProcessMemory(handle, module.BaseAddress.ToInt64(), module.ModuleMemorySize, start);
