@@ -218,16 +218,29 @@ internal sealed class RoadMap
             var (r, g, b) = pixels[i];
             road[i] = light[i] - lightAround[i] > 7 && groundAround[i] > 0.35 && ground[i] == 0 && b <= r + 12;
         }
+        // Bridges: brown planks over the water (r > g > b; seen on c2 ~ 85 72 52 between water ~ 57 77 99) — the road
+        // rule misses them (darker than the road, water around), and the roads of the two banks stayed apart.
+        var water = new double[n];
+        for (int i = 0; i < n; i++)
+            water[i] = pixels[i].B > pixels[i].R + 20 ? 1 : 0;
+        var waterAround = Box(water, w, h, (int)Math.Round(3 * size));
+        for (int i = 0; i < n; i++)
+        {
+            var (r, g, b) = pixels[i];
+            if (r > g + 5 && g > b + 5 && r - b >= 18 && r is >= 55 and <= 130 && waterAround[i] > 0.12)
+                road[i] = true;
+        }
         // Specks dropped: a road is a long line, many pixels joined.
         var label = new int[n];
         var stack = new Stack<int>();
+        int parts = 0;
         for (int i = 0; i < n; i++)
         {
             if (!road[i] || label[i] != 0)
                 continue;
             var part = new List<int>();
             stack.Push(i);
-            label[i] = 1;
+            label[i] = ++parts;
             while (stack.Count > 0)
             {
                 int j = stack.Pop();
@@ -242,15 +255,19 @@ internal sealed class RoadMap
                         int k = ny * w + nx;
                         if (road[k] && label[k] == 0)
                         {
-                            label[k] = 1;
+                            label[k] = parts;
                             stack.Push(k);
                         }
                     }
             }
             if (part.Count < MinRoadPixels * size)
                 foreach (int j in part)
+                {
                     road[j] = false;
+                    label[j] = 0;
+                }
         }
+        JoinGaps(road, label, w, h, (int)Math.Round(GapPixels * size));
         // A pixel wider.
         var wide = new bool[n];
         for (int i = 0; i < n; i++)
@@ -270,6 +287,95 @@ internal sealed class RoadMap
 
     /// <summary>Fewer joined road pixels than this: a speck, not a road.</summary>
     internal const int MinRoadPixels = 15;
+    /// <summary>Two roads coming this close (pixels, on a ~300-px picture: ~15 m) are joined: the picture breaks a road
+    /// where it crosses a river (the bridge), meets the town's square or passes under a mark.</summary>
+    internal const double GapPixels = 12;
+
+    /// <summary>
+    /// Closes the gaps of the road net: where a road line ends (its tip), it is carried on in the way it was going to
+    /// the nearest road ahead within <paramref name="reach"/> that isn't already close along the roads (seen on c2:
+    /// every bridge left a gap — the roads on both banks joined elsewhere — and the way cut across the fields).
+    /// </summary>
+    internal static void JoinGaps(bool[] road, int[] label, int w, int h, int reach)
+    {
+        var links = new List<(int A, int B)>();
+        var done = new List<int>();
+        var near = new Dictionary<int, int>();
+        var queue = new Queue<int>();
+        for (int i = 0; i < road.Length; i++)
+        {
+            if (!road[i])
+                continue;
+            int x = i % w, y = i / w;
+            // A tip: the road pixels around lie to one side of it.
+            double sx = 0, sy = 0;
+            int count = 0;
+            for (int dy = -3; dy <= 3; dy++)
+                for (int dx = -3; dx <= 3; dx++)
+                {
+                    int nx = x + dx, ny = y + dy;
+                    if (nx >= 0 && ny >= 0 && nx < w && ny < h && road[ny * w + nx])
+                    {
+                        sx += dx;
+                        sy += dy;
+                        count++;
+                    }
+                }
+            if (count < 3)
+                continue;
+            double ax = -sx / count, ay = -sy / count, len = Math.Sqrt(ax * ax + ay * ay);
+            if (len < 1.2 || done.Any(d => Math.Abs(d % w - x) <= 4 && Math.Abs(d / w - y) <= 4))
+                continue;
+            done.Add(i);
+            ax /= len;
+            ay /= len;
+            // What is close along the roads (not a gap).
+            near.Clear();
+            queue.Clear();
+            near[i] = 0;
+            queue.Enqueue(i);
+            while (queue.Count > 0)
+            {
+                int j = queue.Dequeue(), steps = near[j];
+                if (steps >= reach * 3)
+                    continue;
+                int jx = j % w, jy = j / w;
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        int nx = jx + dx, ny = jy + dy;
+                        if (nx < 0 || ny < 0 || nx >= w || ny >= h)
+                            continue;
+                        int k = ny * w + nx;
+                        if (road[k] && near.TryAdd(k, steps + 1))
+                            queue.Enqueue(k);
+                    }
+            }
+            int best = -1, bestD = int.MaxValue;
+            for (int dy = -reach; dy <= reach; dy++)
+                for (int dx = -reach; dx <= reach; dx++)
+                {
+                    int nx = x + dx, ny = y + dy, d = dx * dx + dy * dy;
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h || d > reach * reach || d >= bestD || d < 4)
+                        continue;
+                    int k = ny * w + nx;
+                    // Ahead (within ~35° of the way the road was going) and not reached along the roads.
+                    if (!road[k] || near.ContainsKey(k) || (dx * ax + dy * ay) < 0.8 * Math.Sqrt(d))
+                        continue;
+                    best = k;
+                    bestD = d;
+                }
+            if (best >= 0)
+                links.Add((i, best));
+        }
+        foreach (var (a, b) in links)
+        {
+            int ax = a % w, ay = a / w, bx = b % w, by = b / w;
+            int steps = Math.Max(1, Math.Max(Math.Abs(bx - ax), Math.Abs(by - ay)));
+            for (int t = 0; t <= steps; t++)
+                road[(ay + (int)Math.Round((by - ay) * (double)t / steps)) * w + ax + (int)Math.Round((bx - ax) * (double)t / steps)] = true;
+        }
+    }
 
     /// <summary>The mean of each pixel's square neighbourhood (2r+1 wide).</summary>
     private static double[] Box(double[] a, int w, int h, int r)
