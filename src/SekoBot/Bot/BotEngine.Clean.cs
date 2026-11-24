@@ -297,7 +297,7 @@ internal sealed partial class BotEngine
     internal static BotAction TidyAction(BagLayout bag, BotProfile p, bool selling = false)
     {
         if (bag.Confirm is Point yes)
-            return new ClickAction(yes, Slow: true, Fast: true);
+            return new ClickAction(BagCleaner.DropClickPoint(yes, bag.ConfirmBounds), Slow: true, Fast: true);
         if (selling && bag.NpcShop > 0 && bag.OtherConfirm is Point sellYes)
             return new ClickAction(sellYes, Slow: true, Fast: true);
         return new KeyTapAction(bag.OtherConfirm != null || bag.NpcShop > 0 ? p.Keys.CloseWindow : p.Keys.Inventory);

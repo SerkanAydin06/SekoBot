@@ -64,7 +64,9 @@ public class BagCleanerTests
         Func<BagSlotView, bool> toThrow = i => i.Vnum == Junk;
         var junk = Item(20, Junk, 0, true);
         BagLayout With(Point? menuDrop = null, int menuSlot = -1, Point? confirm = null, params BagSlotView[] items) =>
-            Bag(true, 0, items, confirm) with { MenuKnown = true, DropButton = menuDrop, MenuSlot = menuSlot };
+            Bag(true, 0, items, confirm) with { MenuKnown = true, DropButton = menuDrop, MenuSlot = menuSlot,
+                DropBounds = menuDrop is Point at ? new Rectangle(at.X - 10, at.Y - 2, 20, 4) : default,
+                ConfirmBounds = confirm is Point yesAt ? new Rectangle(yesAt.X - 10, yesAt.Y - 2, 20, 4) : default };
         cleaner.Start(S(0));
         var click = Assert.IsType<ClickAction>(Assert.Single(cleaner.Tick(S(0), With(items: junk), toThrow, p, Client)));
         Assert.InRange(click.Client.X, junk.Rect.X + 16, junk.Rect.X + 26);
@@ -72,9 +74,15 @@ public class BagCleanerTests
         var yereAt = new Point(848, 613);
         // Read once: not clicked yet (its place may still be the last menu's); read at the same place again: clicked.
         Assert.Empty(cleaner.Tick(S(1), With(yereAt, 20, null, junk), toThrow, p, Client));
-        Assert.Equal([new ClickAction(yereAt, Slow: true, Fast: true)], cleaner.Tick(S(1.5), With(yereAt, 20, null, junk), toThrow, p, Client));
+        var yereAtClick = Assert.IsType<ClickAction>(Assert.Single(cleaner.Tick(S(1.5), With(yereAt, 20, null, junk), toThrow, p, Client)));
+        Assert.InRange(yereAtClick.Client.X, yereAt.X - 5, yereAt.X + 5);
+        Assert.InRange(yereAtClick.Client.Y, yereAt.Y - 2, yereAt.Y + 1);
+        Assert.Equal(new ClickAction(yereAtClick.Client, Slow: true, Fast: true), yereAtClick);
         var yes = new Point(531, 389);
-        Assert.Equal([new ClickAction(yes, Slow: true, Fast: true)], cleaner.Tick(S(2), With(null, -1, yes, junk), toThrow, p, Client));
+        var yesClick = Assert.IsType<ClickAction>(Assert.Single(cleaner.Tick(S(2), With(null, -1, yes, junk), toThrow, p, Client)));
+        Assert.InRange(yesClick.Client.X, yes.X - 5, yes.X + 5);
+        Assert.InRange(yesClick.Client.Y, yes.Y - 2, yes.Y + 1);
+        Assert.Equal(new ClickAction(yesClick.Client, Slow: true, Fast: true), yesClick);
         Assert.Equal([new KeyTapAction(p.Keys.Inventory)], cleaner.Tick(S(4), With(items: []), toThrow, p, Client));
         Assert.Equal(1, cleaner.Thrown);
     }

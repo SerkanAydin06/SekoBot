@@ -91,6 +91,17 @@ internal sealed class BagCleaner
         client.Width <= 0 || client.Height <= 0 ||
         r.X + r.Width / 2 is var x && r.Y + r.Height / 2 is var y && x >= 0 && y >= 0 && x < client.Width && y < client.Height;
 
+    internal static Point DropClickPoint(Point center, Rectangle bounds)
+    {
+        if (!bounds.Contains(center))
+            return center;
+
+        const int radius = 5;
+        return new Point(
+            Random.Shared.Next(Math.Max(bounds.Left, center.X - radius), Math.Min(bounds.Right - 1, center.X + radius) + 1),
+            Random.Shared.Next(Math.Max(bounds.Top, center.Y - radius), Math.Min(bounds.Bottom - 1, center.Y + radius) + 1));
+    }
+
     /// <summary>Stops at once (attacked, died); closes the inventory if it is open.</summary>
     public IReadOnlyList<BotAction> Abort(BagLayout? bag, BotProfile p, string why)
     {
@@ -100,7 +111,7 @@ internal sealed class BagCleaner
         // The throw / sell question left showing (seen: it stayed open while the bot fought on): the throw question
         // answered "Evet" (Esc doesn't close it since the game's update; the item was to go anyway), another one closed.
         if (bag?.Confirm is Point yes)
-            actions.Add(new ClickAction(yes, Slow: true, Fast: true));
+            actions.Add(new ClickAction(DropClickPoint(yes, bag.ConfirmBounds), Slow: true, Fast: true));
         else if (bag?.OtherConfirm != null)
             actions.Add(new KeyTapAction(p.Keys.CloseWindow));
         if (bag?.Open == true)
@@ -136,7 +147,7 @@ internal sealed class BagCleaner
                 if (Selling && _rightClicked && _yesClicks == 0)
                     actions.Add(new KeyTapAction(Keys.Enter));
                 else
-                    actions.Add(new ClickAction(yes, Slow: true, Fast: _viaMenu));
+                    actions.Add(new ClickAction(Selling ? yes : DropClickPoint(yes, bag.ConfirmBounds), Slow: true, Fast: _viaMenu));
                 _yesClicks++;
                 _yesAt = now;
                 _step = Step.Confirmed;
@@ -146,7 +157,7 @@ internal sealed class BagCleaner
             {
                 // Our own "throw it away?" left from before (cut short by a mob): Esc doesn't close it since the
                 // game's update (seen: "onay penceresi kapanmıyor") — answered "Evet", the item was to go anyway.
-                actions.Add(new ClickAction(leftover, Slow: true, Fast: true));
+                actions.Add(new ClickAction(DropClickPoint(leftover, bag.ConfirmBounds), Slow: true, Fast: true));
                 _leftoverYes++;
                 _waitUntil = now + AfterClick;
             }
@@ -221,7 +232,7 @@ internal sealed class BagCleaner
                         }
                         break;
                     }
-                    actions.Add(new ClickAction(drop, Slow: true, Fast: true));
+                    actions.Add(new ClickAction(Selling ? drop : DropClickPoint(drop, bag.DropBounds), Slow: true, Fast: true));
                     _draggedAt = now;
                     _step = Step.Dragged;
                     _waitUntil = now + AfterItemClick;
@@ -310,13 +321,7 @@ internal sealed class BagCleaner
                     if (!Selling)
                     {
                         var visible = Rectangle.Intersect(here.Rect, new Rectangle(Point.Empty, client));
-                        if (visible.Width > 0 && visible.Height > 0)
-                        {
-                            const int radius = 5;
-                            from = new Point(
-                                Random.Shared.Next(Math.Max(visible.Left, from.X - radius), Math.Min(visible.Right - 1, from.X + radius) + 1),
-                                Random.Shared.Next(Math.Max(visible.Top, from.Y - radius), Math.Min(visible.Bottom - 1, from.Y + radius) + 1));
-                        }
+                        from = DropClickPoint(from, visible);
                     }
                     // A new item: try its menu first (faster); the same item after a missing menu: drag.
                     bool sameItem = here.Slot == _slot && here.Vnum == _vnum && _menuTried;

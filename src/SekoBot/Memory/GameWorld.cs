@@ -129,7 +129,7 @@ internal readonly record struct BagSlotView(int Slot, int Vnum, int Count, int P
 /// <param name="NpcShop">The market NPC whose shop window is open (9001…), 0 when none.</param>
 internal sealed record BagLayout(bool Open, Rectangle Window, int Page, IReadOnlyList<Point> PageButtons,
     IReadOnlyList<BagSlotView> Items, Point? Confirm, bool MenuKnown = false, Point? DropButton = null, int MenuSlot = -1,
-    Point? SellButton = null, int NpcShop = 0, Point? OtherConfirm = null);
+    Point? SellButton = null, int NpcShop = 0, Point? OtherConfirm = null, Rectangle DropBounds = default, Rectangle ConfirmBounds = default);
 
 /// <summary>What kind of thing an item is, by its number (Metin2's item numbers).</summary>
 internal enum LootKind { Unknown, Yang, Potion, Equipment, Other }
@@ -1413,13 +1413,17 @@ internal sealed partial class GameWorldReader : IDisposable
     /// the box <paramref name="box"/> (atBB: throw away, satBB: sell; 33×33, in a row over the item), the
     /// old text button <paramref name="old"/> kept but drawn nowhere (0×0) — so the old one only when it is drawn.
     /// </summary>
-    private Point? MenuButton(long menu, long menuClass, string box, string old)
+    private Point? MenuButton(long menu, long menuClass, string box, string old, out Rectangle bounds)
     {
+        bounds = Rectangle.Empty;
         foreach (string name in new[] { box, old })
         {
             long widget = Pointer(menu + Offset(menuClass, "pop_equp_C", name));
             if (Showing(widget) && DrawnAt(widget) is { Width: > 4, Height: > 4 } r)
+            {
+                bounds = r;
                 return new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
+            }
         }
         return null;
     }
@@ -1508,12 +1512,16 @@ internal sealed partial class GameWorldReader : IDisposable
 
             // "Throw this item away?": m2data.dropWindow (a msgbox_C) with its "evet" button.
             Point? confirm = null;
+            Rectangle confirmBounds = Rectangle.Empty, dropBounds = Rectangle.Empty;
             long question = Pointer(instance + Offset(instanceClass, "m2data_C", "dropWindow"));
             if (Showing(question) && ClassName(Pointer(question + ObjClass)) == "msgbox_C")
             {
                 long yes = Pointer(question + Offset(Pointer(question + ObjClass), "msgbox_C", "evet"));
                 if (Showing(yes) && DrawnAt(yes) is { } r)
+                {
+                    confirmBounds = r;
                     confirm = new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
+                }
             }
             // Any other question showing (m2data.MsgBoxShowing, msgbox_C each: "Sell this item?" after "Sat",
             // seen in the game): the newest one's "evet".
@@ -1539,9 +1547,9 @@ internal sealed partial class GameWorldReader : IDisposable
             int menuSlot = -1;
             if (menuKnown && open && Showing(menu))
             {
-                dropButton = MenuButton(menu, menuClass, "atBB", "yeret");
+                dropButton = MenuButton(menu, menuClass, "atBB", "yeret", out dropBounds);
                 // "Sat" shows only next to a market NPC (seen in the game).
-                sellButton = MenuButton(menu, menuClass, "satBB", "sat");
+                sellButton = MenuButton(menu, menuClass, "satBB", "sat", out _);
                 menuSlot = Int32(menu + Offset(menuClass, "pop_equp_C", "slotid")) ?? -1;
             }
             // A market NPC's shop window (m2data.shopWindow, seen: shopId 9001 with "Al" / "Sat").
@@ -1550,7 +1558,7 @@ internal sealed partial class GameWorldReader : IDisposable
             long shopClass = Pointer(shopWindow + ObjClass);
             if (MemoryReads.IsPointer(shopWindow) && ClassName(shopClass) == "shopWindow_C" && Showing(shopWindow))
                 npcShop = Int32(shopWindow + Offset(shopClass, "shopWindow_C", "shopId")) ?? 0;
-            return new BagLayout(open, window, showing, buttons, items, confirm, menuKnown, dropButton, menuSlot, sellButton, npcShop, otherConfirm);
+            return new BagLayout(open, window, showing, buttons, items, confirm, menuKnown, dropButton, menuSlot, sellButton, npcShop, otherConfirm, dropBounds, confirmBounds);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
