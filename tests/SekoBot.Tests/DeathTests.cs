@@ -60,8 +60,8 @@ public class DeathTests
         var click = brain.Tick(At(5000, 0, dead: true, ready: true));
         var c = Assert.Single(click.OfType<ClickAction>());
         Assert.True(c.Slow); // a UI button: real cursor on it, hover, hold the click
-        Assert.Equal(960, c.Client.X);
-        Assert.InRange(c.Client.Y, 140, 170);
+        Assert.InRange(c.Client.X, 955, 965);
+        Assert.InRange(c.Client.Y, 150, 160);
         Assert.Empty(brain.Tick(At(5100, 0, dead: true, ready: true)).OfType<ClickAction>());
 
         // Alive again with little HP: drink potions, no walking or attacking yet.
@@ -79,7 +79,7 @@ public class DeathTests
     }
 
     [Fact]
-    public void Clicks_revive_again_a_little_higher_and_lower_while_still_dead()
+    public void Retries_within_five_pixels_of_the_revive_button_while_still_dead()
     {
         var p = new BotProfile { LeashMeters = 0, SkillEverySec = new int[5] };
         var brain = new Brain(() => p);
@@ -89,8 +89,11 @@ public class DeathTests
             clicks.AddRange(brain.Tick(At(t, 0, dead: true, ready: true)).OfType<ClickAction>());
         Assert.True(clicks.Count >= 3);
         Assert.All(clicks, c => Assert.True(c.Slow));
-        Assert.Equal(3, clicks.Take(3).Select(c => c.Client.Y).Distinct().Count());
-        Assert.All(clicks, c => Assert.Equal(960, c.Client.X));
+        Assert.All(clicks, c =>
+        {
+            Assert.InRange(c.Client.X, 955, 965);
+            Assert.InRange(c.Client.Y, 150, 160);
+        });
     }
 
     [Fact]

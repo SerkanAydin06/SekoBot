@@ -391,11 +391,13 @@ internal sealed partial class Brain
         }
         if (state.ReviveReady && now - _lastReviveClick >= Ms(3000))
         {
-            // Still dead after a click: the button may sit a little higher or lower on this
-            // window size, so the next tries go a bit up, then a bit down.
-            double shift = (_reviveTries % 3) switch { 1 => -0.015, 2 => 0.015, _ => 0 };
-            var spot = ReviveHereButton(state.Width, state.Height);
-            spot.Y += (int)(state.Height * shift);
+            if (state.Width <= 0 || state.Height <= 0)
+                return;
+            var center = ReviveHereButton(state.Width, state.Height);
+            const int radius = 5;
+            var spot = new Point(
+                _random.Next(Math.Max(0, center.X - radius), Math.Min(state.Width - 1, center.X + radius) + 1),
+                _random.Next(Math.Max(0, center.Y - radius), Math.Min(state.Height - 1, center.Y + radius) + 1));
             actions.Add(new ClickAction(spot, Slow: true));
             actions.Add(new NoteAction(_reviveTries == 0
                 ? "\"Burada yeniden başla\" tıklandı."
