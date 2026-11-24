@@ -84,9 +84,11 @@ internal sealed partial class BotEngine
                 var pack = packs.FirstOrDefault(s => have + s.Count <= need.Want + s.Count / 2 && (long)s.Price * s.Count <= yang - p.KeepYang);
                 if (pack.Vnum == 0)
                     break; // the yang doesn't reach, or the rest is too small for a pack
-                input.Enqueue(new ClickAction(new Point(pack.At.X + pack.At.Width / 2, pack.At.Y + pack.At.Height / 2), Slow: true, Fast: true, Right: true));
-                // Bought: the bag shows more of it within a moment.
+                var center = new Point(pack.At.X + pack.At.Width / 2, pack.At.Y + pack.At.Height / 2);
+                var target = BagCleaner.DropClickPoint(center, pack.At);
                 int before = Count(need.Vnum);
+                input.Enqueue(new ClickAction(target, Slow: true, Fast: true, Right: true));
+                // Bought: the bag shows more of it within a moment.
                 bool came = false;
                 for (int wait = 0; wait < 12 && !came; wait++)
                 {
