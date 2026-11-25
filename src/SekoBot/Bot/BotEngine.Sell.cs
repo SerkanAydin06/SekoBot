@@ -249,6 +249,7 @@ internal sealed partial class BotEngine
             _sellStage = $"💰 {name} dükkanında eşyalar satılıyor";
         }
 
+        var sellBegan = _clock.Elapsed;
         // Sell, item by item, with the game in front the whole time (not back and forth).
         var cleaner = new BagCleaner { Selling = true };
         cleaner.Start(_clock.Elapsed);
@@ -299,6 +300,10 @@ internal sealed partial class BotEngine
         finally { input.HoldFront = false; }
         _sessionItems.Save();
         int sold = soldBefore + cleaner.Thrown;
+        // How the sale went (seen: 12 items took 5 minutes; is the right click enough for every kind of item?).
+        _log($"💰 Satış: {sold} eşya, {(_clock.Elapsed - sellBegan).TotalSeconds:0} sn; sağ tık + Enter ile {cleaner.ByRightClick}, " +
+             $"menüden \"Sat\" ile {cleaner.ByMenu} (sağ tıkta soru gelmeyen), dükkan {reopened} kez yeniden açıldı" +
+             (cleaner.Problem is { } trouble ? $"; sorun: {trouble}" : "") + ".");
         // Still short (the bag was full before the sale): once more, when the shop is still open.
         if (PotionShops.Contains(npc.Vnum) && World is { } after && PotionNeeds(after, profile, topUp: true).Count > 0 && ReadBagNow() is { NpcShop: > 0 })
         {

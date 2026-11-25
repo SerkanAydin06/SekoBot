@@ -43,6 +43,9 @@ internal sealed class BagCleaner
     /// <summary>After Enter the question goes within this (else "Evet" is clicked).</summary>
     public static readonly TimeSpan EnterTakes = TimeSpan.FromMilliseconds(600);
     private bool _rightClicked;
+    /// <summary>Selling: items sold after a right click, and those that needed the menu's "Sat" (no question came).</summary>
+    public int ByRightClick { get; private set; }
+    public int ByMenu => _menuOnly.Count;
     /// <summary>Items whose right click brought no question: sold through their menu.</summary>
     private readonly HashSet<int> _menuOnly = [];
     private TimeSpan _clickedAt;
@@ -78,6 +81,7 @@ internal sealed class BagCleaner
         _failed.Clear();
         _pageClicks.Clear();
         _menuOnly.Clear();
+        ByRightClick = 0;
         _rightClicked = false;
     }
 
@@ -258,6 +262,8 @@ internal sealed class BagCleaner
                 if (Selling && !bag.Items.Any(i => i.Slot == _slot && i.Vnum == _vnum))
                 {
                     Thrown++;
+                    if (_rightClicked)
+                        ByRightClick++;
                     ThrownItems.Add((_vnum, Math.Max(1, _count)));
                     _step = Step.Pick;
                     goto case Step.Pick;
@@ -287,6 +293,8 @@ internal sealed class BagCleaner
                 else
                 {
                     Thrown++;
+                    if (_rightClicked)
+                        ByRightClick++;
                     ThrownItems.Add((_vnum, Math.Max(1, _count)));
                 }
                 _step = Step.Pick;
