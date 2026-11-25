@@ -127,7 +127,7 @@ internal sealed partial class MainForm : Form
         // ── Header: name, version, connection ─────────────────────
         var header = new Card { Bounds = new Rectangle(12, 10, 1156, 46) };
         Controls.Add(header);
-        var title = Theme.Label(header, "◆  SEKOBOT", new Rectangle(14, 8, 150, 30), 13.5f, Theme.Text, FontStyle.Bold);
+        var title = Theme.Label(header, "◆  PARDUS", new Rectangle(14, 8, 150, 30), 13.5f, Theme.Text, FontStyle.Bold);
         string[] modeNames = ["⚔  FARM", "🛒  PAZAR", "🎣  BALIKÇILIK"];
         _modeButtons = new Button[modeNames.Length];
         for (int i = 0; i < modeNames.Length; i++)
@@ -1034,6 +1034,19 @@ internal sealed partial class MainForm : Form
 
         // Everything a size smaller (the window was bigger than needed).
         Compact(this, UiScale);
+        // Under the header and the control bar: one body that scrolls when the screen is too small for the
+        // whole window (seen: the bottom cut off on a small or high-DPI screen).
+        _header = header;
+        _body = new Panel { BackColor = Theme.Background, AutoScroll = true };
+        int bodyTop = bar.Bottom + 1;
+        _body.Bounds = new Rectangle(0, bodyTop, ClientSize.Width, ClientSize.Height - bodyTop);
+        foreach (var c in Controls.Cast<Control>().Where(c => c != header && c != bar).ToList())
+        {
+            Controls.Remove(c);
+            c.Top -= bodyTop;
+            _body.Controls.Add(c);
+        }
+        Controls.Add(_body);
         // List columns don't scale with the window: fit them to the list.
         int number = 56, nameWidth = _runItems.ClientSize.Width - 3 * number; // "Satılan" fits
         _runItems.Columns[0].Width = nameWidth;
@@ -1449,6 +1462,7 @@ internal sealed partial class MainForm : Form
         Show();
         if (WindowState == FormWindowState.Minimized)
             WindowState = FormWindowState.Normal;
+        FitToScreen();
         Activate();
         if (_profile.MiniMode)
         {
@@ -2152,6 +2166,59 @@ internal sealed partial class MainForm : Form
             _preview.Overlay = _engine.IsRecording ? "⏺ KAYIT" : "";
             _preview.Invalidate();
         }
+    }
+
+    private Panel _body = null!;
+    private Control _header = null!;
+
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        FitToScreen();
+    }
+
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        BeginInvoke(FitToScreen);
+    }
+
+    /// <summary>
+    /// The window as big as it is laid out, but never bigger than the screen it is on: what doesn't fit scrolls
+    /// (the header and the control bar always show), and the window is kept on the screen.
+    /// </summary>
+    private void FitToScreen()
+    {
+        if (IsDisposed || _body == null || WindowState != FormWindowState.Normal)
+            return;
+        var work = Screen.FromControl(this).WorkingArea;
+        int gap = _header.Left;
+        int contentBottom = _body.Controls.Cast<Control>().Max(c => c.Bottom) - _body.AutoScrollPosition.Y;
+        int contentRight = _body.Controls.Cast<Control>().Max(c => c.Right) - _body.AutoScrollPosition.X;
+        var need = new Size(Math.Max(_header.Right, contentRight) + gap, _body.Top + contentBottom + gap);
+        var size = FitSize(need, work.Size, SystemInformation.GetVerticalScrollBarWidthForDpi(DeviceDpi),
+            SystemInformation.GetHorizontalScrollBarHeightForDpi(DeviceDpi));
+        _body.AutoScrollMargin = new Size(gap, gap);
+        if (ClientSize != size)
+            ClientSize = size;
+        _body.Bounds = new Rectangle(0, _body.Top, ClientSize.Width, ClientSize.Height - _body.Top);
+        int x = Math.Clamp(Left, work.Left, Math.Max(work.Left, work.Right - Width));
+        int y = Math.Clamp(Top, work.Top, Math.Max(work.Top, work.Bottom - Height));
+        if (x != Left || y != Top)
+            Location = new Point(x, y);
+    }
+
+    /// <summary>
+    /// The window's size on a screen of <paramref name="work"/>: <paramref name="need"/> when it fits; else cut to the
+    /// screen, a scroll bar's room added the other way (so a cut height doesn't make the width scroll too).
+    /// </summary>
+    internal static Size FitSize(Size need, Size work, int verticalBar, int horizontalBar)
+    {
+        if (need.Height > work.Height)
+            need.Width += verticalBar;
+        if (need.Width > work.Width)
+            need.Height += horizontalBar;
+        return new Size(Math.Min(need.Width, work.Width), Math.Min(need.Height, work.Height));
     }
 
     /// <summary>The window is laid out at full size and then shrunk by this much.</summary>
