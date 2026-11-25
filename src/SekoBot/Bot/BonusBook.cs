@@ -37,7 +37,7 @@ internal sealed partial class BonusBook
     };
 
     public static BonusBook Shared => _shared.Value;
-    private static readonly Lazy<BonusBook> _shared = new(() => Load(FilePath, MarketFolder));
+    private static readonly Lazy<BonusBook> _shared = new(() => Load(FilePath, MarketServers.Root));
 
     private Data _data;
     private readonly object _gate = new();
@@ -318,7 +318,7 @@ internal sealed partial class BonusBook
         // The first time: everything scanned so far.
         if (book.Listings == 0 && marketFolder != null && Directory.Exists(marketFolder))
         {
-            foreach (var file in Directory.GetFiles(marketFolder, "pazar-*.json"))
+            foreach (var file in Directory.GetFiles(marketFolder, "pazar-*.json", SearchOption.AllDirectories))
                 try { book.LearnFrom(File.ReadAllText(file)); }
                 catch (IOException) { }
             book.Save(path);

@@ -210,7 +210,7 @@ internal sealed partial class BotEngine
         // Whatever the reason (a player, a crowd of ours): never onto a channel one of our bots is on, on this map
         // (seen: off from a player to channel 5, right where another of ours farmed — both lost experience).
         if (World is { } here)
-            foreach (var o in ReadPlaces(SekoBot.Instance.Number).Where(o => o.Map == here.MapName && o.Channel > 0
+            foreach (var o in ReadPlaces(SekoBot.Instance.Number).Where(o => o.Map == here.MapName && o.Server == here.Server && o.Channel > 0
                          && Math.Sqrt((o.X - here.Player.X) * (o.X - here.Player.X) + (o.Y - here.Player.Y) * (o.Y - here.Player.Y)) <= SamePart))
                 _channelAvoid.Add(o.Channel);
         _channelGrown = false;
