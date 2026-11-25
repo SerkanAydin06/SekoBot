@@ -28,6 +28,13 @@ internal sealed partial class BotEngine
     /// <summary>The last look at the game world from memory (null when it can't be read).</summary>
     public WorldSnapshot? World => Volatile.Read(ref _snapshot);
 
+    /// <summary>What the game holds about this computer (its MAC address, the server…); null without the game.</summary>
+    public GameWorldReader.Machine? MachineSeen()
+    {
+        lock (_worldGate)
+            return _world?.ReadMachine();
+    }
+
     private WorldSnapshot? ReadWorld(TimeSpan now)
     {
         lock (_worldGate)

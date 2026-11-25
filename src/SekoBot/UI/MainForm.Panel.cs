@@ -111,6 +111,45 @@ internal sealed partial class MainForm
         _targetMeter.Caption = world?.Target is { } target && engine?.State?.TargetHp > 0 ? "Hedef · " + target.Name : "Hedef";
     }
 
+    // ── This computer ──
+
+    private InfoList _machine = null!;
+    private string _publicIp = "";
+
+    /// <summary>What the game sees about this computer (from its memory), then what Windows shows.</summary>
+    private void ShowMachine()
+    {
+        if (_machine == null)
+            return;
+        var rows = new List<InfoList.Row>();
+        var seen = _engine?.MachineSeen();
+        string gameMac = seen != null ? MachineInfo.Mac(seen.Mac) : "";
+        rows.Add(new("OYUNUN GÖRDÜĞÜ", seen == null ? "oyun bağlı değil" : "oyunun belleğinden", Caption: true));
+        if (seen != null)
+        {
+            var nets = MachineInfo.Networks();
+            var card = nets.FirstOrDefault(n => gameMac.Length > 0 && n.Mac == gameMac);
+            rows.Add(new("MAC adresi", gameMac.Length > 0 ? gameMac + (card.Name != null ? "  ·  " + card.Name : "") : "—", Theme.GoldLight));
+            rows.Add(new("Konum / IP", seen.LocationIp.Length > 0 ? seen.LocationIp : "— (oyun bu alanı doldurmamış)"));
+            rows.Add(new("Sunucu", seen.Server.Length > 0 ? seen.Server + (seen.ServerIp.Length > 0 ? "  ·  " + seen.ServerIp : "") : "—"));
+            rows.Add(new("Oyun sürümü · dil", string.Join("  ·  ", new[] { seen.Version, seen.Language }.Where(x => x.Length > 0))));
+        }
+        rows.Add(new("WINDOWS'UN GÖSTERDİĞİ", "", Caption: true));
+        rows.Add(new("Bilgisayar adı", Environment.MachineName));
+        rows.Add(new("Windows", MachineInfo.Windows()));
+        rows.Add(new("İşlemci", MachineInfo.Processor()));
+        rows.Add(new("Bellek (RAM)", MachineInfo.Memory()));
+        rows.Add(new("Ekran kartı", MachineInfo.Graphics()));
+        rows.Add(new("Ekran", MachineInfo.Screens()));
+        foreach (var (name, mac, ips) in MachineInfo.Networks())
+            rows.Add(new("Ağ kartı", $"{mac}  ·  {ips}  ·  {name}" + (mac == gameMac && gameMac.Length > 0 ? "  ★ oyunun gördüğü" : ""),
+                mac == gameMac && gameMac.Length > 0 ? Theme.GoldLight : null));
+        rows.Add(new("Dış IP (internetin gördüğü)", _publicIp.Length > 0 ? _publicIp : "\"Dış IP'yi göster\"e bas"));
+        _machine.Show(rows);
+        if (_machine.Parent is Panel page)
+            StackHints(page);
+    }
+
     // ── The log ──
 
     /// <summary>A line of the log with its tag (what kind of thing happened).</summary>
