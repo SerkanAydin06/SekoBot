@@ -8,7 +8,8 @@ namespace SekoBot.UI;
 /// <param name="HpPotions">HP and MP potions left in the bag (the ones on the potion keys), when known.</param>
 internal sealed record MiniInfo(string Name, string Status, Color StatusColor, double? Hp, double? Mp, string ExpRate, string Mobs,
     bool Running, Rectangle? Game, nint GameWindow = 0, int? HpPotions = null, int? MpPotions = null, bool Attack = true, string? Market = null,
-    string Exp10 = "", string Elapsed = "", IReadOnlyList<(string Name, int Picked, int Thrown, int Sold)>? Items = null, int Level = 0);
+    string Exp10 = "", string Elapsed = "", IReadOnlyList<(string Name, int Picked, int Thrown, int Sold)>? Items = null, int Level = 0,
+    string Place = "");
 
 /// <summary>
 /// The bot made small: one bar (420×84) under its own game window, so many bots fit on one screen
@@ -60,12 +61,13 @@ internal sealed class MiniBar : Form
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        BackColor = Theme.Surface;
+        BackColor = Theme.Background;
         ClientSize = new Size(LogicalWidth, LogicalHeight);
         DoubleBuffered = true;
         Text = "PARDUS";
         AppIcon.Use(this);
         _menu = new ContextMenuStrip { ShowImageMargin = false, Font = new Font("Segoe UI", 9.5f) };
+        DarkMenu.Use(_menu);
         _menu.Opening += (_, _) => FillMenu();
         _menu.Closed += (_, _) => { _menuClosedAt = DateTime.Now; Invalidate(); };
         ContextMenuStrip = _menu;
@@ -272,6 +274,17 @@ internal sealed class MiniBar : Form
         Add("✕  Bu PARDUS'u kapat", _close);
     }
 
+    /// <summary>The bar's tone: green running, amber busy elsewhere / paused, red trouble, grey stopped.</summary>
+    private static Tone ToneOf(MiniInfo info)
+    {
+        var tone = Tones.From(info.StatusColor);
+        if (tone == Tone.Red)
+            return Tone.Red;
+        if (!info.Running)
+            return tone == Tone.Amber ? Tone.Amber : Tone.Neutral;
+        return tone == Tone.Amber ? Tone.Amber : Tone.Green;
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
@@ -279,70 +292,88 @@ internal sealed class MiniBar : Form
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
         float s = S;
         var info = _info;
-        using (var border = new Pen(Theme.Border))
+        var tone = ToneOf(info);
+        var toneColor = tone == Tone.Neutral ? Theme.Faint : Tones.Of(tone);
+        g.Clear(Theme.Background);
+        // The border in the bar's tone (red / amber stand out; green and grey stay quiet).
+        using (var border = new Pen(tone is Tone.Red or Tone.Amber ? Tones.Soft(toneColor, 170) : Theme.BorderStrong))
             g.DrawRectangle(border, 0, 0, Width - 1, Height - 1);
-        // A strip on the left: green while the bot runs.
-        using (var strip = new SolidBrush(info.Running ? Theme.Green : Theme.Secondary))
-            g.FillRectangle(strip, 0, 0, 4 * s, Height);
         if (_itemsOpen)
         {
             DrawItems(g, s, info);
             g.TranslateTransform(0, Top);
         }
 
-        // One slim row: the name, how long and the version above; what it is doing under it; HP and MP as two
-        // thin lines at the bottom. The rest (potions, experience) in the tip when the mouse is on the bar.
+        // Row 1: the mark, the status dot, the name, level and server, the time at the right.
+        // Row 2: what it is doing (in its tone), the potions and the experience per hour at the right.
+        // Under them: HP and MP as two thin lines.
         using var nameFont = new Font("Segoe UI", 9f, FontStyle.Bold);
         using var small = new Font("Segoe UI", 7.5f);
         using var smallBold = new Font("Segoe UI", 7.5f, FontStyle.Bold);
-        const TextFormatFlags Left = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.EndEllipsis;
-        const TextFormatFlags Right = TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform;
-        float textW = W - ButtonsWidth - 16;
-        // Every bar shows its SekoBot's number (the 1st too), so they can be told apart.
-        string name = $"{Instance.Number} · " + (info.Name.Length > 0 ? info.Name : "PARDUS") + (info.Level > 0 ? $" (Sv {info.Level})" : "");
-        var nameRow = new Rectangle((int)(10 * s), (int)(1 * s), (int)(textW * s), (int)(16 * s));
-        string tail = info.Elapsed.Length > 0 ? "⏱ " + info.Elapsed : "";
-        TextRenderer.DrawText(g, tail, small, nameRow, info.Running && info.Elapsed.Length > 0 ? Theme.Green : Theme.Muted, Right);
-        nameRow.Width -= TextRenderer.MeasureText(tail, small).Width + (int)(6 * s);
-        // The version right before the time (the user: "botun süresinin hemen sol tarafına").
-        string version = "v" + BuildInfo.Version;
-        TextRenderer.DrawText(g, version, small, nameRow, Theme.Muted, Right);
-        nameRow.Width -= TextRenderer.MeasureText(version, small).Width + (int)(6 * s);
-        TextRenderer.DrawText(g, "◆ " + name, nameFont, nameRow, Theme.Text, Left);
+        const TextFormatFlags Left = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+        const TextFormatFlags Right = TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.NoPrefix;
+        Mark.Paint(g, new RectangleF(7 * s, 6 * s, 22 * s, 22 * s));
+        float textX = 36;
+        float textW = W - ButtonsWidth - textX - 8;
+        var nameRow = new Rectangle((int)(textX * s), (int)(1 * s), (int)(textW * s), (int)(16 * s));
+        string tail = info.Elapsed.Length > 0 ? info.Elapsed : "";
+        if (tail.Length > 0)
+        {
+            TextRenderer.DrawText(g, tail, smallBold, nameRow, info.Running ? Theme.Text : Theme.Muted, Right);
+            nameRow.Width -= TextRenderer.MeasureText(tail, smallBold).Width + (int)(6 * s);
+        }
+        // The experience per hour beside the time (the user: always in sight).
+        string expRate = info.Market == null && info.ExpRate is { Length: > 0 } er && er != "—" ? er + "/sa" : "";
+        if (expRate.Length > 0)
+        {
+            TextRenderer.DrawText(g, expRate, smallBold, nameRow, Theme.GoldLight, Right);
+            nameRow.Width -= TextRenderer.MeasureText(expRate, smallBold).Width + (int)(6 * s);
+        }
+        // The status dot (with a soft ring).
+        float d = 6 * s, cx = nameRow.X + d / 2 + 1, cy = nameRow.Y + nameRow.Height / 2f;
+        using (var halo = new SolidBrush(Tones.Soft(toneColor, 60)))
+            g.FillEllipse(halo, cx - d, cy - d, d * 2, d * 2);
+        using (var dot = new SolidBrush(toneColor))
+            g.FillEllipse(dot, cx - d / 2, cy - d / 2, d, d);
+        nameRow.X += (int)(d + 7 * s);
+        nameRow.Width -= (int)(d + 7 * s);
+        // Every bar shows its PARDUS's number (the 1st too), so they can be told apart.
+        string name = $"{Instance.Number} · " + (info.Name.Length > 0 ? info.Name : "PARDUS");
+        TextRenderer.DrawText(g, name, nameFont, nameRow, Theme.Text, Left);
+        int nameW = TextRenderer.MeasureText(name, nameFont, Size.Empty, TextFormatFlags.NoPrefix).Width;
+        string meta = string.Join(" · ", new[] { info.Level > 0 ? $"Sv {info.Level}" : "", info.Place }.Where(x => x.Length > 0));
+        if (meta.Length > 0 && nameW + 8 * s < nameRow.Width)
+            TextRenderer.DrawText(g, meta, small, nameRow with { X = nameRow.X + nameW + (int)(2 * s), Width = nameRow.Width - nameW - (int)(2 * s) }, Theme.Faint, Left);
+
         bool market = info.Market != null;
         string status = market ? info.Market! : info.Attack ? info.Status : "✋ Sadece eşya · " + info.Status;
-        var statusRow = new Rectangle((int)(10 * s), (int)(16 * s), (int)(textW * s), (int)(13 * s));
+        var statusRow = new Rectangle((int)(textX * s), (int)(16 * s), (int)(textW * s), (int)(13 * s));
         if (!market)
         {
             // Potions left and the experience per hour, always in sight (the user: both matter).
             string Count(int? n) => n is int c ? c.ToString("N0") : "—";
             bool low = info.HpPotions is < 20 || info.MpPotions is < 10;
-            string exp = info.ExpRate is { Length: > 0 } rate && rate != "—" ? rate + "/sa" : "";
-            if (exp.Length > 0)
-            {
-                TextRenderer.DrawText(g, exp, smallBold, statusRow, Theme.Yellow, Right);
-                statusRow.Width -= TextRenderer.MeasureText(exp, smallBold).Width + (int)(4 * s);
-            }
-            string pots = $"HP {Count(info.HpPotions)} · MP {Count(info.MpPotions)}" + (exp.Length > 0 ? " ·" : "");
-            TextRenderer.DrawText(g, pots, smallBold, statusRow, low ? Theme.Red : Theme.Text, Right);
-            statusRow.Width -= TextRenderer.MeasureText(pots, smallBold).Width + (int)(6 * s);
+            string pots = $"İksir {Count(info.HpPotions)} · {Count(info.MpPotions)}";
+            TextRenderer.DrawText(g, pots, small, statusRow, low ? Theme.Red : Theme.Muted, Right);
+            statusRow.Width -= TextRenderer.MeasureText(pots, small).Width + (int)(8 * s);
         }
-        TextRenderer.DrawText(g, status, small, statusRow, market ? Theme.Text : info.Attack ? info.StatusColor : Theme.Accent, Left);
+        TextRenderer.DrawText(g, status, small, statusRow, market ? Theme.Text : tone == Tone.Neutral ? Theme.Muted : toneColor, Left);
         if (!market)
         {
-            // HP and MP: two thin lines under the text, red / blue (darker when few potions are left).
+            // HP and MP: two thin rounded lines under the text, red / blue (darker when few potions are left).
             float barW = textW / 2 - 3;
             bool low = info.HpPotions is < 20 || info.MpPotions is < 10;
             void Line(double? v, Color c, float x)
             {
-                using var back = new SolidBrush(Theme.Inset);
-                g.FillRectangle(back, x * s, 30 * s, barW * s, 3 * s);
-                if (v is double f)
+                var track = new RectangleF(x * s, 30 * s, barW * s, 2.5f * s);
+                using (var back = new SolidBrush(Theme.Inset))
+                    g.FillRectangle(back, track);
+                if (v is double f && f > 0)
                     using (var front = new SolidBrush(c))
-                        g.FillRectangle(front, x * s, 30 * s, barW * s * (float)Math.Clamp(f, 0, 1), 3 * s);
+                        g.FillRectangle(front, track with { Width = track.Width * (float)Math.Clamp(f, 0, 1) });
             }
-            Line(info.Hp, low ? ControlPaint.Dark(Theme.Red) : Theme.Red, 10);
-            Line(info.Mp, Theme.Accent, 10 + barW + 6);
+            Line(info.Hp, low ? ControlPaint.Dark(Theme.Red) : Theme.Red, textX);
+            Line(info.Mp, Theme.Blue, textX + barW + 6);
         }
         DrawButtons(g, s, info);
     }
@@ -357,7 +388,7 @@ internal sealed class MiniBar : Form
         float right = W - 12, soldW = 52, thrownW = 52, pickedW = 52;
         var header = new Rectangle((int)(14 * s), (int)(4 * s), (int)((W - 28) * s), (int)(ItemsHeader * s - 6 * s));
         string title = rows.Count == 0 ? "BU TUR EŞYALAR · bot başlayınca dolar" : $"BU TUR EŞYALAR · {rows.Count} çeşit, {rows.Sum(r => r.Picked):N0} alındı";
-        TextRenderer.DrawText(g, title, head, header, Theme.Accent, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.EndEllipsis);
+        TextRenderer.DrawText(g, title, head, header, Theme.GoldLight, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.EndEllipsis);
         TextRenderer.DrawText(g, "Alınan", head, new Rectangle((int)((right - soldW - thrownW - pickedW) * s), header.Y, (int)(pickedW * s), header.Height), Theme.Muted, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
         TextRenderer.DrawText(g, "Atılan", head, new Rectangle((int)((right - soldW - thrownW) * s), header.Y, (int)(thrownW * s), header.Height), Theme.Muted, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
         TextRenderer.DrawText(g, "Satılan", head, new Rectangle((int)((right - soldW) * s), header.Y, (int)(soldW * s), header.Height), Theme.Muted, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
@@ -401,21 +432,36 @@ internal sealed class MiniBar : Form
         g.SmoothingMode = SmoothingMode.AntiAlias;
         foreach (int kind in Kinds)
         {
-            var (text, back) = kind switch
+            // Start: gold (the main action); stop: red; a list or menu that is open: gold-tinted; the rest quiet.
+            bool open = kind == ItemsButton && _itemsOpen || kind == MenuButton && _menu.Visible;
+            string text = kind switch
             {
-                StartButton => (startText, info.Running ? Theme.Danger : Theme.Primary),
-                ItemsButton => ("🎒 Eşyalar", _itemsOpen ? Theme.Primary : Theme.Secondary),
+                StartButton => startText,
+                ItemsButton => "🎒 Eşyalar",
                 // Already big (most of its screen): the same button puts it back in its place among the others.
-                FillButton => (GameIsBig(info) ? "🗗 Küçült" : "⛶ Büyüt", Theme.Secondary),
-                ArrangeButton => ("⊞ Diz", Theme.Secondary),
-                _ => ("☰ Menü", _menu.Visible ? Theme.Primary : Theme.Secondary),
+                FillButton => GameIsBig(info) ? "🗗 Küçült" : "⛶ Büyüt",
+                ArrangeButton => "⊞ Diz",
+                _ => "☰ Menü",
             };
+            bool over = _hover == kind;
+            Color fill, edge, color;
+            if (kind == StartButton && !info.Running)
+                (fill, edge, color) = (over ? Theme.PrimaryHover : Theme.Gold, Color.Transparent, Theme.OnGold);
+            else if (kind == StartButton)
+                (fill, edge, color) = (Tones.Soft(Theme.Red, over ? 60 : 40), Tones.Soft(Theme.Red, 120), Color.FromArgb(255, 141, 152));
+            else if (open)
+                (fill, edge, color) = (Tones.Soft(Theme.Gold, 40), Tones.Soft(Theme.Gold, 120), Theme.GoldLight);
+            else
+                (fill, edge, color) = (over ? Theme.SecondaryHover : Theme.Secondary, Theme.BorderStrong, over ? Theme.Text : Color.FromArgb(205, 212, 224));
             var r = Button(kind);
-            using var brush = new SolidBrush(_hover == kind ? ControlPaint.Light(back, 0.25f) : back);
             using var path = Rounded(r, 6 * s);
-            g.FillPath(brush, path);
-            TextRenderer.DrawText(g, text, font, r, Theme.Text,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
+            using (var brush = new SolidBrush(fill))
+                g.FillPath(brush, path);
+            if (edge.A > 0)
+                using (var pen = new Pen(edge))
+                    g.DrawPath(pen, path);
+            TextRenderer.DrawText(g, text, font, r, color,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.NoPrefix);
         }
         g.SmoothingMode = SmoothingMode.Default;
     }

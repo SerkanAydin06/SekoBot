@@ -20,7 +20,8 @@ internal sealed partial class MainForm : Form
     private const int CsDropShadow = 0x00020000;
 
     private readonly BotProfile _profile = ProfileStore.Load();
-    private readonly Button _gameButton, _startBot, _stopBot, _record, _replay, _attackButton;
+    private readonly Button _gameButton, _record, _replay;
+    private readonly ProButton _startBot, _stopBot, _attackButton;
     private readonly ContextMenuStrip _gameMenu = new();
     private readonly CheckBox _dryRun;
     private readonly PreviewControl _preview;
@@ -30,9 +31,9 @@ internal sealed partial class MainForm : Form
     private readonly Button _findArea, _scanMarket;
     private readonly Button _scanMobs;
     private readonly Meter _hpMeter, _mpMeter, _targetMeter;
-    private readonly Button[] _tabButtons;
+    private readonly NavButton[] _tabButtons;
     private readonly Panel[] _tabPages;
-    private readonly Button _dashButton;
+    private readonly NavButton _dashButton;
     private readonly Panel _dashboard, _dashBottom;
     private readonly ListView _runItems;
     private readonly Label _runItemsInfo;
@@ -43,8 +44,17 @@ internal sealed partial class MainForm : Form
     // ── Modes: what this SekoBot does (farm, market, fishing), one tab each at the top ──
     private const int FarmMode = 0, MarketMode = 1, FishingMode = 2;
     private int _mode;
-    private readonly Button[] _modeButtons;
-    private readonly Card _side;
+    private readonly NavButton[] _modeButtons;
+    private readonly Panel _side;
+    // ── The new panel: the card at the top (who, what, how long, start / stop), the numbers, what just happened ──
+    private readonly Card _hero, _previewCard;
+    private readonly Avatar _avatar;
+    private readonly Label _heroName, _timer, _timerNote;
+    private readonly StatCard _kExp, _kKills, _kYang, _kPotion, _kLevel;
+    private readonly Feed _feed;
+    private readonly IconButton _moreButton;
+    private readonly NavButton[] _logFilters;
+    private Rectangle _attackInPreview;
     private readonly Panel _marketDash, _fishingDash;
     private readonly Label[] _fBins;
     private readonly Panel[] _fBinTiles;
@@ -115,6 +125,7 @@ internal sealed partial class MainForm : Form
         AutoScaleMode = AutoScaleMode.Dpi;
         Text = "PARDUS";
         AppIcon.Use(this);
+        DarkMenu.Use(_gameMenu);
         ClientSize = new Size(1180, 920);
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
@@ -124,56 +135,139 @@ internal sealed partial class MainForm : Form
         DoubleBuffered = true;
         KeyPreview = true;
 
-        // ── Header: name, version, connection ─────────────────────
-        var header = new Card { Bounds = new Rectangle(12, 10, 1156, 46) };
+        // ── Title strip: the mark, the modes, the server, the game, the window's buttons ──
+        // Everything below is laid out on the old 1180×920 grid (then made 0.84 smaller); B: the body's top.
+        const int B = 65;
+        var header = new Panel { Bounds = new Rectangle(0, 0, 1180, 64), BackColor = Theme.Rail };
         Controls.Add(header);
-        var title = Theme.Label(header, "◆  PARDUS", new Rectangle(14, 8, 150, 30), 13.5f, Theme.Text, FontStyle.Bold);
-        string[] modeNames = ["⚔  FARM", "🛒  PAZAR", "🎣  BALIKÇILIK"];
-        _modeButtons = new Button[modeNames.Length];
+        header.Controls.Add(new Panel { Bounds = new Rectangle(0, 63, 1180, 1), BackColor = Theme.Border, Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom });
+        var mark = new Mark { Bounds = new Rectangle(18, 16, 32, 32) };
+        header.Controls.Add(mark);
+        var title = Theme.Label(header, "PARDUS", new Rectangle(58, 16, 104, 32), 11.5f, Theme.Text, FontStyle.Bold);
+        var modes = new Card { Bounds = new Rectangle(168, 12, 380, 40), BackColor = Theme.Inset };
+        header.Controls.Add(modes);
+        (string Name, string Icon)[] modeNames = [("Farm", "sword"), ("Pazar", "cart"), ("Balıkçılık", "fish")];
+        _modeButtons = new NavButton[modeNames.Length];
         for (int i = 0; i < modeNames.Length; i++)
         {
             int mode = i;
-            _modeButtons[i] = Theme.Button(header, modeNames[i], new Rectangle(160 + i * 124, 7, 118, 32), Theme.Secondary, Theme.SecondaryHover);
-            _modeButtons[i].Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            _modeButtons[i] = new NavButton { Text = modeNames[i].Name, Icon = modeNames[i].Icon, Segment = true, Bounds = new Rectangle(4 + i * 124, 4, 122, 32), Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
             _modeButtons[i].Click += (_, _) => SetMode(mode);
+            modes.Controls.Add(_modeButtons[i]);
         }
-        var version = _identity = Theme.Label(header, "v" + BuildInfo.Version, new Rectangle(526, 4, 170, 20), 8f, Theme.Muted,
-            FontStyle.Regular, ContentAlignment.MiddleRight);
-        _connection = Theme.Label(header, "○  Oyun bekleniyor", new Rectangle(526, 23, 170, 20), 8.5f, Theme.Muted,
-            FontStyle.Bold, ContentAlignment.MiddleRight);
-        foreach (Control c in new Control[] { header, title, version, _connection })
+        // The game's server and channel (market prices are kept per server); the dot: connected or not.
+        _connection = new Chip { Text = "○  Oyun bekleniyor", Bounds = new Rectangle(556, 12, 228, 40), Font = new Font("Segoe UI", 9f), ForeColor = Theme.Muted };
+        header.Controls.Add(_connection);
+        _gameButton = new ProButton { Text = "Oyunu seç", Icon = "user", Kind = ButtonKind.Ghost, Bounds = new Rectangle(792, 12, 188, 40), Font = new Font("Segoe UI", 9f) };
+        _gameButton.Click += (_, _) => ShowGameMenu();
+        header.Controls.Add(_gameButton);
+        var small = new IconButton { Icon = "layers", Boxed = true, Bounds = new Rectangle(988, 12, 40, 40) };
+        small.Click += (_, _) => GoMini();
+        header.Controls.Add(small);
+        // The rest in one menu: every PARDUS at once, arranging the games, updates, the settings folder.
+        var more = _moreButton = new IconButton { Icon = "more", Boxed = true, Bounds = new Rectangle(1034, 12, 40, 40) };
+        var moreMenu = new ContextMenuStrip { Font = new Font("Segoe UI", 9.5f) };
+        DarkMenu.Use(moreMenu);
+        moreMenu.Opening += (_, _) =>
+        {
+            moreMenu.Items.Clear();
+            foreach (ToolStripItem item in WindowLayout.AllMenu().Items.Cast<ToolStripItem>().ToList())
+                moreMenu.Items.Add(item);
+            moreMenu.Items.Add(new ToolStripSeparator());
+            moreMenu.Items.Add("⊞   Oyunları yan yana diz", null, (_, _) => ArrangeAll());
+            moreMenu.Items.Add("▭   Mini moda geç", null, (_, _) => GoMini());
+            moreMenu.Items.Add(new ToolStripSeparator());
+            if (Instance.IsFirst)
+                moreMenu.Items.Add("↻   Güncellemeleri denetle", null, async (_, _) => await CheckForUpdatesAsync(startup: false));
+            moreMenu.Items.Add("📁   Ayar klasörü", null, (_, _) => OpenProfileFolder());
+        };
+        moreMenu.Opened += (_, _) => more.On = true;
+        moreMenu.Closed += (_, _) => more.On = false;
+        more.Click += (_, _) => moreMenu.Show(more, new Point(more.Width - moreMenu.PreferredSize.Width, more.Height + 4));
+        header.Controls.Add(more);
+        var minimize = new IconButton { Icon = "min", Bounds = new Rectangle(1084, 12, 40, 40) };
+        minimize.Click += (_, _) => WindowState = FormWindowState.Minimized;
+        header.Controls.Add(minimize);
+        var close = new IconButton { Icon = "x", Danger = true, Bounds = new Rectangle(1128, 12, 40, 40) };
+        close.Click += (_, _) => Close();
+        header.Controls.Add(close);
+        foreach (Control c in new Control[] { header, title, mark })
         {
             c.MouseDown += DragWindow;
             c.Cursor = Cursors.SizeAll;
         }
-        _gameButton = Theme.Button(header, "Oyunu seç  ▾", new Rectangle(950, 7, 112, 32), Theme.Secondary, Theme.SecondaryHover);
-        _gameButton.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
-        _gameButton.Click += (_, _) => ShowGameMenu();
-        // All the SekoBots at once: start, pause, stop.
-        var all = Theme.Button(header, "Hepsi  ▾", new Rectangle(704, 7, 76, 32), Theme.Secondary, Theme.SecondaryHover);
-        all.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
-        var allMenu = WindowLayout.AllMenu();
-        all.Click += (_, _) => allMenu.Show(all, new Point(0, all.Height));
-        // Many games on one screen: put the games side by side, every bot small under its game.
-        var arrange = Theme.Button(header, "⊞  Diz", new Rectangle(786, 7, 76, 32), Theme.Secondary, Theme.SecondaryHover);
-        arrange.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
-        arrange.Click += (_, _) => ArrangeAll();
-        var small = Theme.Button(header, "▭  Mini", new Rectangle(868, 7, 76, 32), Theme.Secondary, Theme.SecondaryHover);
-        small.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
-        small.Click += (_, _) => GoMini();
-        var minimize = Theme.WindowButton(header, "min", new Rectangle(1068, 7, 36, 32), Theme.Surface, Theme.Secondary);
-        minimize.Click += (_, _) => WindowState = FormWindowState.Minimized;
-        var close = Theme.WindowButton(header, "close", new Rectangle(1110, 7, 36, 32), Theme.Surface, Theme.Danger);
-        close.Click += (_, _) => Close();
+        var bar = header;
 
-        // ── Control bar: Start / Stop and what the bot is doing ───
-        var bar = new Card { Bounds = new Rectangle(12, 64, 1156, 64) };
-        Controls.Add(bar);
-        _startBot = Theme.BigButton(bar, Caption("▶  BAŞLAT", StartKey), new Rectangle(12, 10, 220, 44), Theme.Primary, Theme.PrimaryHover);
-        _startBot.Click += (_, _) => ToggleBot();
-        _stopBot = Theme.BigButton(bar, Caption("■  DURDUR", StopKey), new Rectangle(242, 10, 220, 44), Theme.Danger, Theme.DangerHover);
+        // ── Left menu: the panel and the settings pages; the version and the keys at the bottom ──
+        var side = _side = new Panel { Bounds = new Rectangle(0, B, 192, 855), BackColor = Theme.Rail };
+        Controls.Add(side);
+        side.Controls.Add(new Panel { Bounds = new Rectangle(191, 0, 1, 855), BackColor = Theme.Border });
+        _dashButton = new NavButton { Text = "Panel", Icon = "grid", Bounds = new Rectangle(10, 14, 172, 40), Font = new Font("Segoe UI", 9.5f) };
+        _dashButton.Click += (_, _) => SelectTab(-1);
+        side.Controls.Add(_dashButton);
+        Theme.Label(side, "AYARLAR", new Rectangle(22, 66, 150, 20), 7.5f, Theme.Faint, FontStyle.Bold);
+        (string Name, string Icon)[] tabNames = [("Saldırı", "sword"), ("Hedef", "target"), ("Eşya", "bag"), ("İksir · Beceri", "flask"), ("Alan", "pin"),
+                             ("Bildirim", "bell"), ("Tuşlar", "key"), ("Gelişmiş", "cog"), ("Pazar", "cart")];
+        _tabButtons = new NavButton[tabNames.Length];
+        _tabPages = new Panel[tabNames.Length];
+        _events = new Label { Visible = false };
+        var foot = new Card { Bounds = new Rectangle(10, 855 - 12 - 96, 172, 96) };
+        side.Controls.Add(foot);
+        _identity = Theme.Label(foot, "v" + BuildInfo.Version, new Rectangle(12, 10, 150, 22), 8.5f, Theme.Muted, FontStyle.Bold);
+        Theme.Label(foot, "Başlat · " + StartKey, new Rectangle(12, 36, 150, 20), 8f, Theme.Faint);
+        Theme.Label(foot, "Durdur · " + (Instance.IsFirst ? "F11 / " : "") + OwnStopName, new Rectangle(12, 58, 150, 20), 8f, Theme.Faint);
+
+        // ── The card at the top: who, what the bot is doing, how long, start / stop ──
+        var hero = _hero = new Card { Bounds = new Rectangle(202, B + 12, 966, 84) };
+        Controls.Add(hero);
+        _avatar = new Avatar { Bounds = new Rectangle(18, 16, 60, 56), Font = new Font("Segoe UI", 11f) };
+        hero.Controls.Add(_avatar);
+        _heroName = Theme.Label(hero, "Oyun bağlı değil", new Rectangle(90, 12, 380, 30), 12.5f, Theme.Muted, FontStyle.Bold);
+        _status = new Pill { Text = "Oyun bekleniyor", Bounds = new Rectangle(90, 44, 380, 30), Font = new Font("Segoe UI", 9f, FontStyle.Bold), ForeColor = Theme.Muted,
+                             Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right };
+        hero.Controls.Add(_status);
+        _stopBot = new ProButton { Text = "Durdur\n" + (Instance.IsFirst ? "F11" : OwnStopName), Icon = "stop", Kind = ButtonKind.Danger,
+                                   Bounds = new Rectangle(966 - 18 - 156, 20, 156, 46), Font = new Font("Segoe UI", 10f), Anchor = AnchorStyles.Top | AnchorStyles.Right };
         _stopBot.Click += (_, _) => StopBot("kullanıcı durdurdu", byUser: true);
-        _attackButton = Theme.BigButton(bar, "", new Rectangle(472, 10, 220, 44), Theme.Secondary, Theme.SecondaryHover);
+        hero.Controls.Add(_stopBot);
+        _startBot = new ProButton { Text = "Başlat\n" + StartKey, Icon = "play", Kind = ButtonKind.Gold,
+                                    Bounds = new Rectangle(_stopBot.Left - 12 - 186, 20, 186, 46), Font = new Font("Segoe UI", 10f), Anchor = AnchorStyles.Top | AnchorStyles.Right };
+        _startBot.Click += (_, _) => ToggleBot();
+        hero.Controls.Add(_startBot);
+        _timer = Theme.Label(hero, "--:--", new Rectangle(_startBot.Left - 18 - 150, 14, 150, 36), 16f, Theme.Faint, FontStyle.Bold, ContentAlignment.MiddleRight);
+        _timer.Font = new Font("Consolas", 16f, FontStyle.Bold);
+        _timer.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        _timerNote = Theme.Label(hero, "bu oturum", new Rectangle(_timer.Left, 50, 150, 20), 8f, Theme.Faint, FontStyle.Regular, ContentAlignment.MiddleRight);
+        _timerNote.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        _status.Width = _timer.Left - 12 - _status.Left;
+        _heroName.Width = _status.Width;
+
+        // ── The panel: the session's numbers, the live view, the character and what just happened ──
+        _dashboard = new Panel { Bounds = new Rectangle(202, B + 108, 966, 511), BackColor = Theme.Background };
+        Controls.Add(_dashboard);
+        StatCard Stat(string caption, int x, int width)
+        {
+            var card = new StatCard { Caption = caption, Bounds = new Rectangle(x, 0, width, 104), Font = new Font("Segoe UI", 15f, FontStyle.Bold) };
+            _dashboard.Controls.Add(card);
+            return card;
+        }
+        int[] kx = [0, 152, 304, 456, 610];
+        _kExp = Stat("SAATTE EXP", kx[0], 140);
+        _kKills = Stat("ÖLDÜRÜLEN", kx[1], 140);
+        _kYang = Stat("YANG", kx[2], 140);
+        _kPotion = Stat("İKSİR", kx[3], 142);
+        _kLevel = Stat("SEVİYE", kx[4], 356);
+        // The old tiles' values are still worked out (the small bar and the reports read them); the cards show them.
+        _statTime = new Label(); _statMobs = new Label(); _statRate = new Label(); _statExp = new Label(); _statExpRate = new Label();
+        _statLevel = new Label(); _statYang = new Label(); _statPotions = new Label(); _statDeaths = new Label();
+
+        var previewCard = _previewCard = new Card { Bounds = new Rectangle(0, 116, 598, 395), Caption = "CANLI GÖRÜNTÜ" };
+        _dashboard.Controls.Add(previewCard);
+        _preview = new PreviewControl { Bounds = new Rectangle(14, 42, 570, 339), Profile = _profile };
+        _preview.SelectionChanged += UpdateControls;
+        _preview.MouseClick += (_, _) => { if (_engine != null && _gameMinimized) WindowService.Restore(_engine.Window); };
+        previewCard.Controls.Add(_preview);
+        _attackButton = new ProButton { Bounds = new Rectangle(598 - 14 - 160, 6, 160, 30), Font = new Font("Segoe UI", 8.5f), Anchor = AnchorStyles.Top | AnchorStyles.Right };
         _attackButton.Click += (_, _) =>
         {
             if (_mode == MarketMode)
@@ -181,70 +275,42 @@ internal sealed partial class MainForm : Form
             else
                 ToggleAttack();
         };
+        previewCard.Controls.Add(_attackButton);
         ShowAttack();
         _reloads.Add(ShowAttack);
-        _status = Theme.Label(bar, "Oyun bekleniyor", new Rectangle(704, 10, 440, 44), 11f, Theme.Muted, FontStyle.Bold);
 
-        // ── Side menu: the dashboard and the settings pages ──────
-        var side = _side = new Card { Bounds = new Rectangle(12, 136, 180, 772) };
-        Controls.Add(side);
-        _dashButton = SideButton(side, "📊   Panel", 12);
-        _dashButton.Click += (_, _) => SelectTab(-1);
-        Theme.Label(side, "AYARLAR", new Rectangle(16, 62, 150, 18), 8f, Theme.Accent, FontStyle.Bold);
-        string[] tabNames = ["⚔   Saldırı", "🎯   Hedef", "🎒   Eşya / Envanter", "🧪   İksir / Beceri", "📍   Alan",
-                             "🔔   Bildirim", "⌨   Tuşlar", "⚙   Gelişmiş", "🛒   Pazar"];
-        _tabButtons = new Button[tabNames.Length];
-        _tabPages = new Panel[tabNames.Length];
-        Theme.Label(side, "ETKİNLİK", new Rectangle(16, 482, 150, 18), 8f, Theme.Accent, FontStyle.Bold);
-        _events = Theme.Label(side, "Bot çalışınca görünür.", new Rectangle(16, 502, 152, 300), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+        var charCard = new Card { Bounds = new Rectangle(610, 116, 356, 150), Caption = "KARAKTER" };
+        _dashboard.Controls.Add(charCard);
+        Meter Bar(string caption, Color fill, int y)
+        {
+            var meter = new Meter { Bounds = new Rectangle(18, y, 320, 30), Caption = caption, Fill = fill, Font = new Font("Segoe UI", 8.5f) };
+            charCard.Controls.Add(meter);
+            return meter;
+        }
+        _hpMeter = Bar("HP", Color.FromArgb(255, 79, 96), 40);
+        _mpMeter = Bar("MP", Color.FromArgb(61, 139, 255), 76);
+        _targetMeter = Bar("Hedef", Theme.Gold, 112);
+        var feedCard = new Card { Bounds = new Rectangle(610, 278, 356, 233), Caption = "ŞİMDİ", CaptionRight = "önemli olaylar" };
+        _dashboard.Controls.Add(feedCard);
+        _feed = new Feed { Bounds = new Rectangle(18, 42, 322, 180), Font = new Font("Segoe UI", 8.5f) };
+        feedCard.Controls.Add(_feed);
 
-        // ── Always on top: live preview + session stats (on every page) ──
-        _dashboard = new Panel { Bounds = new Rectangle(202, 136, 966, 400), BackColor = Theme.Background };
-        Controls.Add(_dashboard);
-        var previewCard = new Card { Bounds = new Rectangle(0, 0, 600, 400) };
-        _dashboard.Controls.Add(previewCard);
-        Theme.Label(previewCard, "CANLI GÖRÜNTÜ", new Rectangle(16, 8, 300, 20), 8f, Theme.Accent, FontStyle.Bold);
-        Theme.Label(previewCard, "Sarı halka = bulunan mob", new Rectangle(320, 8, 264, 20), 8f, Theme.Muted,
-            FontStyle.Regular, ContentAlignment.MiddleRight);
-        _preview = new PreviewControl { Bounds = new Rectangle(14, 32, 572, 354), Profile = _profile };
-        _preview.SelectionChanged += UpdateControls;
-        _preview.MouseClick += (_, _) => { if (_engine != null && _gameMinimized) WindowService.Restore(_engine.Window); };
-        previewCard.Controls.Add(_preview);
-
-        var statsCard = new Card { Bounds = new Rectangle(610, 0, 356, 400) };
-        _dashboard.Controls.Add(statsCard);
-        Theme.Label(statsCard, "OTURUM", new Rectangle(16, 8, 200, 20), 8f, Theme.Accent, FontStyle.Bold);
-        // Three columns: time and kills, experience, level/money/potions/deaths.
-        _statTime = Tile(statsCard, "SÜRE", 16, 32);
-        _statMobs = Tile(statsCard, "ÖLDÜRÜLEN", 126, 32);
-        _statRate = Tile(statsCard, "SAATTE MOB", 236, 32);
-        _statExp = Tile(statsCard, "EXP", 16, 98);
-        _statExpRate = Tile(statsCard, "SAATTE EXP", 126, 98);
-        _statLevel = Tile(statsCard, "SEVİYE", 236, 98, small: true);
-        _statYang = Tile(statsCard, "YANG", 16, 164);
-        _statPotions = Tile(statsCard, "İKSİR", 126, 164, small: true);
-        _statDeaths = Tile(statsCard, "ÖLÜM", 236, 164);
-        Theme.Label(statsCard, "KARAKTER", new Rectangle(16, 244, 200, 18), 8f, Theme.Accent, FontStyle.Bold);
-        _hpMeter = AddMeter(statsCard, "HP", Theme.Red, 268);
-        _mpMeter = AddMeter(statsCard, "MP", Theme.Accent, 304);
-        _targetMeter = AddMeter(statsCard, "HEDEF", Theme.Yellow, 340);
-
-        // ── Settings pages: one big card, title + what the page is for ──
-        // Below the live view (the log and this run's items show there on the dashboard).
-        _settingsCard = new Card { Bounds = new Rectangle(202, 544, 966, 364), Visible = false };
+        // ── Settings pages: one big card, title + what the page is for (under the card at the top) ──
+        _settingsCard = new Card { Bounds = new Rectangle(202, B + 108, 966, 735), Visible = false };
         Controls.Add(_settingsCard);
-        _pageTitle = Theme.Label(_settingsCard, "", new Rectangle(24, 10, 260, 28), 13f, Theme.Text, FontStyle.Bold);
-        _pageInfo = Theme.Label(_settingsCard, "", new Rectangle(290, 14, 652, 22), 9f, Theme.Muted);
+        _pageTitle = Theme.Label(_settingsCard, "", new Rectangle(24, 12, 260, 32), 14f, Theme.Text, FontStyle.Bold);
+        _pageInfo = Theme.Label(_settingsCard, "", new Rectangle(290, 16, 652, 26), 9f, Theme.Muted);
         for (int i = 0; i < tabNames.Length; i++)
         {
             int index = i;
-            _tabButtons[i] = SideButton(side, tabNames[i], 86 + i * 42);
+            _tabButtons[i] = new NavButton { Text = tabNames[i].Name, Icon = tabNames[i].Icon, Bounds = new Rectangle(10, 90 + i * 44, 172, 40), Font = new Font("Segoe UI", 9.5f) };
             _tabButtons[i].Click += (_, _) => SelectTab(index);
-            _tabPages[i] = new Panel { Bounds = new Rectangle(24, 58, 918, 296), BackColor = Theme.Surface, Visible = false };
+            side.Controls.Add(_tabButtons[i]);
+            _tabPages[i] = new Panel { Bounds = new Rectangle(24, 62, 918, 296), BackColor = Theme.Surface, Visible = false };
             _settingsCard.Controls.Add(_tabPages[i]);
         }
         // A thin line under the title.
-        _settingsCard.Controls.Add(new Panel { Bounds = new Rectangle(24, 46, 918, 1), BackColor = Theme.Border });
+        _settingsCard.Controls.Add(new Panel { Bounds = new Rectangle(24, 52, 918, 1), BackColor = Theme.Border });
 
         // Saldırı
         var attack = _tabPages[0];
@@ -809,15 +875,25 @@ internal sealed partial class MainForm : Form
         };
 
         // ── Dashboard bottom: the log and this run's items (the settings pages show here instead) ──
-        _dashBottom = new Panel { Bounds = new Rectangle(202, 544, 966, 364), BackColor = Theme.Background };
+        _dashBottom = new Panel { Bounds = new Rectangle(202, B + 631, 966, 212), BackColor = Theme.Background };
         Controls.Add(_dashBottom);
-        var logCard = _logCard = new Card { Bounds = new Rectangle(0, 0, 600, 364) };
+        var logCard = _logCard = new Card { Bounds = new Rectangle(0, 0, 598, 212), Caption = "GÜNLÜK" };
         _dashBottom.Controls.Add(logCard);
-        Theme.Label(logCard, "GÜNLÜK", new Rectangle(16, 8, 200, 20), 8f, Theme.Accent, FontStyle.Bold);
-        var itemsCard = _itemsCard = new Card { Bounds = new Rectangle(610, 0, 356, 364) };
+        // Which lines: all, the sales, the warnings, the deaths.
+        (string Name, string Kind)[] filters = [("Tümü", ""), ("Satış", "sell"), ("Uyarı", "warn"), ("Ölüm", "dead")];
+        _logFilters = new NavButton[filters.Length];
+        for (int i = 0; i < filters.Length; i++)
+        {
+            string kind = filters[i].Kind;
+            var button = _logFilters[i] = new NavButton { Text = filters[i].Name, Segment = true, Selected = i == 0, Tag = kind,
+                Bounds = new Rectangle(598 - 14 - (filters.Length - i) * 66, 7, 62, 26), Font = new Font("Segoe UI", 8.5f), Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            button.Click += (_, _) => FilterLog(kind);
+            logCard.Controls.Add(button);
+        }
+        var itemsCard = _itemsCard = new Card { Bounds = new Rectangle(610, 0, 356, 212), Caption = "BU TUR EŞYALAR" };
         _dashBottom.Controls.Add(itemsCard);
-        Theme.Label(itemsCard, "BU TUR EŞYALAR", new Rectangle(16, 8, 200, 20), 8f, Theme.Accent, FontStyle.Bold);
-        var openItems = Theme.Button(itemsCard, "📄", new Rectangle(310, 4, 32, 26), Theme.Surface, Theme.Secondary);
+        var openItems = new IconButton { Icon = "list", Bounds = new Rectangle(356 - 14 - 30, 6, 30, 28) };
+        itemsCard.Controls.Add(openItems);
         openItems.Click += (_, _) =>
         {
             try { Process.Start(new ProcessStartInfo(SessionItems.FilePath) { UseShellExecute = true }); }
@@ -825,7 +901,7 @@ internal sealed partial class MainForm : Form
         };
         _runItems = new ListView
         {
-            Bounds = new Rectangle(14, 32, 328, 300),
+            Bounds = new Rectangle(14, 40, 328, 146),
             View = View.Details,
             FullRowSelect = true,
             HeaderStyle = ColumnHeaderStyle.Nonclickable,
@@ -852,23 +928,26 @@ internal sealed partial class MainForm : Form
         _runItems.Columns.Add("Atılan", 58, HorizontalAlignment.Right);
         _runItems.Columns.Add("Satılan", 58, HorizontalAlignment.Right);
         itemsCard.Controls.Add(_runItems);
-        _runItemsInfo = Theme.Label(itemsCard, "Bot başlayınca dolar; her turda yenilenir.", new Rectangle(16, 336, 326, 20), 8f, Theme.Muted);
+        _runItemsInfo = Theme.Label(itemsCard, "Bot başlayınca dolar; her turda yenilenir.", new Rectangle(16, 188, 326, 18), 8f, Theme.Faint);
         _log = new RichTextBox
         {
-            Bounds = new Rectangle(14, 32, 572, 318),
+            Bounds = new Rectangle(16, 42, 568, 158),
             BorderStyle = BorderStyle.None,
             ReadOnly = true,
+            WordWrap = false,
             ScrollBars = RichTextBoxScrollBars.Vertical,
             DetectUrls = false,
-            BackColor = Theme.Inset,
+            BackColor = Theme.Surface,
             ForeColor = Theme.Muted,
             Font = new Font("Consolas", 8.5f),
             TabStop = false
         };
         logCard.Controls.Add(_log);
+        foreach (Control list in new Control[] { _log, _runItems })
+            Theme.DarkScrollBars(list);
 
         // ── PAZAR mode: the market watch at a glance; the full search in the market window ──
-        _marketDash = new Panel { Bounds = new Rectangle(12, 136, 1156, 400), BackColor = Theme.Background, Visible = false };
+        _marketDash = new Panel { Bounds = new Rectangle(12, B + 108, 1156, 400), BackColor = Theme.Background, Visible = false };
         Controls.Add(_marketDash);
         var watchCard = new Card { Bounds = new Rectangle(0, 0, 760, 400) };
         _marketDash.Controls.Add(watchCard);
@@ -921,9 +1000,10 @@ internal sealed partial class MainForm : Form
             Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
         };
         findsCard.Controls.Add(_mFinds);
+        Theme.DarkScrollBars(_mFinds);
 
         // ── BALIKÇILIK mode: cast, wait for the bite, pull; the picture question is the player's ──
-        _fishingDash = new Panel { Bounds = new Rectangle(12, 136, 1156, 400), BackColor = Theme.Background, Visible = false };
+        _fishingDash = new Panel { Bounds = new Rectangle(12, B + 108, 1156, 400), BackColor = Theme.Background, Visible = false };
         Controls.Add(_fishingDash);
         var fishCard = new Card { Bounds = new Rectangle(0, 0, 760, 400) };
         _fishingDash.Controls.Add(fishCard);
@@ -937,6 +1017,7 @@ internal sealed partial class MainForm : Form
             Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
         };
         pullsCard.Controls.Add(_fPulls);
+        Theme.DarkScrollBars(_fPulls);
         Theme.Label(fishCard, "BALIK TUTMA", new Rectangle(16, 8, 300, 20), 8f, Theme.Accent, FontStyle.Bold);
         _fState = Theme.Label(fishCard, "", new Rectangle(16, 30, 728, 40), 10f, Theme.Text, FontStyle.Bold, ContentAlignment.TopLeft);
         const int fw = 136;
@@ -1054,6 +1135,7 @@ internal sealed partial class MainForm : Form
         _runItems.Columns[2].Width = number;
         _runItems.Columns[3].Width = number;
         _dashBottomFarm = _dashBottom.Bounds;
+        _attackInPreview = _attackButton.Bounds;
         _logCardFarm = _logCard.Bounds;
         _logFarm = _log.Bounds;
         // The market settings page lives in the PAZAR tab now.
@@ -1102,16 +1184,26 @@ internal sealed partial class MainForm : Form
             _logCard.Bounds = _logCardFarm;
             _log.Bounds = _logFarm;
         }
+        // The card at the top as wide as the page under it (beside the menu on the farm page).
+        var under = farm ? _dashBottomFarm : (market ? _marketDash : _fishingDash).Bounds;
+        _hero.Bounds = new Rectangle(under.Left, _hero.Top, under.Width, _hero.Height);
+        // The attack button in the live view (farm); "Pazar penceresi" in the top card (market); none for fishing.
+        Control host = market ? _hero : _previewCard;
+        if (_attackButton.Parent != host)
+        {
+            _attackButton.Parent?.Controls.Remove(_attackButton);
+            host.Controls.Add(_attackButton);
+        }
+        _attackButton.Bounds = market
+            ? new Rectangle(_startBot.Left - (_stopBot.Left - _startBot.Right) - _startBot.Width, _startBot.Top, _startBot.Width, _startBot.Height)
+            : _attackInPreview;
         _attackButton.Visible = mode != FishingMode;
-        // The status line takes the attack button's place when it isn't shown (no gap in the bar).
-        _status.Bounds = mode == FishingMode ? new Rectangle(_attackButton.Left + 12, _status.Top, _status.Right - _attackButton.Left - 12, _status.Height)
-            : new Rectangle(_attackButton.Right + 12, _status.Top, _status.Right - _attackButton.Right - 12, _status.Height);
+        _timer.Visible = _timerNote.Visible = !market;
+        _status.Width = (market ? _attackButton.Left : _timer.Left) - _status.Left - 12;
+        _heroName.Width = _status.Width;
         _fishDashAt = DateTime.MinValue;
         for (int i = 0; i < _modeButtons.Length; i++)
-        {
-            _modeButtons[i].BackColor = i == mode ? Theme.Primary : Theme.Secondary;
-            _modeButtons[i].FlatAppearance.MouseOverBackColor = i == mode ? Theme.PrimaryHover : Theme.SecondaryHover;
-        }
+            _modeButtons[i].Selected = i == mode;
         ResumeLayout(true);
         if (market)
             ShowAttack();
@@ -1266,15 +1358,15 @@ internal sealed partial class MainForm : Form
     {
         if (_mode == MarketMode)
         {
-            _attackButton.Text = Caption("🖥  PAZAR PENCERESİ", "ara · filtrele · fiyat");
-            _attackButton.BackColor = Theme.Secondary;
-            _attackButton.FlatAppearance.MouseOverBackColor = Theme.SecondaryHover;
+            _attackButton.Text = "Pazar penceresi";
+            _attackButton.Icon = "expand";
+            _attackButton.Kind = ButtonKind.Ghost;
             return;
         }
         bool on = _profile.Attack;
-        _attackButton.Text = on ? Caption("⚔  SALDIRI AÇIK", "kapatmak için tıkla") : Caption("✋  SADECE TOPLA", "saldırı kapalı");
-        _attackButton.BackColor = on ? Theme.Secondary : Theme.Accent;
-        _attackButton.FlatAppearance.MouseOverBackColor = on ? Theme.SecondaryHover : ControlPaint.Light(Theme.Accent, 0.2f);
+        _attackButton.Text = on ? "Saldırı açık" : "Sadece topla";
+        _attackButton.Icon = on ? "sword" : "bag";
+        _attackButton.Kind = on ? ButtonKind.Ghost : ButtonKind.Amber;
     }
 
     private void ReloadSettings()
@@ -1344,8 +1436,9 @@ internal sealed partial class MainForm : Form
     /// <summary>-1: the dashboard (preview, stats); otherwise a settings page.</summary>
     private void SelectTab(int index)
     {
-        // The live view and the stats stay; below them the log (dashboard) or the settings page.
+        // The card at the top stays (start / stop); under it the panel or the settings page.
         _dashBottom.Visible = index < 0;
+        _dashboard.Visible = index < 0;
         _settingsCard.Visible = index >= 0;
         if (index >= 0)
         {
@@ -1359,12 +1452,7 @@ internal sealed partial class MainForm : Form
             Mark(_tabButtons[i], i == index);
         }
 
-        static void Mark(Button button, bool on)
-        {
-            button.BackColor = on ? Theme.Primary : Theme.Surface;
-            button.ForeColor = on ? Theme.Text : Theme.Muted;
-            button.FlatAppearance.MouseOverBackColor = on ? Theme.PrimaryHover : Theme.Secondary;
-        }
+        static void Mark(NavButton button, bool on) => button.Selected = on;
     }
 
     // ── Windows ──────────────────────────────────────────────────
@@ -1657,7 +1745,8 @@ internal sealed partial class MainForm : Form
             _engine is { } e && Win32.IsWindow(e.Window.Handle) ? e.Window.Handle : 0, hpPotions, mpPotions, Attack: _profile.Attack, Market: market,
             Exp10: Exp10(), Elapsed: ElapsedNow(),
             Items: _engine?.SessionItems.Rows().Select(r => (r.Name, r.Picked, r.Thrown, r.Sold)).ToList(),
-            Level: _engine?.World?.Level ?? 0);
+            Level: _engine?.World?.Level ?? 0,
+            Place: _engine?.World is { Server.Length: > 0 } w ? w.Server + (w.Channel > 0 ? $" K{w.Channel}" : "") : "");
     }
 
     protected override void WndProc(ref Message m)
@@ -2291,11 +2380,16 @@ internal sealed partial class MainForm : Form
 
     private void UpdateStats()
     {
+        ShowTop();
+        ShowNumbers();
         UpdateRunItems();
         // The game server in the header (market prices are kept per server).
-        if (_engine?.World is { Server.Length: > 0 } here && _connection.ForeColor == Theme.Green
-            && _connection.Text != $"●  {here.Server} sunucusu")
-            _connection.Text = $"●  {here.Server} sunucusu";
+        if (_engine?.World is { Server.Length: > 0 } here && _connection.ForeColor == Theme.Green)
+        {
+            string where = here.Channel > 0 ? $"●  {here.Server} · Kanal {here.Channel}" : $"●  {here.Server}";
+            if (_connection.Text != where)
+                _connection.Text = where;
+        }
         string name = _engine?.CharacterName ?? "";
         UseCharacter(name);
         ShareStatus(name);
@@ -2670,17 +2764,20 @@ internal sealed partial class MainForm : Form
     {
         bool connected = _engine != null;
         bool running = _engine?.BotRunning == true;
-        _gameButton.Text = connected ? "Bağlantı  ▾" : "Oyunu seç  ▾";
+        _gameButton.Text = connected ? (_engine!.CharacterName is { Length: > 0 } who ? who : "Bağlı") : "Oyunu seç";
         _startBot.Enabled = connected;
         _findArea.Enabled = connected && !running && _engine?.ScanningMarket != true;
         _scanMarket.Enabled = connected && !running && _engine?.ScanningArea != true;
         _scanMobs.Enabled = connected;
-        _startBot.Text = Caption(_mode == MarketMode
-            ? (_engine?.ScanningMarket == true ? "■  TAKİBİ DURDUR" : "🔁  SÜREKLİ TAKİP")
-            : _mode == FishingMode ? (_engine?.Fishing == true ? "■  BALIĞI DURDUR" : "🎣  BALIK TUT")
-            : running ? "❚❚  DURAKLAT"
-            : _engine?.ScanningMarket == true || _engine?.ScanningArea == true ? "■  TARAMAYI DURDUR"
-            : "▶  BAŞLAT", StartKey);
+        var (startText, startIcon) = _mode == MarketMode
+            ? (_engine?.ScanningMarket == true ? ("Takibi durdur", "stop") : ("Sürekli takip", "refresh"))
+            : _mode == FishingMode ? (_engine?.Fishing == true ? ("Balığı durdur", "stop") : ("Balık tut", "fish"))
+            : running ? ("Duraklat", "pause")
+            : _engine?.ScanningMarket == true || _engine?.ScanningArea == true ? ("Taramayı durdur", "stop")
+            : ("Başlat", "play");
+        _startBot.Text = Caption(startText, StartKey);
+        _startBot.Icon = startIcon;
+        _startBot.Kind = startIcon == "play" || startIcon == "refresh" || startIcon == "fish" ? ButtonKind.Gold : ButtonKind.Ghost;
         if (_mode == MarketMode)
             _startBot.Enabled = connected && !running;
         if (_mode == FishingMode)
@@ -2796,11 +2893,21 @@ internal sealed partial class MainForm : Form
         if (IsDisposed)
             return;
         string line = $"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}";
-        _log.AppendText(line);
         LogFile.Append(line);
-        if (_log.TextLength > 20000)
-            _log.Text = _log.Text[^14000..];
-        _log.SelectionStart = _log.TextLength;
-        _log.ScrollToCaret();
+        var entry = LogLine.Of(DateTime.Now, message);
+        _logLines.Add(entry);
+        if (_logLines.Count > 600)
+        {
+            _logLines.RemoveRange(0, 200);
+            ShowLog();
+        }
+        else if (_logFilter.Length == 0 || entry.Kind == _logFilter)
+        {
+            AppendLog(entry);
+            _log.SelectionStart = _log.TextLength;
+            _log.ScrollToCaret();
+        }
+        if (entry.Feed)
+            _feed.Add(new Feed.Line(entry.At, entry.Tone, entry.Icon, entry.Short));
     }
 }

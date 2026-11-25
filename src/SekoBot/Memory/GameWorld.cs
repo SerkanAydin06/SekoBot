@@ -399,7 +399,7 @@ internal sealed record WorldSnapshot(Vec3 Player, CameraView? Camera, IReadOnlyL
     IReadOnlyList<DeadMob>? DeadMobs = null, CharacterProgress? Progress = null, IReadOnlyList<OtherPlayer>? Players = null,
     IReadOnlyList<GroundItem>? Drops = null, bool InSafeZone = false, IReadOnlyList<string>? OpenWindows = null,
     double? ReviveIn = null, IReadOnlyList<SkillInfo>? Skills = null, double AttackDistance = 0, int AttackPower = 0,
-    bool Stunned = false, IReadOnlyList<double?>? SkillWaits = null, IReadOnlyList<TownNpc>? TownNpcs = null, string Server = "")
+    bool Stunned = false, IReadOnlyList<double?>? SkillWaits = null, IReadOnlyList<TownNpc>? TownNpcs = null, string Server = "", int Channel = 0)
 {
     /// <summary>Dead, and "Burada yeniden başla" can be clicked.</summary>
     public bool ReviveReady => Dead && ReviveIn is <= 0;
@@ -700,7 +700,8 @@ internal sealed partial class GameWorldReader : IDisposable
     }
 
     private string _server = "";
-    private DateTime _serverReadAt;
+    private DateTime _serverReadAt, _channelReadAt;
+    private int _channel;
 
     private WorldSnapshot? ReadCore()
     {
@@ -737,6 +738,11 @@ internal sealed partial class GameWorldReader : IDisposable
         {
             _serverReadAt = DateTime.UtcNow;
             _server = ReadFString(instance + Offset(instanceClass, "m2data_C", "serverName"), 32).Trim();
+        }
+        if (DateTime.UtcNow - _channelReadAt > TimeSpan.FromSeconds(5))
+        {
+            _channelReadAt = DateTime.UtcNow;
+            _channel = Int32(instance + Offset(instanceClass, "m2data_C", "Channel")) is int ch and > 0 and < 100 ? ch : 0;
         }
 
         _pawn = Pointer(gm + Offset(gmClass, "gameManager", "Player"));
@@ -862,7 +868,7 @@ internal sealed partial class GameWorldReader : IDisposable
         double? reviveIn = dead ? ReviveIn(Pointer(instance + Offset(instanceClass, "m2data_C", "uiMain"))) : null;
         var skillWaits = ReadSkillWaits(instance, instanceClass);
         return new WorldSnapshot(player, camera, mobs, players.Count, mapName, target, stats, dead, characterLevel, deadMobs, progress, players,
-            drops, safe, windows, reviveIn, _skills, attackDistance, attackPower, stunned, skillWaits, townNpcs, _server);
+            drops, safe, windows, reviveIn, _skills, attackDistance, attackPower, stunned, skillWaits, townNpcs, _server, _channel);
     }
 
     private (CharacterStats? Stats, int Level) ReadStats(long loader)
