@@ -82,8 +82,9 @@ internal sealed partial class MainForm
         int upTo = Math.Max(1, _profile.BuyPotionsUpTo), below = _profile.BuyPotionsBelow;
         bool low = _profile.BuyPotions && hpLeft is int h && h < below;
         int used = (session?.HpPotionsUsed ?? 0) + (session?.MpPotionsUsed ?? 0);
-        _kPotion.Show(hpLeft is int hp ? hp.ToString("N0") : "—", unit: hpLeft is int && _profile.BuyPotions ? "/ " + upTo.ToString("N0") : "",
-            sub: (mpLeft is int mp ? $"MP {mp:N0}" : "") + (used > 0 ? $" · {used:N0} içildi" : ""),
+        // Which is which, written out (the user: "HP" and "MP" weren't told apart).
+        _kPotion.Show(hpLeft is int hp ? hp.ToString("N0") : "—", unit: hpLeft is int ? "HP" : "",
+            sub: (mpLeft is int mp ? $"{mp:N0} MP" : "") + (_profile.BuyPotions ? $" · {upTo:N0}'e tamamlar" : used > 0 ? $" · {used:N0} içildi" : ""),
             bar: hpLeft is int left && _profile.BuyPotions ? Math.Clamp((double)left / upTo, 0, 1) : null,
             corner: low ? "azaldı" : "", cornerColor: Theme.Yellow, valueColor: low ? Theme.Yellow : Theme.Text);
         _kPotion.BarColor = Theme.Yellow;

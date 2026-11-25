@@ -353,7 +353,7 @@ internal sealed class MiniBar : Form
             // Potions left and the experience per hour, always in sight (the user: both matter).
             string Count(int? n) => n is int c ? c.ToString("N0") : "—";
             bool low = info.HpPotions is < 20 || info.MpPotions is < 10;
-            string pots = $"İksir {Count(info.HpPotions)} · {Count(info.MpPotions)}";
+            string pots = $"HP {Count(info.HpPotions)} · MP {Count(info.MpPotions)}";
             TextRenderer.DrawText(g, pots, small, statusRow, low ? Theme.Red : Theme.Muted, Right);
             statusRow.Width -= TextRenderer.MeasureText(pots, small).Width + (int)(8 * s);
         }
