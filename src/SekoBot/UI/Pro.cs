@@ -984,3 +984,90 @@ internal sealed class Field : Panel
         g.DrawPath(pen, path);
     }
 }
+
+/// <summary>The fishing chart: one column per pull time, as high as its share caught; the best one gold.</summary>
+internal sealed class PullChart : Drawn
+{
+    private List<(string Name, double Rate, int Caught, int Pulls)> _bins = [];
+    private int _best = -1;
+
+    public void Show(List<(string Name, double Rate, int Caught, int Pulls)> bins, int best)
+    {
+        if (best == _best && bins.SequenceEqual(_bins))
+            return;
+        (_bins, _best) = (bins, best);
+        Invalidate();
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        Clear(g);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        if (_bins.Count == 0)
+            return;
+        using var small = Sized(0.86f);
+        using var bold = Sized(0.9f, FontStyle.Bold);
+        int labelH = TextRenderer.MeasureText("0", small).Height;
+        float gap = Width * 0.012f, w = (Width - gap * (_bins.Count - 1)) / _bins.Count;
+        float top = labelH + 2, bottom = Height - labelH - 2, h = bottom - top;
+        for (int i = 0; i < _bins.Count; i++)
+        {
+            var (name, rate, caught, pulls) = _bins[i];
+            float x = i * (w + gap);
+            float bh = pulls > 0 ? Math.Max(3, (float)(h * Math.Clamp(rate, 0, 1))) : 3;
+            var bar = new RectangleF(x, bottom - bh, w, bh);
+            using (var path = Theme.RoundRect(bar, Math.Min(5, w / 4)))
+            {
+                Brush fill = i == _best
+                    ? new LinearGradientBrush(new RectangleF(x, bar.Y - 1, w, bh + 2), Theme.GoldLight, Theme.Gold, 90f)
+                    : new SolidBrush(pulls > 0 ? Theme.BorderStrong : Theme.Border);
+                using (fill)
+                    g.FillPath(fill, path);
+            }
+            string value = pulls > 0 ? $"%{rate * 100:0}" : "—";
+            TextRenderer.DrawText(g, value, bold, new Rectangle((int)x, (int)(bar.Y - labelH - 1), (int)w, labelH), i == _best ? Theme.GoldLight : Theme.Muted,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.Bottom | TextFormatFlags.NoPrefix);
+            TextRenderer.DrawText(g, name, small, new Rectangle((int)x, (int)bottom + 2, (int)w, labelH), Theme.Faint,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+        }
+    }
+}
+
+/// <summary>Lists drawn as rows: a coloured mark for what the line is about, the text, a thin line under it.</summary>
+internal static class Rows
+{
+    public static void Style(ListBox list)
+    {
+        list.DrawMode = DrawMode.OwnerDrawFixed;
+        list.ItemHeight = (int)(list.Font.Height * 2.0f);
+        list.FontChanged += (_, _) => list.ItemHeight = (int)(list.Font.Height * 2.0f);
+        list.DrawItem += (_, e) =>
+        {
+            if (e.Index < 0 || e.Index >= list.Items.Count)
+                return;
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            bool selected = (e.State & DrawItemState.Selected) != 0;
+            using (var back = new SolidBrush(selected ? Theme.Secondary : Theme.Surface))
+                g.FillRectangle(back, e.Bounds);
+            using (var line = new Pen(Theme.Border))
+                g.DrawLine(line, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+            string text = list.Items[e.Index]?.ToString() ?? "";
+            string l = text.ToLower(new System.Globalization.CultureInfo("tr-TR"));
+            var tone = l.StartsWith("henüz") ? Tone.Neutral
+                     : l.Contains("kelepir") || l.Contains("yakaland") || l.Contains("✓") ? Tone.Green
+                     : l.Contains("aranan") ? Tone.Gold
+                     : l.Contains("kaçtı") || l.Contains("kaçan") || l.Contains("✗") ? Tone.Red
+                     : Tone.Blue;
+            float d = e.Font!.Height * 0.4f;
+            if (tone != Tone.Neutral)
+                using (var dot = new SolidBrush(Tones.Of(tone)))
+                    g.FillEllipse(dot, e.Bounds.X + d * 0.6f, e.Bounds.Y + (e.Bounds.Height - d) / 2f, d, d);
+            int x = e.Bounds.X + (int)(d * 2.2f);
+            TextRenderer.DrawText(g, text, e.Font, new Rectangle(x, e.Bounds.Y, e.Bounds.Width - x - 4, e.Bounds.Height),
+                tone == Tone.Neutral ? Theme.Faint : Theme.Text,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine);
+        };
+    }
+}

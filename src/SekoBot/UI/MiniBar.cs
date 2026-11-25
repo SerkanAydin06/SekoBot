@@ -66,11 +66,6 @@ internal sealed class MiniBar : Form
         DoubleBuffered = true;
         Text = "PARDUS";
         AppIcon.Use(this);
-        _menu = new ContextMenuStrip { ShowImageMargin = false, Font = new Font("Segoe UI", 9.5f) };
-        DarkMenu.Use(_menu);
-        _menu.Opening += (_, _) => FillMenu();
-        _menu.Closed += (_, _) => { _menuClosedAt = DateTime.Now; Invalidate(); };
-        ContextMenuStrip = _menu;
         // The menu opens and closes with a click (the user: not by the mouse coming over it).
         _timer.Tick += (_, _) => Pull(true);
         FormClosed += (_, _) =>
@@ -206,72 +201,83 @@ internal sealed class MiniBar : Form
         return Rectangle.Empty;
     }
 
-    private readonly ContextMenuStrip _menu;
-    private DateTime _menuClosedAt = DateTime.MinValue, _menuLeftAt = DateTime.MinValue;
+    private MiniMenu? _panel;
+    private DateTime _panelClosedAt = DateTime.MinValue;
+    private bool MenuOpen => _panel is { IsDisposed: false, Visible: true };
 
-    /// <summary>The menu under its button (opened by a click on it; a click elsewhere closes it).</summary>
-    private void OpenMenu()
+    /// <summary>The menu panel above the bar (a click on its button or a right click opens it; a click elsewhere closes it).</summary>
+    private void OpenMenu(Point? near = null)
     {
-        if (_menu.Visible)
+        if (MenuOpen)
             return;
-        _menuLeftAt = DateTime.MinValue;
-        _menu.Show(this, new Point(Button(MenuButton).Left, Button(MenuButton).Bottom + Top));
+        _info = _read();
+        var at = near ?? PointToScreen(new Point(Button(MenuButton).Right, Button(MenuButton).Top + Top));
+        _panel = new MiniMenu(_info, Groups(), RectangleToScreen(new Rectangle(0, Top, Width, Height - Top)), at);
+        _panel.FormClosed += (_, _) => { _panelClosedAt = DateTime.Now; _panel = null; Invalidate(); };
+        _panel.Show(this);
         Invalidate();
     }
 
-    /// <summary>The menu closes once the mouse has been off both it and its button for a moment.</summary>
-    private void CloseMenuWhenLeft()
-    {
-        if (!_menu.Visible)
-            return;
-        var at = Cursor.Position;
-        var button = RectangleToScreen(Button(MenuButton) with { Y = Button(MenuButton).Y + Top });
-        button.Inflate(6, 6);
-        var menu = _menu.Bounds;
-        menu.Inflate(6, 6);
-        if (button.Contains(at) || menu.Contains(at))
-        {
-            _menuLeftAt = DateTime.MinValue;
-            return;
-        }
-        if (_menuLeftAt == DateTime.MinValue)
-            _menuLeftAt = DateTime.Now;
-        else if (DateTime.Now - _menuLeftAt > TimeSpan.FromMilliseconds(400))
-            _menu.Close();
-    }
-
-    /// <summary>The menu's lines, written for what this bot does now (its tab's own action first).</summary>
     /// <summary>The game fills most of its screen (made big with "Büyüt").</summary>
     private static bool GameIsBig(MiniInfo info) =>
         info.Game is Rectangle game && game.Height > 0 && game.Height >= Screen.FromRectangle(game).WorkingArea.Height * 0.7;
 
-    private void FillMenu()
+    /// <summary>The panel's buttons, written for what this bot does now (its own action first).</summary>
+    private List<MiniMenu.Group> Groups()
     {
-        _menu.Items.Clear();
-        void Add(string text, Action act) => _menu.Items.Add(text, null, (_, _) => { act(); Pull(false); });
+        Action Then(Action act) => () => { act(); Pull(false); };
+        bool fishing = _info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true;
+        bool market = _info.Market != null && !fishing;
+        var bot = new List<MiniMenu.Item>();
         if (_info.Running)
         {
-            Add("❚❚  Duraklat (kaldığı yerden sürer)", _start);
+            bot.Add(new("pause", "Duraklat", Then(_start)));
+            bot.Add(new("stop", "Durdur", Then(_stop), ButtonKind.Danger));
             if (ChangeChannel != null && _info.Market == null)
-                Add("🔀  Kanal değiştir (botlarımızın olmadığı en boş kanala)", ChangeChannel);
-            _menu.Items.Add(new ToolStripSeparator());
+                bot.Add(new("swap", "Kanal değiştir", Then(ChangeChannel)));
         }
-        bool fishing = _info.Market?.StartsWith("🎣", StringComparison.Ordinal) == true;
-        // Fishing has no action of its own here (BALIK TUT is the start button).
-        if (_info.Market != null && !fishing)
-            Add("🔍  Pazar penceresini aç", _attack);
-        else if (_info.Market == null)
-            Add(_info.Attack ? "✋  Saldırıyı kapat (sadece yerdeki eşyaları topla)" : "⚔  Saldırıyı aç", _attack);
-        if (_menu.Items.Count > 0)
-            _menu.Items.Add(new ToolStripSeparator());
-        foreach (ToolStripItem item in WindowLayout.AllMenu().Items.Cast<ToolStripItem>().ToList())
-            _menu.Items.Add(item);
-        _menu.Items.Add(new ToolStripSeparator());
-        Add(GameIsBig(_info) ? "🗗  Bu oyunu küçült (hepsini diz)" : "⛶  Bu oyunu büyüt", _fill);
-        Add("⊞  Tüm oyunları ve botları diz", _arrange);
-        Add("⤢  PARDUS panelini aç (ayarlar, günlük)", _big);
-        _menu.Items.Add(new ToolStripSeparator());
-        Add("✕  Bu PARDUS'u kapat", _close);
+        else
+            bot.Add(new(fishing ? "fish" : market ? "refresh" : "play", fishing ? "Balık tut" : market ? "Takibi başlat" : "Başlat", Then(_start), ButtonKind.Gold));
+        if (market)
+            bot.Add(new("expand", "Pazar penceresi", Then(_attack)));
+        else if (!fishing)
+            bot.Add(_info.Attack ? new("bag", "Sadece topla", Then(_attack)) : new("sword", "Saldırıyı aç", Then(_attack), ButtonKind.Amber));
+        if (!market)
+            bot.Add(new("list", _itemsOpen ? "Eşyaları kapat" : "Bu tur eşyalar", () => { _itemsOpen = !_itemsOpen; _itemsScroll = 0; Pull(true); }));
+
+        var window = new List<MiniMenu.Item>
+        {
+            new(GameIsBig(_info) ? "layers" : "expand", GameIsBig(_info) ? "Oyunu küçült" : "Oyunu büyüt", Then(_fill)),
+            new("grid", "Hepsini diz", Then(_arrange)),
+            new("layers", "PARDUS panelini aç", Then(_big), ButtonKind.Ghost, Wide: true),
+        };
+
+        // Every PARDUS at once (the same lines as the big window's menu).
+        var all = WindowLayout.AllMenu();
+        var every = new List<MiniMenu.Item>();
+        string[] icons = ["play", "pause", "stop", "refresh"];
+        string[] names = ["Hepsini başlat", "Hepsini duraklat", "Hepsini durdur", "Hepsini güncelle"];
+        int k = 0;
+        foreach (var item in all.Items.OfType<ToolStripMenuItem>())
+        {
+            string text = item.Text ?? "";
+            int i = 0;
+            while (i < text.Length && !char.IsLetter(text[i]))
+                i++;
+            text = text[i..].Replace(" (kaldığı yerden devam)", "");
+            var menuItem = item;
+            // Short words (the group's title says "every PARDUS"); the menu's own text when there are more lines.
+            every.Add(new(icons[Math.Min(k, icons.Length - 1)], k < names.Length ? names[k] : text, () => menuItem.PerformClick()));
+            k++;
+        }
+        var groups = new List<MiniMenu.Group>
+        {
+            new("BU BOT", bot),
+            new("PENCERE", window),
+            new("BÜTÜN PARDUS'LAR", every),
+            new("", [new("x", "Bu PARDUS'u kapat", _close, ButtonKind.Quiet, Wide: true)]),
+        };
+        return groups;
     }
 
     /// <summary>The bar's tone: green running, amber busy elsewhere / paused, red trouble, grey stopped.</summary>
@@ -433,7 +439,7 @@ internal sealed class MiniBar : Form
         foreach (int kind in Kinds)
         {
             // Start: gold (the main action); stop: red; a list or menu that is open: gold-tinted; the rest quiet.
-            bool open = kind == ItemsButton && _itemsOpen || kind == MenuButton && _menu.Visible;
+            bool open = kind == ItemsButton && _itemsOpen || kind == MenuButton && MenuOpen;
             string text = kind switch
             {
                 StartButton => startText,
@@ -537,6 +543,14 @@ internal sealed class MiniBar : Form
     protected override void OnMouseClick(MouseEventArgs e)
     {
         base.OnMouseClick(e);
+        if (e.Button == MouseButtons.Right)
+        {
+            if (MenuOpen)
+                _panel!.Close();
+            else
+                OpenMenu(Cursor.Position);
+            return;
+        }
         if (e.Button != MouseButtons.Left)
             return;
         switch (HitButton(e.Location))
@@ -557,9 +571,10 @@ internal sealed class MiniBar : Form
             case ArrangeButton: _arrange(); break;
             case MenuButton:
                 // A click with the menu open (it closed on that same click): stays closed.
-                if (_menu.Visible || DateTime.Now - _menuClosedAt < TimeSpan.FromMilliseconds(350))
-                    _menu.Close();
-                else
+                // A click with the panel open (it closed on that same click): stays closed.
+                if (MenuOpen)
+                    _panel!.Close();
+                else if (DateTime.Now - _panelClosedAt > TimeSpan.FromMilliseconds(300))
                     OpenMenu();
                 return;
         }

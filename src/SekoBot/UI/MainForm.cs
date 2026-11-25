@@ -56,12 +56,13 @@ internal sealed partial class MainForm : Form
     private readonly NavButton[] _logFilters;
     private Rectangle _attackInPreview;
     private readonly Panel _marketDash, _fishingDash;
-    private readonly Label[] _fBins;
-    private readonly Panel[] _fBinTiles;
+    private readonly PullChart _fChart;
+    private readonly Card _mCard;
     private readonly Card _logCard, _itemsCard;
     private Rectangle _dashBottomFarm, _logCardFarm, _logFarm;
-    private readonly Label _mState, _mRound, _mRead, _mDeals, _mWanted, _mShops, _mItems, _mOldest, _mNever;
-    private readonly Label _fState, _fTime, _fCasts, _fPulled, _fHooked, _fMissed;
+    private readonly Label _mState, _fState;
+    private readonly StatCard _mRound, _mRead, _mDeals, _mWanted, _mShops, _mItems, _mOldest, _mNever;
+    private readonly StatCard _fTime, _fCasts, _fPulled, _fHooked, _fMissed;
     private readonly ListBox _fPulls;
     private readonly ListBox _mFinds;
     private DateTime _marketDashAt;
@@ -952,24 +953,29 @@ internal sealed partial class MainForm : Form
         // ── PAZAR mode: the market watch at a glance; the full search in the market window ──
         _marketDash = new Panel { Bounds = new Rectangle(12, B + 108, 1156, 400), BackColor = Theme.Background, Visible = false };
         Controls.Add(_marketDash);
-        var watchCard = new Card { Bounds = new Rectangle(0, 0, 760, 400) };
+        var watchCard = _mCard = new Card { Bounds = new Rectangle(0, 0, 760, 480), Caption = "PAZAR TAKİBİ" };
         _marketDash.Controls.Add(watchCard);
-        Theme.Label(watchCard, "PAZAR TAKİBİ", new Rectangle(16, 8, 300, 20), 8f, Theme.Accent, FontStyle.Bold);
-        _mState = Theme.Label(watchCard, "", new Rectangle(16, 30, 728, 40), 10f, Theme.Text, FontStyle.Bold, ContentAlignment.TopLeft);
-        const int mw = 173;
-        _mRound = Tile(watchCard, "TUR", 16, 76, width: mw);
-        _mRead = Tile(watchCard, "OKUNAN", 16 + (mw + 12), 76, width: mw);
-        _mDeals = Tile(watchCard, "KELEPİR", 16 + 2 * (mw + 12), 76, width: mw);
-        _mWanted = Tile(watchCard, "ARANAN", 16 + 3 * (mw + 12), 76, width: mw);
-        _mShops = Tile(watchCard, "DÜKKAN", 16, 142, width: mw);
-        _mItems = Tile(watchCard, "ÜRÜN", 16 + (mw + 12), 142, width: mw);
-        _mOldest = Tile(watchCard, "EN ESKİ", 16 + 2 * (mw + 12), 142, small: true, width: mw);
-        _mNever = Tile(watchCard, "OKUNMAMIŞ", 16 + 3 * (mw + 12), 142, width: mw);
-        var mReport = Theme.Button(watchCard, "📊  Rapor", new Rectangle(16, 216, 130, 30), Theme.Secondary, Theme.SecondaryHover);
+        _mState = Theme.Label(watchCard, "", new Rectangle(18, 40, 724, 34), 10.5f, Theme.Text, FontStyle.Bold);
+        StatCard Number(Card card, string caption, int x, int y, int width)
+        {
+            var stat = new StatCard { Caption = caption, Bounds = new Rectangle(x, y, width, 92), Font = new Font("Segoe UI", 14f, FontStyle.Bold) };
+            card.Controls.Add(stat);
+            return stat;
+        }
+        const int mw = 172;
+        _mRound = Number(watchCard, "TUR", 18, 82, mw);
+        _mRead = Number(watchCard, "OKUNAN DÜKKAN", 18 + (mw + 12), 82, mw);
+        _mDeals = Number(watchCard, "KELEPİR", 18 + 2 * (mw + 12), 82, mw);
+        _mWanted = Number(watchCard, "ARANAN", 18 + 3 * (mw + 12), 82, mw);
+        _mShops = Number(watchCard, "DÜKKAN", 18, 184, mw);
+        _mItems = Number(watchCard, "ÜRÜN", 18 + (mw + 12), 184, mw);
+        _mOldest = Number(watchCard, "EN ESKİ OKUMA", 18 + 2 * (mw + 12), 184, mw);
+        _mNever = Number(watchCard, "OKUNMAMIŞ", 18 + 3 * (mw + 12), 184, mw);
+        var mReport = Theme.Button(watchCard, "📊  Rapor", new Rectangle(18, 290, 140, 34), Theme.Secondary, Theme.SecondaryHover);
         mReport.Click += (_, _) => { if (BotEngine.LatestReport is { } r) OpenFile(r); else WriteLog("Henüz pazar listesi yok."); };
-        var mExcel = Theme.Button(watchCard, "📄  Excel", new Rectangle(152, 216, 110, 30), Theme.Secondary, Theme.SecondaryHover);
+        var mExcel = Theme.Button(watchCard, "📄  Excel", new Rectangle(166, 290, 120, 34), Theme.Secondary, Theme.SecondaryHover);
         mExcel.Click += (_, _) => { if (BotEngine.LatestReport is { } r && File.Exists(Path.ChangeExtension(r, ".csv"))) OpenFile(Path.ChangeExtension(r, ".csv")); else WriteLog("Henüz pazar listesi yok."); };
-        var mGuide = Theme.Button(watchCard, "📚  Efsun rehberi", new Rectangle(268, 216, 150, 30), Theme.Secondary, Theme.SecondaryHover);
+        var mGuide = Theme.Button(watchCard, "📚  Efsun rehberi", new Rectangle(294, 290, 170, 34), Theme.Secondary, Theme.SecondaryHover);
         mGuide.Click += (_, _) =>
         {
             try
@@ -981,76 +987,73 @@ internal sealed partial class MainForm : Form
             }
             catch (IOException ex) { WriteLog("Efsun rehberi yazılamadı: " + ex.Message); }
         };
-        var mFolder = Theme.Button(watchCard, "📂  Klasör", new Rectangle(424, 216, 110, 30), Theme.Secondary, Theme.SecondaryHover);
+        var mFolder = Theme.Button(watchCard, "📂  Klasör", new Rectangle(472, 290, 120, 34), Theme.Secondary, Theme.SecondaryHover);
         mFolder.Click += (_, _) => { Directory.CreateDirectory(BotEngine.MarketFolder); OpenFile(BotEngine.MarketFolder); };
-        Theme.Label(watchCard, "AYARLAR", new Rectangle(16, 258, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
-        NumberRow(watchCard, "Yeniden okuma (dk)", 16, 280, 5, 1440, () => _profile.MarketRefreshMinutes, 0, 5,
+        watchCard.Controls.Add(new Panel { Bounds = new Rectangle(18, 336, 724, 1), BackColor = Theme.Border });
+        Theme.Label(watchCard, "AYARLAR", new Rectangle(18, 344, 300, 20), 7.5f, Theme.Faint, FontStyle.Bold);
+        NumberRow(watchCard, "Yeniden okuma (dk)", 18, 370, 5, 1440, () => _profile.MarketRefreshMinutes, 0, 5,
             v => _profile.MarketRefreshMinutes = (int)v);
-        NumberRow(watchCard, "Kelepir eşiği (% ucuz)", 16, 312, 10, 90, () => _profile.MarketDealPercent, 0, 5,
+        NumberRow(watchCard, "Kelepir eşiği (% ucuz)", 18, 406, 10, 90, () => _profile.MarketDealPercent, 0, 5,
             v => _profile.MarketDealPercent = (int)v);
-        Check(watchCard, "Kelepirleri bildir", 330, 312, 200, () => _profile.MarketDeals, v => _profile.MarketDeals = v);
-        Check(watchCard, "Bulunanları Telegram'a yaz", 330, 280, 220, () => _profile.MarketNotify, v => _profile.MarketNotify = v);
-        Check(watchCard, "Kamerayı kuş bakışına al", 16, 344, 300, () => _profile.MarketBirdsEye, v => _profile.MarketBirdsEye = v);
-        Theme.Label(watchCard, "Hiçbir şey satın alınmaz; almak senin elinde.", new Rectangle(330, 344, 414, 26), 8.5f, Theme.Muted);
+        Check(watchCard, "Bulunanları Telegram'a yaz", 400, 370, 340, () => _profile.MarketNotify, v => _profile.MarketNotify = v);
+        Check(watchCard, "Kelepirleri bildir", 400, 406, 340, () => _profile.MarketDeals, v => _profile.MarketDeals = v);
+        Check(watchCard, "Kamerayı kuş bakışına al", 18, 442, 360, () => _profile.MarketBirdsEye, v => _profile.MarketBirdsEye = v);
+        Theme.Label(watchCard, "Hiçbir şey satın alınmaz; almak senin elinde.", new Rectangle(400, 442, 342, 26), 8.5f, Theme.Faint);
 
-        var findsCard = new Card { Bounds = new Rectangle(770, 0, 386, 400), Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left };
+        var findsCard = new Card { Bounds = new Rectangle(770, 0, 386, 480), Caption = "SON BULUNANLAR", CaptionRight = "aranan · kelepir", Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left };
         _marketDash.Controls.Add(findsCard);
-        Theme.Label(findsCard, "SON BULUNANLAR (aranan · kelepir)", new Rectangle(16, 8, 354, 20), 8f, Theme.Accent, FontStyle.Bold);
         _mFinds = new ListBox
         {
-            Bounds = new Rectangle(14, 32, 358, 354), BackColor = Theme.Inset, ForeColor = Theme.Text, BorderStyle = BorderStyle.None,
-            Font = new Font("Segoe UI", 8.5f), IntegralHeight = false, HorizontalScrollbar = true,
+            Bounds = new Rectangle(14, 42, 358, 424), BackColor = Theme.Surface, ForeColor = Theme.Text, BorderStyle = BorderStyle.None,
+            Font = new Font("Segoe UI", 9f), IntegralHeight = false,
             Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
         };
+        Rows.Style(_mFinds);
         findsCard.Controls.Add(_mFinds);
         Theme.DarkScrollBars(_mFinds);
 
         // ── BALIKÇILIK mode: cast, wait for the bite, pull; the picture question is the player's ──
         _fishingDash = new Panel { Bounds = new Rectangle(12, B + 108, 1156, 400), BackColor = Theme.Background, Visible = false };
         Controls.Add(_fishingDash);
-        var fishCard = new Card { Bounds = new Rectangle(0, 0, 760, 400) };
+        var fishCard = new Card { Bounds = new Rectangle(0, 0, 760, 500), Caption = "BALIK TUTMA" };
         _fishingDash.Controls.Add(fishCard);
-        var pullsCard = new Card { Bounds = new Rectangle(770, 0, 386, 400), Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left };
+        var pullsCard = new Card { Bounds = new Rectangle(770, 0, 386, 500), Caption = "SON ÇEKİŞLER", CaptionRight = "sonuç · balondan sonra", Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left };
         _fishingDash.Controls.Add(pullsCard);
-        Theme.Label(pullsCard, "SON ÇEKİŞLER (sonuç · balondan sonra)", new Rectangle(16, 8, 354, 20), 8f, Theme.Accent, FontStyle.Bold);
         _fPulls = new ListBox
         {
-            Bounds = new Rectangle(14, 32, 358, 354), BackColor = Theme.Inset, ForeColor = Theme.Text, BorderStyle = BorderStyle.None,
-            Font = new Font("Segoe UI", 8.5f), IntegralHeight = false, HorizontalScrollbar = true,
+            Bounds = new Rectangle(14, 42, 358, 444), BackColor = Theme.Surface, ForeColor = Theme.Text, BorderStyle = BorderStyle.None,
+            Font = new Font("Segoe UI", 9f), IntegralHeight = false,
             Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
         };
+        Rows.Style(_fPulls);
         pullsCard.Controls.Add(_fPulls);
         Theme.DarkScrollBars(_fPulls);
-        Theme.Label(fishCard, "BALIK TUTMA", new Rectangle(16, 8, 300, 20), 8f, Theme.Accent, FontStyle.Bold);
-        _fState = Theme.Label(fishCard, "", new Rectangle(16, 30, 728, 40), 10f, Theme.Text, FontStyle.Bold, ContentAlignment.TopLeft);
-        const int fw = 136;
-        _fTime = Tile(fishCard, "SÜRE", 16, 76, small: true, width: fw);
-        _fCasts = Tile(fishCard, "YAKALANAN", 16 + (fw + 12), 76, width: fw);
-        _fHooked = Tile(fishCard, "BAŞARI", 16 + 2 * (fw + 12), 76, width: fw);
-        _fMissed = Tile(fishCard, "KAÇAN", 16 + 3 * (fw + 12), 76, width: fw);
-        _fPulled = Tile(fishCard, "SON ÇEKİŞ", 16 + 4 * (fw + 12), 76, small: true, width: fw);
-        Theme.Label(fishCard, "AYARLAR", new Rectangle(16, 150, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
-        Theme.Label(fishCard, "Yem tuşu (kısayol)", new Rectangle(16, 174, 150, 26), 9f, Theme.Muted);
-        var baitKey = new KeyPicker { Bounds = new Rectangle(170, 174, 104, 26), Key = _profile.FishBaitKey };
+        _fState = Theme.Label(fishCard, "", new Rectangle(18, 40, 724, 34), 10.5f, Theme.Text, FontStyle.Bold);
+        const int fw = 135;
+        _fTime = Number(fishCard, "SÜRE", 18, 82, fw);
+        _fCasts = Number(fishCard, "YAKALANAN", 18 + (fw + 12), 82, fw);
+        _fHooked = Number(fishCard, "BAŞARI", 18 + 2 * (fw + 12), 82, fw);
+        _fMissed = Number(fishCard, "KAÇAN", 18 + 3 * (fw + 12), 82, fw);
+        _fPulled = Number(fishCard, "SON ÇEKİŞ", 18 + 4 * (fw + 12), 82, fw + 1);
+        fishCard.Controls.Add(new Panel { Bounds = new Rectangle(18, 186, 724, 1), BackColor = Theme.Border });
+        Theme.Label(fishCard, "AYARLAR", new Rectangle(18, 194, 300, 20), 7.5f, Theme.Faint, FontStyle.Bold);
+        Theme.Label(fishCard, "Yem tuşu", new Rectangle(18, 218, 110, 28), 9f, Theme.Muted);
+        var baitKey = new KeyPicker { Bounds = new Rectangle(130, 218, 104, 28), Key = _profile.FishBaitKey };
         baitKey.KeyChanged += key => { _profile.FishBaitKey = key; SaveProfile(); WriteLog($"Yem tuşu: {KeyPicker.Name(key)}"); };
         fishCard.Controls.Add(baitKey);
         Theme.Label(fishCard, "Her atıştan önce bu tuşa basılıp yem takılır (yemi kısayola koy).",
-            new Rectangle(284, 174, 460, 26), 8.5f, Theme.Muted);
-        Check(fishCard, "Resimlerden düz olanı bot seçsin", 16, 208, 300, () => _profile.FishAutoPick, v => _profile.FishAutoPick = v);
-        Check(fishCard, "Seçemezse Telegram'a yaz", 330, 208, 300, () => _profile.FishNotify, v => _profile.FishNotify = v);
-        Theme.Label(fishCard, "ÇEKİŞ SÜRESİNE GÖRE BAŞARI (balondan Space'e kadar geçen süre · tüm kayıtlar)", new Rectangle(16, 246, 728, 18), 8f, Theme.Accent, FontStyle.Bold);
-        int bins = FishPulls.Edges.Length + 1, bw = (728 - (bins - 1) * 8) / bins;
-        _fBins = new Label[bins];
-        _fBinTiles = new Panel[bins];
-        for (int i = 0; i < bins; i++)
-        {
-            _fBins[i] = Tile(fishCard, "", 16 + i * (bw + 8), 268, small: true, width: bw);
-            _fBinTiles[i] = (Panel)_fBins[i].Parent!;
-        }
+            new Rectangle(250, 218, 492, 28), 8.5f, Theme.Faint);
+        Check(fishCard, "Resimlerden düz olanı bot seçsin", 18, 254, 340, () => _profile.FishAutoPick, v => _profile.FishAutoPick = v);
+        Check(fishCard, "Seçemezse Telegram'a yaz", 400, 254, 340, () => _profile.FishNotify, v => _profile.FishNotify = v);
+        fishCard.Controls.Add(new Panel { Bounds = new Rectangle(18, 292, 724, 1), BackColor = Theme.Border });
+        Theme.Label(fishCard, "ÇEKİŞ SÜRESİNE GÖRE BAŞARI", new Rectangle(18, 300, 400, 20), 7.5f, Theme.Faint, FontStyle.Bold);
+        Theme.Label(fishCard, "balondan Space'e kadar geçen süre · tüm kayıtlar", new Rectangle(400, 300, 342, 20), 8f, Theme.Faint, FontStyle.Regular, ContentAlignment.MiddleRight);
+        _fChart = new PullChart { Bounds = new Rectangle(18, 324, 724, 118), Font = new Font("Segoe UI", 8.5f) };
+        fishCard.Controls.Add(_fChart);
         Theme.Label(fishCard,
-            "Nasıl: oltayı kuşan, yemi Yem tuşuna koy, suya dönük dur ve BALIK TUT'a bas. Bot yemi takar, atar, balon çıkınca çeker,\n" +
-            "4 resimden düz olanı seçer. Yeşil kutu şimdiye kadar en çok balık getiren süre; her çekiş balik-cekis.csv dosyasına yazılır.",
-            new Rectangle(16, 336, 728, 52), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+            "Nasıl: oltayı kuşan, yemi Yem tuşuna koy, suya dönük dur ve BALIK TUT'a bas. Bot yemi takar, atar, balon çıkınca çeker, " +
+            "4 resimden düz olanı seçer. Altın sütun şimdiye kadar en çok balık getiren süre; her çekiş balik-cekis.csv dosyasına yazılır.",
+            new Rectangle(18, 448, 724, 44), 8.5f, Theme.Faint, FontStyle.Regular, ContentAlignment.TopLeft);
 
         // The pages as tall as their card; the explanations under the settings.
         foreach (var page in _tabPages)
@@ -1241,17 +1244,18 @@ internal sealed partial class MainForm : Form
             : scanning ? engine.MarketStatus
             : $"Takip kapalı. Karakter pazar haritasındayken \"🔁 SÜREKLİ TAKİP\"e bas ({StartKey}).";
         _mState.ForeColor = watching ? Theme.Green : scanning ? Theme.Yellow : Theme.Muted;
+        _mCard.CaptionRight = MarketServers.Current + " sunucusu";
         var counts = engine?.MarketCounts ?? default;
-        _mRound.Text = scanning && watching ? counts.Round.ToString() : "—";
-        _mRead.Text = counts.Read.ToString("N0");
-        _mDeals.Text = counts.Deals.ToString("N0");
-        _mWanted.Text = counts.Wanted.ToString("N0");
+        _mRound.Show(scanning && watching ? counts.Round.ToString() : "—");
+        _mRead.Show(counts.Read.ToString("N0"));
+        _mDeals.Show(counts.Deals.ToString("N0"));
+        _mWanted.Show(counts.Wanted.ToString("N0"));
         var book = engine?.CurrentMarket();
         var (onMap, never) = book?.Coverage() ?? (0, 0);
-        _mShops.Text = onMap > 0 ? onMap.ToString("N0") : book != null ? book.Shops.ToString("N0") : "—";
-        _mItems.Text = book != null ? book.Items.ToString("N0") : "—";
-        _mNever.Text = onMap > 0 ? never.ToString("N0") : "—";
-        _mOldest.Text = book?.OldestRead() is DateTime oldest ? Ago(oldest) : "—";
+        _mShops.Show(onMap > 0 ? onMap.ToString("N0") : book != null ? book.Shops.ToString("N0") : "—");
+        _mItems.Show(book != null ? book.Items.ToString("N0") : "—");
+        _mNever.Show(onMap > 0 ? never.ToString("N0") : "—");
+        _mOldest.Show(book?.OldestRead() is DateTime oldest ? Ago(oldest) : "—");
         var finds = engine?.MarketFinds() ?? [];
         if (finds.Count == 0 && _mFinds.Items.Count == 0 || finds.Count > 0 && (finds.Count != _mFinds.Items.Count || !Equals(_mFinds.Items[0], finds[0])))
         {
@@ -1280,20 +1284,14 @@ internal sealed partial class MainForm : Form
             : $"Kapalı. Oltayı kuşan, suya dönük dur, sonra BALIK TUT'a bas ({StartKey}).";
         _fState.ForeColor = !fishing ? Theme.Muted : _fState.Text.Contains("takıldı") ? Theme.Yellow : Theme.Green;
         var (casts, _, _, missed, caught) = engine?.FishCounts ?? default;
-        _fTime.Text = engine is { } fe && (fe.Fishing || fe.FishingPaused || fe.FishingTime > TimeSpan.Zero) ? fe.FishingTime.ToString(@"hh\:mm\:ss") : "—";
-        _fCasts.Text = $"{caught:N0}/{casts:N0}";
-        _fHooked.Text = casts > 0 ? $"%{100.0 * caught / casts:0}" : "—";
-        _fMissed.Text = missed.ToString("N0");
-        _fPulled.Text = engine?.LastPullMs is int ms and > 0 ? $"{ms / 1000.0:0.00} sn" : "—";
+        _fTime.Show(engine is { } fe && (fe.Fishing || fe.FishingPaused || fe.FishingTime > TimeSpan.Zero) ? fe.FishingTime.ToString(@"hh\:mm\:ss") : "—");
+        _fCasts.Show($"{caught:N0}/{casts:N0}");
+        _fHooked.Show(casts > 0 ? $"%{100.0 * caught / casts:0}" : "—");
+        _fMissed.Show(missed.ToString("N0"));
+        _fPulled.Show(engine?.LastPullMs is int ms and > 0 ? $"{ms / 1000.0:0.00} sn" : "—");
         var binsNow = engine?.PullBins() ?? FishPulls.Bins([]);
         var best = binsNow.Where(b => b.Pulls >= 5).OrderByDescending(b => b.Rate).FirstOrDefault();
-        for (int i = 0; i < _fBins.Length && i < binsNow.Count; i++)
-        {
-            var b = binsNow[i];
-            ((Label)_fBinTiles[i].Controls[0]).Text = b.Name;
-            _fBins[i].Text = b.Pulls > 0 ? $"%{b.Rate * 100:0} · {b.Caught}/{b.Pulls}" : "—";
-            _fBins[i].ForeColor = b == best ? Theme.Green : Theme.Text;
-        }
+        _fChart.Show([.. binsNow.Select(b => (b.Name, b.Rate, b.Caught, b.Pulls))], best == null ? -1 : binsNow.IndexOf(best));
         var pulls = engine?.FishLog() ?? [];
         if (pulls.Count == 0 && _fPulls.Items.Count == 0 || pulls.Count > 0 && (pulls.Count != _fPulls.Items.Count || !Equals(_fPulls.Items[0], pulls[0])))
         {

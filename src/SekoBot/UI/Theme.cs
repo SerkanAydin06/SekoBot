@@ -365,13 +365,13 @@ internal sealed class KeyPicker : Button
 
     public KeyPicker()
     {
-        BackColor = Theme.Inset;
+        BackColor = Theme.Secondary;
         ForeColor = Theme.Text;
         Font = new Font("Segoe UI", 9f, FontStyle.Bold);
         FlatStyle = FlatStyle.Flat;
         Cursor = Cursors.Hand;
         TabStop = false;
-        FlatAppearance.BorderColor = Theme.Border;
+        FlatAppearance.BorderColor = Theme.BorderStrong;
         FlatAppearance.MouseOverBackColor = Theme.SecondaryHover;
     }
 
@@ -408,6 +408,7 @@ internal sealed class KeyPicker : Button
         _waiting = true;
         Text = "Tuşa bas…";
         BackColor = Theme.Primary;
+        ForeColor = Theme.OnGold;
         Focus();
     }
 
@@ -427,7 +428,8 @@ internal sealed class KeyPicker : Button
         e.Handled = e.SuppressKeyPress = true;
         _swallowUp = true;
         _waiting = false;
-        BackColor = Theme.Inset;
+        BackColor = Theme.Secondary;
+        ForeColor = Theme.Text;
         Key = e.KeyCode;
         KeyChanged?.Invoke(e.KeyCode);
     }
@@ -448,7 +450,8 @@ internal sealed class KeyPicker : Button
         base.OnLostFocus(e);
         if (!_waiting) return;
         _waiting = false;
-        BackColor = Theme.Inset;
+        BackColor = Theme.Secondary;
+        ForeColor = Theme.Text;
         Text = Name(_key);
     }
 }
