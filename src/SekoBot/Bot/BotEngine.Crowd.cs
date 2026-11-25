@@ -24,7 +24,7 @@ internal sealed partial class BotEngine
     internal static readonly TimeSpan PlaceFresh = TimeSpan.FromSeconds(20);
 
     /// <summary>Where one of our bots is (what each SekoBot writes for the others).</summary>
-    internal sealed record BotPlace(int Number, string Character, string Map, int Channel, double X, double Y, bool Farming, DateTime At);
+    internal sealed record BotPlace(int Number, string Character, string Map, int Channel, double X, double Y, bool Farming, DateTime At, string Server = "");
 
     private DateTime _placeWrittenAt = DateTime.MinValue, _channelReadAt = DateTime.MinValue, _crowdSince = DateTime.MinValue;
     private DateTime _lastChannelChange = DateTime.MinValue;
@@ -50,7 +50,7 @@ internal sealed partial class BotEngine
     /// <paramref name="me"/> should move.
     /// </summary>
     internal static bool ShouldMove(BotPlace me, IEnumerable<BotPlace> others) =>
-        others.Any(o => o.Number < me.Number && o.Farming && o.Map == me.Map && o.Channel == me.Channel && o.Channel > 0
+        others.Any(o => o.Number < me.Number && o.Farming && o.Server == me.Server && o.Map == me.Map && o.Channel == me.Channel && o.Channel > 0
                         && Math.Sqrt((o.X - me.X) * (o.X - me.X) + (o.Y - me.Y) * (o.Y - me.Y)) <= SamePlace);
 
     /// <summary>Inside <see cref="_botGate"/>: the place shared, a crowd of ours noticed; the actions when this bot moves, else null.</summary>
@@ -78,7 +78,7 @@ internal sealed partial class BotEngine
         if (now - _placeWrittenAt < TimeSpan.FromSeconds(5))
             return null;
         _placeWrittenAt = now;
-        var me = new BotPlace(SekoBot.Instance.Number, CharacterName, world.MapName, _myChannel, world.Player.X, world.Player.Y, p.Attack, now.ToUniversalTime());
+        var me = new BotPlace(SekoBot.Instance.Number, CharacterName, world.MapName, _myChannel, world.Player.X, world.Player.Y, p.Attack, now.ToUniversalTime(), world.Server);
         WritePlace(me);
         if (!p.CrowdGuard || !p.Attack || _myChannel == 0)
             return null;
@@ -98,7 +98,7 @@ internal sealed partial class BotEngine
         if (state.Dead || _selling || _tidying || _cleaner.Active || _brain.Traveling || state.Attackers.Count > 0 || _channelSince != null)
             return null;
         _channelAvoid.Clear();
-        string with = string.Join(", ", others.Where(o => o.Number < me.Number && o.Map == me.Map && o.Channel == me.Channel).Select(o => o.Character));
+        string with = string.Join(", ", others.Where(o => o.Number < me.Number && o.Server == me.Server && o.Map == me.Map && o.Channel == me.Channel).Select(o => o.Character));
         _log($"👥 Bizim botumuz ({with}) aynı yerde, aynı kanalda ({me.Channel}); o kalıyor, bu bot başka kanala geçiyor.");
         _crowdSince = DateTime.MinValue;
         return StartChannelChange(state, p, now);

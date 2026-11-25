@@ -61,6 +61,12 @@ internal sealed partial class BotEngine
                 _searchLogged = true;
                 _log("Oyun güncellenmiş: bellekteki başlangıç noktaları kendiliğinden yeniden bulundu ✓");
             }
+            // Another game server than before: its own market lists (prices differ between servers).
+            if (snapshot is { Server.Length: > 0 } && MarketServers.Set(snapshot.Server))
+            {
+                ReleaseMarket(evenScanning: true);
+                _log($"🌐 Sunucu: {snapshot.Server}. Pazar bilgileri bu sunucunun klasöründen ({MarketFolder}).");
+            }
             Volatile.Write(ref _snapshot, snapshot);
             return snapshot;
         }

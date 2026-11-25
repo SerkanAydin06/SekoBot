@@ -398,7 +398,7 @@ internal sealed record WorldSnapshot(Vec3 Player, CameraView? Camera, IReadOnlyL
     IReadOnlyList<DeadMob>? DeadMobs = null, CharacterProgress? Progress = null, IReadOnlyList<OtherPlayer>? Players = null,
     IReadOnlyList<GroundItem>? Drops = null, bool InSafeZone = false, IReadOnlyList<string>? OpenWindows = null,
     double? ReviveIn = null, IReadOnlyList<SkillInfo>? Skills = null, double AttackDistance = 0, int AttackPower = 0,
-    bool Stunned = false, IReadOnlyList<double?>? SkillWaits = null, IReadOnlyList<TownNpc>? TownNpcs = null)
+    bool Stunned = false, IReadOnlyList<double?>? SkillWaits = null, IReadOnlyList<TownNpc>? TownNpcs = null, string Server = "")
 {
     /// <summary>Dead, and "Burada yeniden başla" can be clicked.</summary>
     public bool ReviveReady => Dead && ReviveIn is <= 0;
@@ -448,6 +448,7 @@ internal sealed partial class GameWorldReader : IDisposable
     [
         ("m2data_C", "gm", 0x1F8),
         ("m2data_C", "loader", 0x1188),
+        ("m2data_C", "serverName", 0x1688),
         ("m2data_C", "selectedActor", 0x1C0),
         ("loader", "charData.HP", 0x770 + 0x34),
         ("loader", "charData.SP", 0x770 + 0x3C),
@@ -697,6 +698,9 @@ internal sealed partial class GameWorldReader : IDisposable
         }
     }
 
+    private string _server = "";
+    private DateTime _serverReadAt;
+
     private WorldSnapshot? ReadCore()
     {
         if (!Locate())
@@ -727,6 +731,12 @@ internal sealed partial class GameWorldReader : IDisposable
             return null;
         }
         string mapName = ReadFString(gm + Offset(gmClass, "gameManager", "mapname"), 64);
+        // The game server ("Tuva", "Yakamoz"): read now and then (it changes only through the login screen).
+        if (_server.Length == 0 || DateTime.UtcNow - _serverReadAt > TimeSpan.FromSeconds(30))
+        {
+            _serverReadAt = DateTime.UtcNow;
+            _server = ReadFString(instance + Offset(instanceClass, "m2data_C", "serverName"), 32).Trim();
+        }
 
         _pawn = Pointer(gm + Offset(gmClass, "gameManager", "Player"));
         long level = Pointer(gm + ObjOuter);
@@ -851,7 +861,7 @@ internal sealed partial class GameWorldReader : IDisposable
         double? reviveIn = dead ? ReviveIn(Pointer(instance + Offset(instanceClass, "m2data_C", "uiMain"))) : null;
         var skillWaits = ReadSkillWaits(instance, instanceClass);
         return new WorldSnapshot(player, camera, mobs, players.Count, mapName, target, stats, dead, characterLevel, deadMobs, progress, players,
-            drops, safe, windows, reviveIn, _skills, attackDistance, attackPower, stunned, skillWaits, townNpcs);
+            drops, safe, windows, reviveIn, _skills, attackDistance, attackPower, stunned, skillWaits, townNpcs, _server);
     }
 
     private (CharacterStats? Stats, int Level) ReadStats(long loader)

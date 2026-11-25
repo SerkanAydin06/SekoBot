@@ -2292,6 +2292,10 @@ internal sealed partial class MainForm : Form
     private void UpdateStats()
     {
         UpdateRunItems();
+        // The game server in the header (market prices are kept per server).
+        if (_engine?.World is { Server.Length: > 0 } here && _connection.ForeColor == Theme.Green
+            && _connection.Text != $"●  {here.Server} sunucusu")
+            _connection.Text = $"●  {here.Server} sunucusu";
         string name = _engine?.CharacterName ?? "";
         UseCharacter(name);
         ShareStatus(name);

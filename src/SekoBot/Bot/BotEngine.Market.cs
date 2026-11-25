@@ -69,7 +69,9 @@ internal sealed partial class BotEngine
         : null;
 
     /// <summary>Market lists are kept here.</summary>
-    public static string MarketFolder => Path.Combine(ProfileStore.Directory, "pazar");
+    public static string MarketFolder => MarketServers.Folder;
+    /// <summary>The folder the list in memory was read from (written back there even when the server changed since).</summary>
+    private string? _marketFolder;
 
     /// <summary>A shop read this recently isn't opened again by a scan (with "skip fresh" on).</summary>
     internal static readonly TimeSpan MarketFreshFor = TimeSpan.FromHours(2);
@@ -95,7 +97,8 @@ internal sealed partial class BotEngine
             {
                 if (_market is { Changed: true } old)
                     SaveMarket(old);
-                _market = MarketBook.Load(MarketFolder, map);
+                _marketFolder = MarketFolder;
+                _market = MarketBook.Load(_marketFolder, map);
                 _history = MarketHistory.Load(MarketFolder, map);
                 _marketStatsAt = DateTime.MinValue;
                 lock (_worldGate)
@@ -110,19 +113,20 @@ internal sealed partial class BotEngine
     {
         try
         {
-            string report = book.Save(MarketFolder, MapReport.Outlines(_terrain.Of(book.Map)));
+            string folder = _market == book && _marketFolder != null ? _marketFolder : MarketFolder;
+            string report = book.Save(folder, MapReport.Outlines(_terrain.Of(book.Map)));
             // Today's prices into the price history.
             var history = _history;
             if (history != null && _market == book)
             {
                 history.Record(book.Stats(), DateTime.Now);
-                history.Save(MarketFolder, book.Map);
+                history.Save(folder, book.Map);
             }
             // The bonuses seen go into the bonus book (which bonus on which items, which values), shared by all SekoBots.
             var bonuses = BonusBook.Shared;
             bonuses.LearnFrom(book.ToJson());
             bonuses.Save();
-            File.WriteAllText(Path.Combine(MarketFolder, "efsun-rehberi.html"), bonuses.Html(), new System.Text.UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(folder, "efsun-rehberi.html"), bonuses.Html(), new System.Text.UTF8Encoding(false));
             return report;
         }
         catch (IOException ex)
@@ -136,9 +140,9 @@ internal sealed partial class BotEngine
     /// The market list out of memory (saved first if it changed): a farm or fishing bot doesn't need the
     /// tens of thousands of items in it (seen: some 45 MB per SekoBot). Loaded again when wanted.
     /// </summary>
-    public void ReleaseMarket()
+    public void ReleaseMarket(bool evenScanning = false)
     {
-        if (ScanningMarket)
+        if (ScanningMarket && !evenScanning)
             return;
         lock (_marketGate)
         {
