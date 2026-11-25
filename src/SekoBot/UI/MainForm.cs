@@ -838,7 +838,8 @@ internal sealed partial class MainForm : Form
 
         // Gelişmiş
         var advanced = _tabPages[7];
-        _dryRun = new CheckBox
+        advanced.AutoScroll = true;
+        _dryRun = new Toggle
         {
             Text = "Kuru çalışma (tuş göndermez)",
             Checked = false,
@@ -867,6 +868,25 @@ internal sealed partial class MainForm : Form
             try { Process.Start(new ProcessStartInfo(SessionLog.FilePath) { UseShellExecute = true }); }
             catch (Exception ex) { WriteLog("Rapor açılamadı: " + ex.Message); }
         };
+        // ── This computer: what the game sees, what Windows shows ──
+        advanced.Controls.Add(new Panel { Bounds = new Rectangle(0, 146, 918, 1), BackColor = Theme.Border });
+        Theme.Label(advanced, "BİLGİSAYAR", new Rectangle(0, 154, 300, 22), 7.5f, Theme.Faint, FontStyle.Bold);
+        var refreshMachine = Theme.Button(advanced, "↻  Yenile", new Rectangle(918 - 300, 150, 110, 30), Theme.Secondary, Theme.SecondaryHover);
+        var publicIp = Theme.Button(advanced, "🌐  Dış IP'yi göster", new Rectangle(918 - 182, 150, 182, 30), Theme.Secondary, Theme.SecondaryHover);
+        _machine = new InfoList { Bounds = new Rectangle(0, 186, 892, 300), Font = new Font("Segoe UI", 9f) };
+        Theme.DarkScrollBars(advanced);
+        advanced.Controls.Add(_machine);
+        refreshMachine.Click += (_, _) => ShowMachine();
+        publicIp.Click += async (_, _) =>
+        {
+            publicIp.Enabled = false;
+            _publicIp = "soruluyor…";
+            ShowMachine();
+            _publicIp = await MachineInfo.PublicIpAsync();
+            publicIp.Enabled = true;
+            ShowMachine();
+        };
+        ShowMachine();
         var openFolder = Theme.Button(advanced, "📁  Ayar klasörü", new Rectangle(150, 100, 142, 30), Theme.Secondary, Theme.SecondaryHover);
         openFolder.Click += (_, _) => OpenProfileFolder();
         // The mobs the bot sees in memory, listed in the log.
@@ -1488,6 +1508,9 @@ internal sealed partial class MainForm : Form
         }
 
         static void Mark(NavButton button, bool on) => button.Selected = on;
+        // The computer's details fresh each time the Gelişmiş page opens.
+        if (index == 7)
+            ShowMachine();
     }
 
     // ── Windows ──────────────────────────────────────────────────

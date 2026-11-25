@@ -27,6 +27,39 @@ internal sealed partial class GameWorldReader
         return null;
     }
 
+    /// <summary>What the game holds about this computer and its connection (gameManager.Mac, .ipLocGet; the server).</summary>
+    internal sealed record Machine(string Mac, string LocationIp, string Server, string ServerIp, string Version, string Language);
+
+    /// <summary>The game's own view of this computer (read only); null when not readable.</summary>
+    public Machine? ReadMachine()
+    {
+        try
+        {
+            if (!_located)
+                return null;
+            long instance = Pointer(_moduleBase + _gameInstance);
+            long instanceClass = Pointer(instance + ObjClass);
+            if (ClassName(instanceClass) != "m2data_C")
+                return null;
+            string Text(long obj, long cls, string className, string field, int max)
+            {
+                int at = Offset(cls, className, field);
+                return at > 0 ? ReadFString(obj + at, max).Trim() : "";
+            }
+            long gm = Pointer(instance + Offset(instanceClass, "m2data_C", "gm"));
+            long gmClass = MemoryReads.IsPointer(gm) ? Pointer(gm + ObjClass) : 0;
+            string mac = gmClass != 0 ? Text(gm, gmClass, "gameManager", "Mac", 40) : "";
+            string ip = gmClass != 0 ? Text(gm, gmClass, "gameManager", "ipLocGet", 64) : "";
+            return new Machine(mac, ip,
+                Text(instance, instanceClass, "m2data_C", "serverName", 32),
+                Text(instance, instanceClass, "m2data_C", "selectedServer.ip", 64),
+                Text(instance, instanceClass, "m2data_C", "serverSettings.Version", 32),
+                Text(instance, instanceClass, "m2data_C", "lang2", 16));
+        }
+        catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException or OverflowException or InvalidOperationException) { }
+        return null;
+    }
+
     /// <summary>"warrior", "ninja", "sura", "shaman" (or the class name as read); null when not readable.</summary>
     public string? ReadCharacterClass()
     {
