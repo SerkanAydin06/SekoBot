@@ -5,6 +5,9 @@ namespace SekoBot.Native;
 
 internal static class Win32
 {
+    [DllImport("dwmapi.dll")]
+    internal static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
+
     [StructLayout(LayoutKind.Sequential)]
     internal struct RECT
     {
