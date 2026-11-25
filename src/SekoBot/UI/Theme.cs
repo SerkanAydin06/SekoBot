@@ -84,17 +84,18 @@ internal static class Theme
 
     public static Button Button(Control parent, string text, Rectangle bounds, Color normal, Color hover)
     {
-        var button = new Button
+        var button = new ProButton
         {
+            FollowBackColor = true,
             Text = text,
             Bounds = bounds,
-            BackColor = normal,
             ForeColor = normal == Primary ? OnGold : Text,
             Font = new Font("Segoe UI", 9f, FontStyle.Bold),
             FlatStyle = FlatStyle.Flat,
             Cursor = Cursors.Hand,
             TabStop = false
         };
+        button.BackColor = normal;
         button.FlatAppearance.BorderSize = 0;
         button.FlatAppearance.MouseOverBackColor = hover;
         button.FlatAppearance.MouseDownBackColor = ControlPaint.Dark(hover, 0.1f);

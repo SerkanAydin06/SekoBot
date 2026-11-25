@@ -235,6 +235,22 @@ internal sealed class ProButton : Button
     }
 
     public ButtonKind Kind { get => _kind; set { _kind = value; Invalidate(); } }
+
+    /// <summary>The look picked from BackColor (the buttons made with Theme.Button, told their state by colour).</summary>
+    public bool FollowBackColor { get; set; }
+
+    protected override void OnBackColorChanged(EventArgs e)
+    {
+        base.OnBackColorChanged(e);
+        if (!FollowBackColor)
+            return;
+        int c = BackColor.ToArgb();
+        Kind = c == Theme.Primary.ToArgb() || c == Theme.PrimaryHover.ToArgb() ? ButtonKind.Gold
+             : c == Theme.Danger.ToArgb() || c == Theme.DangerHover.ToArgb() ? ButtonKind.Danger
+             : c == Theme.Surface.ToArgb() ? ButtonKind.Quiet
+             : c == Theme.Yellow.ToArgb() ? ButtonKind.Amber
+             : ButtonKind.Ghost;
+    }
     private ButtonKind _kind = ButtonKind.Ghost;
     public string Icon { get => _icon; set { _icon = value; Invalidate(); } }
     private string _icon = "";
@@ -509,9 +525,12 @@ internal sealed class Mark : Drawn
         g.FillEllipse(spot, r.X + r.Width * 0.7f - d / 2, r.Y + r.Height * 0.7f - d / 2, d, d);
         g.FillEllipse(spot, r.X + r.Width * 0.22f - d * 0.4f, r.Y + r.Height * 0.76f - d * 0.4f, d * 0.8f, d * 0.8f);
         g.FillEllipse(spot, r.X + r.Width * 0.78f - d * 0.35f, r.Y + r.Height * 0.26f - d * 0.35f, d * 0.7f, d * 0.7f);
-        using var font = new Font("Segoe UI", Math.Max(6f, r.Height * 0.42f), FontStyle.Bold, GraphicsUnit.Pixel);
-        TextRenderer.DrawText(g, "P", font, Rectangle.Round(r), Color.FromArgb(42, 26, 2),
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsTranslateTransform);
+        // Drawn with GDI+ (it follows the graphics' shift: the small bar draws itself lower with its item list open).
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+        using var font = new Font("Segoe UI", Math.Max(6f, r.Height * 0.5f), FontStyle.Bold, GraphicsUnit.Pixel);
+        using var ink = new SolidBrush(Color.FromArgb(42, 26, 2));
+        using var centre = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        g.DrawString("P", font, ink, new RectangleF(r.X, r.Y + r.Height * 0.03f, r.Width, r.Height), centre);
         g.Restore(saved);
     }
 }
@@ -745,5 +764,223 @@ internal sealed class DarkMenu : ToolStripProfessionalRenderer
         public override Color ImageMarginGradientEnd => Back;
         public override Color SeparatorDark => Theme.Border;
         public override Color SeparatorLight => Back;
+    }
+}
+
+/// <summary>An on / off switch with its text (the settings' check boxes).</summary>
+internal sealed class Toggle : CheckBox
+{
+    private bool _over;
+
+    public Toggle()
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+        Cursor = Cursors.Hand;
+        AutoSize = false;
+    }
+
+    protected override void OnMouseEnter(EventArgs e) { _over = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { _over = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnCheckedChanged(EventArgs e) { base.OnCheckedChanged(e); Invalidate(); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(Parent?.BackColor ?? Theme.Surface);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        // Small enough for the old check boxes' places (short words beside them).
+        float h = Math.Min(Height - 6, Font.Height * 0.9f), w = h * 1.7f, y = (Height - h) / 2f;
+        var track = new RectangleF(1, y, w, h);
+        using (var path = Theme.RoundRect(track, h / 2))
+        {
+            using var fill = new SolidBrush(Checked ? (_over ? Theme.PrimaryHover : Theme.Gold) : (_over ? Color.FromArgb(52, 62, 84) : Theme.BorderStrong));
+            g.FillPath(fill, path);
+        }
+        float inset = Math.Max(2, h * 0.16f), knob = h - 2 * inset;
+        float kx = Checked ? track.Right - knob - inset : track.X + inset;
+        using (var k = new SolidBrush(Checked ? Theme.OnGold : Color.FromArgb(201, 209, 222)))
+            g.FillEllipse(k, kx, y + inset, knob, knob);
+        int gap = (int)(w + h * 0.4f + 1);
+        var text = new Rectangle(gap, 0, Width - gap, Height);
+        TextRenderer.DrawText(g, Text, Font, text, Enabled ? (Checked ? Theme.Text : Theme.Muted) : Theme.Faint,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine);
+    }
+}
+
+/// <summary>A slider with its value in a small box at the right (drag, the mouse wheel or the arrow keys).</summary>
+internal sealed class Slider : Control
+{
+    private decimal _value;
+    private bool _dragging, _over;
+
+    public Slider()
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint |
+                 ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
+        Cursor = Cursors.Hand;
+        TabStop = true;
+    }
+
+    public decimal Minimum { get; set; }
+    public decimal Maximum { get; set; } = 100;
+    public decimal Step { get; set; } = 1;
+    public int Decimals { get; set; }
+    public event EventHandler? ValueChanged;
+
+    public decimal Value
+    {
+        get => _value;
+        set
+        {
+            decimal v = Math.Clamp(Step > 0 ? Minimum + Math.Round((value - Minimum) / Step) * Step : value, Minimum, Maximum);
+            if (v == _value)
+                return;
+            _value = v;
+            Invalidate();
+            ValueChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private int BoxWidth => (int)(Font.Height * 3.4f);
+    private RectangleF Track
+    {
+        get
+        {
+            float h = Math.Max(4, Font.Height * 0.3f);
+            float pad = Font.Height * 0.5f;
+            return new RectangleF(pad, (Height - h) / 2f, Width - BoxWidth - pad * 2.2f, h);
+        }
+    }
+
+    private void SetFromX(int x)
+    {
+        var t = Track;
+        double share = Math.Clamp((x - t.X) / Math.Max(1, t.Width), 0, 1);
+        Value = Minimum + (decimal)share * (Maximum - Minimum);
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        Focus();
+        if (e.Button == MouseButtons.Left && e.X < Width - BoxWidth)
+        {
+            _dragging = true;
+            Capture = true;
+            SetFromX(e.X);
+        }
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        if (_dragging)
+            SetFromX(e.X);
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e);
+        _dragging = false;
+        Capture = false;
+    }
+
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+        base.OnMouseWheel(e);
+        Value += Math.Sign(e.Delta) * Step;
+        if (e is HandledMouseEventArgs h)
+            h.Handled = true;
+    }
+
+    protected override bool IsInputKey(Keys keyData) => keyData is Keys.Left or Keys.Right or Keys.Up or Keys.Down || base.IsInputKey(keyData);
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.KeyCode is Keys.Right or Keys.Up) Value += Step;
+        if (e.KeyCode is Keys.Left or Keys.Down) Value -= Step;
+    }
+
+    protected override void OnMouseEnter(EventArgs e) { _over = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { _over = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
+    protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); Invalidate(); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(Parent?.BackColor ?? Theme.Surface);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        var t = Track;
+        using (var path = Theme.RoundRect(t, t.Height / 2))
+        {
+            using var back = new SolidBrush(Theme.Inset);
+            g.FillPath(back, path);
+            using var pen = new Pen(Theme.Border);
+            g.DrawPath(pen, path);
+        }
+        float share = Maximum > Minimum ? (float)((_value - Minimum) / (Maximum - Minimum)) : 0;
+        float x = t.X + t.Width * share;
+        if (x - t.X > 1)
+        {
+            using var path = Theme.RoundRect(t with { Width = x - t.X }, t.Height / 2);
+            using var fill = new SolidBrush(Theme.Gold);
+            g.FillPath(fill, path);
+        }
+        float knob = Font.Height * 0.95f;
+        using (var halo = new SolidBrush(Tones.Soft(Theme.Gold, _over || _dragging || Focused ? 90 : 55)))
+            g.FillEllipse(halo, x - knob * 0.85f, Height / 2f - knob * 0.85f, knob * 1.7f, knob * 1.7f);
+        using (var k = new SolidBrush(Color.White))
+            g.FillEllipse(k, x - knob / 2, Height / 2f - knob / 2, knob, knob);
+        var box = new RectangleF(Width - BoxWidth + 0.5f, 1.5f, BoxWidth - 1.5f, Height - 3);
+        using (var path = Theme.RoundRect(box, 5))
+        {
+            using var fill = new SolidBrush(Theme.Inset);
+            g.FillPath(fill, path);
+            using var pen = new Pen(Theme.Border);
+            g.DrawPath(pen, path);
+        }
+        using var font = new Font("Consolas", Math.Max(6f, Font.Size * 0.95f), FontStyle.Bold);
+        TextRenderer.DrawText(g, _value.ToString("N" + Decimals), font, Rectangle.Round(box), Theme.Text,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+    }
+}
+
+/// <summary>A rounded dark box round a text box (the native border is light and square).</summary>
+internal sealed class Field : Panel
+{
+    private readonly TextBox _box;
+
+    public Field(TextBox box)
+    {
+        _box = box;
+        DoubleBuffered = true;
+        BackColor = Theme.Inset;
+        SetStyle(ControlStyles.ResizeRedraw, true);
+        Controls.Add(box);
+        box.GotFocus += (_, _) => Invalidate();
+        box.LostFocus += (_, _) => Invalidate();
+        Cursor = Cursors.IBeam;
+        Click += (_, _) => box.Focus();
+    }
+
+    protected override void OnLayout(LayoutEventArgs levent)
+    {
+        base.OnLayout(levent);
+        int pad = Math.Max(4, Height / 4);
+        _box.Bounds = new Rectangle(pad + 2, (Height - _box.PreferredHeight) / 2, Width - 2 * pad - 4, _box.PreferredHeight);
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(Parent?.BackColor ?? Theme.Surface);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        using var path = Theme.RoundRect(new RectangleF(0.5f, 0.5f, Width - 1, Height - 1), Height * 0.22f);
+        using var fill = new SolidBrush(Theme.Inset);
+        g.FillPath(fill, path);
+        using var pen = new Pen(_box.Focused ? Tones.Soft(Theme.Gold, 160) : Theme.BorderStrong);
+        g.DrawPath(pen, path);
     }
 }

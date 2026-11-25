@@ -191,7 +191,8 @@ internal sealed partial class MainForm : Form
         var close = new IconButton { Icon = "x", Danger = true, Bounds = new Rectangle(1128, 12, 40, 40) };
         close.Click += (_, _) => Close();
         header.Controls.Add(close);
-        foreach (Control c in new Control[] { header, title, mark })
+        // Moved only by the mark and the name (the user: the rest of the strip showed the move cursor but didn't move).
+        foreach (Control c in new Control[] { title, mark })
         {
             c.MouseDown += DragWindow;
             c.Cursor = Cursors.SizeAll;
@@ -767,6 +768,8 @@ internal sealed partial class MainForm : Form
         Check(notify, "Telegram'a bildirim gönder (GM, ölüm, seviye, iksir bitti, bot durdu)", 0, 0, 600,
             () => _profile.TelegramEnabled, v => _profile.TelegramEnabled = v);
         var token = TextRow(notify, "Bot anahtarı", 0, 34, () => _profile.TelegramToken, v => _profile.TelegramToken = v.Trim(), 420);
+        // Hidden like a password (it gives control of the Telegram bot; seen in a screenshot it could be taken).
+        token.UseSystemPasswordChar = true;
         var chat = TextRow(notify, "Sohbet no", 0, 68, () => _profile.TelegramChatId, v => _profile.TelegramChatId = v.Trim(), 160);
         var findChat = Theme.Button(notify, "Sohbeti bul", new Rectangle(310, 68, 120, 26), Theme.Secondary, Theme.SecondaryHover);
         findChat.Click += async (_, _) =>
@@ -1049,6 +1052,12 @@ internal sealed partial class MainForm : Form
             "4 resimden düz olanı seçer. Yeşil kutu şimdiye kadar en çok balık getiren süre; her çekiş balik-cekis.csv dosyasına yazılır.",
             new Rectangle(16, 336, 728, 52), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
 
+        // The pages as tall as their card; the explanations under the settings.
+        foreach (var page in _tabPages)
+        {
+            page.Height = _settingsCard.Height - page.Top - 18;
+            StackHints(page);
+        }
         SelectTab(-1);
 
         // ── Timers & hotkeys ─────────────────────────────────────
@@ -1380,6 +1389,16 @@ internal sealed partial class MainForm : Form
         int decimals, decimal step, Action<double> apply)
     {
         Theme.Label(parent, caption, new Rectangle(x, y, 190, 26), 9f, Theme.Muted);
+        // A slider when the range is a few hundred steps at most; a number box for the big ones (yang).
+        if ((max - min) / step <= 400)
+        {
+            var slider = new Slider { Bounds = new Rectangle(x + 196, y, 164, 26), Minimum = min, Maximum = max, Step = step, Decimals = decimals,
+                                      Value = Math.Clamp((decimal)value(), min, max), Font = new Font("Segoe UI", 9f) };
+            slider.ValueChanged += (_, _) => { if (_reloading) return; apply((double)slider.Value); SaveProfile(); };
+            _reloads.Add(() => slider.Value = Math.Clamp((decimal)value(), min, max));
+            parent.Controls.Add(slider);
+            return;
+        }
         var number = Theme.Number(parent, new Rectangle(x + 196, y, 90, 26), min, max,
             Math.Clamp((decimal)value(), min, max), decimals, step);
         number.ValueChanged += (_, _) => { if (_reloading) return; apply((double)number.Value); SaveProfile(); };
@@ -1388,7 +1407,7 @@ internal sealed partial class MainForm : Form
 
     private void Check(Control parent, string text, int x, int y, int width, Func<bool> value, Action<bool> apply)
     {
-        var box = new CheckBox
+        var box = new Toggle
         {
             Text = text,
             Checked = value(),
@@ -1407,21 +1426,39 @@ internal sealed partial class MainForm : Form
         Theme.Label(parent, caption, new Rectangle(x, y, 130, 26), 9f, Theme.Muted);
         var box = new TextBox
         {
-            Bounds = new Rectangle(x + 134, y, width, 26),
             Text = value(),
             BackColor = Theme.Inset,
             ForeColor = Theme.Text,
-            BorderStyle = BorderStyle.FixedSingle,
+            BorderStyle = BorderStyle.None,
             Font = new Font("Segoe UI", 9f),
         };
         box.TextChanged += (_, _) => { if (_reloading) return; apply(box.Text); SaveProfile(); };
         _reloads.Add(() => box.Text = value());
-        parent.Controls.Add(box);
+        parent.Controls.Add(new Field(box) { Bounds = new Rectangle(x + 134, y - 1, width, 28) });
         return box;
     }
 
-    private static void Hint(Control parent, string text, int y) =>
-        Theme.Label(parent, text, new Rectangle(0, y, 918, 300 - y), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+    private static void Hint(Control parent, string text, int y)
+    {
+        var label = Theme.Label(parent, text, new Rectangle(0, y, 918, 300 - y), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+        label.Tag = "hint";
+    }
+
+    /// <summary>A page's explanations under all its settings (they sat over the last settings on some pages), each as tall as its text.</summary>
+    private static void StackHints(Panel page)
+    {
+        var hints = page.Controls.OfType<Label>().Where(l => (string?)l.Tag == "hint").OrderBy(l => l.Top).ToList();
+        if (hints.Count == 0)
+            return;
+        var others = page.Controls.Cast<Control>().Where(c => !hints.Contains(c)).ToList();
+        int y = (others.Count > 0 ? others.Max(c => c.Bottom) : 0) + 18;
+        foreach (var hint in hints)
+        {
+            int h = TextRenderer.MeasureText(hint.Text, hint.Font, new Size(hint.Width, 0), TextFormatFlags.WordBreak).Height + 4;
+            hint.Bounds = new Rectangle(0, y, page.Width, h);
+            y += h + 10;
+        }
+    }
 
     /// <summary>A menu entry on the left: text on the left, the selected one coloured.</summary>
     private static Button SideButton(Control parent, string text, int y)
