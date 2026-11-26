@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
+using SekoBot.Config;
 using SekoBot.Bot;
 using SekoBot.Capture;
 using SekoBot.Memory;
@@ -21,7 +23,51 @@ internal sealed partial class MainForm
     /// <summary>What to go back to: the character and the work (farm, market, fishing).</summary>
     private sealed record ResumeWork(string Character, int Mode, DateTime Since);
 
-    private ResumeWork? _resume;
+    /// <summary>The work to go back to — kept on disk too (devam-N.json): a PARDUS that restarts (an update of its own)
+    /// still knows it (seen 2026-11-26: restarted while its game was stuck after an update, it forgot to go back).</summary>
+    private ResumeWork? _resume
+    {
+        get => _resumeNote;
+        set
+        {
+            _resumeNote = value;
+            try
+            {
+                if (value == null)
+                    File.Delete(ResumeFile);
+                else
+                    File.WriteAllText(ResumeFile, JsonSerializer.Serialize(new SavedResume(value.Character, value.Mode, value.Since, _gameFolder)));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Trouble.Tell("Devam notu yazılamadı", ex); }
+        }
+    }
+    private ResumeWork? _resumeNote;
+
+    private sealed record SavedResume(string Character, int Mode, DateTime Since, string? Folder);
+    private static string ResumeFile => Path.Combine(ProfileStore.Directory, $"devam-{Instance.Number}.json");
+    /// <summary>A note older than this is not gone back to (the user will have done something else).</summary>
+    internal static readonly TimeSpan ResumeNoteFor = TimeSpan.FromHours(3);
+
+    /// <summary>At the start: the work this PARDUS was to go back to before it restarted; its game started again when
+    /// it doesn't come up by itself.</summary>
+    private void LoadResumeNote()
+    {
+        try
+        {
+            if (!File.Exists(ResumeFile) || JsonSerializer.Deserialize<SavedResume>(File.ReadAllText(ResumeFile)) is not { } saved)
+                return;
+            if (DateTime.Now - saved.Since > ResumeNoteFor || saved.Character.Length == 0)
+            {
+                File.Delete(ResumeFile);
+                return;
+            }
+            _resumeNote = new ResumeWork(saved.Character, saved.Mode, saved.Since);
+            _gameFolder ??= saved.Folder;
+            _gameGoneAt = DateTime.Now;
+            WriteLog($"↩ Yarım kalan iş hatırlandı: {saved.Character} ile {ModeName(saved.Mode)} devam edecek (oyun açık değilse başlatılacak).");
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { }
+    }
     private string _lastCharacter = "";
     /// <summary>This SekoBot's game copy (the folder holding Mobile2Launcher.exe).</summary>
     private string? _gameFolder;
