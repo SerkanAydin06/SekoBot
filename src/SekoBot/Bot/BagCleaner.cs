@@ -82,6 +82,7 @@ internal sealed class BagCleaner
         _started = now;
         _waitUntil = now;
         _opens = _closes = _noLayout = _yesClicks = _escapes = _leftoverYes = Thrown = _menuMisses = _openWaits = 0;
+        _skipNote = null;
         Problem = null;
         _failed.Clear();
         _pageClicks.Clear();
@@ -307,7 +308,7 @@ internal sealed class BagCleaner
                 var left = bag.Items.Where(i => throwIt(i) && _failed.GetValueOrDefault(i.Slot) < TriesPerItem).ToList();
                 if (left.Count == 0)
                 {
-                    Close(Thrown == 0 ? "atılacak eşya atılamadı" : null);
+                    Close(Thrown == 0 ? "atılacak eşya atılamadı" + (_skipNote is { } why ? " — " + why : "") : null);
                     goto case Step.Close;
                 }
                 // Only what is inside the game's window (a small game cuts the bag off: seen, clicks beside the items).
@@ -365,8 +366,15 @@ internal sealed class BagCleaner
                     _waitUntil = now + AfterClick;
                 }
                 else
+                {
+                    // Why they can't be clicked, for the log (seen 2026-11-26: a whole sale "0 eşya" in 13 s, no reason given).
+                    var first = left.Where(i => i.Page == page).OrderBy(i => i.Slot).First();
+                    _skipNote = first.Rect.IsEmpty ? $"eşyaların yeri okunamadı (çanta sayfası {bag.Page}, eşyanın sayfası {first.Page})"
+                        : first.Page != bag.Page ? $"eşyanın sayfası ({first.Page + 1}) açılamadı (açık sayfa {bag.Page + 1}, {bag.PageButtons.Count} sayfa düğmesi)"
+                        : $"eşya oyun penceresinin dışında ({first.Rect.X},{first.Rect.Y} {first.Rect.Width}×{first.Rect.Height}; pencere {client.Width}×{client.Height})";
                     foreach (var item in left.Where(i => i.Page == page))
                         _failed[item.Slot] = TriesPerItem; // that page can't be shown
+                }
                 break;
 
             case Step.Close:
@@ -405,6 +413,9 @@ internal sealed class BagCleaner
     }
 
     private void Failed(int slot) => _failed[slot] = _failed.GetValueOrDefault(slot) + 1;
+
+    /// <summary>Why the items left couldn't be clicked (for the log).</summary>
+    private string? _skipNote;
 
     private void Close(string? problem)
     {
