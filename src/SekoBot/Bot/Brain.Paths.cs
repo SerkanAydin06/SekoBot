@@ -15,6 +15,9 @@ internal sealed partial class Brain
     internal TerrainBook? Terrain { get; set; }
 
     private (Vec3 Goal, TimeSpan At, List<Vec3>? Way)? _way;
+
+    /// <summary>The corners of the way being walked now (null: none), for the live map.</summary>
+    internal IReadOnlyList<Vec3>? WayNow => _way is { Way: { Count: > 0 } way } ? [.. way] : null;
     private readonly Dictionary<int, (bool Ok, TimeSpan Until)> _reachable = [];
     /// <summary>The way is found again this often (we and the goal move).</summary>
     internal const int WayRefreshMs = 700;

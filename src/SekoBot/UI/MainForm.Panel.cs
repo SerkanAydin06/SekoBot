@@ -146,8 +146,96 @@ internal sealed partial class MainForm
                 mac == gameMac && gameMac.Length > 0 ? Theme.GoldLight : null));
         rows.Add(new("Dış IP (internetin gördüğü)", _publicIp.Length > 0 ? _publicIp : "\"Dış IP'yi göster\"e bas"));
         _machine.Show(rows);
-        if (_machine.Parent is Panel page)
-            StackHints(page);
+    }
+
+    // ── Windows of their own: the live map, the game's picture, the computer ──
+
+    private SideWindow? _mapWindow, _viewWindow, _machineWindow;
+    private LiveMap? _liveMap;
+    private readonly System.Windows.Forms.Timer _mapTimer = new() { Interval = 250 };
+
+    private bool GameViewShown => _viewWindow is { Visible: true, WindowState: not FormWindowState.Minimized };
+
+    private static void Bring(Form window)
+    {
+        if (!window.Visible)
+            window.Show();
+        if (window.WindowState == FormWindowState.Minimized)
+            window.WindowState = FormWindowState.Normal;
+        window.Activate();
+    }
+
+    private void OpenLiveMap()
+    {
+        if (_mapWindow == null)
+        {
+            var window = _mapWindow = new SideWindow("Canlı harita", new Size(760, 760));
+            _liveMap = new LiveMap(() => _engine, () => _profile) { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9f) };
+            var bar = new Panel { Dock = DockStyle.Top, Height = 44, BackColor = Theme.Rail };
+            var whole = new ProButton { Text = "Tüm harita", Icon = "map", Kind = ButtonKind.Ghost, Bounds = new Rectangle(10, 7, 140, 30), Font = new Font("Segoe UI", 8.5f) };
+            whole.Click += (_, _) =>
+            {
+                _liveMap.ToggleWhole();
+                whole.Text = _liveMap.Whole ? "Karakterin çevresi" : "Tüm harita";
+            };
+            bar.Controls.Add(whole);
+            var legend = new Label
+            {
+                Text = "● sen   ● mob   ● sana vuran   ▲ oyuncu   ▲ düşman   ◆ eşya   ┅ gidilen yol   ○ farm alanı   ▓ dağ (girilmez)   — tekerlek: yakınlaştır",
+                ForeColor = Theme.Faint, BackColor = Theme.Rail, Font = new Font("Segoe UI", 8f), AutoSize = false,
+                Bounds = new Rectangle(160, 7, 1200, 30), TextAlign = ContentAlignment.MiddleLeft,
+            };
+            bar.Controls.Add(legend);
+            window.Controls.Add(_liveMap);
+            window.Controls.Add(bar);
+            _mapTimer.Tick += (_, _) => { if (window.Visible && window.WindowState != FormWindowState.Minimized) _liveMap.Invalidate(); };
+            window.VisibleChanged += (_, _) => { if (window.Visible) _mapTimer.Start(); else _mapTimer.Stop(); };
+        }
+        Bring(_mapWindow);
+    }
+
+    private void OpenGameView()
+    {
+        if (_viewWindow == null)
+        {
+            var window = _viewWindow = new SideWindow("Oyun görüntüsü", new Size(960, 560));
+            window.Controls.Add(_preview);
+            // The picture is taken from the game only while this window shows (lighter for the computer otherwise).
+            window.VisibleChanged += (_, _) => _engine?.ShowingPreview(GameViewShown);
+            window.Resize += (_, _) => _engine?.ShowingPreview(GameViewShown);
+        }
+        Bring(_viewWindow);
+    }
+
+    private void OpenMachineWindow()
+    {
+        if (_machineWindow == null)
+        {
+            var window = _machineWindow = new SideWindow("Bilgisayar bilgileri", new Size(820, 620));
+            var bar = new Panel { Dock = DockStyle.Top, Height = 48, BackColor = Theme.Rail };
+            var refresh = new ProButton { Text = "Yenile", Icon = "refresh", Kind = ButtonKind.Ghost, Bounds = new Rectangle(12, 9, 110, 30), Font = new Font("Segoe UI", 8.5f) };
+            var publicIp = new ProButton { Text = "Dış IP'yi göster", Icon = "globe", Kind = ButtonKind.Ghost, Bounds = new Rectangle(130, 9, 170, 30), Font = new Font("Segoe UI", 8.5f) };
+            bar.Controls.Add(refresh);
+            bar.Controls.Add(publicIp);
+            var page = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = Theme.Background, Padding = new Padding(16) };
+            Theme.DarkScrollBars(page);
+            _machine = new InfoList { Location = new Point(16, 12), Width = 770, Font = new Font("Segoe UI", 9f), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+            page.Controls.Add(_machine);
+            window.Controls.Add(page);
+            window.Controls.Add(bar);
+            refresh.Click += (_, _) => ShowMachine();
+            publicIp.Click += async (_, _) =>
+            {
+                publicIp.Enabled = false;
+                _publicIp = "soruluyor…";
+                ShowMachine();
+                _publicIp = await MachineInfo.PublicIpAsync();
+                publicIp.Enabled = true;
+                ShowMachine();
+            };
+        }
+        ShowMachine();
+        Bring(_machineWindow);
     }
 
     // ── The log ──

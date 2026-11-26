@@ -185,9 +185,9 @@ internal sealed partial class MainForm : Form
         var bar = header;
 
         // ── Left menu: the panel and the settings pages; the version and the keys at the bottom ──
-        var side = _side = new Panel { Bounds = new Rectangle(0, B, 192, 855), BackColor = Theme.Rail };
+        var side = _side = new Panel { Bounds = new Rectangle(0, B, 192, 678), BackColor = Theme.Rail };
         Controls.Add(side);
-        side.Controls.Add(new Panel { Bounds = new Rectangle(191, 0, 1, 855), BackColor = Theme.Border });
+        side.Controls.Add(new Panel { Bounds = new Rectangle(191, 0, 1, 678), BackColor = Theme.Border });
         _dashButton = new NavButton { Text = "Panel", Icon = "grid", Bounds = new Rectangle(10, 14, 172, 40), Font = new Font("Segoe UI", 9.5f) };
         _dashButton.Click += (_, _) => SelectTab(-1);
         side.Controls.Add(_dashButton);
@@ -197,7 +197,7 @@ internal sealed partial class MainForm : Form
         _tabButtons = new NavButton[tabNames.Length];
         _tabPages = new Panel[tabNames.Length];
         _events = new Label { Visible = false };
-        var foot = new Card { Bounds = new Rectangle(10, 855 - 12 - 96, 172, 96) };
+        var foot = new Card { Bounds = new Rectangle(10, 678 - 12 - 96, 172, 96) };
         side.Controls.Add(foot);
         _identity = Theme.Label(foot, "v" + BuildInfo.Version, new Rectangle(12, 10, 150, 22), 8.5f, Theme.Muted, FontStyle.Bold);
         Theme.Label(foot, "Başlat · " + StartKey, new Rectangle(12, 36, 150, 20), 8f, Theme.Faint);
@@ -229,7 +229,7 @@ internal sealed partial class MainForm : Form
         _heroName.Width = _status.Width;
 
         // ── The panel: the session's numbers, the live view, the character and what just happened ──
-        _dashboard = new Panel { Bounds = new Rectangle(202, B + 108, 966, 511), BackColor = Theme.Background };
+        _dashboard = new Panel { Bounds = new Rectangle(202, B + 108, 966, 316), BackColor = Theme.Background };
         Controls.Add(_dashboard);
         StatCard Stat(string caption, int x, int width)
         {
@@ -247,13 +247,26 @@ internal sealed partial class MainForm : Form
         _statTime = new Label(); _statMobs = new Label(); _statRate = new Label(); _statExp = new Label(); _statExpRate = new Label();
         _statLevel = new Label(); _statYang = new Label(); _statPotions = new Label(); _statDeaths = new Label();
 
-        var previewCard = _previewCard = new Card { Bounds = new Rectangle(0, 116, 598, 395), Caption = "CANLI GÖRÜNTÜ" };
-        _dashboard.Controls.Add(previewCard);
-        _preview = new PreviewControl { Bounds = new Rectangle(14, 42, 570, 339), Profile = _profile };
+        // The game's picture and the live map open in windows of their own (the panel stays short; the picture is only
+        // taken while its window is open).
+        _preview = new PreviewControl { Dock = DockStyle.Fill, Profile = _profile };
         _preview.SelectionChanged += UpdateControls;
         _preview.MouseClick += (_, _) => { if (_engine != null && _gameMinimized) WindowService.Restore(_engine.Window); };
-        previewCard.Controls.Add(_preview);
-        _attackButton = new ProButton { Bounds = new Rectangle(598 - 14 - 160, 6, 160, 30), Font = new Font("Segoe UI", 8.5f), Anchor = AnchorStyles.Top | AnchorStyles.Right };
+
+        var feedCard = new Card { Bounds = new Rectangle(0, 116, 598, 200), Caption = "ŞİMDİ" };
+        _dashboard.Controls.Add(feedCard);
+        var openLiveMap = new ProButton { Text = "Canlı harita", Icon = "map", Kind = ButtonKind.Ghost, Bounds = new Rectangle(598 - 14 - 300, 6, 138, 30), Font = new Font("Segoe UI", 8.5f) };
+        openLiveMap.Click += (_, _) => OpenLiveMap();
+        feedCard.Controls.Add(openLiveMap);
+        var openView = new ProButton { Text = "Oyun görüntüsü", Icon = "eye", Kind = ButtonKind.Ghost, Bounds = new Rectangle(598 - 14 - 156, 6, 156, 30), Font = new Font("Segoe UI", 8.5f) };
+        openView.Click += (_, _) => OpenGameView();
+        feedCard.Controls.Add(openView);
+        _feed = new Feed { Bounds = new Rectangle(18, 44, 562, 148), Font = new Font("Segoe UI", 8.5f) };
+        feedCard.Controls.Add(_feed);
+
+        var charCard = _previewCard = new Card { Bounds = new Rectangle(610, 116, 356, 200), Caption = "KARAKTER" };
+        _dashboard.Controls.Add(charCard);
+        _attackButton = new ProButton { Bounds = new Rectangle(356 - 14 - 150, 6, 150, 30), Font = new Font("Segoe UI", 8.5f), Anchor = AnchorStyles.Top | AnchorStyles.Right };
         _attackButton.Click += (_, _) =>
         {
             if (_mode == MarketMode)
@@ -261,28 +274,21 @@ internal sealed partial class MainForm : Form
             else
                 ToggleAttack();
         };
-        previewCard.Controls.Add(_attackButton);
+        charCard.Controls.Add(_attackButton);
         ShowAttack();
         _reloads.Add(ShowAttack);
-
-        var charCard = new Card { Bounds = new Rectangle(610, 116, 356, 150), Caption = "KARAKTER" };
-        _dashboard.Controls.Add(charCard);
         Meter Bar(string caption, Color fill, int y)
         {
-            var meter = new Meter { Bounds = new Rectangle(18, y, 320, 30), Caption = caption, Fill = fill, Font = new Font("Segoe UI", 8.5f) };
+            var meter = new Meter { Bounds = new Rectangle(18, y, 320, 32), Caption = caption, Fill = fill, Font = new Font("Segoe UI", 8.5f) };
             charCard.Controls.Add(meter);
             return meter;
         }
-        _hpMeter = Bar("HP", Color.FromArgb(255, 79, 96), 40);
-        _mpMeter = Bar("MP", Color.FromArgb(61, 139, 255), 76);
-        _targetMeter = Bar("Hedef", Theme.Gold, 112);
-        var feedCard = new Card { Bounds = new Rectangle(610, 278, 356, 233), Caption = "ŞİMDİ", CaptionRight = "önemli olaylar" };
-        _dashboard.Controls.Add(feedCard);
-        _feed = new Feed { Bounds = new Rectangle(18, 42, 322, 180), Font = new Font("Segoe UI", 8.5f) };
-        feedCard.Controls.Add(_feed);
+        _hpMeter = Bar("HP", Color.FromArgb(255, 79, 96), 52);
+        _mpMeter = Bar("MP", Color.FromArgb(61, 139, 255), 100);
+        _targetMeter = Bar("Hedef", Theme.Gold, 148);
 
         // ── Settings pages: one big card, title + what the page is for (under the card at the top) ──
-        _settingsCard = new Card { Bounds = new Rectangle(202, B + 108, 966, 735), Visible = false };
+        _settingsCard = new Card { Bounds = new Rectangle(202, B + 108, 966, 558), Visible = false };
         Controls.Add(_settingsCard);
         _pageTitle = Theme.Label(_settingsCard, "", new Rectangle(24, 12, 260, 32), 14f, Theme.Text, FontStyle.Bold);
         _pageInfo = Theme.Label(_settingsCard, "", new Rectangle(290, 16, 652, 26), 9f, Theme.Muted);
@@ -292,7 +298,8 @@ internal sealed partial class MainForm : Form
             _tabButtons[i] = new NavButton { Text = tabNames[i].Name, Icon = tabNames[i].Icon, Bounds = new Rectangle(10, 90 + i * 44, 172, 40), Font = new Font("Segoe UI", 9.5f) };
             _tabButtons[i].Click += (_, _) => SelectTab(index);
             side.Controls.Add(_tabButtons[i]);
-            _tabPages[i] = new Panel { Bounds = new Rectangle(24, 62, 918, 296), BackColor = Theme.Surface, Visible = false };
+            _tabPages[i] = new Panel { Bounds = new Rectangle(24, 62, 918, 296), BackColor = Theme.Surface, Visible = false, AutoScroll = true };
+            Theme.DarkScrollBars(_tabPages[i]);
             _settingsCard.Controls.Add(_tabPages[i]);
         }
         // A thin line under the title.
@@ -875,25 +882,9 @@ internal sealed partial class MainForm : Form
             try { Process.Start(new ProcessStartInfo(SessionLog.FilePath) { UseShellExecute = true }); }
             catch (Exception ex) { WriteLog("Rapor açılamadı: " + ex.Message); }
         };
-        // ── This computer: what the game sees, what Windows shows ──
-        advanced.Controls.Add(new Panel { Bounds = new Rectangle(0, 146, 918, 1), BackColor = Theme.Border });
-        Theme.Label(advanced, "BİLGİSAYAR", new Rectangle(0, 154, 300, 22), 7.5f, Theme.Faint, FontStyle.Bold);
-        var refreshMachine = Theme.Button(advanced, "↻  Yenile", new Rectangle(918 - 300, 150, 110, 30), Theme.Secondary, Theme.SecondaryHover);
-        var publicIp = Theme.Button(advanced, "🌐  Dış IP'yi göster", new Rectangle(918 - 182, 150, 182, 30), Theme.Secondary, Theme.SecondaryHover);
-        _machine = new InfoList { Bounds = new Rectangle(0, 186, 892, 300), Font = new Font("Segoe UI", 9f) };
-        Theme.DarkScrollBars(advanced);
-        advanced.Controls.Add(_machine);
-        refreshMachine.Click += (_, _) => ShowMachine();
-        publicIp.Click += async (_, _) =>
-        {
-            publicIp.Enabled = false;
-            _publicIp = "soruluyor…";
-            ShowMachine();
-            _publicIp = await MachineInfo.PublicIpAsync();
-            publicIp.Enabled = true;
-            ShowMachine();
-        };
-        ShowMachine();
+        // ── This computer: what the game sees, what Windows shows (a window of its own) ──
+        var machine = Theme.Button(advanced, "🖥  Bilgisayar bilgileri", new Rectangle(0, 146, 220, 30), Theme.Secondary, Theme.SecondaryHover);
+        machine.Click += (_, _) => OpenMachineWindow();
         var openFolder = Theme.Button(advanced, "📁  Ayar klasörü", new Rectangle(150, 100, 142, 30), Theme.Secondary, Theme.SecondaryHover);
         if (Instance.IsFirst)
         {
@@ -911,9 +902,9 @@ internal sealed partial class MainForm : Form
         };
 
         // ── Dashboard bottom: the log and this run's items (the settings pages show here instead) ──
-        _dashBottom = new Panel { Bounds = new Rectangle(202, B + 631, 966, 212), BackColor = Theme.Background };
+        _dashBottom = new Panel { Bounds = new Rectangle(202, B + 436, 966, 230), BackColor = Theme.Background };
         Controls.Add(_dashBottom);
-        var logCard = _logCard = new Card { Bounds = new Rectangle(0, 0, 598, 212), Caption = "GÜNLÜK" };
+        var logCard = _logCard = new Card { Bounds = new Rectangle(0, 0, 598, 230), Caption = "GÜNLÜK" };
         _dashBottom.Controls.Add(logCard);
         // Which lines: all, the sales, the warnings, the deaths.
         (string Name, string Kind)[] filters = [("Tümü", ""), ("Satış", "sell"), ("Uyarı", "warn"), ("Ölüm", "dead")];
@@ -926,7 +917,7 @@ internal sealed partial class MainForm : Form
             button.Click += (_, _) => FilterLog(kind);
             logCard.Controls.Add(button);
         }
-        var itemsCard = _itemsCard = new Card { Bounds = new Rectangle(610, 0, 356, 212), Caption = "BU TUR EŞYALAR" };
+        var itemsCard = _itemsCard = new Card { Bounds = new Rectangle(610, 0, 356, 230), Caption = "BU TUR EŞYALAR" };
         _dashBottom.Controls.Add(itemsCard);
         var openItems = new IconButton { Icon = "list", Bounds = new Rectangle(356 - 14 - 30, 6, 30, 28) };
         itemsCard.Controls.Add(openItems);
@@ -937,7 +928,7 @@ internal sealed partial class MainForm : Form
         };
         _runItems = new ListView
         {
-            Bounds = new Rectangle(14, 40, 328, 146),
+            Bounds = new Rectangle(14, 40, 328, 164),
             View = View.Details,
             FullRowSelect = true,
             HeaderStyle = ColumnHeaderStyle.Nonclickable,
@@ -964,10 +955,10 @@ internal sealed partial class MainForm : Form
         _runItems.Columns.Add("Atılan", 58, HorizontalAlignment.Right);
         _runItems.Columns.Add("Satılan", 58, HorizontalAlignment.Right);
         itemsCard.Controls.Add(_runItems);
-        _runItemsInfo = Theme.Label(itemsCard, "Bot başlayınca dolar; her turda yenilenir.", new Rectangle(16, 188, 326, 18), 8f, Theme.Faint);
+        _runItemsInfo = Theme.Label(itemsCard, "Bot başlayınca dolar; her turda yenilenir.", new Rectangle(16, 206, 326, 18), 8f, Theme.Faint);
         _log = new RichTextBox
         {
-            Bounds = new Rectangle(16, 42, 568, 158),
+            Bounds = new Rectangle(16, 42, 568, 176),
             BorderStyle = BorderStyle.None,
             ReadOnly = true,
             WordWrap = false,
@@ -1100,7 +1091,7 @@ internal sealed partial class MainForm : Form
         _scanTimer.Tick += (_, _) => { if (_engine == null) RefreshWindows(); else LoginTick(); ResumeTick(); };
         _previewTimer = new System.Windows.Forms.Timer { Interval = 33 };
         _previewTimer.Tick += (_, _) => RenderPreview();
-        VisibleChanged += (_, _) => _engine?.ShowingPreview(Visible);
+        VisibleChanged += (_, _) => _engine?.ShowingPreview(GameViewShown);
         _statsTimer = new System.Windows.Forms.Timer { Interval = 400 };
         _statsTimer.Tick += (_, _) => UpdateStats();
         _updateTimer = new System.Windows.Forms.Timer { Interval = (int)TimeSpan.FromHours(2).TotalMilliseconds };
@@ -1213,12 +1204,14 @@ internal sealed partial class MainForm : Form
         _itemsCard.Visible = farm;
         if (!farm)
         {
-            // The list on the right the whole height; the log under the page's card on the left.
+            // The page's card on the left; on the right its list above, the log under it.
             var dash = market ? _marketDash : _fishingDash;
             dash.Height = _dashBottomFarm.Bottom - dash.Top;
-            int left = dash.Controls[0].Width, gap = _dashBottomFarm.Left - _side.Right;
-            int top = dash.Top + dash.Controls[0].Height + gap;
-            _dashBottom.Bounds = new Rectangle(dash.Left, top, left, _dashBottomFarm.Bottom - top);
+            int gap = _dashBottomFarm.Left - _side.Right;
+            var list = dash.Controls[1];
+            int logHeight = Math.Min(_dashBottomFarm.Height, dash.Height / 2);
+            list.Height = dash.Height - logHeight - gap;
+            _dashBottom.Bounds = new Rectangle(dash.Left + list.Left, dash.Top + list.Height + gap, list.Width, logHeight);
             _logCard.Bounds = new Rectangle(0, 0, _dashBottom.Width, _dashBottom.Height);
             _log.Bounds = new Rectangle(_logFarm.Left, _logFarm.Top, _logCard.Width - 2 * _logFarm.Left, _logCard.Height - _logFarm.Top - _logFarm.Left);
             _dashBottom.BringToFront();
@@ -1952,7 +1945,7 @@ internal sealed partial class MainForm : Form
             _engine = engine;
             Instance.TakeGame(window.ProcessId);
             engine.Start(previewFps: 30);
-            engine.ShowingPreview(Visible);
+            engine.ShowingPreview(GameViewShown);
             _frameSequence = 0;
             _gameMinimized = false;
             _autoAttached = true;
@@ -2316,8 +2309,8 @@ internal sealed partial class MainForm : Form
             _preview.State = null;
             _preview.Invalidate();
         }
-        // Hidden (the small bar): no picture to draw.
-        if (minimized || !Visible)
+        // The game view's window closed (or the small bar): no picture to draw.
+        if (minimized || !GameViewShown)
             return;
         if (_engine.TryCopyLatest(ref _frameBitmap, ref _frameSequence))
         {
