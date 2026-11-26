@@ -62,6 +62,7 @@ internal sealed partial class BotEngine : IDisposable
     public BotEngine(WindowInfo window, BotProfile profile, Action<string> log)
     {
         _window = window;
+        _cleaner = new BagCleaner(ReadBagNow);
         Profile = profile;
         _log = log;
         _brain = new Brain(() => Profile) { JunkInBag = JunkInBag, Obstacles = _obstacles, Terrain = _terrain, NoGo = _noGo, Lore = SkillLore.Shared };

@@ -251,7 +251,7 @@ internal sealed partial class BotEngine
 
         var sellBegan = _clock.Elapsed;
         // Sell, item by item, with the game in front the whole time (not back and forth).
-        var cleaner = new BagCleaner { Selling = true };
+        var cleaner = new BagCleaner(ReadBagNow) { Selling = true };
         cleaner.Start(_clock.Elapsed);
         input.HoldFront = true;
         try
@@ -367,7 +367,7 @@ internal sealed partial class BotEngine
                 {
                     actedAt = DateTime.Now;
                     closed++;
-                    input.Enqueue(TidyAction(bag, profile, selling: true));
+                    input.Enqueue(TidyAction(bag, profile, selling: true, readBagNow: ReadBagNow));
                 }
             }
             await Task.Delay(200, token);
