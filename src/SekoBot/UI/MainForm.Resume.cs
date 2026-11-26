@@ -38,6 +38,15 @@ internal sealed partial class MainForm
     /// <summary>A launcher that brought no game back in this time is tried again (at most <see cref="MaxLaunches"/> times).</summary>
     internal static readonly TimeSpan LaunchWait = TimeSpan.FromMinutes(15);
     internal const int MaxLaunches = 3;
+    /// <summary>The game said "old version" but its launcher brought nothing new: played on this long before trying again
+    /// (seen 2026-11-26: the flag came up four times a day, every restart the same v3.0, and the game let us play).</summary>
+    internal static readonly TimeSpan NoUpdateWait = TimeSpan.FromHours(1);
+    /// <summary>A game on its opening screen this long (no login, no character select, nothing readable) is started again
+    /// (seen 2026-11-26: "İnternet bağlantısı kontrol ediliyor.. %0" for an hour after an update restart).</summary>
+    internal static readonly TimeSpan StuckOpening = TimeSpan.FromMinutes(10);
+    private string? _updateExe;
+    private DateTime _updateExeTime, _noUpdateUntil = DateTime.MinValue, _unreadableSince = DateTime.MinValue;
+    private uint _updatePid, _unreadablePid;
     /// <summary>In the game this long (loaded, the screens settled) before the work starts again.</summary>
     internal static readonly TimeSpan SettleInGame = TimeSpan.FromSeconds(8);
 
@@ -53,6 +62,23 @@ internal sealed partial class MainForm
         _gameFolder ??= GameFolderOf(e.Window.ProcessId);
         ResumeAfterUpdateTick(e);
         var world = e.World;
+        // Back after closing the game for an update: its file the same (the launcher had nothing to bring) — played on.
+        if (_updateExe != null && e.Window.ProcessId != _updatePid)
+        {
+            bool same = false;
+            try { same = File.Exists(_updateExe) && File.GetLastWriteTimeUtc(_updateExe) == _updateExeTime; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            _updateExe = null;
+            if (same)
+            {
+                _noUpdateUntil = now + NoUpdateWait;
+                string text = $"ℹ Başlatıcıda yeni sürüm yoktu (oyun dosyası değişmedi). Oyun izin verdiği sürece oynanmaya devam edilecek; " +
+                              $"{NoUpdateWait.TotalMinutes:0} dakika sonra güncelleme yeniden denenecek.";
+                WriteLog(text);
+                e.Notify(text);
+            }
+        }
+        StuckOpeningTick(e, world, now);
         // The game's own update question at its start: "Onayla" (it downloads, then goes on to the login).
         if (_profile.AutoLogin && world == null && now - _updateYesAt > TimeSpan.FromSeconds(20) && e.UpdateQuestion() is { } yes)
         {
@@ -66,7 +92,7 @@ internal sealed partial class MainForm
         bool working = e.BotRunning || e.Fishing || e.ScanningMarket;
 
         // An update is out: the work noted, the game closed (started again from its launcher, which updates it).
-        if (_profile.AutoLogin && e.GameOutdated() == true)
+        if (_profile.AutoLogin && now >= _noUpdateUntil && e.GameOutdated() == true)
         {
             if (!_outdatedTold)
             {
@@ -92,6 +118,11 @@ internal sealed partial class MainForm
             if (_closeAskedAt == DateTime.MinValue)
             {
                 _closeAskedAt = now;
+                // The game's file noted: if the launcher brings nothing new, the "old version" flag is played through.
+                _updatePid = e.Window.ProcessId;
+                _updateExe = ProcessPath(e.Window.ProcessId);
+                try { _updateExeTime = _updateExe != null ? File.GetLastWriteTimeUtc(_updateExe) : default; }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _updateExe = null; }
                 CloseGame(e.Window.ProcessId, now);
             }
             else if (now - _closeAskedAt > TimeSpan.FromSeconds(10))
@@ -396,6 +427,35 @@ internal sealed partial class MainForm
     /// <summary>The window to connect to, when this SekoBot waits for its own game: only the one from its folder.</summary>
     private bool MayTake(WindowInfo window) => _resume == null || _gameFolder == null || SameFolder(window.ProcessId);
 
+    /// <summary>
+    /// The game stuck on its opening screen (nothing readable, no login screen, no character select) while work waits
+    /// to be gone back to: closed after <see cref="StuckOpening"/>; its launcher starts it again (at most MaxLaunches).
+    /// </summary>
+    private void StuckOpeningTick(BotEngine e, WorldSnapshot? world, DateTime now)
+    {
+        bool showing = world != null || e.LoginNow() is { Showing: true } || e.CharSelectNow() != null;
+        if (showing || !_profile.AutoLogin || _resume == null || _gameFolder == null)
+        {
+            _unreadableSince = DateTime.MinValue;
+            return;
+        }
+        if (_unreadablePid != e.Window.ProcessId || _unreadableSince == DateTime.MinValue)
+        {
+            _unreadablePid = e.Window.ProcessId;
+            _unreadableSince = now;
+            return;
+        }
+        if (now - _unreadableSince < StuckOpening || _launches >= MaxLaunches || !TakeGameTurn())
+            return;
+        _unreadableSince = DateTime.MinValue;
+        string text = $"⚠ Oyun {StuckOpening.TotalMinutes:0} dakikadır açılış ekranında takılı; kapatılıp yeniden başlatılıyor.";
+        WriteLog(text);
+        e.Notify(text);
+        _closingPid = e.Window.ProcessId;
+        KillGame(e.Window.ProcessId, "açılış ekranında takıldı");
+        _gameGoneAt = now;
+    }
+
     private void CloseGame(uint processId, DateTime now)
     {
         _closingPid = processId;
@@ -409,7 +469,7 @@ internal sealed partial class MainForm
         _gameGoneAt = now;
     }
 
-    private void KillGame(uint processId)
+    private void KillGame(uint processId, string why = "güncelleme için")
     {
         try
         {
@@ -417,7 +477,7 @@ internal sealed partial class MainForm
             if (!game.HasExited)
             {
                 game.Kill();
-                WriteLog("Oyun kapanmadı; sonlandırıldı (güncelleme için).");
+                WriteLog($"Oyun sonlandırıldı ({why}).");
             }
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
