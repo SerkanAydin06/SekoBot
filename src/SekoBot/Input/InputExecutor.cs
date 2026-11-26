@@ -269,9 +269,7 @@ internal sealed class InputExecutor : IDisposable
                 await TypeAsync(type.Text, token, type.ClearFirst);
                 break;
             case KeyTapAction tap:
-                SendKey(tap.Key, down: true);
-                await Task.Delay(_random.Next(40, 90), token);
-                SendKey(tap.Key, down: false);
+                await PressTime.HoldAsync(down => SendKey(tap.Key, down), PressTime.Tap(), token);
                 break;
             case KeyDownAction keyDown:
                 SendKey(keyDown.Key, down: true);
@@ -372,15 +370,24 @@ internal sealed class InputExecutor : IDisposable
             if (stillWanted?.Invoke() == false)
                 return; // gone while coming in: no press
             // A right click (buying in an NPC's shop) or the usual left one.
-            if (front)
-                SendMouse(right ? Win32.MOUSEEVENTF_RIGHTDOWN : Win32.MOUSEEVENTF_LEFTDOWN);
-            else
-                Win32.PostMessage(_window.Handle, right ? Win32.WM_RBUTTONDOWN : Win32.WM_LBUTTONDOWN, right ? Win32.MK_RBUTTON : Win32.MK_LBUTTON, lParam);
-            await Task.Delay(fast ? 110 : 250, token);
-            if (front)
-                SendMouse(right ? Win32.MOUSEEVENTF_RIGHTUP : Win32.MOUSEEVENTF_LEFTUP);
-            else
-                Win32.PostMessage(_window.Handle, right ? Win32.WM_RBUTTONUP : Win32.WM_LBUTTONUP, 0, lParam);
+            void PressButton(bool down)
+            {
+                if (front)
+                {
+                    var flags = right
+                        ? (down ? Win32.MOUSEEVENTF_RIGHTDOWN : Win32.MOUSEEVENTF_RIGHTUP)
+                        : (down ? Win32.MOUSEEVENTF_LEFTDOWN : Win32.MOUSEEVENTF_LEFTUP);
+                    SendMouse(flags);
+                }
+                else
+                {
+                    var message = right
+                        ? (down ? Win32.WM_RBUTTONDOWN : Win32.WM_RBUTTONUP)
+                        : (down ? Win32.WM_LBUTTONDOWN : Win32.WM_LBUTTONUP);
+                    Win32.PostMessage(_window.Handle, message, down ? (right ? Win32.MK_RBUTTON : Win32.MK_LBUTTON) : 0, lParam);
+                }
+            }
+            await PressTime.HoldAsync(PressButton, PressTime.Button(fast), token);
             await Task.Delay(fast ? 200 : 500, token); // keep the cursor there while the game handles it
         }
         finally
@@ -476,12 +483,10 @@ internal sealed class InputExecutor : IDisposable
             {
                 // Empty the box first: Ctrl+A selects what is in it, Backspace removes it.
                 VirtualKey(0x11, true);
-                VirtualKey(0x41, true);
-                VirtualKey(0x41, false);
-                VirtualKey(0x11, false);
+                try { await PressTime.HoldAsync(down => VirtualKey(0x41, down), PressTime.Tap(), token); }
+                finally { VirtualKey(0x11, false); }
                 await Task.Delay(60, token);
-                VirtualKey(0x08, true);
-                VirtualKey(0x08, false);
+                await PressTime.HoldAsync(down => VirtualKey(0x08, down), PressTime.Tap(), token);
                 await Task.Delay(80, token);
             }
             foreach (char c in text)
@@ -559,17 +564,16 @@ internal sealed class InputExecutor : IDisposable
             nint lParam = (nint)((client.Y << 16) | (client.X & 0xFFFF));
             Win32.PostMessage(_window.Handle, Win32.WM_MOUSEMOVE, 0, lParam);
             await Task.Delay(_random.Next(settleMin, settleMax), token);
-            Win32.PostMessage(_window.Handle, Win32.WM_LBUTTONDOWN, Win32.MK_LBUTTON, lParam);
-            await Task.Delay(_random.Next(35, 75), token);
-            Win32.PostMessage(_window.Handle, Win32.WM_LBUTTONUP, 0, lParam);
+            await PressTime.HoldAsync(down => Win32.PostMessage(_window.Handle,
+                down ? Win32.WM_LBUTTONDOWN : Win32.WM_LBUTTONUP, down ? Win32.MK_LBUTTON : 0, lParam),
+                PressTime.Tap(), token);
             return;
         }
         using var guard = MouseGuard.Hold();
         MoveMouse(WindowService.ClientToScreen(_window, client));
         await Task.Delay(_random.Next(settleMin, settleMax), token);
-        SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);
-        await Task.Delay(_random.Next(35, 75), token);
-        SendMouse(Win32.MOUSEEVENTF_LEFTUP);
+        await PressTime.HoldAsync(down => SendMouse(down ? Win32.MOUSEEVENTF_LEFTDOWN : Win32.MOUSEEVENTF_LEFTUP),
+            PressTime.Tap(), token);
     }
 
     /// <summary>
