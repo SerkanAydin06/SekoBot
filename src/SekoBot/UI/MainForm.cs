@@ -1121,6 +1121,7 @@ internal sealed partial class MainForm : Form
                 else
                     WriteLog(text);
             });
+            LoadResumeNote();
             RefreshWindows();
             _scanTimer.Start();
             _statsTimer.Start();
