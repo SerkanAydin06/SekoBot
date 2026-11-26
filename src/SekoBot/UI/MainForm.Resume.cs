@@ -353,7 +353,7 @@ internal sealed partial class MainForm
             var up = down;
             up.u.mi.dwFlags = Win32.MOUSEEVENTF_LEFTUP;
             Win32.SendInput(1, [down], System.Runtime.InteropServices.Marshal.SizeOf<Win32.INPUT>());
-            System.Threading.Thread.Sleep(80);
+            System.Threading.Thread.Sleep(SekoBot.Input.PressTime.Button(fast: true));
             Win32.SendInput(1, [up], System.Runtime.InteropServices.Marshal.SizeOf<Win32.INPUT>());
             System.Threading.Thread.Sleep(150);
             Win32.SetCursorPos(previous.X, previous.Y);

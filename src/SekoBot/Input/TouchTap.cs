@@ -83,7 +83,7 @@ internal static class TouchTap
         // with all games side by side, every tap pulled the market bot's game to the front).
         if (!Shows(window, screen) || Win32.GetForegroundWindow() != window.Handle)
         {
-            PostedClick(window, client, screen, slower ? SlowerPostedClickGaps : PostedClickGaps);
+            PostedClick(window, client, screen, slower);
             return TouchResult.Posted;
         }
         lock (Gate)
@@ -99,7 +99,7 @@ internal static class TouchTap
             t.pointerInfo.pointerFlags = N.InRange | N.InContact | N.Down;
             if (!N.InjectTouchInput(1, [t]))
                 return TouchResult.Unavailable;
-            Thread.Sleep(70);
+            Thread.Sleep(PressTime.Tap() - 25);
             t.pointerInfo.pointerFlags = N.InRange | N.InContact | N.Update;
             N.InjectTouchInput(1, [t]);
             Thread.Sleep(25);
@@ -116,14 +116,9 @@ internal static class TouchTap
         return TouchResult.Done;
     }
 
-    /// <summary>The cursor stays on the stall's place this long around the posted click (ms: move, down, up).</summary>
-    internal static readonly int[] PostedClickGaps = [15, 25, 20];
-    /// <summary>The second try, when the first didn't take (the game behind others draws fewer frames).</summary>
-    internal static readonly int[] SlowerPostedClickGaps = [40, 60, 40];
-
     /// <summary>A click posted to the game window (covered by another one): the cursor is put where the
     /// stall is for a moment, as the game reads it from there, then back where the user had it.</summary>
-    private static void PostedClick(WindowInfo window, Point client, Point screen, int[] gaps)
+    private static void PostedClick(WindowInfo window, Point client, Point screen, bool slower)
     {
         lock (Gate)
         {
@@ -133,11 +128,11 @@ internal static class TouchTap
             {
                 Win32.SetCursorPos(screen.X, screen.Y);
                 Win32.PostMessage(window.Handle, 0x200, 0, at); // WM_MOUSEMOVE
-                Thread.Sleep(gaps[0]);
+                Thread.Sleep(slower ? 40 : 15);
                 Win32.PostMessage(window.Handle, 0x201, 1, at); // WM_LBUTTONDOWN
-                Thread.Sleep(gaps[1]);
+                Thread.Sleep(slower ? PressTime.Button(false) : PressTime.Tap());
                 Win32.PostMessage(window.Handle, 0x202, 0, at); // WM_LBUTTONUP
-                Thread.Sleep(gaps[2]);
+                Thread.Sleep(slower ? 40 : 20);
             }
             finally
             {
