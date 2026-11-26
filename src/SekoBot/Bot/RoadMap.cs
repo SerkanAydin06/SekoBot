@@ -224,12 +224,43 @@ internal sealed class RoadMap
         for (int i = 0; i < n; i++)
             water[i] = pixels[i].B > pixels[i].R + 20 ? 1 : 0;
         var waterAround = Box(water, w, h, (int)Math.Round(3 * size));
+        // The planks over the water first, then every plank joined to them (a bridge's ends lie on the banks, no water
+        // around: seen on c2, the north end left 14 px short of the road and the whole bridge cut off as a dead end).
+        bool Plank(int i) { var (r, g, b) = pixels[i]; return r > g + 5 && g > b + 5 && r - b >= 18 && r is >= 55 and <= 130; }
+        var bridge = new bool[n];
+        var planks = new Stack<int>();
         for (int i = 0; i < n; i++)
+            if (Plank(i) && waterAround[i] > 0.12)
+            {
+                bridge[i] = true;
+                planks.Push(i);
+            }
+        while (planks.Count > 0)
         {
-            var (r, g, b) = pixels[i];
-            if (r > g + 5 && g > b + 5 && r - b >= 18 && r is >= 55 and <= 130 && waterAround[i] > 0.12)
-                road[i] = true;
+            int j = planks.Pop(), x = j % w, y = j / w;
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int nx = x + dx, ny = y + dy;
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h)
+                        continue;
+                    int k = ny * w + nx;
+                    if (!bridge[k] && Plank(k))
+                    {
+                        bridge[k] = true;
+                        planks.Push(k);
+                    }
+                }
         }
+        for (int i = 0; i < n; i++)
+            if (bridge[i])
+                road[i] = true;
+        // Town squares: a round grey open place (the user: the town's square wasn't road; the roads into it were cut off
+        // as dead ends, and with them the bridge beside the town).
+        var plazas = Plazas(pixels, w, h, size);
+        for (int i = 0; i < n; i++)
+            if (plazas[i])
+                road[i] = true;
         // Specks dropped: a road is a long line, many pixels joined.
         var label = new int[n];
         var stack = new Stack<int>();
@@ -314,7 +345,175 @@ internal sealed class RoadMap
                             wide[ny * w + nx] = true;
                     }
             }
+        // The squares whole (the thinning left only their middle): open ground to walk across.
+        for (int i = 0; i < n; i++)
+            if (plazas[i])
+                wide[i] = true;
         return wide;
+    }
+
+    /// <summary>
+    /// The town squares of a map picture: a grey, even, roughly round open place (c2: ~33 × 30 px on a 307-px picture,
+    /// 88 88 93), filled whole. The grey road lines have the same colour but are long and thin (little of their box filled).
+    /// </summary>
+    internal static bool[] Plazas((byte R, byte G, byte B)[] pixels, int w, int h, double size)
+    {
+        int n = w * h;
+        var grey = new bool[n];
+        for (int i = 0; i < n; i++)
+        {
+            var (r, g, b) = pixels[i];
+            int avg = (r + g + b) / 3;
+            grey[i] = Math.Abs(g - r) <= 6 && b - r is >= -4 and <= 10 && avg is >= 80 and <= 115;
+        }
+        var result = new bool[n];
+        var seen = new bool[n];
+        var stack = new Stack<int>();
+        for (int i = 0; i < n; i++)
+        {
+            if (!grey[i] || seen[i])
+                continue;
+            var part = new List<int>();
+            seen[i] = true;
+            stack.Push(i);
+            while (stack.Count > 0)
+            {
+                int j = stack.Pop();
+                part.Add(j);
+                int x = j % w, y = j / w;
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        int nx = x + dx, ny = y + dy;
+                        if (nx < 0 || ny < 0 || nx >= w || ny >= h)
+                            continue;
+                        int k = ny * w + nx;
+                        if (grey[k] && !seen[k])
+                        {
+                            seen[k] = true;
+                            stack.Push(k);
+                        }
+                    }
+            }
+            int x0 = part.Min(j => j % w), x1 = part.Max(j => j % w), y0 = part.Min(j => j / w), y1 = part.Max(j => j / w);
+            int bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+            double fill = (double)part.Count / (bw * bh);
+            if (part.Count < PlazaMinPixels * size * size || bw < 18 * size || bh < 18 * size || bw > 70 * size || bh > 70 * size
+                || fill < 0.22 || Math.Max(bw, bh) > 1.8 * Math.Min(bw, bh))
+                continue;
+            // The whole round place (the stalls and people standing on it are holes in its colour).
+            double cx = (x0 + x1) / 2.0, cy = (y0 + y1) / 2.0, rx = bw / 2.0, ry = bh / 2.0;
+            for (int y = y0; y <= y1; y++)
+                for (int x = x0; x <= x1; x++)
+                {
+                    double ex = (x - cx) / rx, ey = (y - cy) / ry;
+                    if (ex * ex + ey * ey <= 1)
+                        result[y * w + x] = true;
+                }
+        }
+        return result;
+    }
+
+    internal const int PlazaMinPixels = 150;
+
+    // ── Mountains: never walked into (the user: the rocks drawn on the map are no place to go) ──
+
+    private BitArray? _mountain;
+    /// <summary>Whether this map's mountains are known (read off its saved M map picture).</summary>
+    public bool HasMountains => _mountain != null;
+
+    public bool Mountain(double x, double y)
+    {
+        int c = (int)Math.Floor((x - StartX) / Cell), r = (int)Math.Floor((y - StartY) / Cell);
+        return _mountain != null && c >= 0 && r >= 0 && c < Columns && r < Rows && _mountain[r * Columns + c];
+    }
+
+    /// <summary>How much of a square of <paramref name="size"/> around (x, y) is mountain (0..1).</summary>
+    public double MountainShareIn(double x, double y, double size)
+    {
+        if (_mountain == null)
+            return 0;
+        if (size <= Cell * 1.5)
+            return Mountain(x, y) ? 1 : 0;
+        int c0 = (int)Math.Floor((x - size / 2 - StartX) / Cell), c1 = (int)Math.Floor((x + size / 2 - StartX) / Cell);
+        int r0 = (int)Math.Floor((y - size / 2 - StartY) / Cell), r1 = (int)Math.Floor((y + size / 2 - StartY) / Cell);
+        int all = 0, hits = 0;
+        for (int r = r0; r <= r1; r++)
+            for (int c = c0; c <= c1; c++)
+            {
+                all++;
+                if (c >= 0 && r >= 0 && c < Columns && r < Rows && _mountain[r * Columns + c])
+                    hits++;
+            }
+        return all > 0 ? (double)hits / all : 0;
+    }
+
+    /// <summary>The mountains of a map picture: the grey-violet rock (c2: ~95 95 118; red and green alike, blue ~20
+    /// above), in wide patches only, a pixel in from their edges (their foot can be walked).</summary>
+    internal static bool[] MountainPixels((byte R, byte G, byte B)[] pixels, int w, int h)
+    {
+        int n = w * h;
+        var rock = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            var (r, g, b) = pixels[i];
+            int avg = (r + g + b) / 3;
+            rock[i] = Math.Abs(g - r) <= 7 && b - r is >= 10 and <= 34 && avg is >= 72 and <= 160 ? 1 : 0;
+        }
+        double size = Math.Max(1, w / 307.0);
+        var around = Box(rock, w, h, (int)Math.Round(3 * size));
+        var patch = new bool[n];
+        for (int i = 0; i < n; i++)
+            patch[i] = around[i] > 0.45;
+        var inner = new bool[n];
+        int pad = Math.Max(1, (int)Math.Round(size));
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                bool all = patch[y * w + x];
+                for (int dy = -pad; dy <= pad && all; dy++)
+                    for (int dx = -pad; dx <= pad && all; dx++)
+                    {
+                        int nx = x + dx, ny = y + dy;
+                        all = nx >= 0 && ny >= 0 && nx < w && ny < h && patch[ny * w + nx];
+                    }
+                inner[y * w + x] = all;
+            }
+        return inner;
+    }
+
+    /// <summary>The picture the roads were read from (kept beside them): the mountains come from it.</summary>
+    public static string PictureOf(string folder, string map) => MapTerrain.Stem(folder, map) + ".yollar.png";
+
+    /// <summary>Reads the mountains off the map's saved picture (none when there is no picture). Roads stay walkable.</summary>
+    public void ReadMountains(string folder)
+    {
+        string file = PictureOf(folder, Map);
+        if (!File.Exists(file))
+            return;
+        try
+        {
+            using var bmp = new Bitmap(file);
+            int w = bmp.Width, h = bmp.Height;
+            var pixels = new (byte R, byte G, byte B)[w * h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    var c = bmp.GetPixel(x, y);
+                    pixels[y * w + x] = (c.R, c.G, c.B);
+                }
+            var mask = MountainPixels(pixels, w, h);
+            var mountain = new BitArray(Columns * Rows);
+            for (int r = 0; r < Rows; r++)
+                for (int c = 0; c < Columns; c++)
+                {
+                    int px = Math.Clamp((int)((c + 0.5) / Columns * w), 0, w - 1), py = Math.Clamp((int)((r + 0.5) / Rows * h), 0, h - 1);
+                    if (mask[py * w + px] && !_road[r * Columns + c])
+                        mountain[r * Columns + c] = true;
+                }
+            _mountain = mountain;
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException or OutOfMemoryException) { }
     }
 
     /// <summary>A road ending nowhere shorter than this (pixels of its middle line, on a ~300-px picture: ~45 m) is cut
@@ -705,6 +904,7 @@ internal sealed class RoadMap
             var roads = new RoadMap(map, s.StartX, s.StartY, s.Columns, s.Rows, bits, s.Picture, s.Biggest);
             roads.ApplyRemoved(folder);
             roads.RoadCells = roads.Count();
+            roads.ReadMountains(folder);
             return roads;
         }
         catch (Exception ex) when (ex is IOException or JsonException or FormatException or UnauthorizedAccessException) { }
