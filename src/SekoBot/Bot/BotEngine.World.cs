@@ -28,6 +28,19 @@ internal sealed partial class BotEngine
     /// <summary>The last look at the game world from memory (null when it can't be read).</summary>
     public WorldSnapshot? World => Volatile.Read(ref _snapshot);
 
+    /// <summary>A map's roads and mountains as the bot knows them (null: not read yet).</summary>
+    public RoadMap? RoadsOf(string map) => _terrain.RoadsOf(map);
+
+    /// <summary>The way the bot is walking now (its corners), for the live map.</summary>
+    public IReadOnlyList<Vec3>? WayNow
+    {
+        get
+        {
+            try { return _brain.WayNow; }
+            catch (Exception ex) when (ex is InvalidOperationException or ArgumentException) { return null; }
+        }
+    }
+
     /// <summary>What the game holds about this computer (its MAC address, the server…); null without the game.</summary>
     public GameWorldReader.Machine? MachineSeen()
     {
