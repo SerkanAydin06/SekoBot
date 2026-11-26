@@ -274,6 +274,22 @@ internal sealed class MapTerrain
                     if (!solid[y * w + x] && slopes.SteepIn(ox + (x + 0.5) * cell, oy + (y + 0.5) * cell, cell) >= share)
                         solid[y * w + x] = true;
         }
+        // The mountains drawn on the map: never walked into (kept off only away from where the way starts and ends:
+        // a character standing at a rock's foot, or a goal beside one, still gets out / there).
+        if (Roads is { HasMountains: true } mountains)
+        {
+            double share = cell <= RoadMap.Cell * 1.5 ? 0.5 : 0.6;
+            double clear = TerrainBook.MountainClear + cell;
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    double px = ox + (x + 0.5) * cell, py = oy + (y + 0.5) * cell;
+                    if (solid[y * w + x] || Math.Abs(px - from.X) + Math.Abs(py - from.Y) < clear || Math.Abs(px - to.X) + Math.Abs(py - to.Y) < clear)
+                        continue;
+                    if (mountains.MountainShareIn(px, py, cell) >= share)
+                        solid[y * w + x] = true;
+                }
+        }
         foreach (var c in avoid ?? [])
         {
             double r = c.R + solidWithin;
@@ -639,9 +655,13 @@ internal sealed class TerrainBook(string? folder = null)
     }
 
     /// <summary>The map's roads, just read off its M map: kept on disk and used from now on.</summary>
+    /// <summary>Round where a way starts and ends the mountains don't count (world units): out of a rock's foot.</summary>
+    internal const double MountainClear = 600;
+
     public void SetRoads(RoadMap roads)
     {
         roads.ApplyRemoved(Folder);
+        roads.ReadMountains(Folder);
         try { roads.Save(Folder); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         lock (_gate)
