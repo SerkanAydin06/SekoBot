@@ -270,6 +270,16 @@ internal sealed partial class BotEngine
             }
         }
         _channelActedAt = now;
+        ClickAction ChannelClick(Rectangle bounds, Func<ChannelScreen, Point, bool> matches)
+        {
+            var at = BagCleaner.ClickPoint(bounds);
+            bool Wanted()
+            {
+                lock (_worldGate)
+                    return _channelSince.HasValue && _world?.ReadChannels() is { } live && live.Current == screen?.Current && matches(live, at);
+            }
+            return new ClickAction(at, Slow: true, StillWanted: Wanted);
+        }
         if (screen is { WindowOpen: true } window)
         {
             // The emptiest other channel — one none of our bots is on here when there is such (see CrowdTick).
@@ -280,7 +290,7 @@ internal sealed partial class BotEngine
                 return [new KeyTapAction(p.Keys.CloseWindow)];
             }
             if (window.Selected != target.Channel)
-                return [new ClickAction(BagCleaner.ClickPoint(target.At), Slow: true)];
+                return [ChannelClick(target.At, (live, at) => live.WindowOpen && live.Selected != target.Channel && live.Boxes.Any(b => b.Channel == target.Channel && b.At.Contains(at)))];
             // Pressed: the game takes a while to move over (seen: 20 s); not pressed again meanwhile.
             if (now - _changePressedAt < TimeSpan.FromSeconds(12))
                 return [];
@@ -288,19 +298,24 @@ internal sealed partial class BotEngine
             {
                 _changePressedAt = now;
                 _log($"🔀 Kanal {target.Channel} seçildi (%{target.Full} dolu); 'Kanal değiştir'e basılıyor.");
-                return [new ClickAction(BagCleaner.ClickPoint(change), Slow: true)];
+                return [ChannelClick(change, (live, at) => live.WindowOpen && live.Selected == target.Channel && live.Change?.Contains(at) == true)];
             }
             return [];
         }
         if (screen?.MenuButton is { } menuButton)
-            return [new ClickAction(BagCleaner.ClickPoint(menuButton), Slow: true)];
+            return [ChannelClick(menuButton, (live, at) => !live.WindowOpen && live.MenuButton?.Contains(at) == true)];
         // The game menu is up but its button not drawn yet (it slides in): waited on, not Esc'd shut again
         // (seen on VaSPeN: the menu opened and shut three times, no channel change).
         if (World?.OpenWindows?.Contains("EscMenu") == true && _menuWaits++ < 5)
             return [];
         // Nothing open: Esc opens the game menu (tried a few times).
         if (_escTries++ < 3)
-            return [new KeyTapAction(p.Keys.CloseWindow)];
+            return [new KeyTapAction(p.Keys.CloseWindow) { StillWanted = () =>
+            {
+                lock (_worldGate)
+                    return _channelSince.HasValue && _world?.ReadChannels() is { WindowOpen: false, MenuButton: null }
+                        && World?.OpenWindows?.Contains("EscMenu") == false;
+            } }];
         if (state.Dead && _holdRevive)
         {
             // The menu doesn't open while dead: revived here first, then the channel is changed.

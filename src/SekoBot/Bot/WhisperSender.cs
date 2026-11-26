@@ -10,7 +10,7 @@ namespace SekoBot.Bot;
 /// Enter, check the message shows up as ours, and close the window again if we opened it. Works from
 /// what memory shows (<see cref="DmLayout"/>). Pure logic: the engine reads the layout and sends the actions.
 /// </summary>
-internal sealed class WhisperSender
+internal sealed class WhisperSender(Func<DmLayout?>? readNow = null)
 {
     public static readonly TimeSpan GiveUpAfter = TimeSpan.FromSeconds(45);
     private static TimeSpan AfterClick => TimeSpan.FromMilliseconds(PressTime.Vary(1800));
@@ -52,6 +52,13 @@ internal sealed class WhisperSender
         Problem ??= why;
     }
 
+    private Func<bool>? When(Func<DmLayout, bool> predicate) =>
+        readNow == null ? null : () => readNow() is { } live && predicate(live);
+
+    private static bool Conversation(DmLayout dm, string recipient) =>
+        dm.Open && !dm.TextBox.IsEmpty &&
+        dm.Shown.Any(m => !m.Mine && string.Equals(m.Name.Trim(), recipient, StringComparison.OrdinalIgnoreCase));
+
     public IReadOnlyList<BotAction> Tick(TimeSpan now, DmLayout? dm)
     {
         var actions = new List<BotAction>();
@@ -65,6 +72,7 @@ internal sealed class WhisperSender
         if (_step != Step.Close && now - _started > GiveUpAfter)
             Close("süre doldu");
 
+        string recipient = To;
         switch (_step)
         {
             case Step.Open:
@@ -78,7 +86,8 @@ internal sealed class WhisperSender
                     Abort("mesaj penceresi açılamadı");
                     break;
                 }
-                actions.Add(new ClickAction(BagCleaner.DropClickPoint(opener, dm.OpenerBounds), Slow: true));
+                var openerAt = BagCleaner.DropClickPoint(opener, dm.OpenerBounds);
+                actions.Add(new ClickAction(openerAt, Slow: true, StillWanted: When(live => !live.Open && live.OpenerBounds.Contains(openerAt))));
                 _openedByUs = true;
                 _opens++;
                 _waitUntil = now + AfterClick;
@@ -101,7 +110,9 @@ internal sealed class WhisperSender
                     _step = Step.Focus;
                     goto case Step.Focus;
                 }
-                actions.Add(new ClickAction(BagCleaner.DropClickPoint(Centre(person.Rect), person.Rect), Slow: true));
+                var personAt = BagCleaner.DropClickPoint(Centre(person.Rect), person.Rect);
+                actions.Add(new ClickAction(personAt, Slow: true, StillWanted: When(live => live.Open && live.People.Any(p =>
+                    string.Equals(p.Name.Trim(), recipient, StringComparison.OrdinalIgnoreCase) && p.Rect.Contains(personAt)))));
                 _selects++;
                 _step = Step.Focus;
                 _waitUntil = now + AfterClick;
@@ -113,13 +124,15 @@ internal sealed class WhisperSender
                     Close("yazı kutusu bulunamadı");
                     goto case Step.Close;
                 }
-                actions.Add(new ClickAction(BagCleaner.ClickPoint(dm.TextBox), Slow: true));
+                var boxAt = BagCleaner.ClickPoint(dm.TextBox);
+                actions.Add(new ClickAction(boxAt, Slow: true, StillWanted: When(live =>
+                    Conversation(live, recipient) && live.TextBox.Contains(boxAt))));
                 _step = Step.Type;
                 _waitUntil = now + TimeSpan.FromMilliseconds(PressTime.Vary(1200));
                 break;
 
             case Step.Type:
-                actions.Add(new TypeTextAction(Text, ClearFirst: true));
+                actions.Add(new TypeTextAction(Text, ClearFirst: true) { StillWanted = When(live => Conversation(live, recipient) && live.TextBox == dm.TextBox) });
                 _step = Step.Send;
                 _waitUntil = now + TimeSpan.FromMilliseconds(PressTime.Vary(800) + Text.Length * 60);
                 break;
@@ -130,7 +143,7 @@ internal sealed class WhisperSender
                     Close("mesaj yazı alanı kapandı");
                     goto case Step.Close;
                 }
-                actions.Add(new KeyTapAction(Keys.Enter));
+                actions.Add(new KeyTapAction(Keys.Enter) { StillWanted = When(live => Conversation(live, recipient) && live.TextBox == dm.TextBox) });
                 _step = Step.Check;
                 _waitUntil = now + AfterClick;
                 break;
@@ -159,9 +172,12 @@ internal sealed class WhisperSender
                     break;
                 }
                 if (_closes < 2 && dm.Opener is Point button)
-                    actions.Add(new ClickAction(BagCleaner.DropClickPoint(button, dm.OpenerBounds), Slow: true));
+                {
+                    var buttonAt = BagCleaner.DropClickPoint(button, dm.OpenerBounds);
+                    actions.Add(new ClickAction(buttonAt, Slow: true, StillWanted: When(live => live.Open && live.OpenerBounds.Contains(buttonAt))));
+                }
                 else
-                    actions.Add(new KeyTapAction(Keys.Escape));
+                    actions.Add(new KeyTapAction(Keys.Escape) { StillWanted = When(live => live.Open) });
                 _closes++;
                 _waitUntil = now + AfterClick;
                 break;

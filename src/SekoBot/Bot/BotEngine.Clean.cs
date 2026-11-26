@@ -299,7 +299,7 @@ internal sealed partial class BotEngine
         if (bag.Confirm is Point yes)
             return BagCleaner.DropConfirmation(yes, bag.ConfirmBounds, readBagNow);
         if (selling && bag.NpcShop > 0 && bag.OtherConfirm is Point sellYes)
-            return new ClickAction(BagCleaner.DropClickPoint(sellYes, bag.OtherConfirmBounds), Slow: true, Fast: true);
+            return BagCleaner.SaleConfirmation(sellYes, bag, readBagNow);
         return new KeyTapAction(bag.OtherConfirm != null || bag.NpcShop > 0 ? p.Keys.CloseWindow : p.Keys.Inventory);
     }
 

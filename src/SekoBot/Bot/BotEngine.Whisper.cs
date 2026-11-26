@@ -12,7 +12,12 @@ namespace SekoBot.Bot;
 internal sealed partial class BotEngine
 {
     private static readonly TimeSpan WhisperWaitForFight = TimeSpan.FromSeconds(30);
-    private readonly WhisperSender _whisper = new();
+    private readonly WhisperSender _whisper;
+
+    private DmLayout? ReadMessagesNow()
+    {
+        lock (_worldGate) return _world?.ReadDmWindow();
+    }
     private (string To, string Text, TimeSpan Since)? _pendingWhisper;
     private DmLayout? _dmLayout;
 

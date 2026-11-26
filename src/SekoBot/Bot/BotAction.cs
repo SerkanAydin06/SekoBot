@@ -28,11 +28,15 @@ internal sealed record MouseDragAction(Point From, Point To) : BotAction
 /// Backspace) — a movement key still on its way can land in it (seen: "sAs" for "As").</summary>
 internal sealed record TypeTextAction(string Text, bool ClearFirst = false) : BotAction
 {
+    internal Func<bool>? StillWanted { get; init; }
+
     public override string ToString() => $"Yaz \"{Text}\"";
 }
 
 internal sealed record KeyTapAction(Keys Key) : BotAction
 {
+    internal Func<bool>? StillWanted { get; init; }
+
     public override string ToString() => $"Tuş {Key}";
 }
 

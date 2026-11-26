@@ -17,6 +17,7 @@ internal enum TouchResult
     Busy,
     /// <summary>Windows doesn't allow touches from this program.</summary>
     Unavailable,
+    Stale,
 }
 
 /// <summary>
@@ -41,13 +42,12 @@ internal static class TouchTap
     private static bool? _ready;
 
     /// <param name="slower">A posted click that didn't take: the cursor stays longer on the stall's place.</param>
-    public static async Task<TouchResult> TapAsync(WindowInfo window, Point client, CancellationToken token, bool slower = false)
+    public static async Task<TouchResult> TapAsync(WindowInfo window, Point client, CancellationToken token, bool slower = false, Func<bool>? wanted = null)
     {
         if (!Ready())
             return TouchResult.Unavailable;
         if (Win32.IsIconic(window.Handle))
             return TouchResult.Covered;
-        var screen = WindowService.ClientToScreen(window, client);
         // Wait until the user's mouse is still and no button is held (their click never goes astray).
         Win32.GetCursorPos(out var last);
         int still = 0;
@@ -68,7 +68,7 @@ internal static class TouchTap
             return TouchResult.Busy;
         try
         {
-            return Tap(window, client, screen, slower);
+            return Tap(window, client, WindowService.ClientToScreen(window, client), slower, wanted);
         }
         finally
         {
@@ -76,15 +76,14 @@ internal static class TouchTap
         }
     }
 
-    private static TouchResult Tap(WindowInfo window, Point client, Point screen, bool slower)
+    private static TouchResult Tap(WindowInfo window, Point client, Point screen, bool slower, Func<bool>? wanted)
     {
         // A touch brings the window it lands on to the front (like a click): only when the game is in
         // front already. Otherwise the click is posted, which leaves every window where it is (seen:
         // with all games side by side, every tap pulled the market bot's game to the front).
         if (!Shows(window, screen) || Win32.GetForegroundWindow() != window.Handle)
         {
-            PostedClick(window, client, screen, slower);
-            return TouchResult.Posted;
+            return PostedClick(window, client, screen, slower, wanted) ? TouchResult.Posted : TouchResult.Stale;
         }
         lock (Gate)
         {
@@ -97,6 +96,7 @@ internal static class TouchTap
             t.pressure = 32000;
             t.rcContact = new N.RECT { L = screen.X - 2, T = screen.Y - 2, R = screen.X + 2, B = screen.Y + 2 };
             t.pointerInfo.pointerFlags = N.InRange | N.InContact | N.Down;
+            if (wanted?.Invoke() == false) return TouchResult.Stale;
             if (!N.InjectTouchInput(1, [t]))
                 return TouchResult.Unavailable;
             Thread.Sleep(PressTime.Tap() - 25);
@@ -118,7 +118,7 @@ internal static class TouchTap
 
     /// <summary>A click posted to the game window (covered by another one): the cursor is put where the
     /// stall is for a moment, as the game reads it from there, then back where the user had it.</summary>
-    private static void PostedClick(WindowInfo window, Point client, Point screen, bool slower)
+    private static bool PostedClick(WindowInfo window, Point client, Point screen, bool slower, Func<bool>? wanted)
     {
         lock (Gate)
         {
@@ -129,10 +129,12 @@ internal static class TouchTap
                 Win32.SetCursorPos(screen.X, screen.Y);
                 Win32.PostMessage(window.Handle, 0x200, 0, at); // WM_MOUSEMOVE
                 Thread.Sleep(PressTime.Vary(slower ? 40 : 15));
+                if (wanted?.Invoke() == false) return false;
                 Win32.PostMessage(window.Handle, 0x201, 1, at); // WM_LBUTTONDOWN
                 Thread.Sleep(slower ? PressTime.Button(false) : PressTime.Tap());
                 Win32.PostMessage(window.Handle, 0x202, 0, at); // WM_LBUTTONUP
                 Thread.Sleep(PressTime.Vary(slower ? 40 : 20));
+                return true;
             }
             finally
             {

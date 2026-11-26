@@ -48,7 +48,10 @@ internal sealed partial class BotEngine
     /// </summary>
     public Point? UpdateQuestion() => WithLatestFrame(UpdateQuestionIn);
 
-    internal static Point? UpdateQuestionIn(Frame frame)
+    internal static Point? UpdateQuestionIn(Frame frame) =>
+        UpdateQuestionBounds(frame) is { } bounds ? BagCleaner.ClickPoint(bounds) : null;
+
+    private static Rectangle? UpdateQuestionBounds(Frame frame)
     {
         int w = frame.Width, h = frame.Height;
         if (w < 400 || h < 300)
@@ -71,14 +74,15 @@ internal sealed partial class BotEngine
         if (!shown)
             return null;
         var bounds = Rectangle.FromLTRB(cx + (int)(-90 * s), cy + (int)(22 * s), cx + (int)(-22 * s), cy + (int)(46 * s));
-        return BagCleaner.ClickPoint(bounds);
+        return bounds;
     }
 
     /// <summary>Presses a point of the game (client pixels), e.g. "Onayla" on its update question.</summary>
     public void PressAt(Point at)
     {
         _loginInput ??= new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
-        _loginInput.Enqueue(new ClickAction(at, Slow: true, Fast: true));
+        _loginInput.Enqueue(new ClickAction(at, Slow: true, Fast: true,
+            StillWanted: () => WithLatestFrame(frame => UpdateQuestionBounds(frame)?.Contains(at) == true)));
     }
 
     /// <summary>Presses the login button (drawn at <paramref name="button"/>, client pixels): the game in front a moment.</summary>
