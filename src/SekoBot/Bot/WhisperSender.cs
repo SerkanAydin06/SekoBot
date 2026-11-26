@@ -1,4 +1,5 @@
 using SekoBot.Config;
+using SekoBot.Input;
 using SekoBot.Memory;
 
 namespace SekoBot.Bot;
@@ -12,7 +13,7 @@ namespace SekoBot.Bot;
 internal sealed class WhisperSender
 {
     public static readonly TimeSpan GiveUpAfter = TimeSpan.FromSeconds(45);
-    private static readonly TimeSpan AfterClick = TimeSpan.FromMilliseconds(1800);
+    private static TimeSpan AfterClick => TimeSpan.FromMilliseconds(PressTime.Vary(1800));
     /// <summary>After the held keys are let go, before the first click.</summary>
     internal static readonly TimeSpan KeysSettle = TimeSpan.FromMilliseconds(1000);
 
@@ -114,13 +115,13 @@ internal sealed class WhisperSender
                 }
                 actions.Add(new ClickAction(BagCleaner.ClickPoint(dm.TextBox), Slow: true));
                 _step = Step.Type;
-                _waitUntil = now + TimeSpan.FromMilliseconds(1200);
+                _waitUntil = now + TimeSpan.FromMilliseconds(PressTime.Vary(1200));
                 break;
 
             case Step.Type:
                 actions.Add(new TypeTextAction(Text, ClearFirst: true));
                 _step = Step.Send;
-                _waitUntil = now + TimeSpan.FromMilliseconds(800 + Text.Length * 60);
+                _waitUntil = now + TimeSpan.FromMilliseconds(PressTime.Vary(800) + Text.Length * 60);
                 break;
 
             case Step.Send:

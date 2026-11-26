@@ -11,6 +11,8 @@ internal abstract record BotAction;
 /// (the window it was for has closed meanwhile; a click then would land on the ground and walk the character).</param>
 internal sealed record ClickAction(Point Client, bool Slow = false, bool Fast = false, bool Yield = false, Func<bool>? StillWanted = null, bool Right = false) : BotAction
 {
+    internal TaskCompletionSource<bool>? Completion { get; init; }
+
     public override string ToString() => $"Tıkla ({Client.X}, {Client.Y}){(Slow ? " yavaş" : "")}";
 }
 

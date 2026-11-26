@@ -87,7 +87,16 @@ internal sealed partial class BotEngine
                 var center = new Point(pack.At.X + pack.At.Width / 2, pack.At.Y + pack.At.Height / 2);
                 var target = BagCleaner.DropClickPoint(center, pack.At);
                 int before = Count(need.Vnum);
-                input.Enqueue(new ClickAction(target, Slow: true, Fast: true, Right: true));
+                bool SlotStillValid()
+                {
+                    lock (_worldGate)
+                        return _world?.ReadNpcShop() is { } current && current.ShopId == shop.ShopId
+                            && current.Slots.Any(s => s.Vnum == pack.Vnum && s.Count == pack.Count
+                            && s.Price == pack.Price && s.At.Contains(target));
+                }
+                if (!await input.ClickAndWaitAsync(new ClickAction(target, Slow: true, Fast: true,
+                        Right: true, StillWanted: SlotStillValid), token))
+                    break;
                 // Bought: the bag shows more of it within a moment.
                 bool came = false;
                 for (int wait = 0; wait < 12 && !came; wait++)

@@ -273,7 +273,8 @@ internal sealed partial class BotEngine
         if (cover?.ChatHistoryClose is not Point x || !ChatHistoryShowing(cover))
             return false;
         _log("Sohbet geçmişi penceresi açık (dükkanları kapatıyor); kapatılıyor.");
-        await OpenStallAsync(input, BagCleaner.DropClickPoint(x, cover.CloseBounds), yieldMouse: true, token);
+        await OpenStallAsync(input, BagCleaner.DropClickPoint(x, cover.CloseBounds), yieldMouse: true, token,
+            () => ChatHistoryShowing(cover) ? BagCleaner.DropClickPoint(x, cover.CloseBounds) : null);
         await Task.Delay(1000, token);
         if (ChatHistoryShowing(cover))
         {
@@ -506,7 +507,8 @@ internal sealed partial class BotEngine
                 if (ClickPoint(next, world, camera, state, cover) is Point p)
                 {
                     // A tap that couldn't be made (the window covered, the mouse in use) uses no try.
-                    if (!await OpenStallAsync(input, p, yieldMouse: true, token))
+                    if (!await OpenStallAsync(input, p, yieldMouse: true, token,
+                            () => ClickPoint(next, world, camera, state, ScreenCoverNow())))
                         continue;
                     tries[next.Id] = tries.GetValueOrDefault(next.Id) + 1;
                     if (await WaitForShop(token) != null)
@@ -594,8 +596,14 @@ internal sealed partial class BotEngine
     {
         if (!OnPlayfield(center, width, height) || cover?.Covers(center) == true)
             return null;
-        var target = BagCleaner.DropClickPoint(center, new Rectangle(0, 0, width, height));
-        return OnPlayfield(target, width, height) && cover?.Covers(target) != true ? target : center;
+        var bounds = new Rectangle(0, 0, width, height);
+        for (int attempt = 0; attempt < 12; attempt++)
+        {
+            var target = BagCleaner.DropClickPoint(center, bounds);
+            if (OnPlayfield(target, width, height) && cover?.Covers(target) != true)
+                return target;
+        }
+        return null;
     }
 
     private bool _touchRefused;
@@ -625,7 +633,7 @@ internal sealed partial class BotEngine
     /// other windows, the cursor stays where the user has it), else a real click.</summary>
     /// <returns>False when nothing was done (the game window is covered or the user is using the
     /// mouse): try again a moment later.</returns>
-    private async Task<bool> OpenStallAsync(InputExecutor input, Point p, bool yieldMouse, CancellationToken token)
+    private async Task<bool> OpenStallAsync(InputExecutor input, Point p, bool yieldMouse, CancellationToken token, Func<Point?> retryPoint)
     {
         await WaitForOtherMouseJobsAsync(token);
         if (!_touchRefused)
@@ -644,8 +652,9 @@ internal sealed partial class BotEngine
                     if (ShopOpenNow() != null)
                         return true;
                 }
-                if (player is Vec3 was && World?.Player is Vec3 now && now.DistanceXY(was) < 30)
-                    await TouchTap.TapAsync(_window, p, token, slower: true);
+                if (player is Vec3 was && World?.Player is Vec3 now && now.DistanceXY(was) < 30
+                    && retryPoint() is Point retry && retry != p)
+                    await TouchTap.TapAsync(_window, retry, token, slower: true);
                 return true;
             }
             if (result == TouchResult.Unavailable)
@@ -869,7 +878,8 @@ internal sealed partial class BotEngine
                 continue;
             if (ClickPoint(shop, world, camera, state, cover) is Point p && clicks < 4)
             {
-                if (!await OpenStallAsync(input, p, yieldMouse: false, token))
+                if (!await OpenStallAsync(input, p, yieldMouse: false, token,
+                        () => ClickPoint(shop, world, camera, state, ScreenCoverNow())))
                     continue;
                 clicks++;
                 if (await WaitForShop(token) is { } opened)

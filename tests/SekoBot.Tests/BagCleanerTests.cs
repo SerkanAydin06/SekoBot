@@ -23,6 +23,20 @@ public class BagCleanerTests
     private static TimeSpan S(double s) => TimeSpan.FromSeconds(s);
 
     [Fact]
+    public void Offset_stays_inside_narrow_targets_and_only_uses_center_for_a_single_pixel()
+    {
+        var center = new Point(12, 20);
+        Assert.Equal(center, BagCleaner.DropClickPoint(center, new Rectangle(center, new Size(1, 1))));
+        var narrow = new Rectangle(12, 20, 1, 4);
+        for (int i = 0; i < 100; i++)
+        {
+            var target = BagCleaner.DropClickPoint(center, narrow);
+            Assert.True(narrow.Contains(target));
+            Assert.NotEqual(center, target);
+        }
+    }
+
+    [Fact]
     public void Opens_the_bag_goes_to_the_page_and_clicks_the_item()
     {
         var p = new BotProfile();
@@ -35,7 +49,10 @@ public class BagCleanerTests
         Assert.Equal([new KeyTapAction(p.Keys.Inventory)], cleaner.Tick(S(0), Bag(false, 0, [Item(11, Keep, 0, false), junkClosed]), toThrow, p, Client));
         // Open on page 1, the item is on page 2: its button (second from the left).
         var page = cleaner.Tick(S(1.5), Bag(true, 0, [Item(11, Keep, 0, true), junkClosed]), toThrow, p, Client);
-        Assert.Equal([new ClickAction(Pages[1], Slow: true)], page);
+        var pageClick = Assert.IsType<ClickAction>(Assert.Single(page));
+        Assert.NotEqual(Pages[1], pageClick.Client);
+        Assert.InRange(Math.Abs(pageClick.Client.X - Pages[1].X), 0, 2);
+        Assert.InRange(Math.Abs(pageClick.Client.Y - Pages[1].Y), 0, 2);
         var shown = Item(104, Junk, 1, true);
         var click = Assert.IsType<ClickAction>(Assert.Single(cleaner.Tick(S(3.5), Bag(true, 1, [shown]), toThrow, p, Client)));
         Assert.False(click.Right);
