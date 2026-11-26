@@ -19,6 +19,7 @@ internal sealed partial class Brain
 
     private readonly Func<BotProfile> _profile;
 
+    private int _lootInterval = 350, _reviveInterval = 3000;
     private TimeSpan _phaseSince, _lastLoot, _turnDuration;
     private TimeSpan _lastAttackDown = Never, _lastHpPotion = Never, _lastMpPotion = Never, _lastEsc = Never;
     private TimeSpan _lastReviveClick = Never, _recoverSince = Never;
@@ -331,10 +332,11 @@ internal sealed partial class Brain
         var now = state.Time;
         if (_lootPresses < p.LootPresses)
         {
-            if (now - _lastLoot >= Ms(350))
+            if (now - _lastLoot >= Ms(_lootInterval))
             {
                 actions.Add(new KeyTapAction(p.Keys.Pickup));
                 _lastLoot = now;
+                _lootInterval = _random.Next(315, 386);
                 _lootPresses++;
             }
             return;
@@ -390,20 +392,18 @@ internal sealed partial class Brain
             _lastReviveClick = Never;
             return; // killed by a player still around: waiting (the engine decides)
         }
-        if (state.ReviveReady && now - _lastReviveClick >= Ms(3000))
+        if (state.ReviveReady && now - _lastReviveClick >= Ms(_reviveInterval))
         {
             if (state.Width <= 0 || state.Height <= 0)
                 return;
             var center = ReviveHereButton(state.Width, state.Height);
-            const int radius = 5;
-            var spot = new Point(
-                _random.Next(Math.Max(0, center.X - radius), Math.Min(state.Width - 1, center.X + radius) + 1),
-                _random.Next(Math.Max(0, center.Y - radius), Math.Min(state.Height - 1, center.Y + radius) + 1));
+            var spot = BagCleaner.DropClickPoint(center, new Rectangle(0, 0, state.Width, state.Height));
             actions.Add(new ClickAction(spot, Slow: true));
             actions.Add(new NoteAction(_reviveTries == 0
                 ? "\"Burada yeniden başla\" tıklandı."
                 : $"Hâlâ ölü; \"Burada yeniden başla\" tekrar tıklandı ({_reviveTries + 1}. deneme)."));
             _lastReviveClick = now;
+            _reviveInterval = _random.Next(3000, 3301);
             _reviveTries++;
         }
     }

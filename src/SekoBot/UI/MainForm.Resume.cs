@@ -323,7 +323,9 @@ internal sealed partial class MainForm
             _launcherSizedAt = now;
             return;
         }
-        var point = new Win32.POINT { X = (int)(client.Right * LauncherStart.X), Y = (int)(client.Bottom * LauncherStart.Y) };
+        var center = new Point((int)(client.Right * LauncherStart.X), (int)(client.Bottom * LauncherStart.Y));
+        var target = BagCleaner.DropClickPoint(center, new Rectangle(center.X - 4, center.Y - 4, 9, 9));
+        var point = new Win32.POINT { X = target.X, Y = target.Y };
         Win32.ClientToScreen(window, ref point);
         // Brought forward, the button looked at, pressed.
         var alt = new Win32.INPUT { type = Win32.INPUT_KEYBOARD };
@@ -347,7 +349,7 @@ internal sealed partial class MainForm
         {
             Win32.GetCursorPos(out var previous);
             Win32.SetCursorPos(point.X, point.Y);
-            System.Threading.Thread.Sleep(150);
+            System.Threading.Thread.Sleep(SekoBot.Input.PressTime.Vary(150));
             var down = new Win32.INPUT { type = Win32.INPUT_MOUSE };
             down.u.mi.dwFlags = Win32.MOUSEEVENTF_LEFTDOWN;
             var up = down;
@@ -355,7 +357,7 @@ internal sealed partial class MainForm
             Win32.SendInput(1, [down], System.Runtime.InteropServices.Marshal.SizeOf<Win32.INPUT>());
             System.Threading.Thread.Sleep(SekoBot.Input.PressTime.Button(fast: true));
             Win32.SendInput(1, [up], System.Runtime.InteropServices.Marshal.SizeOf<Win32.INPUT>());
-            System.Threading.Thread.Sleep(150);
+            System.Threading.Thread.Sleep(SekoBot.Input.PressTime.Vary(150));
             Win32.SetCursorPos(previous.X, previous.Y);
         }
         _launcherPressedAt = now;

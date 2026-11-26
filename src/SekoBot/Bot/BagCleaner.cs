@@ -1,4 +1,5 @@
 using SekoBot.Config;
+using SekoBot.Input;
 using SekoBot.Memory;
 
 namespace SekoBot.Bot;
@@ -18,17 +19,17 @@ internal sealed class BagCleaner
     public static readonly TimeSpan GiveUpAfter = TimeSpan.FromSeconds(300);
     /// <summary>No question this long after the click: it didn't take.</summary>
     public static readonly TimeSpan QuestionTimeout = TimeSpan.FromMilliseconds(4500);
-    public static readonly TimeSpan AfterClick = TimeSpan.FromMilliseconds(1800);
+    public static TimeSpan AfterClick => TimeSpan.FromMilliseconds(PressTime.Vary(1800));
     /// <summary>After "Evet" in the item menu's question: looked at again this soon (the item goes within a second, seen);
     /// still there then, waited for up to <see cref="GoneWithin"/> before it counts as not taken.</summary>
-    public static readonly TimeSpan AfterYes = TimeSpan.FromMilliseconds(700);
+    public static TimeSpan AfterYes => TimeSpan.FromMilliseconds(PressTime.Vary(700));
     public static readonly TimeSpan GoneWithin = TimeSpan.FromMilliseconds(1800);
-    public static readonly TimeSpan AfterKey = TimeSpan.FromMilliseconds(1200);
+    public static TimeSpan AfterKey => TimeSpan.FromMilliseconds(PressTime.Vary(1200));
     public const int TriesPerItem = 2;
     /// <summary>The item's menu shows a moment after the click; not there after this: retry the item.</summary>
     public static readonly TimeSpan MenuTimeout = TimeSpan.FromMilliseconds(2500);
     /// <summary>The menu shows some 60 ms after the click (recorded 2026-11-20); looked for this soon, waited for up to <see cref="MenuTimeout"/>.</summary>
-    public static readonly TimeSpan AfterItemClick = TimeSpan.FromMilliseconds(250);
+    public static TimeSpan AfterItemClick => TimeSpan.FromMilliseconds(PressTime.Vary(250));
     /// <summary>The menu's button read at one place this long before it is clicked (see <see cref="Step.Menu"/>).</summary>
     public static readonly TimeSpan MenuSettle = TimeSpan.FromMilliseconds(150);
     private Point? _menuSeenAt;
@@ -39,7 +40,7 @@ internal sealed class BagCleaner
     /// "Sat" only for an item that showed no question this long after its right click.</summary>
     public static readonly TimeSpan RightClickTimeout = TimeSpan.FromMilliseconds(1200);
     /// <summary>Looked at again this soon after the right click / the Enter.</summary>
-    public static readonly TimeSpan AfterRightClick = TimeSpan.FromMilliseconds(120);
+    public static TimeSpan AfterRightClick => TimeSpan.FromMilliseconds(PressTime.Vary(120));
     /// <summary>After Enter the question goes within this (else "Evet" is clicked).</summary>
     public static readonly TimeSpan EnterTakes = TimeSpan.FromMilliseconds(600);
     private bool _rightClicked;
@@ -98,10 +99,15 @@ internal sealed class BagCleaner
         if (!bounds.Contains(center))
             return center;
 
-        const int radius = 5;
-        return new Point(
-            Random.Shared.Next(Math.Max(bounds.Left, center.X - radius), Math.Min(bounds.Right - 1, center.X + radius) + 1),
-            Random.Shared.Next(Math.Max(bounds.Top, center.Y - radius), Math.Min(bounds.Bottom - 1, center.Y + radius) + 1));
+        var area = Rectangle.Intersect(bounds, new Rectangle(center.X - 5, center.Y - 5, 11, 11));
+        int count = area.Width * area.Height;
+        if (count == 1)
+            return center;
+        int middle = (center.Y - area.Top) * area.Width + center.X - area.Left;
+        int index = Random.Shared.Next(count - 1);
+        if (index >= middle)
+            index++;
+        return new Point(area.Left + index % area.Width, area.Top + index / area.Width);
     }
 
     /// <summary>Stops at once (attacked, died); closes the inventory if it is open.</summary>
@@ -356,7 +362,8 @@ internal sealed class BagCleaner
                 if (page >= 0 && page < bag.PageButtons.Count && _pageClicks.GetValueOrDefault(page) < 3)
                 {
                     var target = bag.PageButtonBounds is { } bounds && page < bounds.Count
-                        ? ClickPoint(bounds[page]) : bag.PageButtons[page];
+                        ? ClickPoint(bounds[page]) : DropClickPoint(bag.PageButtons[page],
+                            Rectangle.Intersect(bag.Window, new Rectangle(bag.PageButtons[page].X - 2, bag.PageButtons[page].Y - 2, 5, 5)));
                     actions.Add(new ClickAction(target, Slow: true));
                     _pageClicks[page] = _pageClicks.GetValueOrDefault(page) + 1;
                     _waitUntil = now + AfterClick;

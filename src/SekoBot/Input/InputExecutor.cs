@@ -19,7 +19,8 @@ internal sealed class InputExecutor : IDisposable
     private readonly WindowInfo _window;
     private readonly Action<string> _log;
     private readonly Channel<BotAction> _queue = Channel.CreateBounded<BotAction>(
-        new BoundedChannelOptions(32) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
+        new BoundedChannelOptions(32) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true },
+        dropped => (dropped as ClickAction)?.Completion?.TrySetResult(false));
     private readonly CancellationTokenSource _cts = new();
     private readonly HashSet<Keys> _held = [];
     private readonly Random _random = new();
@@ -155,6 +156,7 @@ internal sealed class InputExecutor : IDisposable
             {
                 if (DryRun)
                 {
+                    (action as ClickAction)?.Completion?.TrySetResult(false);
                     _log("[Kuru] " + action);
                     continue;
                 }
@@ -174,11 +176,13 @@ internal sealed class InputExecutor : IDisposable
                         ReleaseAll();
                         _log("Oyun penceresi odakta değil; girdiler bekletiliyor.");
                     }
+                    (action as ClickAction)?.Completion?.TrySetResult(false);
                     _warnedFocus = true;
                     continue;
                 }
                 _warnedFocus = false;
-                await ExecuteAsync(action, _cts.Token);
+                try { await ExecuteAsync(action, _cts.Token); }
+                finally { (action as ClickAction)?.Completion?.TrySetResult(false); }
             }
         }
         catch (OperationCanceledException) { }
@@ -188,8 +192,20 @@ internal sealed class InputExecutor : IDisposable
         }
         finally
         {
+            _queue.Writer.TryComplete();
+            while (_queue.Reader.TryRead(out var pending))
+                (pending as ClickAction)?.Completion?.TrySetResult(false);
             ReleaseAll();
         }
+    }
+
+    internal async Task<bool> ClickAndWaitAsync(ClickAction click, CancellationToken token)
+    {
+        var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        bool Wanted() => !token.IsCancellationRequested && click.StillWanted?.Invoke() != false;
+        if (!_queue.Writer.TryWrite(click with { StillWanted = Wanted, Completion = done }))
+            return false;
+        return await done.Task.WaitAsync(token);
     }
 
     /// <summary>
@@ -257,7 +273,8 @@ internal sealed class InputExecutor : IDisposable
         switch (action)
         {
             case ClickAction { Slow: true } button:
-                await ClickButtonAsync(button.Client, token, button.Fast, button.StillWanted, button.Right);
+                bool clicked = await ClickButtonAsync(button.Client, token, button.Fast, button.StillWanted, button.Right);
+                button.Completion?.TrySetResult(clicked);
                 break;
             case ClickAction click:
                 await ClickAsync(click.Client, 30, 60, token);
@@ -279,7 +296,7 @@ internal sealed class InputExecutor : IDisposable
                 break;
             case KeyHoldAction hold:
                 SendKey(hold.Key, down: true);
-                try { await Task.Delay(hold.Milliseconds, token); }
+                try { await Task.Delay(PressTime.Vary(hold.Milliseconds), token); }
                 finally { SendKey(hold.Key, down: false); }
                 break;
         }
@@ -337,10 +354,10 @@ internal sealed class InputExecutor : IDisposable
     /// hover, press with a real mouse event, hold, release, and wait for the game to take it.
     /// Afterwards the cursor and the window that was in front are put back.
     /// </summary>
-    private async Task ClickButtonAsync(Point client, CancellationToken token, bool fast = false, Func<bool>? stillWanted = null, bool right = false)
+    private async Task<bool> ClickButtonAsync(Point client, CancellationToken token, bool fast = false, Func<bool>? stillWanted = null, bool right = false)
     {
         if (stillWanted?.Invoke() == false)
-            return;
+            return false;
         using var guard = MouseGuard.Hold(); // the user's mouse held first, then the game brought forward
         await LetGoOfUserButtonsAsync(token);
         Win32.GetCursorPos(out var previous);
@@ -349,10 +366,10 @@ internal sealed class InputExecutor : IDisposable
         if (!front && _holdFront)
         {
             _log("Oyun penceresi öne getirilemedi; tıklama yapılmadı (arkadan tıklanırsa yanlış yere basabilir).");
-            return;
+            return false;
         }
         if (front && before != _window.Handle)
-            await Task.Delay(300, token);
+            await Task.Delay(PressTime.Vary(300), token);
         var screen = WindowService.ClientToScreen(_window, client);
         nint lParam = (nint)((client.Y << 16) | (client.X & 0xFFFF));
         try
@@ -363,12 +380,12 @@ internal sealed class InputExecutor : IDisposable
                 int d = 8 - i * (fast ? 3 : 2);
                 MoveMouse(new Point(screen.X + d, screen.Y + d / 2));
                 Win32.PostMessage(_window.Handle, Win32.WM_MOUSEMOVE, 0, lParam);
-                await Task.Delay(fast ? 35 : 60, token);
+                await Task.Delay(PressTime.Vary(fast ? 35 : 60), token);
             }
             MoveMouse(screen);
-            await Task.Delay(fast ? 120 : 300, token);
+            await Task.Delay(PressTime.Vary(fast ? 120 : 300), token);
             if (stillWanted?.Invoke() == false)
-                return; // gone while coming in: no press
+                return false; // gone while coming in: no press
             // A right click (buying in an NPC's shop) or the usual left one.
             void PressButton(bool down)
             {
@@ -388,7 +405,7 @@ internal sealed class InputExecutor : IDisposable
                 }
             }
             await PressTime.HoldAsync(PressButton, PressTime.Button(fast), token);
-            await Task.Delay(fast ? 200 : 500, token); // keep the cursor there while the game handles it
+            await Task.Delay(PressTime.Vary(fast ? 200 : 500), token); // keep the cursor there while the game handles it
         }
         finally
         {
@@ -398,6 +415,7 @@ internal sealed class InputExecutor : IDisposable
         }
         if (!front)
             _log("Oyun penceresi öne getirilemedi; tıklama arka plandan gönderildi.");
+        return true;
     }
 
     /// <summary>
@@ -417,7 +435,7 @@ internal sealed class InputExecutor : IDisposable
             return;
         }
         if (before != _window.Handle)
-            await Task.Delay(300, token);
+            await Task.Delay(PressTime.Vary(300), token);
         var start = WindowService.ClientToScreen(_window, from);
         var end = WindowService.ClientToScreen(_window, to);
         bool down = false;
@@ -426,23 +444,23 @@ internal sealed class InputExecutor : IDisposable
             for (int i = 0; i < 4; i++)
             {
                 MoveMouse(new Point(start.X + 6 - i * 2, start.Y + 3 - i));
-                await Task.Delay(50, token);
+                await Task.Delay(PressTime.Vary(50), token);
             }
             MoveMouse(start);
-            await Task.Delay(250, token);
+            await Task.Delay(PressTime.Vary(250), token);
             SendMouse(Win32.MOUSEEVENTF_LEFTDOWN);
             down = true;
-            await Task.Delay(200, token);
+            await Task.Delay(PressTime.Vary(200), token);
             const int steps = 20;
             for (int i = 1; i <= steps; i++)
             {
                 MoveMouse(new Point(start.X + (end.X - start.X) * i / steps, start.Y + (end.Y - start.Y) * i / steps));
-                await Task.Delay(25, token);
+                await Task.Delay(PressTime.Vary(25), token);
             }
-            await Task.Delay(250, token);
+            await Task.Delay(PressTime.Vary(250), token);
             SendMouse(Win32.MOUSEEVENTF_LEFTUP);
             down = false;
-            await Task.Delay(400, token);
+            await Task.Delay(PressTime.Vary(400), token);
         }
         finally
         {
@@ -476,7 +494,7 @@ internal sealed class InputExecutor : IDisposable
             return;
         }
         if (before != _window.Handle)
-            await Task.Delay(300, token);
+            await Task.Delay(PressTime.Vary(300), token);
         try
         {
             if (clearFirst)
@@ -485,9 +503,9 @@ internal sealed class InputExecutor : IDisposable
                 VirtualKey(0x11, true);
                 try { await PressTime.HoldAsync(down => VirtualKey(0x41, down), PressTime.Tap(), token); }
                 finally { VirtualKey(0x11, false); }
-                await Task.Delay(60, token);
+                await Task.Delay(PressTime.Vary(60), token);
                 await PressTime.HoldAsync(down => VirtualKey(0x08, down), PressTime.Tap(), token);
-                await Task.Delay(80, token);
+                await Task.Delay(PressTime.Vary(80), token);
             }
             foreach (char c in text)
             {
@@ -496,7 +514,8 @@ internal sealed class InputExecutor : IDisposable
                 down.u.ki.dwFlags = Win32.KEYEVENTF_UNICODE;
                 var up = down;
                 up.u.ki.dwFlags = Win32.KEYEVENTF_UNICODE | Win32.KEYEVENTF_KEYUP;
-                Win32.SendInput(2, [down, up], Marshal.SizeOf<Win32.INPUT>());
+                await PressTime.HoldAsync(pressed => Win32.SendInput(1, [pressed ? down : up], Marshal.SizeOf<Win32.INPUT>()),
+                    _random.Next(18, 36), token);
                 await Task.Delay(_random.Next(35, 70), token);
             }
         }
@@ -656,7 +675,7 @@ internal sealed class InputExecutor : IDisposable
         {
             while (!_cts.Token.IsCancellationRequested)
             {
-                await Task.Delay(100, _cts.Token);
+                await Task.Delay(PressTime.Vary(100), _cts.Token);
                 lock (_held)
                 {
                     foreach (var key in _held)
