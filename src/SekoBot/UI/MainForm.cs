@@ -491,6 +491,29 @@ internal sealed partial class MainForm : Form
             ReloadSettings();
             SaveProfile();
         };
+        // The character's kingdom: players of another one count as a danger (the game doesn't tell its own while playing).
+        Theme.Label(area, "Irkım", new Rectangle(0, 214, 190, 26), 9f, Theme.Muted);
+        var empire = new ComboBox
+        {
+            Bounds = new Rectangle(196, 214, 164, 26),
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            BackColor = Theme.Inset,
+            ForeColor = Theme.Text,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 9f),
+        };
+        empire.Items.AddRange(["Seçilmedi", "Kırmızı", "Sarı", "Mavi"]);
+        empire.SelectedIndex = Math.Clamp(_profile.Empire, 0, 3);
+        empire.SelectedIndexChanged += (_, _) =>
+        {
+            if (_reloading) return;
+            _profile.Empire = empire.SelectedIndex;
+            SaveProfile();
+            WriteLog(empire.SelectedIndex > 0 ? $"Irk: {empire.Text}. Başka ırktan oyuncular tehlikeli sayılır." : "Irk seçilmedi: oyuncular ırklarına göre ayrılmaz.");
+        };
+        _reloads.Add(() => empire.SelectedIndex = Math.Clamp(_profile.Empire, 0, 3));
+        area.Controls.Add(empire);
+        Theme.Label(area, "Her karakter kendi ırkını seçer; başka ırktan oyuncu yaklaşınca bot onu tehlike sayar.", new Rectangle(370, 214, 548, 26), 8.5f, Theme.Faint);
         var forgetSpot = Theme.Button(area, "Kaydettiğim alanı sil", new Rectangle(570, 100, 180, 28), Theme.Secondary, Theme.SecondaryHover);
         forgetSpot.Click += (_, _) =>
         {
