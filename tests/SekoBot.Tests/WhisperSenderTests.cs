@@ -28,6 +28,19 @@ public class WhisperSenderTests
     }
 
     [Fact]
+    public void Delayed_open_click_is_discarded_when_panel_already_opened()
+    {
+        var bounds = new Rectangle(Opener.X - 8, Opener.Y - 4, 16, 8);
+        DmLayout live = Closed with { OpenerBounds = bounds };
+        var sender = new WhisperSender(() => live);
+        sender.Start(S(-1), "oxyygen", "selam");
+        var click = Assert.IsType<ClickAction>(Assert.Single(sender.Tick(S(0), live)));
+        Assert.True(click.StillWanted!());
+        live = Open() with { OpenerBounds = bounds };
+        Assert.False(click.StillWanted!());
+    }
+
+    [Fact]
     public void Opening_clicks_stay_inside_the_button_and_stop_after_it_opens()
     {
         var sender = new WhisperSender();

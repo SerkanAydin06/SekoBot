@@ -14,6 +14,7 @@ namespace SekoBot.Bot;
 /// </summary>
 internal sealed partial class Brain
 {
+    internal Func<GameState?>? ReviveState { get; init; }
     private static readonly TimeSpan Never = TimeSpan.FromDays(-1);
     private TimeSpan _lastTickTime;
 
@@ -398,7 +399,8 @@ internal sealed partial class Brain
                 return;
             var center = ReviveHereButton(state.Width, state.Height);
             var spot = BagCleaner.DropClickPoint(center, new Rectangle(0, 0, state.Width, state.Height));
-            actions.Add(new ClickAction(spot, Slow: true));
+            actions.Add(new ClickAction(spot, Slow: true, StillWanted: ReviveState == null ? null : () =>
+                ReviveState() is { Dead: true, ReviveReady: true, HoldRevive: false } live && live.Width == state.Width && live.Height == state.Height));
             actions.Add(new NoteAction(_reviveTries == 0
                 ? "\"Burada yeniden başla\" tıklandı."
                 : $"Hâlâ ölü; \"Burada yeniden başla\" tekrar tıklandı ({_reviveTries + 1}. deneme)."));

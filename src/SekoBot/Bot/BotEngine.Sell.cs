@@ -205,7 +205,17 @@ internal sealed partial class BotEngine
             // A little above its feet, a bit more each try.
             if (camera.ToScreen(npcAt with { Z = npcAt.Z + 80 + tries * 40 }, state.Width, state.Height) is PointF p &&
                 WorldClickPoint(Point.Round(p), state.Width, state.Height, ScreenCoverNow()) is Point target)
-                input.Enqueue(new ClickAction(target, Slow: true));
+                {
+                bool StillClosed()
+                {
+                    if (ReadBagNow() is not { NpcShop: 0 } || State is not { } current || World is not { Camera: { } view } live)
+                        return false;
+                    var entity = live.TownNpcs?.Where(n => n.Vnum == npc.Vnum).OrderBy(n => n.Position.DistanceXY(at)).FirstOrDefault();
+                    return entity is { } found && view.ToScreen(found.Position with { Z = found.Position.Z + 80 + tries * 40 }, current.Width, current.Height) is PointF pos
+                        && Math.Abs(pos.X - target.X) <= 6 && Math.Abs(pos.Y - target.Y) <= 6 && ScreenCoverNow()?.Covers(target) != true;
+                }
+                await input.ClickAndWaitAsync(new ClickAction(target, Slow: true, StillWanted: StillClosed), token);
+            }
             for (int wait = 0; wait < 12 && !open; wait++)
             {
                 await Task.Delay(250, token);

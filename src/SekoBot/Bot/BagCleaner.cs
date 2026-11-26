@@ -110,6 +110,9 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
         return new Point(area.Left + index % area.Width, area.Top + index / area.Width);
     }
 
+    private Func<bool>? When(Func<BagLayout, bool> check) =>
+        readBagNow == null ? null : () => readBagNow() is { } live && check(live);
+
     internal static ClickAction DropConfirmation(Point center, Rectangle bounds, Func<BagLayout?>? readBagNow)
     {
         var target = DropClickPoint(center, bounds);
@@ -119,6 +122,14 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
             return current?.Confirm is Point && current.ConfirmBounds.Contains(target);
         }
         return new ClickAction(target, Slow: true, Fast: true, StillWanted: readBagNow == null ? null : StillOpen);
+    }
+
+    internal static ClickAction SaleConfirmation(Point yes, BagLayout bag, Func<BagLayout?>? readBagNow)
+    {
+        var at = DropClickPoint(yes, bag.OtherConfirmBounds);
+        return new ClickAction(at, Slow: true, Fast: true, StillWanted: readBagNow == null ? null :
+            () => readBagNow() is { NpcShop: > 0, Confirm: null, OtherConfirm: not null } live
+                && live.NpcShop == bag.NpcShop && live.OtherConfirm == yes && live.OtherConfirmBounds.Contains(at));
     }
 
     /// <summary>Stops at once (attacked, died); closes the inventory if it is open.</summary>
@@ -163,11 +174,14 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
             {
                 // After a right click the question is said yes to with Enter (quicker than the mouse); still showing
                 // after that, "Evet" is clicked. Only with the question up: Enter alone would open the chat.
+                int expectedSlot = _slot, expectedVnum = _vnum;
                 if (Selling && _rightClicked && _yesClicks == 0)
-                    actions.Add(new KeyTapAction(Keys.Enter));
+                    actions.Add(new KeyTapAction(Keys.Enter) { StillWanted = When(live => live.NpcShop == bag.NpcShop && live.NpcShop > 0
+                        && (bag.Confirm.HasValue ? live.Confirm.HasValue : live.Confirm == null && live.OtherConfirm.HasValue)
+                        && live.Items.Any(i => i.Slot == expectedSlot && i.Vnum == expectedVnum)) });
                 else
                     actions.Add(bag.Confirm.HasValue ? DropConfirmation(yes, bag.ConfirmBounds, readBagNow)
-                        : new ClickAction(DropClickPoint(yes, bag.OtherConfirmBounds), Slow: true, Fast: true));
+                        : SaleConfirmation(yes, bag, readBagNow));
                 _yesClicks++;
                 _yesAt = now;
                 _step = Step.Confirmed;
@@ -252,7 +266,12 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
                         }
                         break;
                     }
-                    actions.Add(new ClickAction(DropClickPoint(drop, Selling ? bag.SellBounds : bag.DropBounds), Slow: true, Fast: true));
+                    var at = DropClickPoint(drop, Selling ? bag.SellBounds : bag.DropBounds);
+                    int slot = _slot, vnum = _vnum;
+                    actions.Add(new ClickAction(at, Slow: true, Fast: true, StillWanted: When(live =>
+                        live.Open && live.Confirm == null && live.OtherConfirm == null && live.MenuSlot == slot
+                        && live.NpcShop == bag.NpcShop && live.Items.Any(i => i.Slot == slot && i.Vnum == vnum)
+                        && (Selling ? live.SellBounds : live.DropBounds).Contains(at))));
                     _requestedAt = now;
                     _step = Step.AwaitQuestion;
                     _waitUntil = now + AfterItemClick;
@@ -344,12 +363,15 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
                     var from = new Point(here.Rect.X + here.Rect.Width / 2, here.Rect.Y + here.Rect.Height / 2);
                     var visible = Rectangle.Intersect(here.Rect, new Rectangle(Point.Empty, client));
                     from = DropClickPoint(from, visible);
+                    var slotWanted = When(live => live.Open && live.Page == here.Page && live.NpcShop == bag.NpcShop
+                        && live.Confirm == null && live.OtherConfirm == null && (live.MenuSlot != here.Slot || (live.DropButton == null && live.SellButton == null))
+                        && live.Items.Any(i => i.Slot == here.Slot && i.Vnum == here.Vnum && i.Rect.Contains(from)));
                     _count = here.Count;
                     _rightClicked = false;
                     if (Selling && !_menuOnly.Contains(here.Slot))
                     {
                         // Right click: the sell question comes straight up.
-                        actions.Add(new ClickAction(from, Slow: true, Fast: true, Right: true));
+                        actions.Add(new ClickAction(from, Slow: true, Fast: true, Right: true, StillWanted: slotWanted));
                         _slot = here.Slot;
                         _vnum = here.Vnum;
                         _yesClicks = 0;
@@ -359,7 +381,7 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
                         _waitUntil = now + AfterRightClick;
                         break;
                     }
-                    actions.Add(new ClickAction(from, Slow: true, Fast: true));
+                    actions.Add(new ClickAction(from, Slow: true, Fast: true, StillWanted: slotWanted));
                     _slot = here.Slot;
                     _vnum = here.Vnum;
                     _yesClicks = 0;
@@ -376,7 +398,8 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
                     var target = bag.PageButtonBounds is { } bounds && page < bounds.Count
                         ? ClickPoint(bounds[page]) : DropClickPoint(bag.PageButtons[page],
                             Rectangle.Intersect(bag.Window, new Rectangle(bag.PageButtons[page].X - 2, bag.PageButtons[page].Y - 2, 5, 5)));
-                    actions.Add(new ClickAction(target, Slow: true));
+                    actions.Add(new ClickAction(target, Slow: true, StillWanted: When(live => live.Open && live.Page == bag.Page && live.Confirm == null && live.OtherConfirm == null
+                        && live.PageButtonBounds is { } buttons && page < buttons.Count && buttons[page].Contains(target))));
                     _pageClicks[page] = _pageClicks.GetValueOrDefault(page) + 1;
                     _waitUntil = now + AfterClick;
                 }

@@ -283,9 +283,10 @@ internal sealed class InputExecutor : IDisposable
                 await DragAsync(drag.From, drag.To, token);
                 break;
             case TypeTextAction type:
-                await TypeAsync(type.Text, token, type.ClearFirst);
+                await TypeAsync(type.Text, token, type.ClearFirst, type.StillWanted);
                 break;
             case KeyTapAction tap:
+                if (tap.StillWanted?.Invoke() == false) break;
                 await PressTime.HoldAsync(down => SendKey(tap.Key, down), PressTime.Tap(), token);
                 break;
             case KeyDownAction keyDown:
@@ -484,7 +485,7 @@ internal sealed class InputExecutor : IDisposable
         Win32.SendInput(1, [input], Marshal.SizeOf<Win32.INPUT>());
     }
 
-    private async Task TypeAsync(string text, CancellationToken token, bool clearFirst = false)
+    private async Task TypeAsync(string text, CancellationToken token, bool clearFirst, Func<bool>? stillWanted)
     {
         nint before = Win32.GetForegroundWindow();
         bool front = before == _window.Handle || BringGameToFront();
@@ -497,6 +498,7 @@ internal sealed class InputExecutor : IDisposable
             await Task.Delay(PressTime.Vary(300), token);
         try
         {
+            if (stillWanted?.Invoke() == false) return;
             if (clearFirst)
             {
                 // Empty the box first: Ctrl+A selects what is in it, Backspace removes it.
@@ -509,6 +511,7 @@ internal sealed class InputExecutor : IDisposable
             }
             foreach (char c in text)
             {
+                if (stillWanted?.Invoke() == false) return;
                 var down = new Win32.INPUT { type = Win32.INPUT_KEYBOARD };
                 down.u.ki.wScan = c;
                 down.u.ki.dwFlags = Win32.KEYEVENTF_UNICODE;

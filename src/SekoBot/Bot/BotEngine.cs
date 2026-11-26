@@ -63,9 +63,10 @@ internal sealed partial class BotEngine : IDisposable
     {
         _window = window;
         _cleaner = new BagCleaner(ReadBagNow);
+        _whisper = new WhisperSender(ReadMessagesNow);
         Profile = profile;
         _log = log;
-        _brain = new Brain(() => Profile) { JunkInBag = JunkInBag, Obstacles = _obstacles, Terrain = _terrain, NoGo = _noGo, Lore = SkillLore.Shared };
+        _brain = new Brain(() => Profile) { ReviveState = () => World is { Dead: true, ReviveReady: true } && !_holdRevive ? State : null, JunkInBag = JunkInBag, Obstacles = _obstacles, Terrain = _terrain, NoGo = _noGo, Lore = SkillLore.Shared };
         if (ItemBook.FilePath == null)
             ItemBook.Load(Path.Combine(ProfileStore.Directory, "esya-bilgisi.json"));
         _session.PotionsRanOut += kind =>
