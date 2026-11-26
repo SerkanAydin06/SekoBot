@@ -57,6 +57,7 @@ internal static class Icons
             case "list": L(8, 6, 21, 6); L(8, 12, 21, 12); L(8, 18, 21, 18); F(3.5f, 6, 1.1f); F(3.5f, 12, 1.1f); F(3.5f, 18, 1.1f); break;
             case "refresh": g.DrawArc(pen, 4, 4, 16, 16, 300, 290); L(20, 3, 20, 8, 15, 8); break;
             case "expand": L(15, 3, 21, 3, 21, 9); L(9, 21, 3, 21, 3, 15); L(21, 3, 14, 10); L(3, 21, 10, 14); break;
+            case "shrink": L(14, 4, 14, 10, 20, 10); L(10, 20, 10, 14, 4, 14); L(14, 10, 21, 3); L(10, 14, 3, 21); break;
             case "user": C(12, 8, 4); g.DrawArc(pen, 4, 13, 16, 16, 180, 180); break;
             case "spark": L(12, 3, 12, 7); L(12, 17, 12, 21); L(3, 12, 7, 12); L(17, 12, 21, 12); L(6, 6, 8.5f, 8.5f); L(15.5f, 15.5f, 18, 18); L(6, 18, 8.5f, 15.5f); L(15.5f, 8.5f, 18, 6); break;
         }
@@ -827,6 +828,55 @@ internal sealed class Slider : Control
     public int Decimals { get; set; }
     public event EventHandler? ValueChanged;
 
+    // ── Typing the value (the user: hard to hit the exact number with the slider) ──
+    private TextBox? _edit;
+
+    private void BeginEdit()
+    {
+        if (_edit != null)
+            return;
+        var box = Rectangle.Round(new RectangleF(Width - BoxWidth + 3, 3, BoxWidth - 6, Height - 6));
+        _edit = new TextBox
+        {
+            BorderStyle = BorderStyle.None, BackColor = Theme.Inset, ForeColor = Theme.GoldLight, TextAlign = HorizontalAlignment.Center,
+            Font = new Font("Consolas", Math.Max(6f, Font.Size * 0.95f), FontStyle.Bold), Text = _value.ToString("0." + new string('#', Math.Max(0, Decimals))),
+        };
+        _edit.Bounds = new Rectangle(box.X, box.Y + (box.Height - _edit.PreferredHeight) / 2, box.Width, _edit.PreferredHeight);
+        _edit.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; EndEdit(true); }
+            else if (e.KeyCode == Keys.Escape) { e.SuppressKeyPress = true; EndEdit(false); }
+        };
+        _edit.LostFocus += (_, _) => EndEdit(true);
+        Controls.Add(_edit);
+        _edit.Focus();
+        _edit.SelectAll();
+        Invalidate();
+    }
+
+    private void EndEdit(bool keep)
+    {
+        if (_edit is not { } edit)
+            return;
+        _edit = null;
+        string text = edit.Text.Trim().Replace(" ", "").Replace(".", "").Replace(',', '.');
+        if (Decimals > 0)
+            text = edit.Text.Trim().Replace(',', '.');
+        if (keep && decimal.TryParse(text, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out decimal typed))
+        {
+            // As typed (not snapped to the slider's steps), only kept inside the range.
+            decimal v = Math.Round(Math.Clamp(typed, Minimum, Maximum), Decimals);
+            if (v != _value)
+            {
+                _value = v;
+                ValueChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+        Controls.Remove(edit);
+        edit.Dispose();
+        Invalidate();
+    }
+
     public decimal Value
     {
         get => _value;
@@ -862,6 +912,11 @@ internal sealed class Slider : Control
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
+        if (e.Button == MouseButtons.Left && e.X >= Width - BoxWidth)
+        {
+            BeginEdit();
+            return;
+        }
         Focus();
         if (e.Button == MouseButtons.Left && e.X < Width - BoxWidth)
         {
@@ -874,6 +929,7 @@ internal sealed class Slider : Control
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
+        Cursor = e.X >= Width - BoxWidth ? Cursors.IBeam : Cursors.Hand;
         if (_dragging)
             SetFromX(e.X);
     }
@@ -940,6 +996,13 @@ internal sealed class Slider : Control
             g.FillPath(fill, path);
             using var pen = new Pen(Theme.Border);
             g.DrawPath(pen, path);
+        }
+        if (_edit != null)
+        {
+            using var focus = Theme.RoundRect(box, 5);
+            using var pen = new Pen(Tones.Soft(Theme.Gold, 170));
+            g.DrawPath(pen, focus);
+            return;
         }
         using var font = new Font("Consolas", Math.Max(6f, Font.Size * 0.95f), FontStyle.Bold);
         TextRenderer.DrawText(g, _value.ToString("N" + Decimals), font, Rectangle.Round(box), Theme.Text,

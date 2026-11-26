@@ -52,7 +52,7 @@ internal sealed partial class MainForm : Form
     private readonly Label _heroName, _timer, _timerNote;
     private readonly StatCard _kExp, _kKills, _kYang, _kPotion, _kLevel;
     private readonly Feed _feed;
-    private readonly IconButton _moreButton;
+    private readonly IconButton _bigButton;
     private readonly NavButton[] _logFilters;
     private Rectangle _attackInPreview;
     private readonly Panel _marketDash, _fishingDash;
@@ -165,27 +165,10 @@ internal sealed partial class MainForm : Form
         var small = new IconButton { Icon = "layers", Boxed = true, Bounds = new Rectangle(988, 12, 40, 40) };
         small.Click += (_, _) => GoMini();
         header.Controls.Add(small);
-        // The rest in one menu: every PARDUS at once, arranging the games, updates, the settings folder.
-        var more = _moreButton = new IconButton { Icon = "more", Boxed = true, Bounds = new Rectangle(1034, 12, 40, 40) };
-        var moreMenu = new ContextMenuStrip { Font = new Font("Segoe UI", 9.5f) };
-        DarkMenu.Use(moreMenu);
-        moreMenu.Opening += (_, _) =>
-        {
-            moreMenu.Items.Clear();
-            foreach (ToolStripItem item in WindowLayout.AllMenu().Items.Cast<ToolStripItem>().ToList())
-                moreMenu.Items.Add(item);
-            moreMenu.Items.Add(new ToolStripSeparator());
-            moreMenu.Items.Add("⊞   Oyunları yan yana diz", null, (_, _) => ArrangeAll());
-            moreMenu.Items.Add("▭   Mini moda geç", null, (_, _) => GoMini());
-            moreMenu.Items.Add(new ToolStripSeparator());
-            if (Instance.IsFirst)
-                moreMenu.Items.Add("↻   Güncellemeleri denetle", null, async (_, _) => await CheckForUpdatesAsync(startup: false));
-            moreMenu.Items.Add("📁   Ayar klasörü", null, (_, _) => OpenProfileFolder());
-        };
-        moreMenu.Opened += (_, _) => more.On = true;
-        moreMenu.Closed += (_, _) => more.On = false;
-        more.Click += (_, _) => moreMenu.Show(more, new Point(more.Width - moreMenu.PreferredSize.Width, more.Height + 4));
-        header.Controls.Add(more);
+        // The window over the whole screen, everything in it bigger (again: back to its size).
+        var big = _bigButton = new IconButton { Icon = "expand", Boxed = true, Bounds = new Rectangle(1034, 12, 40, 40) };
+        big.Click += (_, _) => ToggleBig();
+        header.Controls.Add(big);
         var minimize = new IconButton { Icon = "min", Bounds = new Rectangle(1084, 12, 40, 40) };
         minimize.Click += (_, _) => WindowState = FormWindowState.Minimized;
         header.Controls.Add(minimize);
@@ -195,6 +178,7 @@ internal sealed partial class MainForm : Form
         // Moved only by the mark and the name (the user: the rest of the strip showed the move cursor but didn't move).
         foreach (Control c in new Control[] { title, mark })
         {
+            c.DoubleClick += (_, _) => ToggleBig();
             c.MouseDown += DragWindow;
             c.Cursor = Cursors.SizeAll;
         }
@@ -911,6 +895,11 @@ internal sealed partial class MainForm : Form
         };
         ShowMachine();
         var openFolder = Theme.Button(advanced, "📁  Ayar klasörü", new Rectangle(150, 100, 142, 30), Theme.Secondary, Theme.SecondaryHover);
+        if (Instance.IsFirst)
+        {
+            var checkUpdate = Theme.Button(advanced, "↻  Güncellemeleri denetle", new Rectangle(300, 100, 220, 30), Theme.Secondary, Theme.SecondaryHover);
+            checkUpdate.Click += async (_, _) => await CheckForUpdatesAsync(startup: false);
+        }
         openFolder.Click += (_, _) => OpenProfileFolder();
         // The mobs the bot sees in memory, listed in the log.
         _scanMobs = Theme.Button(advanced, "🔍  Mobları göster", new Rectangle(450, 100, 180, 30), Theme.Secondary, Theme.SecondaryHover);
@@ -1183,6 +1172,7 @@ internal sealed partial class MainForm : Form
             _body.Controls.Add(c);
         }
         Controls.Add(_body);
+        Theme.DarkScrollBars(_body);
         // List columns don't scale with the window: fit them to the list.
         int number = 56, nameWidth = _runItems.ClientSize.Width - 3 * number; // "Satılan" fits
         _runItems.Columns[0].Width = nameWidth;
@@ -2341,6 +2331,89 @@ internal sealed partial class MainForm : Form
     private Panel _body = null!;
     private Control _header = null!;
 
+    /// <summary>The space round the content (the header starts at the window's edge now: a fixed small margin).</summary>
+    private int Gap => (int)(12 * DeviceDpi / 96f * 0.84f * _zoom);
+
+    /// <summary>The window's size that shows all of its content.</summary>
+    private Size Need()
+    {
+        int gap = Gap;
+        int contentBottom = _body.Controls.Cast<Control>().Max(c => c.Bottom) - _body.AutoScrollPosition.Y;
+        int contentRight = _body.Controls.Cast<Control>().Max(c => c.Right) - _body.AutoScrollPosition.X;
+        return new Size(Math.Max(_header.Right, contentRight) + gap, _body.Top + contentBottom + gap);
+    }
+
+    // ── Full screen: everything scaled up to fill the screen (the layout stays the same, only bigger) ──
+    private float _zoom = 1f;
+    private bool _big;
+    private Point _normalAt;
+    private readonly Dictionary<Control, float> _baseFont = [];
+
+    private void ToggleBig()
+    {
+        if (IsDisposed)
+            return;
+        var work = Screen.FromControl(this).WorkingArea;
+        if (!_big)
+        {
+            _normalAt = Location;
+            var need = Need();
+            float k = Math.Min((float)work.Width / need.Width, (float)work.Height / need.Height) * 0.995f;
+            if (k < 1.05f)
+            {
+                WriteLog("Pencere zaten ekranı dolduruyor; daha fazla büyütülemez.");
+                return;
+            }
+            ZoomTo(k);
+            _big = true;
+        }
+        else
+        {
+            ZoomTo(1f);
+            _big = false;
+        }
+        _bigButton.Icon = _big ? "shrink" : "expand";
+        _bigButton.Invalidate();
+        FitToScreen();
+        Location = _big
+            ? new Point(work.Left + (work.Width - Width) / 2, work.Top + (work.Height - Height) / 2)
+            : new Point(Math.Clamp(_normalAt.X, work.Left, Math.Max(work.Left, work.Right - Width)), Math.Clamp(_normalAt.Y, work.Top, Math.Max(work.Top, work.Bottom - Height)));
+    }
+
+    /// <summary>Everything <paramref name="zoom"/> times its own size: places and sizes, the fonts, the remembered places.</summary>
+    private void ZoomTo(float zoom)
+    {
+        float f = zoom / _zoom;
+        if (Math.Abs(f - 1) < 0.001f)
+            return;
+        SuspendLayout();
+        _body.AutoScrollPosition = Point.Empty;
+        void Fonts(Control c)
+        {
+            if (!_baseFont.TryGetValue(c, out float size))
+                _baseFont[c] = size = c.Font.Size / _zoom;
+            c.Font = new Font(c.Font.FontFamily, Math.Max(6f, size * zoom), c.Font.Style);
+            foreach (Control child in c.Controls)
+                Fonts(child);
+        }
+        foreach (var part in new[] { _header, _body })
+        {
+            part.Scale(new SizeF(f, f));
+            Fonts(part);
+        }
+        Rectangle Grow(Rectangle r) => new((int)Math.Round(r.X * f), (int)Math.Round(r.Y * f), (int)Math.Round(r.Width * f), (int)Math.Round(r.Height * f));
+        _dashBottomFarm = Grow(_dashBottomFarm);
+        _logCardFarm = Grow(_logCardFarm);
+        _logFarm = Grow(_logFarm);
+        _attackInPreview = Grow(_attackInPreview);
+        foreach (ColumnHeader column in _runItems.Columns)
+            column.Width = (int)Math.Round(column.Width * f);
+        _zoom = zoom;
+        ResumeLayout(true);
+        _logBold = null;
+        Invalidate(true);
+    }
+
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
@@ -2349,6 +2422,14 @@ internal sealed partial class MainForm : Form
 
     protected override void OnDpiChanged(DpiChangedEventArgs e)
     {
+        // Another screen: back to the normal size first (the fonts' own sizes are measured again there).
+        if (_big)
+        {
+            ZoomTo(1f);
+            _big = false;
+            _bigButton.Icon = "expand";
+        }
+        _baseFont.Clear();
         base.OnDpiChanged(e);
         BeginInvoke(FitToScreen);
     }
@@ -2362,10 +2443,8 @@ internal sealed partial class MainForm : Form
         if (IsDisposed || _body == null || WindowState != FormWindowState.Normal)
             return;
         var work = Screen.FromControl(this).WorkingArea;
-        int gap = _header.Left;
-        int contentBottom = _body.Controls.Cast<Control>().Max(c => c.Bottom) - _body.AutoScrollPosition.Y;
-        int contentRight = _body.Controls.Cast<Control>().Max(c => c.Right) - _body.AutoScrollPosition.X;
-        var need = new Size(Math.Max(_header.Right, contentRight) + gap, _body.Top + contentBottom + gap);
+        int gap = Gap;
+        var need = Need();
         var size = FitSize(need, work.Size, SystemInformation.GetVerticalScrollBarWidthForDpi(DeviceDpi),
             SystemInformation.GetHorizontalScrollBarHeightForDpi(DeviceDpi));
         _body.AutoScrollMargin = new Size(gap, gap);

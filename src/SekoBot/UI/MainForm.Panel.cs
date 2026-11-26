@@ -84,7 +84,7 @@ internal sealed partial class MainForm
         int used = (session?.HpPotionsUsed ?? 0) + (session?.MpPotionsUsed ?? 0);
         // Which is which, written out (the user: "HP" and "MP" weren't told apart).
         _kPotion.Show(hpLeft is int hp ? hp.ToString("N0") : "—", unit: hpLeft is int ? "HP" : "",
-            sub: (mpLeft is int mp ? $"{mp:N0} MP" : "") + (_profile.BuyPotions ? $" · {upTo:N0}'e tamamlar" : used > 0 ? $" · {used:N0} içildi" : ""),
+            sub: string.Join(" · ", new[] { mpLeft is int mp ? $"{mp:N0} MP" : "", hpLeft is int && _profile.BuyPotions ? $"{upTo:N0}'e tamamlar" : used > 0 ? $"{used:N0} içildi" : "" }.Where(x => x.Length > 0)),
             bar: hpLeft is int left && _profile.BuyPotions ? Math.Clamp((double)left / upTo, 0, 1) : null,
             corner: low ? "azaldı" : "", cornerColor: Theme.Yellow, valueColor: low ? Theme.Yellow : Theme.Text);
         _kPotion.BarColor = Theme.Yellow;
