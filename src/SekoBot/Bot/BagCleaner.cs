@@ -13,7 +13,7 @@ namespace SekoBot.Bot;
 /// result; an item that can't be thrown (twice nothing happened) is left alone.
 /// Pure logic: the engine reads the layout and sends the actions.
 /// </summary>
-internal sealed class BagCleaner
+internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
 {
     /// <summary>Long enough for a full bag of junk (seen: 26 items took longer than 2 minutes).</summary>
     public static readonly TimeSpan GiveUpAfter = TimeSpan.FromSeconds(300);
@@ -110,6 +110,17 @@ internal sealed class BagCleaner
         return new Point(area.Left + index % area.Width, area.Top + index / area.Width);
     }
 
+    internal static ClickAction DropConfirmation(Point center, Rectangle bounds, Func<BagLayout?>? readBagNow)
+    {
+        var target = DropClickPoint(center, bounds);
+        bool StillOpen()
+        {
+            var current = readBagNow!();
+            return current?.Confirm is Point && current.ConfirmBounds.Contains(target);
+        }
+        return new ClickAction(target, Slow: true, Fast: true, StillWanted: readBagNow == null ? null : StillOpen);
+    }
+
     /// <summary>Stops at once (attacked, died); closes the inventory if it is open.</summary>
     public IReadOnlyList<BotAction> Abort(BagLayout? bag, BotProfile p, string why)
     {
@@ -119,7 +130,7 @@ internal sealed class BagCleaner
         // The throw / sell question left showing (seen: it stayed open while the bot fought on): the throw question
         // answered "Evet" (Esc doesn't close it since the game's update; the item was to go anyway), another one closed.
         if (bag?.Confirm is Point yes)
-            actions.Add(new ClickAction(DropClickPoint(yes, bag.ConfirmBounds), Slow: true, Fast: true));
+            actions.Add(DropConfirmation(yes, bag.ConfirmBounds, readBagNow));
         else if (bag?.OtherConfirm != null)
             actions.Add(new KeyTapAction(p.Keys.CloseWindow));
         if (bag?.Open == true)
@@ -155,7 +166,8 @@ internal sealed class BagCleaner
                 if (Selling && _rightClicked && _yesClicks == 0)
                     actions.Add(new KeyTapAction(Keys.Enter));
                 else
-                    actions.Add(new ClickAction(DropClickPoint(yes, bag.Confirm.HasValue ? bag.ConfirmBounds : bag.OtherConfirmBounds), Slow: true, Fast: true));
+                    actions.Add(bag.Confirm.HasValue ? DropConfirmation(yes, bag.ConfirmBounds, readBagNow)
+                        : new ClickAction(DropClickPoint(yes, bag.OtherConfirmBounds), Slow: true, Fast: true));
                 _yesClicks++;
                 _yesAt = now;
                 _step = Step.Confirmed;
@@ -165,7 +177,7 @@ internal sealed class BagCleaner
             {
                 // Our own "throw it away?" left from before (cut short by a mob): Esc doesn't close it since the
                 // game's update (seen: "onay penceresi kapanmıyor") — answered "Evet", the item was to go anyway.
-                actions.Add(new ClickAction(DropClickPoint(leftover, bag.ConfirmBounds), Slow: true, Fast: true));
+                actions.Add(DropConfirmation(leftover, bag.ConfirmBounds, readBagNow));
                 _leftoverYes++;
                 _waitUntil = now + AfterClick;
             }

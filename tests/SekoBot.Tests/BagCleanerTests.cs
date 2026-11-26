@@ -23,6 +23,24 @@ public class BagCleanerTests
     private static TimeSpan S(double s) => TimeSpan.FromSeconds(s);
 
     [Fact]
+    public void Queued_drop_confirmation_rechecks_the_live_button_before_pressing()
+    {
+        var bounds = new Rectangle(500, 380, 40, 20);
+        var center = new Point(520, 390);
+        var open = Bag(true, 0, [], center) with { ConfirmBounds = bounds };
+        BagLayout? live = open;
+        var click = BagCleaner.DropConfirmation(center, bounds, () => live);
+        var wanted = Assert.IsType<Func<bool>>(click.StillWanted);
+        Assert.True(wanted());
+        live = open with { Confirm = null, OtherConfirm = center, OtherConfirmBounds = bounds };
+        Assert.False(wanted());
+        live = open with { Confirm = new Point(30, 20), ConfirmBounds = new Rectangle(10, 10, 40, 20) };
+        Assert.False(wanted());
+        live = null;
+        Assert.False(wanted());
+    }
+
+    [Fact]
     public void Offset_stays_inside_narrow_targets_and_only_uses_center_for_a_single_pixel()
     {
         var center = new Point(12, 20);

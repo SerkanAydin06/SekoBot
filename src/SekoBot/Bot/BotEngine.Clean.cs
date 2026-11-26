@@ -16,7 +16,7 @@ internal sealed partial class BotEngine
     private const int CleanTriesMax = 5;
     /// <summary>Throwing starts with this many free slots left (not only when the bag is full).</summary>
     internal const int CleanAtFreeSlots = 2;
-    private readonly BagCleaner _cleaner = new();
+    private readonly BagCleaner _cleaner;
     private BagLayout? _bagLayout;
     private int _cleanTries;
 
@@ -294,10 +294,10 @@ internal sealed partial class BotEngine
     /// "Evet": Esc doesn't close it since the game's update (seen 2026-11-20: tried 4 times, open for 20 s), and it
     /// was asked for an item the bot meant to throw / sell anyway. Any other question and a shop: Esc; the bag: its key.
     /// </summary>
-    internal static BotAction TidyAction(BagLayout bag, BotProfile p, bool selling = false)
+    internal static BotAction TidyAction(BagLayout bag, BotProfile p, bool selling = false, Func<BagLayout?>? readBagNow = null)
     {
         if (bag.Confirm is Point yes)
-            return new ClickAction(BagCleaner.DropClickPoint(yes, bag.ConfirmBounds), Slow: true, Fast: true);
+            return BagCleaner.DropConfirmation(yes, bag.ConfirmBounds, readBagNow);
         if (selling && bag.NpcShop > 0 && bag.OtherConfirm is Point sellYes)
             return new ClickAction(BagCleaner.DropClickPoint(sellYes, bag.OtherConfirmBounds), Slow: true, Fast: true);
         return new KeyTapAction(bag.OtherConfirm != null || bag.NpcShop > 0 ? p.Keys.CloseWindow : p.Keys.Inventory);
@@ -329,7 +329,7 @@ internal sealed partial class BotEngine
             return [];
         _tidyActedAt = now;
         _tidyClosed++;
-        return [TidyAction(bag, p)];
+        return [TidyAction(bag, p, readBagNow: ReadBagNow)];
     }
 
     private void EndTidy(bool clean)
@@ -365,7 +365,7 @@ internal sealed partial class BotEngine
                 {
                     _leftoverClosedAt = DateTime.Now;
                     _log(left.Confirm != null ? "Atma sorusu açık kalmış; 'Evet' ile kapatılıyor (eşya zaten atılacaktı)." : "Açık kalan soru kapatılıyor.");
-                    return [TidyAction(left, p)];
+                    return [TidyAction(left, p, readBagNow: ReadBagNow)];
                 }
                 if (left.Open)
                 {
