@@ -99,7 +99,8 @@ internal sealed partial class BotEngine
         {
             _empireReadAt = now;
             lock (_worldGate)
-                _ownEmpire = _world?.ReadOwnEmpire() ?? _ownEmpire;
+                // The game's own field stays 0 while playing: the kingdom the player chose for this character then.
+                _ownEmpire = _world?.ReadOwnEmpire() is int read and > 0 ? read : p.Empire;
         }
         var me = world.Player;
         var players = (world.Players ?? []).Where(RealPlayer).ToList();

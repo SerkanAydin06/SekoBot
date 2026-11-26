@@ -158,6 +158,11 @@ internal sealed class BotProfile
     /// <summary>Never go for mobs whose name contains one of these (comma separated).</summary>
     public string SkipMobs { get; set; } = "";
     public MetinMode Metins { get; set; } = MetinMode.Normal;
+    /// <summary>
+    /// The character's kingdom ("ırk"), chosen by the player: 1 kırmızı, 2 sarı, 3 mavi; 0 not chosen. The game leaves its
+    /// own field for it empty while playing (charData.empire = 0), so players of another kingdom are told by this.
+    /// </summary>
+    public int Empire { get; set; }
     /// <summary>Walk to items on the ground and pick them up (when no mob is next to the character).</summary>
     public bool PickUpDrops { get; set; } = true;
     /// <summary>Which items to walk to (the pickup key still picks up everything within reach).</summary>
@@ -491,7 +496,7 @@ internal static class CharacterSettings
         nameof(BotProfile.SkillGapLearnedMs), nameof(BotProfile.MobFights), nameof(BotProfile.AutoArea), nameof(BotProfile.Attack), nameof(BotProfile.FollowName),
         // The page (farm / market / fishing) and the keys go with the character too (the user: SekoBots may come up
         // on other games after a restart — the market character must stay on the market page).
-        nameof(BotProfile.UiMode), nameof(BotProfile.Keys),
+        nameof(BotProfile.UiMode), nameof(BotProfile.Keys), nameof(BotProfile.Empire),
     ];
 
     public static string Folder { get; set; } = Path.Combine(ProfileStore.Directory, "karakterler");
