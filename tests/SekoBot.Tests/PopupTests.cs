@@ -62,4 +62,37 @@ public class PopupTests
         Assert.Equal("newDialog_C", PopupWatch.Target(["newDialog_C"]));
         Assert.Null(PopupWatch.Target(["miniMap", "chatBox", "taskbar"]));
     }
+
+    [Fact]
+    public void Each_blocker_gets_its_own_deadline()
+    {
+        var brain = new Brain(() => new BotProfile());
+        brain.Start(TimeSpan.Zero);
+        var state = new GameState(TimeSpan.Zero, 1920, 1080, 1, 1, null, 1) { PopupTarget = "inventory" };
+        brain.Tick(state);
+        state = state with { Time = TimeSpan.FromSeconds(28), PopupTarget = "bigMap" };
+        brain.Tick(state);
+        Assert.DoesNotContain(brain.Tick(state with { Time = TimeSpan.FromSeconds(31) }), a => a is StopAction);
+        Assert.Contains(brain.Tick(state with { Time = TimeSpan.FromSeconds(58) }), a => a is StopAction);
+    }
+
+    [Theory]
+    [InlineData("bigMap", Keys.M)]
+    [InlineData("inventory", Keys.I)]
+    [InlineData(null, Keys.Escape)]
+    public void Market_rechecks_both_panel_and_shop(string? window, Keys key)
+    {
+        var keys = new BotProfile().Keys;
+        (bool, string?, int?) live = (true, window, 17);
+        var tap = BotEngine.MarketCloseAction(keys, live, () => live, default, 17);
+        Assert.NotNull(tap);
+        Assert.Equal(key, tap.Key);
+        Assert.True(tap.StillWanted!());
+        live = (true, window, 18);
+        Assert.False(tap.StillWanted());
+        live = (true, "EscMenu", 17);
+        Assert.False(tap.StillWanted());
+        Assert.Null(BotEngine.MarketCloseAction(keys, (false, null, null), () => live, default));
+        Assert.Null(BotEngine.MarketCloseAction(keys, (true, null, null), () => live, default));
+    }
 }

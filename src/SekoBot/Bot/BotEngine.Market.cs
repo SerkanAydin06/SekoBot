@@ -773,7 +773,7 @@ internal sealed partial class BotEngine
         for (int waited = 0; waited < 2000; waited += 250)
         {
             await Task.Delay(250, token);
-            if (ShopOpenNow() is not { } again)
+            if (ShopOpenNow() is not { } again || again.Id != shop.Id)
                 break;
             shop = again;
             if (again.Items.Count == last && last > 0)
@@ -800,30 +800,66 @@ internal sealed partial class BotEngine
             }
             TellDeals(shop);
         }
-        // Esc only while the shop window is open (with nothing open it would open the game menu).
-        for (int i = 0; close && i < 3 && ShopOpenNow() != null; i++)
+        for (int i = 0; close && i < 3 && MarketWindowNow().Shop == shop.Id; i++)
         {
-            input.Enqueue(new KeyTapAction(Profile.Keys.CloseWindow));
-            for (int waited = 0; waited < 1500 && ShopOpenNow() != null; waited += 150)
+            await CloseMarketWindowAsync(input, Profile.Keys, MarketWindowNow(), token, shop.Id);
+            for (int waited = 0; waited < 1500 && MarketWindowNow().Shop == shop.Id; waited += 150)
                 await Task.Delay(150, token);
         }
+        var after = close ? MarketWindowNow() : default;
+        if (close && (!after.Readable || after.Shop == shop.Id))
+            throw new InvalidOperationException($"{shop.Owner} dükkanı kapanmadı.");
         return shop;
     }
 
-    /// <summary>Before the scan: windows over the game are closed (inventory, menu, a shop left open)
-    /// and the camera looks straight down from far up, so many stalls show and none hides another.</summary>
+    private (bool Readable, string? Window, int? Shop) MarketWindowNow()
+    {
+        lock (_worldGate)
+        {
+            var windows = _world?.ReadWindowsNow();
+            if (windows == null) return (false, null, null);
+            string? target = windows.Contains(GameWorldReader.MessageWindow) ? GameWorldReader.MessageWindow : PopupWatch.Target(windows);
+            int? shop = _world?.ReadOpenShopId();
+            return (shop.HasValue, target, shop > 0 ? shop : null);
+        }
+    }
+
+    private async Task CloseMarketWindowAsync(InputExecutor input, KeyBindings keys,
+        (bool Readable, string? Window, int? Shop) expected, CancellationToken token, int? requiredShop = null)
+    {
+        var action = MarketCloseAction(keys, expected, MarketWindowNow, token, requiredShop);
+        if (action == null) return;
+        var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        input.Enqueue(action with { Completion = done });
+        await done.Task.WaitAsync(token);
+    }
+
+    internal static KeyTapAction? MarketCloseAction(KeyBindings keys,
+        (bool Readable, string? Window, int? Shop) expected, Func<(bool, string?, int?)> read,
+        CancellationToken token, int? requiredShop = null)
+    {
+        if (!expected.Readable || expected.Window == GameWorldReader.MessageWindow ||
+            (expected.Window == null && expected.Shop == null) || (requiredShop.HasValue && expected.Shop != requiredShop))
+            return null;
+        return new KeyTapAction(PopupWatch.CloseKey(expected.Window, keys))
+        {
+            StillWanted = () => !token.IsCancellationRequested && read() == expected
+        };
+    }
+
     private async Task PrepareForMarket(InputExecutor input, BotProfile profile, CancellationToken token)
     {
-        for (int i = 0; i < 4; i++)
+        var current = MarketWindowNow();
+        for (int i = 0; i < 12 && (!current.Readable || current.Window != null || current.Shop != null); i++)
         {
-            var open = (World?.OpenWindows ?? []).Where(KnownWindows.Contains).ToList();
-            if (open.Count == 0 && ShopOpenNow() == null)
-                break;
-            if (i == 0)
-                _log("Açık pencereler kapatılıyor: " + string.Join(", ", open.Count > 0 ? open : ["dükkan"]) + ".");
-            input.Enqueue(new KeyTapAction(profile.Keys.CloseWindow));
+            token.ThrowIfCancellationRequested();
+            await CloseMarketWindowAsync(input, profile.Keys, current, token);
             await Task.Delay(700, token);
+            current = MarketWindowNow();
         }
+        if (!current.Readable || current.Window != null || current.Shop != null)
+            throw new InvalidOperationException("Pazar için ekran hazır değil: " +
+                (current.Window ?? (current.Shop.HasValue ? "dükkan açık" : "pencere durumu okunamadı")));
         if (!profile.MarketBirdsEye)
             return;
         _log("Kamera kuş bakışına alınıyor (yukarıdan, uzaktan).");

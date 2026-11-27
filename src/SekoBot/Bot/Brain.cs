@@ -18,6 +18,7 @@ internal sealed partial class Brain
     private static readonly TimeSpan Never = TimeSpan.FromDays(-1);
     internal Func<string, bool>? SamePopupOpen { get; init; }
     private TimeSpan _popupSince = Never;
+    private string? _timedPopup;
     private TimeSpan _lastTickTime;
 
     private readonly Func<BotProfile> _profile;
@@ -100,6 +101,7 @@ internal sealed partial class Brain
         // The message window is open (the user writing a message): no key at all, held ones let go.
         if (state.Typing)
         {
+            _popupSince = Never;
             if (!_typingTold)
             {
                 _typingTold = true;
@@ -124,7 +126,12 @@ internal sealed partial class Brain
             SetMoves([], p, actions, refresh: false);
             SetAttack(false, p, actions, refresh: false);
             ReleaseTimedKeys(actions);
-            if (_popupSince == Never) _popupSince = now;
+            string? blocker = state.WindowsUnreadable ? null : state.PopupTarget;
+            if (_popupSince == Never || _timedPopup != blocker)
+            {
+                _popupSince = now;
+                _timedPopup = blocker;
+            }
             if (now - _popupSince >= TimeSpan.FromSeconds(30))
             {
                 actions.Add(new StopAction(state.WindowsUnreadable ? "Pencere durumu okunamadı."
@@ -133,12 +140,7 @@ internal sealed partial class Brain
             }
             if (!state.WindowsUnreadable && state.PopupTarget is string target && now - _lastEsc >= Ms(3000))
             {
-                Keys key = target switch
-                {
-                    "bigMap" => p.Keys.Map,
-                    "inventory" or "equipment" => p.Keys.Inventory,
-                    _ => p.Keys.CloseWindow
-                };
+                Keys key = PopupWatch.CloseKey(target, p.Keys);
                 actions.Add(new KeyTapAction(key) { StillWanted = () => SamePopupOpen?.Invoke(target) == true });
                 actions.Add(new NoteAction($"Açık pencere: {target}. Kapatma tuşu: {key}."));
                 _lastEsc = now;

@@ -1,7 +1,16 @@
+using SekoBot.Config;
+
 namespace SekoBot.Bot;
 
 internal static class PopupWatch
 {
+    public static Keys CloseKey(string? target, KeyBindings keys) => target switch
+    {
+        "bigMap" => keys.Map,
+        "inventory" or "equipment" => keys.Inventory,
+        _ => keys.CloseWindow
+    };
+
     // Dismiss the menu and transient dialogs before toggling a panel underneath them.
     public static string? Target(IReadOnlyList<string>? windows)
     {
