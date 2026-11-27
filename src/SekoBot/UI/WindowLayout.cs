@@ -164,7 +164,7 @@ internal static class WindowLayout
     }
 
     /// <summary>The side panel's width (96-dpi units) beside a single game.</summary>
-    public const int SidePanelWidth = 300;
+    public const int SidePanelWidth = 360;
 
     /// <summary>
     /// One game on this computer (the user: one game per device now): its picture <paramref name="picture"/> big, in
