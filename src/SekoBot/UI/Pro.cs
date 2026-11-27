@@ -38,6 +38,7 @@ internal static class Icons
             case "layers": L(12, 3, 21, 8, 12, 13, 3, 8, 12, 3); L(3, 13, 12, 18, 21, 13); break;
             case "more": F(5, 12, 1.7f); F(12, 12, 1.7f); F(19, 12, 1.7f); break;
             case "min": L(5, 12, 19, 12); break;
+            case "plus": L(12, 5, 12, 19); L(5, 12, 19, 12); break;
             case "x": L(6, 6, 18, 18); L(18, 6, 6, 18); break;
             case "cart": C(9, 20, 1.4f); C(18, 20, 1.4f); L(2.5f, 3, 5.5f, 3, 8, 15.5f, 18.5f, 15.5f, 21.5f, 8, 6.2f, 8); break;
             case "fish": g.DrawEllipse(pen, 6.5f, 7, 14.5f, 10); L(6.5f, 12, 2, 8, 2, 16, 6.5f, 12); F(17, 11, 0.9f); break;

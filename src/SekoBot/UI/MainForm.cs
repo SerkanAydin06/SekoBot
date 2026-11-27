@@ -1041,11 +1041,11 @@ internal sealed partial class MainForm : Form
         _mItems = Number(watchCard, "ÜRÜN", 18 + (mw + 12), 184, mw);
         _mOldest = Number(watchCard, "EN ESKİ OKUMA", 18 + 2 * (mw + 12), 184, mw);
         _mNever = Number(watchCard, "OKUNMAMIŞ", 18 + 3 * (mw + 12), 184, mw);
-        var mReport = Theme.Button(watchCard, "📊  Rapor", new Rectangle(18, 290, 140, 34), Theme.Secondary, Theme.SecondaryHover);
+        var mReport = Theme.Button(watchCard, "📊  Rapor", new Rectangle(18, 290, 172, 34), Theme.Secondary, Theme.SecondaryHover);
         mReport.Click += (_, _) => { if (BotEngine.LatestReport is { } r) OpenFile(r); else WriteLog("Henüz pazar listesi yok."); };
-        var mExcel = Theme.Button(watchCard, "📄  Excel", new Rectangle(166, 290, 120, 34), Theme.Secondary, Theme.SecondaryHover);
+        var mExcel = Theme.Button(watchCard, "📄  Excel", new Rectangle(202, 290, 172, 34), Theme.Secondary, Theme.SecondaryHover);
         mExcel.Click += (_, _) => { if (BotEngine.LatestReport is { } r && File.Exists(Path.ChangeExtension(r, ".csv"))) OpenFile(Path.ChangeExtension(r, ".csv")); else WriteLog("Henüz pazar listesi yok."); };
-        var mGuide = Theme.Button(watchCard, "📚  Efsun rehberi", new Rectangle(294, 290, 170, 34), Theme.Secondary, Theme.SecondaryHover);
+        var mGuide = Theme.Button(watchCard, "📚  Efsun rehberi", new Rectangle(386, 290, 172, 34), Theme.Secondary, Theme.SecondaryHover);
         mGuide.Click += (_, _) =>
         {
             try
@@ -1057,7 +1057,7 @@ internal sealed partial class MainForm : Form
             }
             catch (IOException ex) { WriteLog("Efsun rehberi yazılamadı: " + ex.Message); }
         };
-        var mFolder = Theme.Button(watchCard, "📂  Klasör", new Rectangle(472, 290, 120, 34), Theme.Secondary, Theme.SecondaryHover);
+        var mFolder = Theme.Button(watchCard, "📂  Klasör", new Rectangle(570, 290, 172, 34), Theme.Secondary, Theme.SecondaryHover);
         mFolder.Click += (_, _) => { Directory.CreateDirectory(BotEngine.MarketFolder); OpenFile(BotEngine.MarketFolder); };
         watchCard.Controls.Add(new Panel { Bounds = new Rectangle(18, 336, 724, 1), BackColor = Theme.Border });
         Theme.Label(watchCard, "AYARLAR", new Rectangle(18, 344, 300, 20), 7.5f, Theme.Faint, FontStyle.Bold);
@@ -2484,11 +2484,15 @@ internal sealed partial class MainForm : Form
         Keep(_header);
         _rectsBeforeStretch = (_dashBottomFarm, _logCardFarm, _logFarm, _attackInPreview);
         SuspendLayout();
+        // Each part widened from its own left edge when it starts left of the menu's edge (the market and fishing pages
+        // take the whole width, no menu — seen: they slid sideways in full screen), else from the menu's edge; the right
+        // edge always ends at the window's.
         foreach (var c in parts)
         {
-            int left = c.Left;
-            c.Scale(new SizeF(fx, 1f));
-            c.Left = (int)Math.Round(rail + (left - rail) * fx);
+            int left = c.Left, origin = Math.Min(left, rail);
+            float k = (float)(right - origin + extra) / Math.Max(1, right - origin);
+            c.Scale(new SizeF(k, 1f));
+            c.Left = (int)Math.Round(origin + (left - origin) * k);
         }
         int headerRight = _connection.Left;
         _header.Width += extra;
