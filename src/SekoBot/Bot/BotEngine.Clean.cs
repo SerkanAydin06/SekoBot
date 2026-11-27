@@ -58,6 +58,8 @@ internal sealed partial class BotEngine
     private TimeSpan? _bagBonusesAt;
     /// <summary>The bonus items told about (slot, item), so each is told once.</summary>
     private readonly Dictionary<(int Slot, int Vnum), TimeSpan> _bonusTold = [];
+    /// <summary>Items just picked up to see their bonuses, waiting for them to show (slot, item → since).</summary>
+    private readonly Dictionary<(int Slot, int Vnum), TimeSpan> _bonusLooks = [];
 
     private IReadOnlySet<(int Slot, int Vnum)> BotPicked
     {
@@ -106,7 +108,28 @@ internal sealed partial class BotEngine
             foreach (var gone in _bonusTold.Where(kv => now - kv.Value > TimeSpan.FromSeconds(5)).Select(kv => kv.Key).ToList())
                 _bonusTold.Remove(gone);
             foreach (var came in _lootedItems.CameIn)
+            {
                 _bonusTold.Remove((came.Slot, came.Vnum)); // just picked up (again): a new one to tell
+                // Picked up for its bonuses (not for its price, not as wanted anyway): looked at once its bonuses are in.
+                if (Loot.KindOf(came.Vnum) == LootKind.Equipment && !profile.LootEquipment && !AlwaysLoot(came.Vnum, profile)
+                    && !(profile.LootEquipmentMinGold > 0 && ItemBook.Get(came.Vnum)?.Sell >= profile.LootEquipmentMinGold))
+                    _bonusLooks[(came.Slot, came.Vnum)] = now;
+            }
+            foreach (var ((slot, vnum), since) in _bonusLooks.ToList())
+            {
+                var inBag = progress.Inventory.FirstOrDefault(i => i.Slot == slot && i.Vnum == vnum);
+                if (inBag.Vnum == 0)
+                {
+                    _bonusLooks.Remove((slot, vnum)); // gone before it was looked at
+                    continue;
+                }
+                // The game fills the bonuses a moment after the item comes in.
+                if (now - since < TimeSpan.FromSeconds(3) && inBag.Bonuses == null)
+                    continue;
+                _bonusLooks.Remove((slot, vnum));
+                if (Trials.Record(vnum, GoodBonus(inBag, profile)) && Trials.Of(vnum) is { } tally)
+                    _log($"🔎 {ItemBook.NameOf(vnum)}: efsunu için {tally.Checked} kez alındı, {(tally.Hits == 0 ? "hiç" : $"yalnız {tally.Hits} kez")} istenen efsun çıktı; artık efsunu için toplanmayacak.");
+            }
             foreach (var item in progress.Inventory.Where(i => looted.Contains((i.Slot, i.Vnum))).ToList())
                 if (Loot.KindOf(item.Vnum) == LootKind.Equipment && GoodBonus(item, profile) && _bonusTold.TryAdd((item.Slot, item.Vnum), now))
                 {
