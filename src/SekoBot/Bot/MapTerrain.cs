@@ -235,7 +235,15 @@ internal sealed class MapTerrain
     {
         if (Roads is not { } roads)
             return null;
-        var along = roads.WayAlong(from, to, RoadReach, avoid?.Select(c => (c.X, c.Y, c.R + margin)).ToList());
+        // What stands on the road (walls, a bridge's railings) shuts it there: the way keeps to where one can walk.
+        bool Blocked(double x, double y)
+        {
+            foreach (var b in Around(x - margin, y - margin, x + margin, y + margin))
+                if (b.Distance(x, y) < margin && InTheWayFrom(b, from))
+                    return true;
+            return false;
+        }
+        var along = roads.WayAlong(from, to, RoadReach, avoid?.Select(c => (c.X, c.Y, c.R + margin)).ToList(), Blocked);
         if (along is not { Count: > 0 })
             return null;
         var onto = along[0];

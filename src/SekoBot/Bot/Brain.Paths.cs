@@ -46,6 +46,8 @@ internal sealed partial class Brain
     /// them at once (seen on c2: held by a ledge not in the map, it stepped aside and walked into it again for minutes —
     /// the way kept leading there).</summary>
     private readonly List<Vec3> _wayStuck = [];
+    /// <summary>Held up this many times at the same spot of a road: something stands there for good (mobs move on).</summary>
+    internal const int SameSpotStucks = 3;
     /// <summary>A stuck spot on the way is kept away from by this much (world units).</summary>
     internal const double WayStuckRadius = 120;
 
@@ -100,7 +102,9 @@ internal sealed partial class Brain
         if (_wayStuck.Count > 30)
             _wayStuck.RemoveAt(0);
         // On a road: a mob (or a player) held us up, not the ground — walked round, not kept.
-        if (Obstacles != null && state.MapName.Length > 0 && TerrainHere(state)?.Roads?.OnRoad(spot.X, spot.Y) != true)
+        // On a road: a mob (or a player) held us up, not the ground — unless it happens at the same spot again and again.
+        bool again = _wayStuck.Count(s => Math.Abs(s.X - spot.X) < 150 && Math.Abs(s.Y - spot.Y) < 150) > SameSpotStucks;
+        if (Obstacles != null && state.MapName.Length > 0 && (again || TerrainHere(state)?.Roads?.OnRoad(spot.X, spot.Y) != true))
             Obstacles.Stuck(state.MapName, spot.X, spot.Y, DateTime.Now);
         if (_way is { } w)
             _way = (w.Goal, Never, w.Way); // found again on the next look

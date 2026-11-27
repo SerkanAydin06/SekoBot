@@ -114,8 +114,9 @@ internal sealed class RoadMap
         return _cost = cost;
     }
 
-    /// <summary>The road cell nearest to (x, y), within <paramref name="reach"/> world units; null: none.</summary>
-    internal (int C, int R)? NearestCell(double x, double y, double reach)
+    /// <summary>The road cell nearest to (x, y), within <paramref name="reach"/> world units, not shut by
+    /// <paramref name="shut"/> (cell index); null: none.</summary>
+    internal (int C, int R)? NearestCell(double x, double y, double reach, Func<int, bool>? shut = null)
     {
         int c0 = (int)Math.Floor((x - StartX) / Cell), r0 = (int)Math.Floor((y - StartY) / Cell);
         int most = (int)Math.Ceiling(reach / Cell);
@@ -126,7 +127,8 @@ internal sealed class RoadMap
             for (int r = r0 - ring; r <= r0 + ring; r++)
                 for (int c = c0 - ring; c <= c0 + ring; c++)
                 {
-                    if (Math.Max(Math.Abs(r - r0), Math.Abs(c - c0)) != ring || c < 0 || r < 0 || c >= Columns || r >= Rows || !_road[r * Columns + c])
+                    if (Math.Max(Math.Abs(r - r0), Math.Abs(c - c0)) != ring || c < 0 || r < 0 || c >= Columns || r >= Rows || !_road[r * Columns + c]
+                        || shut?.Invoke(r * Columns + c) == true)
                         continue;
                     double d = (c - c0) * (c - c0) + (r - r0) * (r - r0);
                     if (d < bestD)
@@ -150,14 +152,27 @@ internal sealed class RoadMap
     /// reached, the last where it is left. Null: no road near, or the two not joined by road. Round places in
     /// <paramref name="slow"/> (mobs, where the bot got stuck) cost more, they are never shut.
     /// </summary>
-    internal List<Vec3>? WayAlong(Vec3 from, Vec3 to, double reach, IReadOnlyList<(double X, double Y, double R)>? slow = null)
+    /// <param name="blocked">Whether a point (world units) is shut by what stands there (a wall, a bridge's railing —
+    /// seen: the road drawn over a bridge's railing, the character pressed against it for minutes); null: nothing.</param>
+    internal List<Vec3>? WayAlong(Vec3 from, Vec3 to, double reach, IReadOnlyList<(double X, double Y, double R)>? slow = null,
+        Func<double, double, bool>? blocked = null)
     {
-        if (NearestCell(from.X, from.Y, reach) is not var (sc, sr) || NearestCell(to.X, to.Y, reach) is not var (gc, gr))
-            return null;
-        var costs = Costs();
-        int w = Columns, h = Rows, start = sr * w + sc, goal = gr * w + gc;
+        int w = Columns, h = Rows;
         double X(int i) => StartX + (i % w + 0.5) * Cell;
         double Y(int i) => StartY + (i / w + 0.5) * Cell;
+        var shutCache = new Dictionary<int, bool>();
+        bool Shut(int i)
+        {
+            if (blocked == null)
+                return false;
+            if (!shutCache.TryGetValue(i, out bool s))
+                shutCache[i] = s = blocked(X(i), Y(i));
+            return s;
+        }
+        if (NearestCell(from.X, from.Y, reach, Shut) is not var (sc, sr) || NearestCell(to.X, to.Y, reach, Shut) is not var (gc, gr))
+            return null;
+        var costs = Costs();
+        int start = sr * w + sc, goal = gr * w + gc;
         float Slow(int i)
         {
             if (slow == null)
@@ -193,7 +208,7 @@ internal sealed class RoadMap
                     if ((dx == 0 && dy == 0) || nx < 0 || ny < 0 || nx >= w || ny >= h)
                         continue;
                     int n = ny * w + nx;
-                    if (!_road[n])
+                    if (!_road[n] || Shut(n))
                         continue;
                     float c = cost[i] + (dx != 0 && dy != 0 ? 1.4142f : 1f) * costs[n] * Slow(n);
                     if (c < cost[n])
@@ -220,7 +235,7 @@ internal sealed class RoadMap
             {
                 double t = (double)s / steps, px = ax + (bx - ax) * t, py = ay + (by - ay) * t;
                 int c = (int)Math.Floor((px - StartX) / Cell), r = (int)Math.Floor((py - StartY) / Cell);
-                if (c < 0 || r < 0 || c >= w || r >= h || !_road[r * w + c])
+                if (c < 0 || r < 0 || c >= w || r >= h || !_road[r * w + c] || blocked?.Invoke(px, py) == true)
                     return false;
                 float here = costs[r * w + c], onWay = costs[cells[Math.Clamp(a + (int)Math.Round(t * (b - a)), a, b)]];
                 if (here > Math.Max(CornerCost, onWay) + 0.01f || Slow(r * w + c) > 1 && Slow(cells[Math.Clamp(a + (int)Math.Round(t * (b - a)), a, b)]) == 1)
