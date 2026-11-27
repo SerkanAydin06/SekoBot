@@ -712,6 +712,77 @@ internal sealed class StatCard : Drawn
     }
 }
 
+/// <summary>
+/// "DURUM": what the bot does now (a line on top, its tone's colour) and six small tiles under it — caption, a value,
+/// a note each — two rows of three (the user: the panel's middle card only repeated the log; a summary instead).
+/// </summary>
+internal sealed class StatusSummary : Drawn
+{
+    public sealed record Tile(string Caption, string Value, string Note = "", Tone Tone = Tone.Neutral);
+
+    private string _now = "";
+    private Tone _nowTone = Tone.Neutral;
+    private IReadOnlyList<Tile> _tiles = [];
+
+    public void Show(string now, Tone nowTone, IReadOnlyList<Tile> tiles)
+    {
+        if (now == _now && nowTone == _nowTone && tiles.SequenceEqual(_tiles))
+            return;
+        (_now, _nowTone, _tiles) = (now, nowTone, [.. tiles]);
+        Invalidate();
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        Clear(g);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        // What it does now: a rounded strip, a dot in its colour.
+        using var nowFont = Sized(1.05f, FontStyle.Bold);
+        int nowH = (int)(nowFont.Height * 1.9f);
+        var strip = new RectangleF(0.5f, 0.5f, Width - 1, nowH);
+        using (var path = Theme.RoundRect(strip, nowH * 0.3f))
+        {
+            using var fill = new SolidBrush(Theme.Inset);
+            g.FillPath(fill, path);
+        }
+        var tone = _nowTone == Tone.Neutral ? Theme.Muted : Tones.Of(_nowTone);
+        float d = nowFont.Height * 0.45f;
+        using (var dot = new SolidBrush(tone))
+            g.FillEllipse(dot, nowH * 0.4f, (nowH - d) / 2f, d, d);
+        int tx = (int)(nowH * 0.4f + d * 2.2f);
+        TextRenderer.DrawText(g, _now, nowFont, new Rectangle(tx, 0, Width - tx - 8, nowH), Theme.Text, LeftMid);
+        if (_tiles.Count == 0)
+            return;
+        // The tiles: three a row.
+        int cols = 3, rows = (_tiles.Count + cols - 1) / cols;
+        float top = nowH + nowH * 0.35f, gap = nowH * 0.25f;
+        float cw = (Width - gap * (cols - 1)) / cols, ch = (Height - top - gap * (rows - 1)) / rows;
+        using var cap = Sized(0.78f, FontStyle.Bold);
+        using var value = Sized(1.15f, FontStyle.Bold);
+        using var note = Sized(0.85f);
+        for (int i = 0; i < _tiles.Count; i++)
+        {
+            var t = _tiles[i];
+            var cell = new RectangleF(i % cols * (cw + gap), top + i / cols * (ch + gap), cw, ch);
+            using (var path = Theme.RoundRect(cell with { X = cell.X + 0.5f, Width = cell.Width - 1 }, ch * 0.16f))
+            {
+                using var fill = new SolidBrush(Theme.Background);
+                g.FillPath(fill, path);
+                using var pen = new Pen(Theme.Border);
+                g.DrawPath(pen, path);
+            }
+            int px = (int)(cell.X + ch * 0.18f), pw = (int)(cell.Width - ch * 0.36f);
+            int capH = cap.Height, valueH = value.Height, noteH = note.Height;
+            int y = (int)(cell.Y + (ch - capH - valueH - noteH) / 2);
+            TextRenderer.DrawText(g, t.Caption, cap, new Rectangle(px, y, pw, capH), Theme.Faint, LeftMid);
+            TextRenderer.DrawText(g, t.Value, value, new Rectangle(px, y + capH, pw, valueH), t.Tone == Tone.Neutral ? Theme.Text : Tones.Of(t.Tone), LeftMid);
+            if (t.Note.Length > 0)
+                TextRenderer.DrawText(g, t.Note, note, new Rectangle(px, y + capH + valueH, pw, noteH), Theme.Muted, LeftMid);
+        }
+    }
+}
+
 /// <summary>"ŞİMDİ": the important things of the last minutes, one line each (time, a coloured icon, the text).</summary>
 internal sealed class Feed : Drawn
 {
