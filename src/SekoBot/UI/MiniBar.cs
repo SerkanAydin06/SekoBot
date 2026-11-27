@@ -9,7 +9,7 @@ namespace SekoBot.UI;
 internal sealed record MiniInfo(string Name, string Status, Color StatusColor, double? Hp, double? Mp, string ExpRate, string Mobs,
     bool Running, Rectangle? Game, nint GameWindow = 0, int? HpPotions = null, int? MpPotions = null, bool Attack = true, string? Market = null,
     string Exp10 = "", string Elapsed = "", IReadOnlyList<(string Name, int Picked, int Thrown, int Sold)>? Items = null, int Level = 0,
-    string Place = "");
+    string Place = "", double? ExpPercent = null, string ToLevel = "", string ExpLeft = "");
 
 /// <summary>
 /// The bot made small: one bar (420×84) under its own game window, so many bots fit on one screen

@@ -406,6 +406,15 @@ internal sealed partial class BotEngine
                     return potionTrip;
                 return null;
             }
+            // Nothing left to throw and room in the bag again (seen: the junk thrown, cut short by an attack, then off
+            // to sell 5 items 215 m away with 33 slots free): no trip — only a (nearly) full bag or "Şimdi at" sends one.
+            if (World is { } roomy && !HasThrowables(roomy, p) && !BagTight(roomy) && !_sellAsked)
+            {
+                _brain.WantsClean = false;
+                _log($"Çantada yer var ({roomy.Progress?.FreeSlots()} boş); satmaya gidilmiyor, avlanmaya devam.");
+                StartTidy();
+                return null;
+            }
             // One bot at a time: another one emptying its bag or selling is waited for.
             if (!TakeTurn())
                 return WaitingForTurn(state);

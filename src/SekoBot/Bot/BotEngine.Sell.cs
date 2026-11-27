@@ -423,8 +423,12 @@ internal sealed partial class BotEngine
 
     private bool _toldWalkedWay;
 
-    /// <summary>Mobs on the way are passed this far off (world units, 3 m).</summary>
-    internal const double PassMobsBy = 300;
+    /// <summary>Mobs on the way are passed this far off (world units, 5,5 m; seen at 3 m: walked through a group on the
+    /// road, all of them after us).</summary>
+    internal const double PassMobsBy = 550;
+    /// <summary>A mob this near the way ahead: the way is found again often (mobs move; seen: a way found 20 s before
+    /// led straight into a group that had come onto the road meanwhile).</summary>
+    internal static readonly TimeSpan MobWayRefresh = TimeSpan.FromSeconds(1.5);
     /// <summary>A town NPC is passed this far off (world units): not walked into.</summary>
     internal const double PassNpcsBy = 120;
 
@@ -519,7 +523,10 @@ internal sealed partial class BotEngine
                 // The way kept while we follow it (found anew each time it may lead another way round — seen: back and
                 // forth between two); found again when off it, stuck (way set to null), or now and then.
                 bool offWay = way is { Count: > 0 } current && OffTheWay(current, me);
-                if (way == null || offWay || _clock.Elapsed - wayAt > TimeSpan.FromSeconds(me.DistanceXY(target) > 6000 ? 20 : 2))
+                bool mobAhead = way is { Count: > 0 } wayNow && world.Mobs.Any(m => m.Hp > 0 && m.Position.DistanceXY(me) < MapTerrain.MobsAhead
+                    && MapTerrain.NearWayAhead(me, wayNow, m.Position, PassMobsBy + 300));
+                var refresh = mobAhead ? MobWayRefresh : TimeSpan.FromSeconds(me.DistanceXY(target) > 6000 ? 20 : 2);
+                if (way == null || offWay || _clock.Elapsed - wayAt > refresh)
                 {
                     // A way walked before (over the slopes up to the town…) first; else drawn around what is known.
                     // The map's roads known: along them (the M map's roads); else a way walked before.
@@ -592,7 +599,7 @@ internal sealed partial class BotEngine
             // The town's NPCs too (the one we go to stands in the goal's circle and doesn't count).
             .Concat((world.TownNpcs ?? []).Where(n => n.Position.DistanceXY(me) < reach)
                 .Select(n => new MapTerrain.Circle(n.Position.X, n.Position.Y, PassNpcsBy))).ToList();
-        return map.WayTo(me, target, avoid: [.. learned, .. mobs], roads: true)
+        return map.WayTo(me, target, avoid: learned, roads: true, mobs: mobs)
                ?? map.WayTo(me, target, avoid: learned, roads: true)
                ?? map.WayTo(me, target, avoid: stuckHere)
                ?? map.WayTo(me, target);

@@ -65,6 +65,22 @@ internal sealed class SessionStats
         Exp = Yang = 0;
     }
 
+    /// <summary>The run goes on after <paramref name="away"/> (a break, kicked): the counts kept, the time away not counted
+    /// (for the rates), the game's numbers read anew (the login screen reads nothing).</summary>
+    public void GoOn(TimeSpan away)
+    {
+        _near.Clear();
+        _died.Clear();
+        _previousNear = [];
+        _exp = _needExp = _yang = null;
+        _hpLeft = _mpLeft = null;
+        _level = 0;
+        _lowSince = TimeSpan.MinValue;
+        _levelTaken = false;
+        _started += away;
+        _lastExpUp += away;
+    }
+
     /// <param name="hpPotion">The item number of the HP potion (on its quick slot key), if known.</param>
     public void Update(WorldSnapshot world, TimeSpan now, int? hpPotion, int? mpPotion)
     {

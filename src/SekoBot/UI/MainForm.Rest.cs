@@ -71,7 +71,7 @@ internal sealed partial class MainForm
                 }
                 Remember(e);
                 e.QuietFor(null);
-                StopBot("oyundan çıkış molası");
+                StopBot("oyundan çıkış molası", hold: true);
                 _rest = RestStage.LoggingOut;
                 _restStageAt = now;
                 _logoutPressedAt = DateTime.MinValue;
@@ -128,6 +128,38 @@ internal sealed partial class MainForm
                 EndRest(null);
                 return;
         }
+    }
+
+    /// <summary>
+    /// The farm stopped only for a while and coming back by itself: an out-of-game break, or kicked to the login screen
+    /// (maintenance, the connection lost) with the login on. Shown as working (the user: "molada iken bot çalışmıyor
+    /// gibi neden? sonuçta bot hâlâ çalışıyor").
+    /// </summary>
+    private bool WaitingToGoOn => _engine is { BotRunning: false } e && _mode == FarmMode
+        && (_rest is RestStage.LoggingOut or RestStage.Resting || _profile.AutoLogin && (_resume != null || e.KickedWhileWorking) && e.SessionHeld);
+
+    /// <summary>What it waits for, in words.</summary>
+    private string WaitingText() =>
+        _rest == RestStage.Resting ? $"☕ Molada · {_restUntil:HH:mm}'de oyuna girilip devam edilecek"
+        : _rest == RestStage.LoggingOut ? "☕ Mola için oyundan çıkılıyor"
+        : "⏳ Oyuna yeniden girilip kaldığı yerden devam edilecek";
+
+    /// <summary>The user stopped while the farm waits to go on: the break / the way back given up, the run ended. False: nothing waited.</summary>
+    private bool CancelGoingOn(string reason)
+    {
+        if (!WaitingToGoOn || _engine is not { } e)
+            return false;
+        _rest = RestStage.None;
+        _played = TimeSpan.Zero;
+        _lastPlayTick = DateTime.MinValue;
+        _resume = null;
+        e.KickedWhileWorking = false;
+        e.EndHeldSession(reason);
+        _stopReason = reason;
+        WriteLog("⏹ Bekleme iptal edildi; oyuna yeniden girilmeyecek, bot durdu.");
+        UpdateControls();
+        UpdateStats();
+        return true;
     }
 
     /// <summary>The break over; with <paramref name="farmOn"/> the farm started again at once (no logout happened).</summary>

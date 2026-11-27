@@ -719,7 +719,9 @@ internal sealed class StatCard : Drawn
 /// </summary>
 internal sealed class StatusSummary : Drawn
 {
-    public sealed record Tile(string Caption, string Value, string Note = "", Tone Tone = Tone.Neutral);
+    /// <param name="Bar">How full (0..1) when the tile has a bar (the side panel draws it), else null.</param>
+    /// <param name="Icon">The tile's icon in the side panel.</param>
+    public sealed record Tile(string Caption, string Value, string Note = "", Tone Tone = Tone.Neutral, double? Bar = null, string Icon = "");
 
     private string _now = "";
     private Tone _nowTone = Tone.Neutral;

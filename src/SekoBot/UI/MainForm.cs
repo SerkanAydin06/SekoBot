@@ -1741,7 +1741,7 @@ internal sealed partial class MainForm : Form
         {
             FishingMode => e.Fishing || e.FishingPaused ? e.FishingTime : null,
             MarketMode => e.ScanningMarket && e.MarketSince is DateTime since ? DateTime.Now - since : null,
-            _ => e.BotRunning ? e.Stats.BotUptime : null,
+            _ => e.BotRunning || WaitingToGoOn ? e.Stats.BotUptime : null,
         };
         return t is TimeSpan v ? (v.TotalHours >= 1 ? $"{(int)v.TotalHours}:{v.Minutes:00}:{v.Seconds:00}" : v.ToString(@"mm\:ss")) : "";
     }
@@ -1995,13 +1995,16 @@ internal sealed partial class MainForm : Form
             {
                 MarketMode => _engine?.ScanningMarket == true,
                 FishingMode => _engine?.Fishing == true,
-                _ => _engine?.BotRunning == true,
+                _ => _engine?.BotRunning == true || WaitingToGoOn,
             }, game,
             _engine is { } e && Win32.IsWindow(e.Window.Handle) ? e.Window.Handle : 0, hpPotions, mpPotions, Attack: _profile.Attack, Market: market,
             Exp10: Exp10(), Elapsed: ElapsedNow(),
             Items: _engine?.SessionItems.Rows().Select(r => (r.Name, r.Picked, r.Thrown, r.Sold)).ToList(),
             Level: _engine?.World?.Level ?? 0,
-            Place: _engine?.World is { Server.Length: > 0 } w ? w.Server + (w.Channel > 0 ? $" K{w.Channel}" : "") : "");
+            Place: _engine?.World is { Server.Length: > 0 } w ? w.Server + (w.Channel > 0 ? $" K{w.Channel}" : "") : "",
+            ExpPercent: _engine?.World is { Progress: { } p } && p.Exp + p.NeedExp > 0 && !BotEngine.IsLoginScreen(_engine.World.MapName) ? 100.0 * p.Exp / (p.Exp + p.NeedExp) : null,
+            ToLevel: _engine?.Stats.Session?.ToLevel is TimeSpan toLevel ? "~" + Duration(toLevel) : "",
+            ExpLeft: _engine?.World is { Progress: { NeedExp: > 0 } left } ? Short(left.NeedExp) : "");
     }
 
     protected override void WndProc(ref Message m)
@@ -2181,7 +2184,7 @@ internal sealed partial class MainForm : Form
     {
         MarketMode => _engine?.ScanningMarket == true,
         FishingMode => _engine?.Fishing == true,
-        _ => _engine?.BotRunning == true,
+        _ => _engine?.BotRunning == true || WaitingToGoOn,
     };
 
     /// <summary>The "all bots" message: this SekoBot starts, pauses or stops its own tab's work.</summary>
@@ -2205,7 +2208,8 @@ internal sealed partial class MainForm : Form
                 if (WorkingNow() || _engine.FishingPaused)
                 {
                     WriteLog("Tüm botlar durduruldu.");
-                    StopBot("tüm botlar durduruldu", byUser: true);
+                    if (!CancelGoingOn("tüm botlar durduruldu"))
+                        StopBot("tüm botlar durduruldu", byUser: true);
                 }
                 break;
         }
@@ -2238,6 +2242,8 @@ internal sealed partial class MainForm : Form
             UpdateStats();
             return;
         }
+        if (CancelGoingOn("durduruldu"))
+            return;
         if (_engine.BotRunning || _engine.ScanningMarket || _engine.ScanningArea)
         {
             StopBot("duraklatıldı", byUser: true);
@@ -2258,7 +2264,8 @@ internal sealed partial class MainForm : Form
 
     /// <param name="byUser">F10/F11/button: a pending update may install now. Automatic stops
     /// (minimized game) keep the window as is so the user can see why it stopped.</param>
-    private void StopBot(string reason, bool byUser = false)
+    /// <param name="hold">Only for a while (an out-of-game break): the run goes on when the bot starts again.</param>
+    private void StopBot(string reason, bool byUser = false, bool hold = false)
     {
         if (_engine is { Fishing: true } || (_engine is { FishingPaused: true } && ActiveWork == null))
         {
@@ -2286,7 +2293,7 @@ internal sealed partial class MainForm : Form
         }
         if (_engine?.BotRunning != true)
             return;
-        _engine.StopBot(reason);
+        _engine.StopBot(reason, hold);
         _stopReason = reason;
         UpdateControls();
         UpdateStats();
@@ -2950,6 +2957,9 @@ internal sealed partial class MainForm : Form
         }
         else
         {
+            if (WaitingToGoOn)
+                SetLine(WaitingText() + $"  ·  İptal için DURAKLAT ya da {StartKey}.", Theme.Yellow);
+            else
             SetLine(_stopReason is string reason
                         ? $"Durdu ({reason}). Devam etmek için BAŞLAT ya da {StartKey}."
                         : $"Hazır. Başlatmak için BAŞLAT ya da {StartKey}.",
@@ -3131,6 +3141,7 @@ internal sealed partial class MainForm : Form
             case "durum" or "status":
                 return AllStatuses();
             case "dur" or "stop":
+                if (CancelGoingOn("Telegram'dan durduruldu")) return "⏹ Mola / yeniden giriş iptal edildi; bot durdu.";
                 if (ActiveWork is not string stopping) return "Bot zaten duruyor.";
                 StopBot("Telegram'dan durduruldu", byUser: true);
                 return $"⏹ {stopping} için durdurma istendi.";
@@ -3197,7 +3208,7 @@ internal sealed partial class MainForm : Form
             return "PARDUS açık; oyun bağlı değil.";
         var s = _engine.Stats;
         var world = _engine.World;
-        var lines = new List<string> { _engine.BotRunning ? "▶ Bot çalışıyor" : "⏸ Bot duruyor" + (_stopReason != null ? $" ({_stopReason})" : "") };
+        var lines = new List<string> { _engine.BotRunning ? "▶ Bot çalışıyor" : WaitingToGoOn ? "▶ Bot çalışıyor · " + WaitingText() : "⏸ Bot duruyor" + (_stopReason != null ? $" ({_stopReason})" : "") };
         if (_engine.ScanningMarket)
         {
             var c = _engine.MarketCounts;
@@ -3243,7 +3254,7 @@ internal sealed partial class MainForm : Form
     private void UpdateControls()
     {
         bool connected = _engine != null;
-        bool running = _engine?.BotRunning == true;
+        bool running = _engine?.BotRunning == true || _mode == FarmMode && WaitingToGoOn;
         _gameButton.Text = connected ? (_engine!.CharacterName is { Length: > 0 } who ? who : "Bağlı") : "Oyunu seç";
         _startBot.Enabled = connected;
         _findArea.Enabled = connected && !running && _engine?.ScanningMarket != true;
