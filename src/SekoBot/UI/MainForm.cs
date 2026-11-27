@@ -1669,7 +1669,10 @@ internal sealed partial class MainForm : Form
             return;
         if (UseSidePanel)
         {
-            _sidePanel ??= new SidePanel(MiniInfoNow, SummaryNow, ToggleBot, () => StopBot("kullanıcı durdurdu", byUser: true), OpenLiveMap, GoBig, CloseFromMini);
+            _sidePanel ??= new SidePanel(MiniInfoNow, SummaryNow,
+                () => [.. _logLines.TakeLast(200).Select(l => new SidePanel.Line(l.At, l.Tag, l.Tone, l.Text))],
+                new LiveMap(() => _engine, () => _profile) { Font = new Font("Segoe UI", 8.5f) },
+                ToggleBot, () => StopBot("kullanıcı durdurdu", byUser: true), GoBig, ArrangeAll, CloseFromMini);
             _mini?.Hide();
             if (!_sidePanel.Visible)
                 _sidePanel.Show();
