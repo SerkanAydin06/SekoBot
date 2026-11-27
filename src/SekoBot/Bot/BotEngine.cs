@@ -591,6 +591,29 @@ internal sealed partial class BotEngine : IDisposable
         }
     }
 
+    internal bool UsesWindowCapture => _capture is WgcCapture;
+
+    internal Bitmap? CopyWindowFrameSince(long requestedAt)
+    {
+        lock (_frameGate)
+        {
+            if (!UsesWindowCapture || _latest == null || _latest.CreatedAt < requestedAt)
+                return null;
+            Bitmap? image = null;
+            long sequence = -1;
+            try
+            {
+                TryCopyLatest(ref image, ref sequence);
+                return image;
+            }
+            catch
+            {
+                image?.Dispose();
+                throw;
+            }
+        }
+    }
+
     /// <summary>Runs <paramref name="work"/> on the newest frame while it is guaranteed alive.</summary>
     public T? WithLatestFrame<T>(Func<Frame, T> work)
     {

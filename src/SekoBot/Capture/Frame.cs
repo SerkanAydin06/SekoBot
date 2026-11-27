@@ -14,6 +14,7 @@ internal sealed class Frame : IDisposable
     public int Width { get; }
     public int Height { get; }
     public int Stride { get; }
+    public long CreatedAt { get; } = System.Diagnostics.Stopwatch.GetTimestamp();
     public long Sequence { get; init; }
 
     public byte[] Data => _data ?? throw new ObjectDisposedException(nameof(Frame));

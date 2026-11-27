@@ -32,6 +32,22 @@ internal static class TelegramNotifier
         }
     }
 
+    internal static async Task<string?> SendScreenshotAsync(string token, string chatId, byte[] jpeg, CancellationToken cancel)
+    {
+        using var form = new MultipartFormDataContent();
+        form.Add(new StringContent(chatId.Trim()), "chat_id");
+        var photo = new ByteArrayContent(jpeg);
+        photo.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/jpeg");
+        form.Add(photo, "photo", "oyun.jpg");
+        try
+        {
+            using var response = await Http.PostAsync(Url(token, "sendPhoto"), form, cancel);
+            return response.IsSuccessStatusCode ? null : $"Fotoğraf gönderilemedi (HTTP {(int)response.StatusCode}).";
+        }
+        catch (HttpRequestException) { return "Fotoğraf gönderilemedi; Telegram bağlantısı kurulamadı."; }
+        catch (OperationCanceledException) when (!cancel.IsCancellationRequested) { return "Fotoğraf gönderimi zaman aşımına uğradı."; }
+    }
+
     private static readonly HttpClient LongHttp = new() { Timeout = TimeSpan.FromSeconds(45) };
 
     /// <summary>
