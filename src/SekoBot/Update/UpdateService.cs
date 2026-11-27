@@ -183,12 +183,9 @@ exit /B 1
 
 :replace
 if not exist "%replacement%" exit /B 1
+rem No byte-by-byte check whether the two are the same: on two 59 MB files it took 130 s, the game standing
+rem idle meanwhile (the file was checked when it came in; the same one put in place again does no harm).
 if exist "%target%" (
-  fc /B "%replacement%" "%target%" >NUL 2>&1
-  if not errorlevel 1 (
-    del /Q "%replacement%" >NUL 2>&1
-    exit /B 0
-  )
   move /Y "%target%" "%old%" >NUL 2>&1 || exit /B 1
 )
 move /Y "%replacement%" "%target%" >NUL 2>&1 && exit /B 0
