@@ -49,4 +49,18 @@ public class BonusTrialTests
         Assert.True(BotEngine.WantedLoot(item, profile, freeSlots: 20));
         Assert.False(BotEngine.WantedLoot(item, profile, freeSlots: BotEngine.BonusLookMinFree));
     }
+
+    [Fact]
+    public void A_low_chance_item_is_still_wanted_but_only_in_passing()
+    {
+        int sword = ItemBook.All().Where(i => Loot.KindOf(i.Vnum) == LootKind.Equipment).Skip(3).First().Vnum;
+        var profile = new BotProfile { LootEquipment = false, LootOwnClass = false, LootEquipmentMinGold = 0 };
+        profile.LootBonuses.Add(new BonusWant { Type = 47, Min = 6 });
+        Assert.False(BotEngine.OnlyInPassing(sword, profile));
+        for (int i = 0; i < BonusTrials.GiveUpAfter; i++)
+            BotEngine.Trials.Record(sword, false);
+        // Never left for good (one in a hundred may be the one): wanted, but only when passing by.
+        Assert.True(BotEngine.WantedLoot(new GroundItem(1, default, sword), profile, freeSlots: 30));
+        Assert.True(BotEngine.OnlyInPassing(sword, profile));
+    }
 }

@@ -5,8 +5,9 @@ namespace SekoBot.Bot;
 
 /// <summary>
 /// What picking items up to see their bonuses brought, per item (its number): how many were looked at in the bag and how
-/// many had a bonus of the list. An item that keeps coming without one isn't picked up for its bonuses any more (the user:
-/// "efsununu görmek için çok eşya alıyor" — seen: 11 of 11 spears and 11 of 11 long swords picked up, then thrown away).
+/// many had a bonus of the list. An item that keeps coming without one is picked up for its bonuses only in passing (the
+/// user: "efsununu görmek için çok eşya alıyor" — seen: 11 of 11 spears and 11 of 11 long swords picked up, then thrown
+/// away; and: one in a hundred may be the one wanted, so never left for good).
 /// Kept for every character and every PARDUS (efsun-denemeleri.json).
 /// </summary>
 internal sealed class BonusTrials
