@@ -945,6 +945,7 @@ internal sealed partial class MainForm : Form
         Check(advanced, "Tek oyun düzeni: oyun sabit boyutta sol üstte, PARDUS ve küçük mod paneli yanında", 0, 174, 918,
             () => _profile.SingleGame, v => _profile.SingleGame = v);
         Theme.Label(advanced, "Oyunun boyutu", new Rectangle(0, 208, 190, 26), 9f, Theme.Muted);
+        // (A size that is no longer in the list — set by hand — shows as automatic.)
         (int W, int H)[] sizes = [(1024, 576), (1280, 720), (1366, 768), (1600, 900), (1920, 1080)];
         var gameSize = new ComboBox
         {
@@ -955,13 +956,15 @@ internal sealed partial class MainForm : Form
             FlatStyle = FlatStyle.Flat,
             Font = new Font("Segoe UI", 9f),
         };
+        // First: automatic (each computer the biggest its screen holds).
+        gameSize.Items.Add("Otomatik (ekrana göre)");
         gameSize.Items.AddRange([.. sizes.Select(z => $"{z.W} × {z.H}")]);
-        int SizeIndex() => Math.Max(0, Array.FindIndex(sizes, z => z.W == _profile.SingleGameWidth && z.H == _profile.SingleGameHeight));
+        int SizeIndex() => _profile.SingleGameWidth <= 0 ? 0 : Array.FindIndex(sizes, z => z.W == _profile.SingleGameWidth && z.H == _profile.SingleGameHeight) + 1;
         gameSize.SelectedIndex = SizeIndex();
         gameSize.SelectedIndexChanged += (_, _) =>
         {
             if (_reloading) return;
-            (_profile.SingleGameWidth, _profile.SingleGameHeight) = sizes[gameSize.SelectedIndex];
+            (_profile.SingleGameWidth, _profile.SingleGameHeight) = gameSize.SelectedIndex == 0 ? (0, 0) : sizes[gameSize.SelectedIndex - 1];
             SaveProfile();
         };
         _reloads.Add(() => gameSize.SelectedIndex = SizeIndex());
@@ -1949,14 +1952,18 @@ internal sealed partial class MainForm : Form
         if (WindowService.GetOpenWindows().Count(w => w.IsMetin2) > 1)
             return false;
         int side = (int)(WindowLayout.SidePanelWidth * DeviceDpi / 96f) + 8;
-        var game = WindowLayout.PlaceSingle(e.Window.Handle, new Size(_profile.SingleGameWidth, _profile.SingleGameHeight), side);
+        // Automatic: as big as the screen holds (a 16:9 picture made smaller to fit, never bigger than 4K).
+        bool auto = _profile.SingleGameWidth <= 0 || _profile.SingleGameHeight <= 0;
+        var want = auto ? new Size(3840, 2160) : new Size(_profile.SingleGameWidth, _profile.SingleGameHeight);
+        var game = WindowLayout.PlaceSingle(e.Window.Handle, want, side);
         if (game.IsEmpty)
             return false;
         // PARDUS beside the game when it fits there (else it stays where it is).
         var work = Screen.FromRectangle(game).WorkingArea;
         if (Visible && WindowState == FormWindowState.Normal && game.Right + 8 + Width <= work.Right)
             Location = new Point(game.Right + 8, work.Top);
-        WriteLog($"Oyun {_profile.SingleGameWidth}×{_profile.SingleGameHeight} boyutunda sol üst köşeye yerleşti; PARDUS sağında.");
+        string size = Win32.GetClientRect(e.Window.Handle, out var client) ? $"{client.Right - client.Left}×{client.Bottom - client.Top}" : "";
+        WriteLog($"Oyun {size} boyutunda{(auto ? " (ekrana göre en büyük)" : "")} sol üst köşeye yerleşti; PARDUS sağında.");
         _sidePanel?.Place();
         return true;
     }
