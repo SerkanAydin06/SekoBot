@@ -447,6 +447,24 @@ internal sealed partial class BotEngine
         List<Vec3>? way = null, walked = null;
         var wayAt = TimeSpan.FromDays(-1);
         int stuck = 0;
+        // Time up but still getting closer: walked on (seen: given up 83 m before the shop after a detour, then
+        // 106 m walked back to the farm — the bag full for 10 more minutes). At most twice the time.
+        double closest = double.MaxValue, closestThen = double.MaxValue;
+        var closestCheck = started;
+        bool TimeLeft()
+        {
+            var now = _clock.Elapsed;
+            if (now - started < limit)
+                return true;
+            if (now - started >= limit * 2)
+                return false;
+            if (now - closestCheck < TimeSpan.FromSeconds(60))
+                return true;
+            bool nearer = closest < closestThen - 1000;
+            closestThen = closest;
+            closestCheck = now;
+            return nearer;
+        }
         void Let(HashSet<Keys> want)
         {
             foreach (var k in held.Where(k => !want.Contains(k)).ToList())
@@ -459,7 +477,7 @@ internal sealed partial class BotEngine
         }
         try
         {
-            while (_clock.Elapsed - started < limit)
+            while (TimeLeft())
             {
                 token.ThrowIfCancellationRequested();
                 if (World is not { Camera: { } camera } world)
@@ -470,6 +488,7 @@ internal sealed partial class BotEngine
                 var me = world.Player;
                 if (me.DistanceXY(target) < near)
                     break;
+                closest = Math.Min(closest, me.DistanceXY(target));
                 if (last is Vec3 l && me.DistanceXY(l) > 30)
                     lastMove = _clock.Elapsed;
                 else if (_clock.Elapsed - lastMove > TimeSpan.FromSeconds(1.5))
