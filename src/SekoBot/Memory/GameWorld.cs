@@ -891,7 +891,7 @@ internal sealed partial class GameWorldReader : IDisposable
 
     private readonly Dictionary<long, List<(string Name, int Offset)>> _widgetFields = [];
     private readonly Dictionary<long, bool> _isWidget = [];
-    private List<string> _windows = [];
+    private List<string>? _windows;
     private List<SkillInfo> _skills = [];
     private DateTime _skillsReadAt = DateTime.MinValue;
     private DateTime _windowsReadAt = DateTime.MinValue;
@@ -903,12 +903,22 @@ internal sealed partial class GameWorldReader : IDisposable
     /// The game's own windows (the "_C" widgets held by the main UI, e.g. "EscMenu", "inventory",
     /// "settings") that are showing. Unreal's ESlateVisibility: 1 Collapsed and 2 Hidden are not showing.
     /// </summary>
-    private List<string> ReadWindows(long ui)
+    internal List<string>? ReadWindowsNow()
+    {
+        if (!_located) return null;
+        long instance = Pointer(_moduleBase + _gameInstance);
+        long cls = Pointer(instance + ObjClass);
+        if (ClassName(cls) != "m2data_C") return null;
+        long ui = Pointer(instance + Offset(cls, "m2data_C", "uiMain"));
+        return MemoryReads.IsPointer(ui) ? ReadWindows(ui) : null;
+    }
+
+    private List<string>? ReadWindows(long ui)
     {
         var open = new List<string>();
-        if (!MemoryReads.IsPointer(ui))
-            return open;
+        if (!MemoryReads.IsPointer(ui)) return null;
         long uiClass = Pointer(ui + ObjClass);
+        if (ClassName(uiClass) != "UI_C") return null;
         if (!_widgetFields.TryGetValue(uiClass, out var fields))
             _widgetFields[uiClass] = fields = ObjectFields(uiClass);
         foreach (var (name, offset) in fields)
@@ -921,7 +931,9 @@ internal sealed partial class GameWorldReader : IDisposable
                 continue;
             // The message window's frame is always "visible" (seen: Visibility 4 while closed); whether it
             // is open is its IsOpen flag, read below.
-            if (name != MessageWindow && Byte(widget + Offset(cls, "Widget", "Visibility")) is byte visibility and not (1 or 2))
+            if (name == "bigMap" && ClassName(cls) == "bigMap_C")
+                open.Add(name);
+            else if (name != MessageWindow && Byte(widget + Offset(cls, "Widget", "Visibility")) is byte visibility and not (1 or 2))
                 open.Add(name);
         }
         // The message (DM) window: its own IsOpen flag (it isn't hidden like the others).

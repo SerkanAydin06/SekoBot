@@ -300,7 +300,12 @@ internal sealed partial class BotEngine
             return BagCleaner.DropConfirmation(yes, bag.ConfirmBounds, readBagNow);
         if (selling && bag.NpcShop > 0 && bag.OtherConfirm is Point sellYes)
             return BagCleaner.SaleConfirmation(sellYes, bag, readBagNow);
-        return new KeyTapAction(bag.OtherConfirm != null || bag.NpcShop > 0 ? p.Keys.CloseWindow : p.Keys.Inventory);
+        bool escape = bag.OtherConfirm != null || bag.NpcShop > 0;
+        return new KeyTapAction(escape ? p.Keys.CloseWindow : p.Keys.Inventory)
+        {
+            StillWanted = readBagNow == null ? null : () => readBagNow() is { Confirm: null } live
+                && live.OtherConfirm == bag.OtherConfirm && live.NpcShop == bag.NpcShop && (escape || live.Open)
+        };
     }
 
     /// <summary>One look while tidying: a key that closes what is left, nothing (waiting), or null when done.</summary>
@@ -354,8 +359,6 @@ internal sealed partial class BotEngine
     {
         if (!_cleaner.Active && _tidying && TidyTick(state, p) is { } tidy)
             return tidy;
-        if (!_cleaner.Active && !_tidying && MapPeekTick(state, p) is { } peek)
-            return peek;
         if (!_cleaner.Active)
         {
             // Cut short a moment ago: the throw question (or the bag) may still be showing — closed, then fight on.
@@ -370,7 +373,7 @@ internal sealed partial class BotEngine
                 if (left.Open)
                 {
                     _leftoverClosedAt = DateTime.Now;
-                    return [new KeyTapAction(p.Keys.Inventory)];
+                    return [TidyAction(left, p, readBagNow: ReadBagNow)];
                 }
             }
             if (!_brain.WantsClean || !_brain.ReadyToClean)

@@ -132,13 +132,8 @@ internal sealed record GameState(
     /// <summary>Killed by a player who is still around: "Burada yeniden başla" waits (see BotEngine.PvpTick).</summary>
     public bool HoldRevive { get; init; }
 
-    /// <summary>A window covers the game (e.g. the advert after a level-up).</summary>
-    public bool PopupOpen { get; init; }
-    /// <summary>The window open is the bag (with its equipment beside it): closed with the bag's key, not Esc
-    /// (seen since the game's update: Esc left the equipment open, and the next Esc opened the game menu).</summary>
-    public bool PopupIsBag { get; init; }
-    /// <summary>The only window open is the M map: closed with the map key (Esc doesn't close it, it opens the game menu).</summary>
-    public bool PopupIsMap { get; init; }
+    public bool WindowsUnreadable { get; init; }
+    public string? PopupTarget { get; init; }
 
     /// <summary>The game's message window is open: someone may be typing in it, so no key is pressed
     /// (they would end up in the text: "ggggg").</summary>

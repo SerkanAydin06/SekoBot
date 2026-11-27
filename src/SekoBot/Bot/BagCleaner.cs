@@ -154,9 +154,9 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
         if (bag?.Confirm is Point yes)
             actions.Add(DropConfirmation(yes, bag.ConfirmBounds, readBagNow));
         else if (bag?.OtherConfirm != null)
-            actions.Add(new KeyTapAction(p.Keys.CloseWindow));
+            actions.Add(new KeyTapAction(p.Keys.CloseWindow) { StillWanted = When(b => b.OtherConfirm == bag.OtherConfirm && b.Confirm == null) });
         if (bag?.Open == true)
-            actions.Add(new KeyTapAction(p.Keys.Inventory));
+            actions.Add(new KeyTapAction(p.Keys.Inventory) { StillWanted = When(b => b.Open && b.Confirm == null && b.OtherConfirm == null) });
         return actions;
     }
 
@@ -254,9 +254,9 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
                 }
                 // Open already (a market's shop opens it by itself) with its page not read yet: waited on, not
                 // pressed — the key would shut it (seen: the bag closed at the shop).
-                if (bag.Open && _openWaits < 4)
+                if (bag.Open)
                 {
-                    _openWaits++;
+                    if (++_openWaits >= 5) Finish("envanter sayfası okunamadı");
                     _waitUntil = now + AfterKey;
                     break;
                 }
@@ -265,7 +265,7 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
                     Finish("envanter açılamadı");
                     break;
                 }
-                actions.Add(new KeyTapAction(p.Keys.Inventory));
+                actions.Add(new KeyTapAction(p.Keys.Inventory) { StillWanted = When(b => !b.Open) });
                 _opens++;
                 _waitUntil = now + AfterKey;
                 break;
@@ -451,7 +451,7 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
                     Finish(Problem ?? "envanter kapatılamadı");
                     break;
                 }
-                actions.Add(new KeyTapAction(p.Keys.Inventory));
+                actions.Add(new KeyTapAction(p.Keys.Inventory) { StillWanted = When(b => b.Open && b.Confirm == null && b.OtherConfirm == null) });
                 _closes++;
                 _waitUntil = now + AfterKey;
                 break;

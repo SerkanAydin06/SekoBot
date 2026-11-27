@@ -16,6 +16,8 @@ internal sealed partial class Brain
 {
     internal Func<GameState?>? ReviveState { get; init; }
     private static readonly TimeSpan Never = TimeSpan.FromDays(-1);
+    internal Func<string, bool>? SamePopupOpen { get; init; }
+    private TimeSpan _popupSince = Never;
     private TimeSpan _lastTickTime;
 
     private readonly Func<BotProfile> _profile;
@@ -48,7 +50,7 @@ internal sealed partial class Brain
         Cycles = Potions = Deaths = 0;
         Detours = NoWayMobs = 0;
         _lastAttackDown = Never;
-        _hpLowSince = _mpLowSince = _lastEsc = Never;
+        _hpLowSince = _mpLowSince = _lastEsc = _popupSince = Never;
         ResetSkills();
         ResetRetreat();
         _nextBreak = Never;
@@ -117,6 +119,34 @@ internal sealed partial class Brain
             actions.Add(new NoteAction("Mesaj penceresi kapandı; bot devam ediyor."));
         }
 
+        if (!state.Dead && (state.PopupTarget != null || state.WindowsUnreadable))
+        {
+            SetMoves([], p, actions, refresh: false);
+            SetAttack(false, p, actions, refresh: false);
+            ReleaseTimedKeys(actions);
+            if (_popupSince == Never) _popupSince = now;
+            if (now - _popupSince >= TimeSpan.FromSeconds(30))
+            {
+                actions.Add(new StopAction(state.WindowsUnreadable ? "Pencere durumu okunamadı."
+                    : $"Açık pencere kapanmadı ({state.PopupTarget}); elle kontrol et."));
+                return actions;
+            }
+            if (!state.WindowsUnreadable && state.PopupTarget is string target && now - _lastEsc >= Ms(3000))
+            {
+                Keys key = target switch
+                {
+                    "bigMap" => p.Keys.Map,
+                    "inventory" or "equipment" => p.Keys.Inventory,
+                    _ => p.Keys.CloseWindow
+                };
+                actions.Add(new KeyTapAction(key) { StillWanted = () => SamePopupOpen?.Invoke(target) == true });
+                actions.Add(new NoteAction($"Açık pencere: {target}. Kapatma tuşu: {key}."));
+                _lastEsc = now;
+            }
+            return actions;
+        }
+        _popupSince = Never;
+
         // Dead: wait for "Burada yeniden başla", click it; then heal before fighting again.
         if (p.ReviveOnDeath && state.Dead)
         {
@@ -165,26 +195,6 @@ internal sealed partial class Brain
             return actions;
         }
         _lastTickTime = state.Time;
-
-        // A window over the game (advert after a level-up): let go of everything and close it
-        // with one Esc; only press again if it is still there 3 s later (a second Esc with
-        // nothing open would open the game menu instead).
-        if (p.ClosePopups && state.PopupOpen)
-        {
-            if (p.NavigateMode)
-            {
-                SetMoves([], p, actions, refresh: false);
-                SetAttack(false, p, actions, refresh: false);
-            }
-            if (now - _lastEsc >= Ms(3000))
-            {
-                actions.Add(new KeyTapAction(state.PopupIsBag ? p.Keys.Inventory : state.PopupIsMap ? p.Keys.Map : p.Keys.CloseWindow));
-                actions.Add(new NoteAction(state.PopupIsBag ? "Envanter açık kalmış; envanter tuşuyla kapatılıyor."
-                    : state.PopupIsMap ? "M haritası açık kalmış; harita tuşuyla kapatılıyor." : "Açılır pencere görüldü; Esc ile kapatılıyor."));
-                _lastEsc = now;
-            }
-            return actions;
-        }
 
         // Few HP potions left: get away from the mobs and stop somewhere quiet.
         if (!TravelPending(state, p) && RetreatTick(state, p, actions) && Did("İksir az: sakin bir yere çekiliniyor"))
