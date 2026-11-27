@@ -23,7 +23,7 @@ internal static class WindowLayout
     public const int AllStart = 1, AllPause = 2, AllStop = 3, AllUpdate = 4;
 
     /// <summary>Tells every SekoBot open (this one too) to start, pause or stop its work (each in its own tab).</summary>
-    public static void TellAll(int what) => Win32.PostMessage(Win32.HWND_BROADCAST, AllMessage, what, 0);
+    public static void TellAll(int what, nint except = 0) => Win32.PostMessage(Win32.HWND_BROADCAST, AllMessage, what, except);
 
     /// <summary>The menu for all bots at once (the small bar's and the header's button).</summary>
     public static ContextMenuStrip AllMenu()

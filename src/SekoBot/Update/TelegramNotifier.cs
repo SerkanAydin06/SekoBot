@@ -90,6 +90,10 @@ internal static class TelegramNotifier
     }
 
     /// <summary>A command written to the bot, cleaned up: "/Durum " is "durum", "başla" is "basla".</summary>
+    internal static bool IsUpdateCommand(string text, string replyTo) =>
+        (text.TrimStart().StartsWith('/') || string.IsNullOrEmpty(replyTo)) && Command(text) == "guncelle"
+        && !text.Trim().Any(char.IsWhiteSpace);
+
     public static string Command(string text) =>
         text.Trim().TrimStart('/').Split(' ', '@')[0].Replace("İ", "i").Replace("I", "ı").ToLowerInvariant()
             .Replace('ş', 's').Replace('ı', 'i').Replace('ğ', 'g').Replace('ü', 'u').Replace('ö', 'o').Replace('ç', 'c');
