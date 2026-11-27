@@ -148,7 +148,7 @@ internal static class WindowLayout
     }
 
     /// <summary>Moves a window so that what is seen of it fills <paramref name="target"/>.</summary>
-    private static void MoveVisible(nint hwnd, Rectangle target)
+    internal static void MoveVisible(nint hwnd, Rectangle target)
     {
         if (Win32.IsIconic(hwnd))
             Win32.ShowWindow(hwnd, Win32.SW_SHOWNOACTIVATE);
@@ -161,6 +161,30 @@ internal static class WindowLayout
         int left = seen.Left - outer.Left, top = seen.Top - outer.Top, right = outer.Right - seen.Right, bottom = outer.Bottom - seen.Bottom;
         Win32.SetWindowPos(hwnd, 0, target.Left - left, target.Top - top, target.Width + left + right, target.Height + top + bottom,
             Win32.SWP_NOZORDER | Win32.SWP_NOACTIVATE | Win32.SWP_NOOWNERZORDER);
+    }
+
+    /// <summary>The side panel's width (96-dpi units) beside a single game.</summary>
+    public const int SidePanelWidth = 300;
+
+    /// <summary>
+    /// One game on this computer (the user: one game per device now): its picture <paramref name="picture"/> big, in
+    /// the top left corner of its screen, a strip kept free on its right for the side panel. Smaller when the screen
+    /// is smaller (its shape kept). Returns where it went (as seen), or empty.
+    /// </summary>
+    public static Rectangle PlaceSingle(nint hwnd, Size picture, int sideRoom)
+    {
+        if (!Win32.IsWindow(hwnd))
+            return Rectangle.Empty;
+        var seen = Visible(hwnd);
+        var work = Screen.FromRectangle(seen.IsEmpty ? Rectangle.Empty : seen).WorkingArea;
+        var frame = Win32.GetClientRect(hwnd, out var c) && !seen.IsEmpty
+            ? new Size(Math.Max(0, seen.Width - (c.Right - c.Left)), Math.Max(0, seen.Height - (c.Bottom - c.Top)))
+            : Size.Empty;
+        double k = Math.Min(1, Math.Min((double)(work.Width - sideRoom - frame.Width) / picture.Width, (double)(work.Height - frame.Height) / picture.Height));
+        var size = new Size((int)(picture.Width * k) + frame.Width, (int)(picture.Height * k) + frame.Height);
+        var target = new Rectangle(work.Left, work.Top, size.Width, size.Height);
+        MoveVisible(hwnd, target);
+        return target;
     }
 
     /// <summary>

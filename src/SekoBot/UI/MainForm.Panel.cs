@@ -344,6 +344,13 @@ internal sealed partial class MainForm
 
     private void ShowSummary()
     {
+        var summary = SummaryNow();
+        _summary.Show(summary.Now, summary.NowTone, summary.Tiles);
+    }
+
+    /// <summary>What the bot does now and the six tiles (the panel's card and the side panel beside a single game).</summary>
+    private SidePanel.Summary SummaryNow()
+    {
         var e = _engine;
         var world = e?.World;
         var stats = e?.Stats;
@@ -404,6 +411,6 @@ internal sealed partial class MainForm
         int deaths = stats?.Deaths ?? 0;
         tiles.Add(new("BU OTURUM", e != null && session != null ? $"{deaths} ölüm" : "—",
             session != null ? $"{session.Kills:N0} mob · {Short(session.Yang)} yang" : "", deaths > 0 ? Tone.Red : Tone.Neutral));
-        _summary.Show(now, tone, tiles);
+        return new SidePanel.Summary(now, tone, tiles);
     }
 }
