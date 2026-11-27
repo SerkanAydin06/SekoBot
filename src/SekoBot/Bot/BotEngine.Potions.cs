@@ -86,7 +86,11 @@ internal sealed partial class BotEngine
                     break; // the yang doesn't reach, or the rest is too small for a pack
                 var center = new Point(pack.At.X + pack.At.Width / 2, pack.At.Y + pack.At.Height / 2);
                 var target = BagCleaner.DropClickPoint(center, pack.At);
-                int before = Count(need.Vnum);
+                if (Count(need.Vnum) is not int before)
+                {
+                    _log("İksir sayısı okunamadı; satın alma durduruldu.");
+                    break;
+                }
                 bool SlotStillValid()
                 {
                     lock (_worldGate)
@@ -98,18 +102,22 @@ internal sealed partial class BotEngine
                         Right: true, StillWanted: SlotStillValid), token))
                     break;
                 // Bought: the bag shows more of it within a moment.
-                bool came = false;
-                for (int wait = 0; wait < 12 && !came; wait++)
+                int? observed = null;
+                for (int wait = 0; wait < 12 && !(observed > before); wait++)
                 {
                     await Task.Delay(250, token);
-                    came = Count(need.Vnum) > before;
+                    observed = Count(need.Vnum);
                 }
-                if (!came)
+                if (observed is not int now)
+                {
+                    _log("İksir alımı doğrulanamadı; tekrar satın alma durduruldu.");
+                    break;
+                }
+                if (now <= before)
                 {
                     fails++;
                     continue;
                 }
-                int now = Count(need.Vnum);
                 got += now - before;
                 spent += (long)pack.Price * (now - before);
                 have = now;
@@ -122,6 +130,6 @@ internal sealed partial class BotEngine
         }
         return string.Join(", ", bought);
 
-        int Count(int vnum) => (World?.Progress?.Inventory ?? []).Where(i => i.Vnum == vnum).Sum(i => i.Count);
+        int? Count(int vnum) => World?.Progress?.Inventory?.Where(i => i.Vnum == vnum).Sum(i => i.Count);
     }
 }

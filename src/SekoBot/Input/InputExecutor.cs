@@ -18,9 +18,11 @@ internal sealed class InputExecutor : IDisposable
 {
     private readonly WindowInfo _window;
     private readonly Action<string> _log;
-    private readonly Channel<BotAction> _queue = Channel.CreateBounded<BotAction>(
-        new BoundedChannelOptions(32) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true },
-        dropped => (dropped as ClickAction)?.Completion?.TrySetResult(false));
+    // Keep releases in FIFO order with their presses, even when the normal input budget is full.
+    private const int NormalCapacity = 32;
+    private int _queuedNormal;
+    private readonly Channel<BotAction> _queue = Channel.CreateUnbounded<BotAction>(
+        new UnboundedChannelOptions { SingleReader = true });
     private readonly CancellationTokenSource _cts = new();
     private readonly HashSet<Keys> _held = [];
     private readonly Random _random = new();
@@ -55,7 +57,16 @@ internal sealed class InputExecutor : IDisposable
 
     public bool DryRun { get; }
 
-    public void Enqueue(BotAction action) => _queue.Writer.TryWrite(action);
+    public void Enqueue(BotAction action)
+    {
+        bool normal = action is not KeyUpAction;
+        bool accepted = !normal || Interlocked.Increment(ref _queuedNormal) <= NormalCapacity;
+        if (accepted && _queue.Writer.TryWrite(action))
+            return;
+        if (normal)
+            Interlocked.Decrement(ref _queuedNormal);
+        action.Completion?.TrySetResult(false);
+    }
 
     private volatile bool _holdFront;
     private IDisposable? _jobGuard;
@@ -154,9 +165,10 @@ internal sealed class InputExecutor : IDisposable
         {
             await foreach (var action in _queue.Reader.ReadAllAsync(_cts.Token))
             {
+                if (action is not KeyUpAction) Interlocked.Decrement(ref _queuedNormal);
                 if (DryRun)
                 {
-                    (action as ClickAction)?.Completion?.TrySetResult(false);
+                    action.Completion?.TrySetResult(false);
                     _log("[Kuru] " + action);
                     continue;
                 }
@@ -176,13 +188,13 @@ internal sealed class InputExecutor : IDisposable
                         ReleaseAll();
                         _log("Oyun penceresi odakta değil; girdiler bekletiliyor.");
                     }
-                    (action as ClickAction)?.Completion?.TrySetResult(false);
+                    action.Completion?.TrySetResult(false);
                     _warnedFocus = true;
                     continue;
                 }
                 _warnedFocus = false;
                 try { await ExecuteAsync(action, _cts.Token); }
-                finally { (action as ClickAction)?.Completion?.TrySetResult(false); }
+                finally { action.Completion?.TrySetResult(false); }
             }
         }
         catch (OperationCanceledException) { }
@@ -194,7 +206,7 @@ internal sealed class InputExecutor : IDisposable
         {
             _queue.Writer.TryComplete();
             while (_queue.Reader.TryRead(out var pending))
-                (pending as ClickAction)?.Completion?.TrySetResult(false);
+                pending.Completion?.TrySetResult(false);
             ReleaseAll();
         }
     }
@@ -203,8 +215,7 @@ internal sealed class InputExecutor : IDisposable
     {
         var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         bool Wanted() => !token.IsCancellationRequested && click.StillWanted?.Invoke() != false;
-        if (!_queue.Writer.TryWrite(click with { StillWanted = Wanted, Completion = done }))
-            return false;
+        Enqueue(click with { StillWanted = Wanted, Completion = done });
         return await done.Task.WaitAsync(token);
     }
 
@@ -232,25 +243,28 @@ internal sealed class InputExecutor : IDisposable
         bool job = NeedsMouse(action) && action is not ClickAction { Yield: true };
         if (job)
             MouseUse.Begin();
-        if (NeedsMouse(action))
-        {
-            bool yields = action is ClickAction { Yield: true };
-            // A long job lets a waiting short one go first.
-            for (int waited = 0; yields && waited < MouseYieldMs && MouseWanted.WaitOne(0); waited += 100)
-                await Task.Delay(100, token);
-            for (int waited = 0; waited < MouseTurnWaitMs; waited += 50)
-            {
-                if (turn = MouseTurn.WaitOne(0))
-                    break;
-                if (!yields)
-                    MouseWanted.Set();
-                await Task.Delay(50, token);
-            }
-            if (!yields)
-                MouseWanted.Reset();
-        }
         try
         {
+            if (NeedsMouse(action))
+            {
+                bool yields = action is ClickAction { Yield: true };
+                // A long job lets a waiting short one go first.
+                for (int waited = 0; yields && waited < MouseYieldMs && MouseWanted.WaitOne(0); waited += 100)
+                    await Task.Delay(100, token);
+                for (int waited = 0; waited < MouseTurnWaitMs; waited += 50)
+                {
+                    if (turn = MouseTurn.WaitOne(0))
+                        break;
+                    if (!yields)
+                        MouseWanted.Set();
+                    await Task.Delay(50, token);
+                }
+                if (!turn)
+                {
+                    _log("Fare sırası alınamadı; işlem atlandı.");
+                    return;
+                }
+            }
             await ExecuteCoreAsync(action, token);
         }
         finally
@@ -258,7 +272,10 @@ internal sealed class InputExecutor : IDisposable
             if (turn)
                 MouseTurn.Release();
             if (job)
+            {
+                MouseWanted.Reset();
                 MouseUse.End();
+            }
         }
     }
 
@@ -288,6 +305,7 @@ internal sealed class InputExecutor : IDisposable
             case KeyTapAction tap:
                 if (tap.StillWanted?.Invoke() == false) break;
                 await PressTime.HoldAsync(down => SendKey(tap.Key, down), PressTime.Tap(), token);
+                tap.Completion?.TrySetResult(true);
                 break;
             case KeyDownAction keyDown:
                 SendKey(keyDown.Key, down: true);

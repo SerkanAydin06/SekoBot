@@ -71,8 +71,18 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
     /// <summary>Why it ended without throwing everything (null: all went well).</summary>
     public string? Problem { get; private set; }
 
+    private TaskCompletionSource<bool>? _confirmation;
+    private void ConfirmationSent(TimeSpan now)
+    {
+        _yesClicks++;
+        _yesAt = now;
+        _step = Step.Confirmed;
+        _waitUntil = now + (Selling && _rightClicked ? AfterRightClick : AfterYes);
+    }
+
     public void Start(TimeSpan now)
     {
+        _confirmation = null;
         Active = true;
         _step = Step.Open;
         _started = now;
@@ -135,6 +145,7 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
     /// <summary>Stops at once (attacked, died); closes the inventory if it is open.</summary>
     public IReadOnlyList<BotAction> Abort(BagLayout? bag, BotProfile p, string why)
     {
+        _confirmation = null;
         Active = false;
         Problem = why;
         var actions = new List<BotAction>();
@@ -154,6 +165,17 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
         var actions = new List<BotAction>();
         if (!Active || now < _waitUntil)
             return actions;
+        if (_confirmation != null)
+        {
+            if (!_confirmation.Task.IsCompleted) return actions;
+            bool sent = _confirmation.Task.Result;
+            _confirmation = null;
+            if (sent)
+            {
+                ConfirmationSent(now);
+                return actions;
+            }
+        }
         if (bag == null)
         {
             if (++_noLayout > 30)
@@ -161,7 +183,7 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
             return actions;
         }
         _noLayout = 0;
-        if (_step != Step.Close && now - _started > GiveUpAfter)
+        if (!Selling && _step != Step.Close && now - _started > GiveUpAfter)
             Close("süre doldu");
 
         // The "throw it away?" question is showing (selling: "sell it?", another window).
@@ -182,10 +204,20 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
                 else
                     actions.Add(bag.Confirm.HasValue ? DropConfirmation(yes, bag.ConfirmBounds, readBagNow)
                         : SaleConfirmation(yes, bag, readBagNow));
-                _yesClicks++;
-                _yesAt = now;
-                _step = Step.Confirmed;
-                _waitUntil = now + (Selling && _rightClicked ? AfterRightClick : AfterYes);
+                if (readBagNow == null)
+                    ConfirmationSent(now);
+                else
+                {
+                    var pending = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _confirmation = pending;
+                    bool Current() => ReferenceEquals(Volatile.Read(ref _confirmation), pending);
+                    actions[^1] = actions[^1] switch
+                    {
+                        ClickAction click => click with { Completion = pending, StillWanted = () => Current() && click.StillWanted?.Invoke() == true },
+                        KeyTapAction key => key with { Completion = pending, StillWanted = () => Current() && key.StillWanted?.Invoke() == true },
+                        _ => throw new InvalidOperationException()
+                    };
+                }
             }
             else if (bag.Confirm is Point leftover && _step is Step.Open or Step.Pick && _leftoverYes < 2)
             {

@@ -260,16 +260,28 @@ internal sealed partial class BotEngine
         }
 
         var sellBegan = _clock.Elapsed;
+        string? interrupted = null;
         // Sell, item by item, with the game in front the whole time (not back and forth).
         var cleaner = new BagCleaner(ReadBagNow) { Selling = true };
         cleaner.Start(_clock.Elapsed);
         input.HoldFront = true;
         try
         {
-            var began = _clock.Elapsed;
-            while (cleaner.Active && _clock.Elapsed - began < TimeSpan.FromMinutes(4))
+            var lastProgress = _clock.Elapsed;
+            int lastSold = 0;
+            while (cleaner.Active)
             {
                 token.ThrowIfCancellationRequested();
+                if (soldBefore + cleaner.Thrown > lastSold)
+                {
+                    lastSold = soldBefore + cleaner.Thrown;
+                    lastProgress = _clock.Elapsed;
+                }
+                if (_clock.Elapsed - lastProgress >= TimeSpan.FromMinutes(4))
+                {
+                    interrupted = "dört dakikadır yeni satış doğrulanamadı";
+                    break;
+                }
                 // The shop window closed by itself (seen): the inventory question is let go, the NPC clicked again.
                 if (ReadBagNow() is { NpcShop: 0 } && reopened < 3)
                 {
@@ -284,7 +296,10 @@ internal sealed partial class BotEngine
                         await Task.Delay(500, token);
                     }
                     if (!await OpenShopAsync())
+                    {
+                        interrupted = "dükkan tekrar açılamadı";
                         break;
+                    }
                     input.HoldFront = true;
                     soldBefore += cleaner.Thrown;
                     cleaner.Start(_clock.Elapsed);
@@ -308,6 +323,8 @@ internal sealed partial class BotEngine
             }
         }
         finally { input.HoldFront = false; }
+        if (interrupted != null) cleaner.Abort(null, profile, interrupted);
+        interrupted ??= cleaner.Problem;
         _sessionItems.Save();
         int sold = soldBefore + cleaner.Thrown;
         // How the sale went (seen: 12 items took 5 minutes; is the right click enough for every kind of item?).
@@ -338,6 +355,8 @@ internal sealed partial class BotEngine
         FrontTurn.Shared.LetGo();
         _sellStage = "💰 Satış bitti; alana dönülüyor";
         await WalkRouteAsync(input, home, WalkLimit(World?.Player ?? at, home), token, near: 300);
+        if (interrupted != null)
+            return Failed($"satış tamamlanamadı ({interrupted}); {sold} eşya satıldı, çanta yeniden kontrol edilmeli");
         if (sold == 0 && bought.Length > 0)
         {
             _sellFailsInRow = 0;

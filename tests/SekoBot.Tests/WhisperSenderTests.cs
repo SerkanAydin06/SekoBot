@@ -28,6 +28,28 @@ public class WhisperSenderTests
     }
 
     [Fact]
+    public void Repeated_text_counts_only_after_another_copy_appears()
+    {
+        var old = new DmShown("me", "tamam", true);
+        var incoming = new DmShown("OxyyGeN", "selam", false);
+        var live = Open(incoming, old);
+        var sender = new WhisperSender(() => live);
+        sender.Start(S(-1), "OxyyGeN", "tamam");
+        foreach (int time in new[] { 0, 3, 6 })
+            sender.Tick(S(time), live);
+        var enter = Assert.IsType<KeyTapAction>(Assert.Single(sender.Tick(S(9), live)));
+        sender.Tick(S(12), live);
+        Assert.False(sender.Sent);
+        Assert.True(enter.StillWanted!());
+        enter.Completion!.SetResult(true);
+        sender.Tick(S(14), live);
+        Assert.False(sender.Sent);
+        live = Open(incoming, old, old);
+        sender.Tick(S(16), live);
+        Assert.True(sender.Sent);
+    }
+
+    [Fact]
     public void Delayed_open_click_is_discarded_when_panel_already_opened()
     {
         var bounds = new Rectangle(Opener.X - 8, Opener.Y - 4, 16, 8);
