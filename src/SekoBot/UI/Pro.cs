@@ -598,6 +598,19 @@ internal sealed class StatCard : Drawn
     public Color BarColor { get; set; } = Theme.Gold;
     /// <summary>Values for the little curve (instead of the bar); fewer than two: none.</summary>
     public IReadOnlyList<double> Curve { get; set; } = [];
+    /// <summary>Instead of one big value: a few named ones of the same size, one a line (the user: the HP potions were big,
+    /// the MP ones small under them).</summary>
+    public IReadOnlyList<(string Name, string Value, Color Color)> Lines { get; private set; } = [];
+
+    /// <summary>Shows named values of the same size (see <see cref="Lines"/>).</summary>
+    public void ShowLines(IReadOnlyList<(string Name, string Value, Color Color)> lines, double? bar = null, string corner = "", Color? cornerColor = null)
+    {
+        var cc = cornerColor ?? Theme.Muted;
+        if (Lines.SequenceEqual(lines) && Bar == bar && Corner == corner && CornerColor == cc)
+            return;
+        (Lines, Bar, Corner, CornerColor) = ([.. lines], bar, corner, cc);
+        Invalidate();
+    }
 
     /// <summary>Sets everything and draws again only when something changed.</summary>
     public void Show(string value, string unit = "", string sub = "", Color? subColor = null, double? bar = null, string corner = "", Color? cornerColor = null, Color? valueColor = null)
@@ -633,6 +646,21 @@ internal sealed class StatCard : Drawn
         TextRenderer.DrawText(g, Caption, cap, capRect, Theme.Muted, LeftMid);
         if (Corner.Length > 0)
             TextRenderer.DrawText(g, Corner, cap, capRect, CornerColor, RightMid);
+        if (Lines.Count > 0)
+        {
+            using var lineFont = Sized(0.66f, FontStyle.Bold);
+            int lineH = TextRenderer.MeasureText("0", lineFont).Height;
+            int ly = capRect.Bottom + 2;
+            foreach (var (name, value, color) in Lines)
+            {
+                var line = new Rectangle((int)pad, ly, (int)(Width - 2 * pad), lineH);
+                TextRenderer.DrawText(g, name, unit, line, Theme.Muted, LeftMid);
+                TextRenderer.DrawText(g, value, lineFont, line, color, RightMid);
+                ly += lineH;
+            }
+            DrawBar();
+            return;
+        }
         int valueH = TextRenderer.MeasureText("0", Font).Height;
         int y = capRect.Bottom;
         int valueW = TextRenderer.MeasureText(Value, Font, Size.Empty, TextFormatFlags.NoPrefix).Width;
@@ -661,10 +689,14 @@ internal sealed class StatCard : Drawn
         int subH = TextRenderer.MeasureText("Ag", sub).Height;
         if (Sub.Length > 0)
             TextRenderer.DrawText(g, Sub, sub, new Rectangle((int)pad, y, (int)(Width - 2 * pad), subH), SubColor, LeftMid);
+        DrawBar();
+
+        void DrawBar()
+        {
         if (Bar is double b)
         {
             float bh = Math.Max(3, Height * 0.04f);
-            var track = new RectangleF(pad, bottom - bh, Width - 2 * pad, bh);
+            var track = new RectangleF(pad, Height - pad - bh, Width - 2 * pad, bh);
             using (var path = Theme.RoundRect(track, bh / 2))
             using (var fill = new SolidBrush(Theme.Inset))
                 g.FillPath(fill, path);
@@ -675,6 +707,7 @@ internal sealed class StatCard : Drawn
                 using var fill = new SolidBrush(BarColor);
                 g.FillPath(fill, path);
             }
+        }
         }
     }
 }
@@ -895,13 +928,17 @@ internal sealed class Slider : Control
     }
 
     private int BoxWidth => (int)(Font.Height * 3.4f);
+    private float Knob => Font.Height * 0.95f;
+    /// <summary>The ring round the knob (its radius): never more than the slider is high.</summary>
+    private float Halo => Math.Min(Knob * 0.85f, Height / 2f - 1);
     private RectangleF Track
     {
         get
         {
             float h = Math.Max(4, Font.Height * 0.3f);
-            float pad = Font.Height * 0.5f;
-            return new RectangleF(pad, (Height - h) / 2f, Width - BoxWidth - pad * 2.2f, h);
+            // Room for the knob's ring at both ends (the user: at the far left / right the ring was cut).
+            float pad = Halo + 1.5f;
+            return new RectangleF(pad, (Height - h) / 2f, Width - BoxWidth - pad * 2 - 4, h);
         }
     }
 
@@ -987,9 +1024,9 @@ internal sealed class Slider : Control
             using var fill = new SolidBrush(Theme.Gold);
             g.FillPath(fill, path);
         }
-        float knob = Font.Height * 0.95f;
+        float knob = Math.Min(Knob, Halo * 2 * 0.7f), ring = Halo;
         using (var halo = new SolidBrush(Tones.Soft(Theme.Gold, _over || _dragging || Focused ? 90 : 55)))
-            g.FillEllipse(halo, x - knob * 0.85f, Height / 2f - knob * 0.85f, knob * 1.7f, knob * 1.7f);
+            g.FillEllipse(halo, x - ring, Height / 2f - ring, ring * 2, ring * 2);
         using (var k = new SolidBrush(Color.White))
             g.FillEllipse(k, x - knob / 2, Height / 2f - knob / 2, knob, knob);
         var box = new RectangleF(Width - BoxWidth + 0.5f, 1.5f, BoxWidth - 1.5f, Height - 3);
