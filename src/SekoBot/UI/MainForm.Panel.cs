@@ -322,4 +322,71 @@ internal sealed partial class MainForm
             button.Selected = (string?)button.Tag == kind;
         ShowLog();
     }
+
+    // ── "DURUM": what the bot does now and six tiles ──
+
+    private void ShowSummary()
+    {
+        var e = _engine;
+        var world = e?.World;
+        var stats = e?.Stats;
+        var session = stats?.Session;
+        double hours = stats?.BotUptime.TotalHours ?? 0;
+        bool onLogin = world != null && BotEngine.IsLoginScreen(world.MapName);
+        bool inGame = world != null && world.MapName.Length > 0 && !onLogin && !world.MapName.StartsWith('_');
+
+        // What it does now.
+        (string now, Tone tone) = e == null ? ("Oyun bağlı değil", Tone.Neutral)
+            : _rest == RestStage.Resting ? ($"☕ Çıkış molası: {Math.Max(1, (int)Math.Ceiling((_restUntil - DateTime.Now).TotalMinutes))} dk sonra yeniden girilecek", Tone.Amber)
+            : _rest is RestStage.Quieting or RestStage.LoggingOut ? ("☕ Çıkış molasına hazırlanıyor", Tone.Amber)
+            : onLogin ? ("Oyun giriş ekranında", Tone.Amber)
+            : !inGame ? ("Oyun yükleniyor", Tone.Amber)
+            : e.BotRunning ? (e.ActivityText, Tone.Green)
+            : e.Fishing ? ("🎣 Balık tutuluyor", Tone.Blue)
+            : e.ScanningMarket ? ("🛒 Pazar taranıyor", Tone.Blue)
+            : ("Bot duruyor", Tone.Neutral);
+
+        var tiles = new List<StatusSummary.Tile>();
+        // The bag: free places, what was sold this run.
+        int? free = inGame ? world!.Progress?.FreeSlots() : null;
+        int sold = e?.SessionItems?.Rows().Sum(r => r.Sold) ?? 0;
+        tiles.Add(new("ÇANTA", free is int f ? $"{f} boş yer" : "—", sold > 0 ? $"{sold:N0} eşya satıldı" : "",
+            free is <= 4 ? Tone.Amber : Tone.Neutral));
+        // The potions: how long the HP ones last at this run's pace.
+        var (hp, mp) = inGame ? e!.PotionsLeft() : (null, null);
+        int used = session?.HpPotionsUsed ?? 0;
+        string lasts = "—";
+        var lastsTone = Tone.Neutral;
+        if (hp is int h && hours >= 1 / 6.0 && used > 0)
+        {
+            var left = TimeSpan.FromHours(h / (used / hours));
+            lasts = left.TotalHours >= 48 ? "2 günden fazla" : "~" + Duration(left);
+            if (left.TotalHours < 1)
+                lastsTone = Tone.Amber;
+        }
+        else if (hp is int)
+            lasts = "ölçülüyor";
+        tiles.Add(new("İKSİR YETER", lasts, hp is int || mp is int ? $"HP {hp?.ToString("N0") ?? "—"} · MP {mp?.ToString("N0") ?? "—"}" : "", lastsTone));
+        // The break out of the game.
+        if (!_profile.LogoutBreaks)
+            tiles.Add(new("ÇIKIŞ MOLASI", "Kapalı", "Güvenlik · Mola'dan açılır"));
+        else if (_rest == RestStage.Resting)
+            tiles.Add(new("ÇIKIŞ MOLASI", "Molada", $"{Math.Max(1, (int)Math.Ceiling((_restUntil - DateTime.Now).TotalMinutes))} dk kaldı", Tone.Amber));
+        else
+        {
+            int toGo = Math.Max(0, (int)Math.Ceiling(_profile.LogoutPlayMin - _played.TotalMinutes));
+            tiles.Add(new("ÇIKIŞ MOLASI", _rest == RestStage.None ? $"{toGo} dk sonra" : "Hazırlanıyor", $"{_profile.LogoutRestMin} dk oyundan çıkış"));
+        }
+        // Where, who is around.
+        tiles.Add(new("KONUM", inGame ? world!.MapName : "—",
+            inGame ? string.Join(" · ", new[] { world!.Server, world.Channel > 0 ? $"Kanal {world.Channel}" : "" }.Where(x => x.Length > 0)) : ""));
+        int players = inGame ? world!.OtherPlayers : 0;
+        int mobs = inGame ? world!.Mobs.Count(m => m.Hp > 0) : 0;
+        tiles.Add(new("YAKINDA", inGame ? $"{players} oyuncu" : "—", inGame ? $"{mobs} mob" : "", players > 0 ? Tone.Amber : Tone.Neutral));
+        // This session.
+        int deaths = stats?.Deaths ?? 0;
+        tiles.Add(new("BU OTURUM", e != null && session != null ? $"{deaths} ölüm" : "—",
+            session != null ? $"{session.Kills:N0} mob · {Short(session.Yang)} yang" : "", deaths > 0 ? Tone.Red : Tone.Neutral));
+        _summary.Show(now, tone, tiles);
+    }
 }

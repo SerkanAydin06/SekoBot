@@ -52,6 +52,7 @@ internal sealed partial class MainForm : Form
     private readonly Label _heroName, _timer, _timerNote;
     private readonly StatCard _kExp, _kKills, _kYang, _kPotion, _kLevel;
     private readonly Feed _feed;
+    private readonly StatusSummary _summary;
     private readonly IconButton _bigButton;
     private readonly NavButton[] _logFilters;
     private Rectangle _attackInPreview;
@@ -262,7 +263,7 @@ internal sealed partial class MainForm : Form
         _preview.SelectionChanged += UpdateControls;
         _preview.MouseClick += (_, _) => { if (_engine != null && _gameMinimized) WindowService.Restore(_engine.Window); };
 
-        var feedCard = new Card { Bounds = new Rectangle(0, 116, LeftW, 200), Caption = "ŞİMDİ" };
+        var feedCard = new Card { Bounds = new Rectangle(0, 116, LeftW, 200), Caption = "DURUM" };
         _dashboard.Controls.Add(feedCard);
         var openLiveMap = new ProButton { Text = "Canlı harita", Icon = "map", Kind = ButtonKind.Ghost, Bounds = new Rectangle(LeftW - 14 - 300, 6, 138, 30), Font = new Font("Segoe UI", 8.5f) };
         openLiveMap.Click += (_, _) => OpenLiveMap();
@@ -270,8 +271,11 @@ internal sealed partial class MainForm : Form
         var openView = new ProButton { Text = "Oyun görüntüsü", Icon = "eye", Kind = ButtonKind.Ghost, Bounds = new Rectangle(LeftW - 14 - 156, 6, 156, 30), Font = new Font("Segoe UI", 8.5f) };
         openView.Click += (_, _) => OpenGameView();
         feedCard.Controls.Add(openView);
-        _feed = new Feed { Bounds = new Rectangle(18, 44, LeftW - 36, 148), Font = new Font("Segoe UI", 8.5f) };
-        feedCard.Controls.Add(_feed);
+        // What the bot does now and six tiles (bag, potions, break, place, around, this session) — the log already
+        // lists what happened (the user: use the card for something more useful).
+        _feed = new Feed();
+        _summary = new StatusSummary { Bounds = new Rectangle(18, 44, LeftW - 36, 146), Font = new Font("Segoe UI", 8.5f) };
+        feedCard.Controls.Add(_summary);
 
         var charCard = _previewCard = new Card { Bounds = new Rectangle(RightX, 116, RightW, 200), Caption = "KARAKTER" };
         _dashboard.Controls.Add(charCard);
@@ -1523,8 +1527,9 @@ internal sealed partial class MainForm : Form
     {
         using var bold = new Font("Segoe UI", _runItems.Font.Size * 0.94f, FontStyle.Bold);
         int number = Math.Max(TextRenderer.MeasureText("Satılan", bold).Width, TextRenderer.MeasureText("99.999", _runItems.Font).Width) + 14;
-        // The scroll bar's room always kept (it comes once the list is long; the columns stay the same then).
-        int room = _runItems.Width - SystemInformation.VerticalScrollBarWidth - 4;
+        // Exactly the list's inner width (with or without its scroll bar): nothing left over at the right, where the
+        // header was drawn white (the user saw a white patch), and no side scroll bar. Fitted again when the list changes.
+        int room = _runItems.ClientSize.Width;
         _fittingColumns = true;
         try
         {
@@ -2636,6 +2641,7 @@ internal sealed partial class MainForm : Form
                 ForeColor = thrown + sold > 0 && picked <= thrown + sold ? Theme.Muted : Theme.Text,
             });
         _runItems.EndUpdate();
+        FitRunItems(); // the scroll bar may have come or gone
         _runItemsInfo.Text = rows.Count == 0 ? "Bot başlayınca dolar; her turda yenilenir."
             : $"{rows.Count} çeşit · alınan {rows.Sum(r => r.Picked):N0} · atılan {rows.Sum(r => r.Thrown):N0} · satılan {rows.Sum(r => r.Sold):N0}";
     }
@@ -2677,6 +2683,7 @@ internal sealed partial class MainForm : Form
     {
         ShowTop();
         ShowNumbers();
+        ShowSummary();
         UpdateRunItems();
         // The game server in the header (market prices are kept per server).
         if (_engine?.World is { Server.Length: > 0 } here && _connection.ForeColor == Theme.Green)
