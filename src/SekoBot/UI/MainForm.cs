@@ -940,6 +940,55 @@ internal sealed partial class MainForm : Form
             checkUpdate.Click += async (_, _) => await CheckForUpdatesAsync(startup: false);
         }
         openFolder.Click += (_, _) => OpenProfileFolder();
+        // ── The window layout for one game on the computer; starting with Windows ──
+        Section(advanced, "PENCERE DÜZENİ", 150);
+        Check(advanced, "Tek oyun düzeni: oyun sabit boyutta sol üstte, PARDUS ve küçük mod paneli yanında", 0, 174, 918,
+            () => _profile.SingleGame, v => _profile.SingleGame = v);
+        Theme.Label(advanced, "Oyunun boyutu", new Rectangle(0, 208, 190, 26), 9f, Theme.Muted);
+        (int W, int H)[] sizes = [(1024, 576), (1280, 720), (1366, 768), (1600, 900), (1920, 1080)];
+        var gameSize = new ComboBox
+        {
+            Bounds = new Rectangle(196, 208, 164, 26),
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            BackColor = Theme.Inset,
+            ForeColor = Theme.Text,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 9f),
+        };
+        gameSize.Items.AddRange([.. sizes.Select(z => $"{z.W} × {z.H}")]);
+        int SizeIndex() => Math.Max(0, Array.FindIndex(sizes, z => z.W == _profile.SingleGameWidth && z.H == _profile.SingleGameHeight));
+        gameSize.SelectedIndex = SizeIndex();
+        gameSize.SelectedIndexChanged += (_, _) =>
+        {
+            if (_reloading) return;
+            (_profile.SingleGameWidth, _profile.SingleGameHeight) = sizes[gameSize.SelectedIndex];
+            SaveProfile();
+        };
+        _reloads.Add(() => gameSize.SelectedIndex = SizeIndex());
+        advanced.Controls.Add(gameSize);
+        var placeNow = Theme.Button(advanced, "⤢  Şimdi yerleştir", new Rectangle(478, 207, 214, 28), Theme.Secondary, Theme.SecondaryHover);
+        placeNow.Click += (_, _) => ArrangeAll();
+        Section(advanced, "OTOMATİK BAŞLAMA", 252);
+        Check(advanced, "Bilgisayar açılınca PARDUS'u başlat ve son karakterle kaldığı yerden devam et", 0, 276, 918,
+            () => _profile.AutoStart, v =>
+            {
+                string? error = AutoStart.Set(v);
+                if (error != null)
+                {
+                    WriteLog("Otomatik başlama ayarlanamadı: " + error);
+                    return;
+                }
+                _profile.AutoStart = v;
+                WriteLog(v ? "🖥 Bilgisayar açılınca PARDUS da açılacak ve son karakterle kaldığı yerden devam edecek."
+                           : "Bilgisayar açılınca PARDUS artık kendiliğinden açılmayacak.");
+            });
+        Hint(advanced, "Tek oyun düzeni: bu bilgisayarda tek oyun açıkken oyun seçtiğin boyutta sol üst köşeye yerleşir, PARDUS sağında durur; " +
+            "küçük mod da oyunun yanında bir panel olur (ne yapıyor, HP / MP, çanta, iksir, mola, başlat / durdur). Birden fazla oyun açılırsa " +
+            "eski ızgara düzeni kullanılır. Oyunu oyunun ayarlarından pencere (başlıklı) modunda aç.\n" +
+            "Otomatik başlama: Windows'a giriş yapılınca PARDUS yönetici olarak açılır, oyunu başlatıcıdan açar, oyunun kayıtlı bilgileriyle " +
+            "giriş yapar (şifreye dokunmaz) ve son karakterle devam eder. Bilgisayar kendi başına açılacaksa Windows'un kendiliğinden " +
+            "oturum açması gerekir (bunu Windows ayarlarından sen açmalısın).", 320);
+
         // The mobs the bot sees in memory, listed in the log.
         _scanMobs = Theme.Button(advanced, "🔍  Mobları göster", new Rectangle(450, 100, 180, 30), Theme.Secondary, Theme.SecondaryHover);
         _scanMobs.Visible = false; // a developer tool (the mobs show in "Moblar ve düşenler")
@@ -1176,6 +1225,7 @@ internal sealed partial class MainForm : Form
                     WriteLog(text);
             });
             LoadResumeNote();
+            ResumeAfterWindowsStart();
             RefreshWindows();
             _scanTimer.Start();
             _statsTimer.Start();
@@ -1195,6 +1245,7 @@ internal sealed partial class MainForm : Form
         FormClosing += (_, _) =>
         {
             _mini?.Close();
+            _sidePanel?.Close();
             foreach (var t in new[] { _scanTimer, _previewTimer, _statsTimer, _updateTimer }) t.Stop();
             _telegramCts.Cancel();
             _engine?.Dispose();
@@ -1605,12 +1656,33 @@ internal sealed partial class MainForm : Form
     // ── Windows ──────────────────────────────────────────────────
 
     private MiniBar? _mini;
+    /// <summary>The small mode with one game: a panel beside it.</summary>
+    private SidePanel? _sidePanel;
+
+    /// <summary>The small mode as a panel beside the game: one game on this computer and the single-game layout chosen.</summary>
+    private bool UseSidePanel => _profile.SingleGame && WindowService.GetOpenWindows().Count(w => w.IsMetin2) <= 1;
 
     /// <summary>The bot as one small bar under its game (the full window hidden).</summary>
     private void GoMini()
     {
         if (IsDisposed)
             return;
+        if (UseSidePanel)
+        {
+            _sidePanel ??= new SidePanel(MiniInfoNow, SummaryNow, ToggleBot, () => StopBot("kullanıcı durdurdu", byUser: true), OpenLiveMap, GoBig, CloseFromMini);
+            _mini?.Hide();
+            if (!_sidePanel.Visible)
+                _sidePanel.Show();
+            if (Visible)
+                Hide();
+            if (!_profile.MiniMode)
+            {
+                _profile.MiniMode = true;
+                SaveProfile();
+            }
+            return;
+        }
+        _sidePanel?.Hide();
         _mini ??= new MiniBar(MiniInfoNow, ToggleBot, () => StopBot("kullanıcı durdurdu", byUser: true), GoBig, ArrangeAll,
             () => { if (_mode == MarketMode) OpenMarketWindow(); else if (_mode == FarmMode) ToggleAttack(); }, CloseFromMini, FillWithGame);
         _mini.ChangeChannel ??= () => WriteLog(_engine?.ChangeChannelNow() ?? "Önce oyunu bağla.");
@@ -1694,6 +1766,7 @@ internal sealed partial class MainForm : Form
     private void GoBig()
     {
         _mini?.Hide();
+        _sidePanel?.Hide();
         Show();
         if (WindowState == FormWindowState.Minimized)
             WindowState = FormWindowState.Normal;
@@ -1851,6 +1924,8 @@ internal sealed partial class MainForm : Form
     /// <summary>Every game window side by side (a band left at the bottom), every SekoBot small under its game.</summary>
     private void ArrangeAll()
     {
+        if (_profile.SingleGame && ArrangeSingle())
+            return;
         int band = MiniBar.HeightAt(DeviceDpi) + 2;
         var near = _engine != null && Win32.IsWindow(_engine.Window.Handle) ? WindowLayout.Visible(_engine.Window.Handle) : Bounds;
         int count = WindowLayout.ArrangeGames(near, band);
@@ -1858,6 +1933,29 @@ internal sealed partial class MainForm : Form
             ? "Açık oyun penceresi bulunamadı."
             : $"{count} oyun penceresi ızgaraya dizildi (her biri kendi oranında küçüldü, sıkıştırılmadı); her PARDUS kendi oyununun altına küçüldü. Büyütmek için şeride çift tıkla.");
         WindowLayout.TellAllMini();
+    }
+
+    /// <summary>
+    /// One game on this computer: the game at its set size in the top left corner, PARDUS (or its side panel in the
+    /// small mode) on its right. False when there are several games (then they are arranged in a grid as before).
+    /// </summary>
+    private bool ArrangeSingle()
+    {
+        if (_engine is not { } e || !Win32.IsWindow(e.Window.Handle))
+            return false;
+        if (WindowService.GetOpenWindows().Count(w => w.IsMetin2) > 1)
+            return false;
+        int side = (int)(WindowLayout.SidePanelWidth * DeviceDpi / 96f) + 8;
+        var game = WindowLayout.PlaceSingle(e.Window.Handle, new Size(_profile.SingleGameWidth, _profile.SingleGameHeight), side);
+        if (game.IsEmpty)
+            return false;
+        // PARDUS beside the game when it fits there (else it stays where it is).
+        var work = Screen.FromRectangle(game).WorkingArea;
+        if (Visible && WindowState == FormWindowState.Normal && game.Right + 8 + Width <= work.Right)
+            Location = new Point(game.Right + 8, work.Top);
+        WriteLog($"Oyun {_profile.SingleGameWidth}×{_profile.SingleGameHeight} boyutunda sol üst köşeye yerleşti; PARDUS sağında.");
+        _sidePanel?.Place();
+        return true;
     }
 
     private MiniInfo MiniInfoNow()

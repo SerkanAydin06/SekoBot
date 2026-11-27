@@ -68,6 +68,27 @@ internal sealed partial class MainForm
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { }
     }
+    /// <summary>
+    /// Started by Windows at sign-in (the "start with the computer" setting): the last character's work gone back to —
+    /// its game started from the launcher when it doesn't come up by itself, logged in, the work started again.
+    /// </summary>
+    private void ResumeAfterWindowsStart()
+    {
+        if (!AutoStart.StartedByWindows || !_profile.AutoStart || _resumeNote != null)
+            return;
+        if (_profile.LastCharacter.Length == 0 || _profile.LastGameFolder.Length == 0 || !Directory.Exists(_profile.LastGameFolder))
+        {
+            WriteLog("🖥 Bilgisayar açıldı ama son karakter ya da oyunun klasörü bilinmiyor; oyun bir kez elle açılıp bot çalıştırılınca öğrenilir.");
+            return;
+        }
+        _gameFolder ??= _profile.LastGameFolder;
+        _resume = new ResumeWork(_profile.LastCharacter, Math.Clamp(_profile.UiMode, FarmMode, FishingMode), DateTime.Now);
+        _gameGoneAt = DateTime.Now;
+        string text = $"🖥 Bilgisayar açıldı: {_profile.LastCharacter} ile {ModeName(_resume.Mode)} devam edecek (oyun açık değilse başlatıcıdan açılacak).";
+        WriteLog(text);
+        _engine?.Notify(text);
+    }
+
     private string _lastCharacter = "";
     /// <summary>This SekoBot's game copy (the folder holding Mobile2Launcher.exe).</summary>
     private string? _gameFolder;
@@ -140,7 +161,16 @@ internal sealed partial class MainForm
         }
         bool inGame = world != null && world.MapName.Length > 0 && !BotEngine.IsLoginScreen(world.MapName) && !world.MapName.StartsWith('_');
         if (inGame && e.CharacterName.Length > 0)
+        {
             _lastCharacter = e.CharacterName;
+            // Kept for starting by itself after the computer starts.
+            if (_profile.LastCharacter != e.CharacterName || _gameFolder != null && _profile.LastGameFolder != _gameFolder)
+            {
+                _profile.LastCharacter = e.CharacterName;
+                _profile.LastGameFolder = _gameFolder ?? _profile.LastGameFolder;
+                SaveProfile();
+            }
+        }
         bool working = e.BotRunning || e.Fishing || e.ScanningMarket;
 
         // An update is out (the game sent us to its login screen and says its version is old): the work noted, the game

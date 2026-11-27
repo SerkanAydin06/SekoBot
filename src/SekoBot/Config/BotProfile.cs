@@ -203,6 +203,17 @@ internal sealed class BotProfile
     /// <summary>About this long a break lasts (±25 %).</summary>
     public int BreakSeconds { get; set; } = 40;
 
+    /// <summary>One game on this computer: it is kept at <see cref="SingleGameWidth"/> × <see cref="SingleGameHeight"/>
+    /// (its picture) in the screen's top left corner, PARDUS beside it, the small mode a panel at its side.</summary>
+    public bool SingleGame { get; set; } = true;
+    public int SingleGameWidth { get; set; } = 1280;
+    public int SingleGameHeight { get; set; } = 720;
+    /// <summary>PARDUS starts with Windows (a task at sign-in, as administrator) and goes on with the last character.</summary>
+    public bool AutoStart { get; set; }
+    /// <summary>The character and the game folder last seen (for starting by itself after the computer starts).</summary>
+    public string LastCharacter { get; set; } = "";
+    public string LastGameFolder { get; set; } = "";
+
     /// <summary>Out of the game now and then: after <see cref="LogoutPlayMin"/> minutes of farming, what attacks us is
     /// fought, then the game is left for its login screen for <see cref="LogoutRestMin"/> minutes; logged in again after.</summary>
     public bool LogoutBreaks { get; set; }
