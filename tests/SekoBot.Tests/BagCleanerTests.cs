@@ -23,6 +23,38 @@ public class BagCleanerTests
     private static TimeSpan S(double s) => TimeSpan.FromSeconds(s);
 
     [Fact]
+    public void Queued_escape_only_cancels_the_original_sale_question()
+    {
+        var live = Bag(true, 0, []) with { OtherConfirm = new Point(100, 90), NpcShop = 42 };
+        var cleaner = new BagCleaner(() => live) { Selling = true };
+        cleaner.Start(S(0));
+        var tap = Assert.IsType<KeyTapAction>(Assert.Single(cleaner.Tick(S(0), live, _ => true, new BotProfile(), Client)));
+        Assert.True(tap.StillWanted!());
+        live = live with { NpcShop = 43 };
+        Assert.False(tap.StillWanted());
+        live = live with { NpcShop = 42, OtherConfirm = null };
+        Assert.False(tap.StillWanted());
+    }
+
+    [Fact]
+    public void Escape_for_a_skipped_item_requires_its_original_menu()
+    {
+        var item = Item(20, Junk, 0, true);
+        var live = Bag(true, 0, [item]) with { MenuKnown = true };
+        var cleaner = new BagCleaner(() => live);
+        cleaner.Start(S(0));
+        var p = new BotProfile();
+        cleaner.Tick(S(0), live, _ => true, p, Client);
+        live = live with { MenuSlot = item.Slot, DropButton = new Point(400, 300) };
+        var tap = Assert.IsType<KeyTapAction>(Assert.Single(cleaner.Tick(S(1), live, _ => false, p, Client)));
+        Assert.True(tap.StillWanted!());
+        live = live with { MenuSlot = item.Slot + 1 };
+        Assert.False(tap.StillWanted());
+        live = live with { MenuSlot = item.Slot, DropButton = null };
+        Assert.False(tap.StillWanted());
+    }
+
+    [Fact]
     public void Confirmation_waits_for_delivery_and_retries_a_skipped_input()
     {
         var item = Item(20, Junk, 0, true);

@@ -230,7 +230,9 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
             else if (_escapes < 3)
             {
                 // A question that isn't ours (or "Evet" didn't take twice): say no rather than guess.
-                actions.Add(new KeyTapAction(p.Keys.CloseWindow));
+                actions.Add(new KeyTapAction(p.Keys.CloseWindow) { StillWanted = When(live =>
+                    live.NpcShop == bag.NpcShop && live.Confirm == bag.Confirm && live.OtherConfirm == bag.OtherConfirm
+                    && live.ConfirmBounds == bag.ConfirmBounds && live.OtherConfirmBounds == bag.OtherConfirmBounds) });
                 _escapes++;
                 _waitUntil = now + AfterKey;
                 if (_step == Step.Confirmed)
@@ -281,7 +283,10 @@ internal sealed class BagCleaner(Func<BagLayout?>? readBagNow = null)
                         _failed[_slot] = TriesPerItem;
                         // At a shop Esc shuts the shop too (seen): the menu is left, the next item's click replaces it.
                         if (!Selling)
-                            actions.Add(new KeyTapAction(p.Keys.CloseWindow));
+                            actions.Add(new KeyTapAction(p.Keys.CloseWindow) { StillWanted = When(live =>
+                                live.Open && live.NpcShop == 0 && live.Confirm == null && live.OtherConfirm == null
+                                && live.MenuSlot == bag.MenuSlot && live.Page == bag.Page && live.DropButton == drop
+                                && live.DropBounds == bag.DropBounds) });
                         _step = Step.Pick;
                         _waitUntil = now + AfterKey;
                         break;

@@ -191,27 +191,37 @@ internal sealed partial class GameWorldReader
     }
 
     /// <summary>The shop whose window is open now, or null.</summary>
+    // Zero is a closed shop. A failed/incomplete read must not authorize another input.
+    internal int? ReadOpenShopId() => OpenShopId(out _, out _);
+
+    private int? OpenShopId(out long view, out long cls)
+    {
+        view = cls = 0;
+        if (!_located) return null;
+        long instance = Pointer(_moduleBase + _gameInstance);
+        long instanceClass = Pointer(instance + ObjClass);
+        if (ClassName(instanceClass) != "m2data_C") return null;
+        if (!_memory.TryReadInt64(instance + Offset(instanceClass, "m2data_C", "PrivateShopView"), out view)) return null;
+        if (view == 0) return 0;
+        if (!MemoryReads.IsPointer(view)) return null;
+        cls = Pointer(view + ObjClass);
+        if (ClassName(cls) != "PrivateShopView_C") return null;
+        var closed = Byte(view + Offset(cls, "PrivateShopView_C", "closed"));
+        if (closed == null) return null;
+        if (closed != 0) return 0;
+        var id = Int32(view + Offset(cls, "PrivateShopView_C", "shopId"));
+        return id > 0 ? id : null;
+    }
+
     public OpenShop? ReadOpenShop()
     {
         try
         {
-            if (!_located)
-                return null;
-            long instance = Pointer(_moduleBase + _gameInstance);
-            long instanceClass = Pointer(instance + ObjClass);
-            if (ClassName(instanceClass) != "m2data_C")
-                return null;
-            long view = Pointer(instance + Offset(instanceClass, "m2data_C", "PrivateShopView"));
-            if (!MemoryReads.IsPointer(view))
-                return null;
-            long cls = Pointer(view + ObjClass);
-            if (ClassName(cls) != "PrivateShopView_C" || Byte(view + Offset(cls, "PrivateShopView_C", "closed")) is not 0)
-                return null;
-            int id = Int32(view + Offset(cls, "PrivateShopView_C", "shopId")) ?? 0;
+            if (OpenShopId(out long view, out long cls) is not int id || id <= 0) return null;
             long list = view + Offset(cls, "PrivateShopView_C", "gotData");
             long data = Pointer(list);
             int count = Int32(list + 8) ?? 0;
-            if (id <= 0 || count < 0 || count > 500)
+            if (count < 0 || count > 500)
                 return null;
             var items = new List<ShopItem>();
             if (count > 0)

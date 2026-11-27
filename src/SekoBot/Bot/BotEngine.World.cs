@@ -115,13 +115,6 @@ internal sealed partial class BotEngine
         return world.Player.DistanceXY(past.Position) > 15;
     }
 
-    /// <summary>The game's windows that are closed with Esc when they show up (from memory).</summary>
-    internal static readonly HashSet<string> KnownWindows =
-    [
-        "EscMenu", "settings", "inventory", "Character", "skills", "community", "costume", "events",
-        "friendRequests", "efsunData", "oXGameUI", "pop_ayir", "pop_weaponArmor", "happyHourBoxMobile",
-        "popup_C", // the advert after a level-up (seen in the game, in UI_C.canvasAdds)
-    ];
     /// <summary>Parts of the screen that come and go on their own (not windows to close).</summary>
     internal static readonly HashSet<string> NotWindows =
     [
