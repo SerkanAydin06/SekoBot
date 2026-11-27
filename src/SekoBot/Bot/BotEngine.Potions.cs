@@ -30,7 +30,7 @@ internal sealed partial class BotEngine
     private List<PotionNeed> PotionNeeds(WorldSnapshot world, BotProfile p, bool topUp = false)
     {
         var needs = new List<PotionNeed>();
-        if (!p.BuyPotions)
+        if (!p.BuyPotions || !BagRead(world))
             return needs;
         foreach (var (kind, key) in new[] { ("HP", p.Keys.HpPotion), ("MP", p.Keys.MpPotion) })
             if (Potion(world, key) is { Vnum: int vnum } potion
@@ -39,6 +39,13 @@ internal sealed partial class BotEngine
                 needs.Add(new PotionNeed(kind, vnum, potion.InBag, p.BuyPotionsUpTo));
         return needs;
     }
+
+    /// <summary>
+    /// Whether the bag was really read: the character always wears something, so nothing at all means it wasn't (seen
+    /// 2026-11-27: going to the login screen and just after logging in, "0 potions" — the bot stopped, or walked 389 m
+    /// to the shop for potions it had).
+    /// </summary>
+    internal static bool BagRead(WorldSnapshot world) => world.Progress is { Inventory.Count: > 0 };
 
     /// <summary>At the shop, a potion with less than this share of the target is filled up.</summary>
     internal const double TopUpShare = 0.9;

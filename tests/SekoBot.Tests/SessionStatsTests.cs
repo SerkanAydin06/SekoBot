@@ -102,6 +102,40 @@ public class SessionStatsTests
     }
 
     [Fact]
+    public void A_level_up_whose_level_read_lags_still_counts_the_experience()
+    {
+        var stats = Started();
+        stats.Update(World(99_500), S(0), HpPotion, MpPotion);
+        // The experience starts again from 0, the level read stays 12 (seen: for 20 minutes).
+        stats.Update(World(100), S(1), HpPotion, MpPotion);
+        Assert.Equal(0, stats.Exp); // a moment: maybe only the middle of the level up
+        stats.Update(World(300), S(10), HpPotion, MpPotion);
+        Assert.Equal(500 + 300, stats.Exp);
+        Assert.Equal(1, stats.LevelsGained);
+        stats.Update(World(900), S(20), HpPotion, MpPotion);
+        Assert.Equal(500 + 900, stats.Exp);
+        // The level read catches up: not counted twice.
+        stats.Update(World(1000, level: 13), S(30), HpPotion, MpPotion);
+        Assert.Equal(500 + 1000, stats.Exp);
+        Assert.Equal(1, stats.LevelsGained);
+    }
+
+    [Fact]
+    public void An_empty_bag_read_is_no_potion_count()
+    {
+        var stats = Started();
+        string? ranOut = null;
+        stats.PotionsRanOut += kind => ranOut = kind;
+        stats.Update(World(1000, hpPotions: 50), S(0), HpPotion, MpPotion);
+        var empty = World(1000) with { Progress = new CharacterProgress(1000, 99_000, 1000, [], [12, 15]) };
+        stats.Update(empty, S(1), HpPotion, MpPotion);
+        Assert.Null(ranOut);
+        Assert.Equal(0, stats.HpPotionsUsed);
+        Assert.False(BotEngine.BagRead(empty));
+        Assert.True(BotEngine.BagRead(World(1000)));
+    }
+
+    [Fact]
     public void Free_inventory_slots_count_tall_items_twice()
     {
         // Two pages: slots 11–106. Equipment (slots 1–10) doesn't count.

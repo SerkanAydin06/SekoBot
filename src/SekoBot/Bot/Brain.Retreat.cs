@@ -32,6 +32,25 @@ internal sealed partial class Brain
     }
     private bool _wantsClean, _cleanNoted;
 
+    /// <summary>
+    /// Set by the engine before something that leaves the character standing (an update of PARDUS, a break out of the
+    /// game): why, in words. The same as for throwing: fight what attacks us, gather nothing new, get to a quiet spot
+    /// (seen 2026-11-27: stopped for an update among the mobs, found dead three times after it). Null: not wanted.
+    /// </summary>
+    public string? WantsQuietFor
+    {
+        get => _wantsQuietFor;
+        set
+        {
+            _wantsQuietFor = value;
+            _quietNoted = false;
+            if (value == null && !_wantsClean)
+                ReadyToClean = false;
+        }
+    }
+    private string? _wantsQuietFor;
+    private bool _quietNoted;
+
     /// <summary>Quiet spot reached (nothing near, nothing attacking for 3 s): the engine can open the bag.</summary>
     public bool ReadyToClean { get; private set; }
 
@@ -49,6 +68,7 @@ internal sealed partial class Brain
         _fleeing = false;
         _fleeSince = _fleeQuietSince = Never;
         WantsClean = false;
+        WantsQuietFor = null;
     }
 
     // ── In danger: HP low with several mobs on us ──
@@ -103,7 +123,7 @@ internal sealed partial class Brain
     /// <returns>True when this tick was spent getting to a quiet spot for throwing items away.</returns>
     private bool CleanTick(GameState state, BotProfile p, List<BotAction> actions)
     {
-        if (!WantsClean || !p.NavigateMode)
+        if (!WantsClean && WantsQuietFor == null || !p.NavigateMode)
             return false;
         // Whatever attacks us is fought first (the usual fighting; nothing new is gathered).
         if (state.Attackers.Count > 0 || state.Targets.Any(t => t.AttacksMe))
@@ -117,9 +137,12 @@ internal sealed partial class Brain
         if (refresh)
             _lastKeyRefresh = now;
         _tickTime = now;
-        if (!_cleanNoted)
+        if (WantsClean && !_cleanNoted)
             actions.Add(new NoteAction("Envanter boşaltılacak: moblardan uzak, sakin bir yere çekiliniyor."));
-        _cleanNoted = true;
+        else if (!WantsClean && WantsQuietFor is { } why && !_quietNoted)
+            actions.Add(new NoteAction($"{why}: etraftaki moblar bitirildi, moblardan uzak sakin bir yere çekiliniyor."));
+        _cleanNoted = WantsClean || _cleanNoted;
+        _quietNoted = true;
         SetAttack(false, p, actions, refresh);
         FinishFight(p, actions, now);
         if (GetAway(state, p, actions, refresh))

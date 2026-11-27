@@ -85,6 +85,31 @@ internal sealed partial class BotEngine
             StillWanted: () => WithLatestFrame(frame => UpdateQuestionBounds(frame)?.Contains(at) == true)));
     }
 
+    /// <summary>The game menu's "Oturumu kapat" (back to the login screen).</summary>
+    internal const string LogoutKey = "SYSTEM_LOGOUT";
+
+    /// <summary>The game menu's button with this text key when the menu shows.</summary>
+    public Rectangle? GameMenuButton(string key)
+    {
+        lock (_worldGate)
+            return _world?.ReadMenuButton(key);
+    }
+
+    /// <summary>Opens the game menu (the close-window key, Esc, with nothing else open).</summary>
+    public void OpenGameMenu()
+    {
+        _loginInput ??= new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
+        _loginInput.Enqueue(new KeyTapAction(Profile.Keys.CloseWindow) { StillWanted = () => GameMenuButton(LogoutKey) == null });
+    }
+
+    /// <summary>Presses the game menu's button with this text key (drawn at <paramref name="button"/>).</summary>
+    public void PressMenuButton(Rectangle button, string key)
+    {
+        _loginInput ??= new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
+        var at = BagCleaner.ClickPoint(button);
+        _loginInput.Enqueue(new ClickAction(at, Slow: true, Fast: true, StillWanted: () => GameMenuButton(key)?.Contains(at) == true));
+    }
+
     /// <summary>Presses the login button (drawn at <paramref name="button"/>, client pixels): the game in front a moment.</summary>
     public void PressLogin(Rectangle button)
     {

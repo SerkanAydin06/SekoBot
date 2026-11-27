@@ -151,7 +151,7 @@ internal sealed partial class MainForm
         else if (_onLoginSince == DateTime.MinValue)
             _onLoginSince = now;
         bool closing = _closeAskedAt != DateTime.MinValue;
-        if (_profile.AutoLogin && now >= _noUpdateUntil && (closing || onLogin && now - _onLoginSince >= OutdatedOnLogin) && e.GameOutdated() == true)
+        if (_profile.AutoLogin && !Resting && now >= _noUpdateUntil && (closing || onLogin && now - _onLoginSince >= OutdatedOnLogin) && e.GameOutdated() == true)
         {
             if (!_outdatedTold)
             {
@@ -189,6 +189,9 @@ internal sealed partial class MainForm
             return;
         }
 
+        // A break out of the game: the login and the resume wait for it (see RestTick).
+        if (Resting)
+            return;
         if (working)
         {
             // The user (or the resume) started work: nothing to go back to.

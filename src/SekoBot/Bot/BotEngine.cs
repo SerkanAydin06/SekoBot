@@ -246,7 +246,8 @@ internal sealed partial class BotEngine : IDisposable
                             SkillsOffSlots = SkillsOffSlots(world, profile),
                             MpPoints = world?.Stats?.Mp,
                             // What the key can still drink: 0 once the game emptied it (then the bot gets away safely).
-                            HpPotionsLeft = world is null ? null : Potion(world, profile.Keys.HpPotion)?.Drinkable ?? 0,
+                            // An empty read (going to the login screen, just logged in) is no count (seen: "0 left", stopped).
+                            HpPotionsLeft = world is null || !BagRead(world) ? null : Potion(world, profile.Keys.HpPotion)?.Drinkable ?? 0,
                             AnalysisMs = watch.Elapsed.TotalMilliseconds,
                         };
                         Volatile.Write(ref _state, state);

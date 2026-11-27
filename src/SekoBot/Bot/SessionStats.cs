@@ -29,6 +29,13 @@ internal sealed class SessionStats
     private TimeSpan _lastExpUp = TimeSpan.FromDays(-1), _started;
     private long? _exp, _needExp, _yang;
     private int _level;
+    /// <summary>Since when the experience reads lower than before with the level the same (a level up in the middle).</summary>
+    private TimeSpan _lowSince = TimeSpan.MinValue;
+    /// <summary>A level up taken from the experience alone (the level read lagging): not counted again when it comes.</summary>
+    private bool _levelTaken;
+    /// <summary>The experience low this long with the level unchanged: the level up is taken as done (seen 2026-11-27:
+    /// the level read stayed old for 20 minutes, nothing was counted, the bot stopped for "no EXP" among 17 mobs).</summary>
+    internal static readonly TimeSpan LevelLag = TimeSpan.FromSeconds(8);
     private int? _hpLeft, _mpLeft;
 
     public int Kills { get; private set; }
@@ -51,6 +58,8 @@ internal sealed class SessionStats
         _exp = _needExp = _yang = null;
         _hpLeft = _mpLeft = null;
         _level = 0;
+        _lowSince = TimeSpan.MinValue;
+        _levelTaken = false;
         _started = now;
         Kills = LevelsGained = HpPotionsUsed = MpPotionsUsed = 0;
         Exp = Yang = 0;
@@ -71,7 +80,16 @@ internal sealed class SessionStats
         bool expUp = false;
         if (_exp is long exp && _needExp is long need)
         {
-            if (world.Level > _level && _level > 0)
+            if (world.Level > _level && _level > 0 && _levelTaken)
+            {
+                // The level read caught up with a level up already counted.
+                if (progress.Exp > exp)
+                    Exp += progress.Exp - exp;
+                LevelsGained += world.Level - _level - 1;
+                _levelTaken = false;
+                expUp = progress.Exp > exp;
+            }
+            else if (world.Level > _level && _level > 0)
             {
                 // Level up: the rest of the old level, plus what is already in the new one.
                 Exp += need + progress.Exp;
@@ -83,8 +101,18 @@ internal sealed class SessionStats
                 Exp += progress.Exp - exp;
                 expUp = true;
             }
+            else if (world.Level == _level && progress.Exp < exp && _lowSince != TimeSpan.MinValue && now - _lowSince >= LevelLag)
+            {
+                // Low for long and the level still the old one: the level up is done, only its read lags.
+                Exp += need + progress.Exp; // the rest of the old level ("left to the level" before), plus the new one
+                LevelsGained++;
+                _levelTaken = true;
+                expUp = true;
+            }
             else if (world.Level == _level && progress.Exp < exp)
             {
+                if (_lowSince == TimeSpan.MinValue)
+                    _lowSince = now;
                 // The experience back near 0 with the level not raised yet: the game is in the middle of a level up
                 // (it resets the experience a moment before the level). Not kept — else the "left to the level" read
                 // now (nearly a whole new level) was counted at the level up (seen: 10 Mn EXP per hour shown).
@@ -96,6 +124,7 @@ internal sealed class SessionStats
         }
         if (_yang is long yang && progress.Yang > yang)
             Yang += progress.Yang - yang;
+        _lowSince = TimeSpan.MinValue;
         _exp = progress.Exp;
         _needExp = progress.NeedExp;
         _yang = progress.Yang;
@@ -110,6 +139,8 @@ internal sealed class SessionStats
 
     private int? Potions(CharacterProgress progress, int? vnum, int? before, Action<int> used, string kind)
     {
+        if (progress.Inventory.Count == 0)
+            return before; // the bag not read (going to the login screen): no count
         if (vnum is not int item)
             return before == null ? null : 0; // the quick slot became empty: none left
         int left = progress.Count(item);

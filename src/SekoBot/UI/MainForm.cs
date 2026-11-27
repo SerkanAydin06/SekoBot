@@ -518,6 +518,13 @@ internal sealed partial class MainForm : Form
             WriteLog("Kaydettiğin alan silindi" + (_profile.FarmSpot != null && _profile.UseFarmSpot
                 ? "; bot başlarken botun bulduğu alana gider." : "; bot durduğu yerde başlar."));
         };
+        // Out of the game now and then (the user: "1 saatte bir 10 dakika çıkış yap").
+        Theme.Label(area, "OYUNDAN ÇIKIŞ MOLASI", new Rectangle(0, 252, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
+        Check(area, "Belli aralıklarla oyundan çıkıp giriş ekranında bekle", 0, 274, 460, () => _profile.LogoutBreaks, v => _profile.LogoutBreaks = v);
+        NumberRow(area, "Çalışma süresi (dakika)", 0, 306, 10, 600, () => _profile.LogoutPlayMin, 0, 5, v => _profile.LogoutPlayMin = (int)v);
+        NumberRow(area, "Mola süresi (dakika)", 460, 306, 1, 180, () => _profile.LogoutRestMin, 0, 1, v => _profile.LogoutRestMin = (int)v);
+        Theme.Label(area, "Süre dolunca bot yeni mob toplamaz; saldıranları bitirip sakin bir yere çekilir, sonra oyundan çıkar (Oturumu kapat). " +
+            "Mola bitince kendisi giriş yapıp aynı karakterle kaldığı yerden devam eder.", new Rectangle(0, 338, 918, 36), 8.5f, Theme.Faint, FontStyle.Regular, ContentAlignment.TopLeft);
         _respawnState = Theme.Label(area, "", new Rectangle(0, 140, 918, 22), 8.5f, Theme.Muted);
         _positionState = Theme.Label(area, "", new Rectangle(0, 166, 918, 40), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
 
@@ -1088,7 +1095,7 @@ internal sealed partial class MainForm : Form
 
         // ── Timers & hotkeys ─────────────────────────────────────
         _scanTimer = new System.Windows.Forms.Timer { Interval = 2000 };
-        _scanTimer.Tick += (_, _) => { if (_engine == null) RefreshWindows(); else LoginTick(); ResumeTick(); };
+        _scanTimer.Tick += (_, _) => { if (_engine == null) RefreshWindows(); else LoginTick(); ResumeTick(); RestTick(); };
         _previewTimer = new System.Windows.Forms.Timer { Interval = 33 };
         _previewTimer.Tick += (_, _) => RenderPreview();
         VisibleChanged += (_, _) => _engine?.ShowingPreview(GameViewShown);

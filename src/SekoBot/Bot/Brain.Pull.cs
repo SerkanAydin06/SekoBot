@@ -221,7 +221,7 @@ internal sealed partial class Brain
     private bool PullTick(GameState state, BotProfile p, List<BotAction> actions, bool refresh, double radius)
     {
         var now = state.Time;
-        if (!p.PullGroups || state.Targets.Count == 0 || WantsClean)
+        if (!p.PullGroups || state.Targets.Count == 0 || WantsClean || WantsQuietFor != null)
             return EndPull(actions, null);
         // A preferred Metin stone comes first; gathering would only get in the way.
         if (state.Targets.Any(t => t.Priority && !t.AttacksMe))
