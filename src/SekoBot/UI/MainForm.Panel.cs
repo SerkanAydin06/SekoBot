@@ -174,24 +174,41 @@ internal sealed partial class MainForm
         {
             var window = _mapWindow = new SideWindow("Canlı harita", new Size(760, 760));
             _liveMap = new LiveMap(() => _engine, () => _profile) { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9f) };
-            var bar = new Panel { Dock = DockStyle.Top, Height = 44, BackColor = Theme.Rail };
-            var whole = new ProButton { Text = "Tüm harita", Icon = "map", Kind = ButtonKind.Ghost, Bounds = new Rectangle(10, 7, 140, 30), Font = new Font("Segoe UI", 8.5f) };
-            whole.Click += (_, _) =>
+            var bar = new Panel { Dock = DockStyle.Top, Height = 48, BackColor = Theme.Rail };
+            ProButton Tool(string text, string icon, int x, int width, Action click)
+            {
+                var button = new ProButton { Text = text, Icon = icon, Kind = ButtonKind.Ghost, Bounds = new Rectangle(x, 8, width, 32), Font = new Font("Segoe UI", 8.5f) };
+                button.Click += (_, _) => click();
+                bar.Controls.Add(button);
+                return button;
+            }
+            ProButton? whole = null;
+            whole = Tool("Tüm harita", "map", 10, 150, () =>
             {
                 _liveMap.ToggleWhole();
-                whole.Text = _liveMap.Whole ? "Karakterin çevresi" : "Tüm harita";
-            };
-            bar.Controls.Add(whole);
-            var legend = new Label
+                whole!.Text = _liveMap.Whole ? "Çevrem" : "Tüm harita";
+            });
+            Tool("Ortala", "target", 168, 110, () => { _liveMap.CenterOnMe(); whole.Text = "Tüm harita"; });
+            Tool("Yakınlaştır", "plus", 286, 130, () => _liveMap.ZoomBy(0.75));
+            Tool("Uzaklaştır", "min", 424, 130, () => _liveMap.ZoomBy(1.33));
+            var counts = new Label
             {
-                Text = "● sen   ● mob   ● sana vuran   ▲ oyuncu   ▲ düşman   ◆ eşya   ┅ gidilen yol   ○ farm alanı   ▓ dağ (girilmez)   — tekerlek: yakınlaştır",
-                ForeColor = Theme.Faint, BackColor = Theme.Rail, Font = new Font("Segoe UI", 8f), AutoSize = false,
-                Bounds = new Rectangle(160, 7, 1200, 30), TextAlign = ContentAlignment.MiddleLeft,
+                Text = "", ForeColor = Theme.Muted, BackColor = Theme.Rail, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), AutoSize = false,
+                Bounds = new Rectangle(566, 8, 400, 32), TextAlign = ContentAlignment.MiddleRight, Anchor = AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Left,
             };
-            bar.Controls.Add(legend);
+            bar.Controls.Add(counts);
+            bar.Resize += (_, _) => counts.Width = Math.Max(60, bar.ClientSize.Width - counts.Left - 12);
+            bar.Controls.Add(new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = Theme.Border });
             window.Controls.Add(_liveMap);
             window.Controls.Add(bar);
-            _mapTimer.Tick += (_, _) => { if (window.Visible && window.WindowState != FormWindowState.Minimized) _liveMap.Invalidate(); };
+            _mapTimer.Tick += (_, _) =>
+            {
+                if (!window.Visible || window.WindowState == FormWindowState.Minimized)
+                    return;
+                _liveMap.Invalidate();
+                if (counts.Text != _liveMap.Counts)
+                    counts.Text = _liveMap.Counts;
+            };
             window.VisibleChanged += (_, _) => { if (window.Visible) _mapTimer.Start(); else _mapTimer.Stop(); };
         }
         Bring(_mapWindow);
