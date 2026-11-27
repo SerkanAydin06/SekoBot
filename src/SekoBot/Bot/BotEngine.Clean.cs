@@ -127,9 +127,8 @@ internal sealed partial class BotEngine
                 if (now - since < TimeSpan.FromSeconds(3) && inBag.Bonuses == null)
                     continue;
                 _bonusLooks.Remove((slot, vnum));
-                if (Trials.Record(vnum, GoodBonus(inBag, profile)) && Trials.Of(vnum) is { } tally)
-                    _log($"🔎 {ItemBook.NameOf(vnum)}: efsunu için {tally.Checked} kez alındı, {(tally.Hits == 0 ? "istenen efsun hiç çıkmadı" : $"istenen efsun yalnız {tally.Hits} kez çıktı")}; " +
-                         $"bundan sonra sadece yanından geçerken ({PassingBy / 100:0} m) ve çantada en az {PassingFree} boş yer varken alınacak.");
+                // Only counted (what each item brings, for the user to see); nothing is left on the ground for it.
+                Trials.Record(vnum, GoodBonus(inBag, profile));
             }
             foreach (var item in progress.Inventory.Where(i => looted.Contains((i.Slot, i.Vnum))).ToList())
                 if (Loot.KindOf(item.Vnum) == LootKind.Equipment && GoodBonus(item, profile) && _bonusTold.TryAdd((item.Slot, item.Vnum), now))

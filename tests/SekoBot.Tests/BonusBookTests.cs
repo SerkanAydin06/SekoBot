@@ -6,6 +6,7 @@ using Xunit;
 namespace SekoBot.Tests;
 
 /// <summary>Which bonuses come on which items, with which values: learned from the shops.</summary>
+[Collection("BonusKnowledge")]
 public class BonusBookTests
 {
     private const int Necklace = 990101, Shoes = 990102, Sword = 990103, Fish = 990104;

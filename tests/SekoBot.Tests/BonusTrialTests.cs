@@ -13,8 +13,23 @@ internal static class TrialsForTests
     internal static void Init() => BotEngine.Trials = new BonusTrials();
 }
 
+[Collection("BonusKnowledge")]
 public class BonusTrialTests
 {
+    [Fact]
+    public void Every_item_on_the_bonus_list_is_picked_up_whatever_it_brought_so_far()
+    {
+        const int sword = 3030; // a weapon (by its number)
+        var profile = new BotProfile { LootEquipment = false, LootOwnClass = false, LootEquipmentMinGold = 0 };
+        profile.LootBonuses.Add(new BonusWant { Type = 47, Min = 6 });
+        for (int i = 0; i < 50; i++)
+            BotEngine.Trials.Record(sword, false);
+        var known = BotEngine.BonusKnowledge;
+        BotEngine.BonusKnowledge = null; // what the market taught is another test's
+        try { Assert.True(BotEngine.WantedLoot(new GroundItem(1, default, sword), profile, freeSlots: 2)); }
+        finally { BotEngine.BonusKnowledge = known; }
+    }
+
     [Fact]
     public void An_item_without_a_wanted_bonus_twelve_times_is_not_worth_it_any_more()
     {
@@ -39,28 +54,5 @@ public class BonusTrialTests
         Assert.False(trials.Worth(200)); // 1 in 91: under 2.5 %
     }
 
-    [Fact]
-    public void A_nearly_full_bag_picks_no_weapon_just_to_see_its_bonuses()
-    {
-        int sword = ItemBook.All().First(i => Loot.KindOf(i.Vnum) == LootKind.Equipment).Vnum;
-        var profile = new BotProfile { LootEquipment = false, LootOwnClass = false, LootEquipmentMinGold = 0 };
-        profile.LootBonuses.Add(new BonusWant { Type = 47, Min = 6 });
-        var item = new GroundItem(1, default, sword);
-        Assert.True(BotEngine.WantedLoot(item, profile, freeSlots: 20));
-        Assert.False(BotEngine.WantedLoot(item, profile, freeSlots: BotEngine.BonusLookMinFree));
-    }
 
-    [Fact]
-    public void A_low_chance_item_is_still_wanted_but_only_in_passing()
-    {
-        int sword = ItemBook.All().Where(i => Loot.KindOf(i.Vnum) == LootKind.Equipment).Skip(3).First().Vnum;
-        var profile = new BotProfile { LootEquipment = false, LootOwnClass = false, LootEquipmentMinGold = 0 };
-        profile.LootBonuses.Add(new BonusWant { Type = 47, Min = 6 });
-        Assert.False(BotEngine.OnlyInPassing(sword, profile));
-        for (int i = 0; i < BonusTrials.GiveUpAfter; i++)
-            BotEngine.Trials.Record(sword, false);
-        // Never left for good (one in a hundred may be the one): wanted, but only when passing by.
-        Assert.True(BotEngine.WantedLoot(new GroundItem(1, default, sword), profile, freeSlots: 30));
-        Assert.True(BotEngine.OnlyInPassing(sword, profile));
-    }
 }
