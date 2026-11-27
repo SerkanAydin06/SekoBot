@@ -59,6 +59,10 @@ internal sealed partial class BotEngine
                          .OrderBy(d => d.Position.DistanceXY(world.Player)))
             {
                 double away = item.Position.DistanceXY(world.Player);
+                // Rarely a wanted bonus on it so far: only when passing by with room in the bag — never left for good
+                // (the user: one in a hundred may be the one wanted).
+                if (OnlyInPassing(item.Vnum, profile) && (away > PassingBy || world.Progress?.FreeSlots() is not (int free and >= PassingFree)))
+                    continue;
                 // A special item ("Topla", e.g. an event card) is gone for from further away, also
                 // off the screen (seen: a card 9 m off left behind while fighting).
                 if (AlwaysLoot(item.Vnum, profile) && away <= Math.Max(profile.DropRangeMetres * 100, SpecialDropRange))
@@ -200,6 +204,16 @@ internal sealed partial class BotEngine
         _ => true,
     });
 
+    /// <summary>An item picked up only for its bonuses that rarely brought a wanted one: taken when this close…</summary>
+    internal const double PassingBy = 300;
+    /// <summary>…and with this many free bag slots.</summary>
+    internal const int PassingFree = 10;
+
+    /// <summary>Picked up only to see its bonuses (not for its price, not wanted anyway), and rarely with a wanted one so far.</summary>
+    internal static bool OnlyInPassing(int vnum, BotProfile profile) =>
+        Loot.KindOf(vnum) == LootKind.Equipment && !Trials.Worth(vnum) && !profile.LootEquipment && !AlwaysLoot(vnum, profile)
+        && !(profile.LootEquipmentMinGold > 0 && ItemBook.Get(vnum)?.Sell >= profile.LootEquipmentMinGold);
+
     /// <summary>What looking at bonuses brought per item (the tests use their own).</summary>
     internal static BonusTrials Trials { get; set; } = BonusTrials.Shared;
 
@@ -214,9 +228,6 @@ internal sealed partial class BotEngine
     internal static bool MayCarryWantedBonus(int vnum, BotProfile profile)
     {
         if (profile.LootBonuses.Count == 0)
-            return false;
-        // Picked up often enough without a wanted bonus: not any more (its price may still make it worth it).
-        if (!Trials.Worth(vnum))
             return false;
         var book = BonusKnowledge;
         // A line with item names is only about those items ("EXP on Deri Çizme": only Deri Çizme is picked up).
