@@ -867,6 +867,8 @@ internal sealed partial class MainForm : Form
         Check(notify, "Şehre gidip eşya satınca", 478, 238, 440, () => _profile.NotifySells, v => _profile.NotifySells = v);
         Check(notify, "Efsun listesindeki efsunlu eşya alınınca (✨ Efsun listesi'nde seçtiklerin)", 0, 272, 918,
             () => _profile.NotifyBonusItems, v => _profile.NotifyBonusItems = v);
+        Check(notify, "Sistem ban mesajı (oyundan ban yiyen oyuncu; chat banlar hariç)", 0, 306, 918,
+            () => _profile.NotifyBans, v => _profile.NotifyBans = v);
 
         var keys = _tabPages[7];
         var k = _profile.Keys;

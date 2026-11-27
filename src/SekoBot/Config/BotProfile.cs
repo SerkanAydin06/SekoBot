@@ -321,6 +321,8 @@ internal sealed class BotProfile
     public bool NotifyLevelUp { get; set; } = true;
     /// <summary>Send "💰 … satıldı" to Telegram after a trip to a market NPC (the log always gets it).</summary>
     public bool NotifySells { get; set; } = true;
+    /// <summary>The game's system lines about a player banned: sent to Telegram too (always written in the log).</summary>
+    public bool NotifyBans { get; set; } = true;
     /// <summary>Pick up the item of a drop event going on now (level allowing), like "Topla".</summary>
     public bool EventLoot { get; set; } = true;
     /// <summary>Stop the bot when the inventory has no free slot left (loot would be lost).</summary>
