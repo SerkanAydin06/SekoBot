@@ -6,6 +6,9 @@ namespace SekoBot.Bot;
 /// </summary>
 internal sealed partial class BotEngine
 {
+    /// <summary>A trip to a market NPC going on (there, selling, or back to the farm).</summary>
+    public bool SellingNow => _selling;
+
     /// <summary>Asks for a quiet spot (<paramref name="why"/>: in words; null: not any more). True once the character
     /// stands there (nothing near, nothing attacking it, no selling or throwing going on).</summary>
     public bool QuietFor(string? why)

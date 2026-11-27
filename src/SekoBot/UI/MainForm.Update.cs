@@ -56,6 +56,8 @@ internal sealed partial class MainForm
 
     /// <summary>Waited at most this long for a quiet spot before an update.</summary>
     internal static readonly TimeSpan QuietBeforeUpdate = TimeSpan.FromMinutes(3);
+    /// <summary>Waited at most this long for a trip to the shop to end before an update.</summary>
+    internal static readonly TimeSpan SellBeforeUpdate = TimeSpan.FromMinutes(8);
 
     /// <summary>The "update all" message reached this SekoBot.</summary>
     private async Task UpdateAndResumeAsync(string? telegramChat = null)
@@ -118,6 +120,16 @@ internal sealed partial class MainForm
             // stopped among the mobs, found dead after the update three times). At most a few minutes.
             if (_engine is { BotRunning: true } farming && runningMode == FarmMode)
             {
+                // On a trip to the shop: its end waited for (seen: stopped on the way back, found dead after the update).
+                if (farming.SellingNow)
+                {
+                    WriteLog("⬆ Satış yolculuğu sürüyor; bitince güncellenecek.");
+                    var tripEnd = DateTime.Now + SellBeforeUpdate;
+                    while (DateTime.Now < tripEnd && farming.BotRunning && farming.SellingNow)
+                        await Task.Delay(1000);
+                    if (IsDisposed)
+                        return;
+                }
                 WriteLog("⬆ Güncellemeden önce etraftaki moblar bitirilip sakin bir yere çekiliniyor.");
                 var until = DateTime.Now + QuietBeforeUpdate;
                 while (DateTime.Now < until && farming.BotRunning && !farming.QuietFor("⬆ Güncelleme"))
