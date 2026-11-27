@@ -83,10 +83,13 @@ internal sealed partial class MainForm
         bool low = _profile.BuyPotions && hpLeft is int h && h < below;
         int used = (session?.HpPotionsUsed ?? 0) + (session?.MpPotionsUsed ?? 0);
         // Which is which, written out (the user: "HP" and "MP" weren't told apart).
-        _kPotion.Show(hpLeft is int hp ? hp.ToString("N0") : "—", unit: hpLeft is int ? "HP" : "",
-            sub: string.Join(" · ", new[] { mpLeft is int mp ? $"{mp:N0} MP" : "", hpLeft is int && _profile.BuyPotions ? $"{upTo:N0}'e tamamlar" : used > 0 ? $"{used:N0} içildi" : "" }.Where(x => x.Length > 0)),
+        // HP and MP the same size, one a line (the user: HP big, MP small under it; the note didn't fit).
+        bool mpLow = _profile.BuyPotions && mpLeft is int m0 && m0 < below;
+        _kPotion.ShowLines(
+            [("HP", hpLeft is int hp ? hp.ToString("N0") : "—", low ? Theme.Yellow : Theme.Text),
+             ("MP", mpLeft is int mp ? mp.ToString("N0") : "—", mpLow ? Theme.Yellow : Theme.Text)],
             bar: hpLeft is int left && _profile.BuyPotions ? Math.Clamp((double)left / upTo, 0, 1) : null,
-            corner: low ? "azaldı" : "", cornerColor: Theme.Yellow, valueColor: low ? Theme.Yellow : Theme.Text);
+            corner: low || mpLow ? "azaldı" : used > 0 ? $"{Short(used)} içildi" : "", cornerColor: low || mpLow ? Theme.Yellow : Theme.Faint);
         _kPotion.BarColor = Theme.Yellow;
 
         // The level: how far, how long to the next one; the deaths in the corner.

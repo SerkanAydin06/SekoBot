@@ -163,19 +163,25 @@ internal sealed partial class MainForm : Form
         _gameButton = new ProButton { Text = "Oyunu seç", Icon = "user", Kind = ButtonKind.Ghost, Bounds = new Rectangle(792, 12, 188, 40), Font = new Font("Segoe UI", 9f) };
         _gameButton.Click += (_, _) => ShowGameMenu();
         header.Controls.Add(_gameButton);
-        var small = new IconButton { Icon = "layers", Boxed = true, Bounds = new Rectangle(988, 12, 40, 40) };
-        small.Click += (_, _) => GoMini();
-        header.Controls.Add(small);
+        // The window's buttons in one capsule like the mode switch: the small bar, full screen | minimise, close
+        // (the user: make them look as one, of good quality).
+        var windowButtons = new Card { Bounds = new Rectangle(988, 12, 180, 40), BackColor = Theme.Inset };
+        header.Controls.Add(windowButtons);
+        var tips = new ToolTip();
+        IconButton WindowButton(string icon, int x, string tip, Action click, bool danger = false)
+        {
+            var button = new IconButton { Icon = icon, Danger = danger, Bounds = new Rectangle(x, 4, 40, 32) };
+            button.Click += (_, _) => click();
+            tips.SetToolTip(button, tip);
+            windowButtons.Controls.Add(button);
+            return button;
+        }
+        WindowButton("layers", 6, "Küçük çubuk (mini mod)", GoMini);
         // The window over the whole screen, everything in it bigger (again: back to its size).
-        var big = _bigButton = new IconButton { Icon = "expand", Boxed = true, Bounds = new Rectangle(1034, 12, 40, 40) };
-        big.Click += (_, _) => ToggleBig();
-        header.Controls.Add(big);
-        var minimize = new IconButton { Icon = "min", Bounds = new Rectangle(1084, 12, 40, 40) };
-        minimize.Click += (_, _) => WindowState = FormWindowState.Minimized;
-        header.Controls.Add(minimize);
-        var close = new IconButton { Icon = "x", Danger = true, Bounds = new Rectangle(1128, 12, 40, 40) };
-        close.Click += (_, _) => Close();
-        header.Controls.Add(close);
+        _bigButton = WindowButton("expand", 48, "Tam ekran", ToggleBig);
+        windowButtons.Controls.Add(new Panel { Bounds = new Rectangle(90, 10, 1, 20), BackColor = Theme.Border });
+        WindowButton("min", 92, "Simge durumuna küçült", () => WindowState = FormWindowState.Minimized);
+        WindowButton("x", 134, "Kapat", Close, danger: true);
         // Moved only by the mark and the name (the user: the rest of the strip showed the move cursor but didn't move).
         foreach (Control c in new Control[] { title, mark })
         {
@@ -511,9 +517,12 @@ internal sealed partial class MainForm : Form
         // Off by default: it took the character to odd places (user, 2026-11-19).
         Check(area, "Oyuncu gelince başka alana geç", R, 96, ColW, () => _profile.MoveAwayFromPlayers, v => _profile.MoveAwayFromPlayers = v);
         Section(area, "DURUM", 144);
+        // Wrapped over as many lines as they need (the respawn times ended in "…" on one line).
         _farmState = Theme.Label(area, "", new Rectangle(L, 168, 918, 40), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
-        _respawnState = Theme.Label(area, "", new Rectangle(L, 210, 918, 22), 8.5f, Theme.Muted);
-        _positionState = Theme.Label(area, "", new Rectangle(L, 234, 918, 40), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+        _respawnState = Theme.Label(area, "", new Rectangle(L, 210, 918, 58), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+        _positionState = Theme.Label(area, "", new Rectangle(L, 270, 918, 58), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+        foreach (var state in new[] { _farmState, _respawnState, _positionState })
+            state.AutoEllipsis = false;
 
         // Güvenlik · Mola: when to stop, the breaks, the login after a maintenance.
         var safety = _tabPages[5];
@@ -979,7 +988,8 @@ internal sealed partial class MainForm : Form
             var flags = (e.Header?.TextAlign == HorizontalAlignment.Right ? TextFormatFlags.Right : TextFormatFlags.Left) |
                         TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis;
             var text = e.Bounds with { X = e.Bounds.X + 4, Width = e.Bounds.Width - 8 };
-            TextRenderer.DrawText(e.Graphics, e.Header?.Text, new Font("Segoe UI", 8f, FontStyle.Bold), text, Theme.Muted, flags);
+            using var headerFont = new Font("Segoe UI", _runItems.Font.Size * 0.94f, FontStyle.Bold);
+            TextRenderer.DrawText(e.Graphics, e.Header?.Text, headerFont, text, Theme.Muted, flags);
         };
         _runItems.DrawItem += (_, e) => e.DrawDefault = true;
         _runItems.DrawSubItem += (_, e) => e.DrawDefault = true;
@@ -1207,6 +1217,14 @@ internal sealed partial class MainForm : Form
         // List columns don't scale with the window: fit them to the list.
         FitRunItems();
         _runItems.Resize += (_, _) => FitRunItems();
+        // Fixed columns: not dragged wider or narrower by hand (the user: "orayı sabit yap").
+        _runItems.ColumnWidthChanging += (_, e) =>
+        {
+            if (_fittingColumns)
+                return;
+            e.Cancel = true;
+            e.NewWidth = _runItems.Columns[e.ColumnIndex].Width;
+        };
         _dashBottomFarm = _dashBottom.Bounds;
         _attackInPreview = _attackButton.Bounds;
         _logCardFarm = _logCard.Bounds;
@@ -1503,15 +1521,22 @@ internal sealed partial class MainForm : Form
     /// user saw a side scroll bar once the list grew long); the number columns as wide as "Satılan" needs.</summary>
     private void FitRunItems()
     {
-        using var bold = new Font("Segoe UI", 8f, FontStyle.Bold);
+        using var bold = new Font("Segoe UI", _runItems.Font.Size * 0.94f, FontStyle.Bold);
         int number = Math.Max(TextRenderer.MeasureText("Satılan", bold).Width, TextRenderer.MeasureText("99.999", _runItems.Font).Width) + 14;
         // The scroll bar's room always kept (it comes once the list is long; the columns stay the same then).
         int room = _runItems.Width - SystemInformation.VerticalScrollBarWidth - 4;
-        _runItems.Columns[1].Width = number;
-        _runItems.Columns[2].Width = number;
-        _runItems.Columns[3].Width = number;
-        _runItems.Columns[0].Width = Math.Max(60, room - 3 * number);
+        _fittingColumns = true;
+        try
+        {
+            _runItems.Columns[1].Width = number;
+            _runItems.Columns[2].Width = number;
+            _runItems.Columns[3].Width = number;
+            _runItems.Columns[0].Width = Math.Max(60, room - 3 * number);
+        }
+        finally { _fittingColumns = false; }
     }
+
+    private bool _fittingColumns;
 
     private static void Hint(Control parent, string text, int y)
     {
@@ -2410,9 +2435,13 @@ internal sealed partial class MainForm : Form
             }
             ZoomTo(k);
             _big = true;
+            // The height fills the screen; the width too: the content right of the menu drawn wider (the user: full
+            // screen didn't fill the screen — bands left at the sides).
+            Stretch(work.Width - (Width - ClientSize.Width));
         }
         else
         {
+            Unstretch();
             ZoomTo(1f);
             _big = false;
         }
@@ -2422,6 +2451,67 @@ internal sealed partial class MainForm : Form
         Location = _big
             ? new Point(work.Left + (work.Width - Width) / 2, work.Top + (work.Height - Height) / 2)
             : new Point(Math.Clamp(_normalAt.X, work.Left, Math.Max(work.Left, work.Right - Width)), Math.Clamp(_normalAt.Y, work.Top, Math.Max(work.Top, work.Bottom - Height)));
+    }
+
+    // ── Full screen across: the parts right of the menu wider (fonts the same), the header's right side moved over ──
+    private Dictionary<Control, Rectangle>? _beforeStretch;
+    private (Rectangle DashBottom, Rectangle LogCard, Rectangle Log, Rectangle Attack) _rectsBeforeStretch;
+
+    private void Stretch(int clientWidth)
+    {
+        int extra = clientWidth - Need().Width;
+        if (extra < 8)
+            return;
+        int rail = _side.Right;
+        var parts = _body.Controls.Cast<Control>().Where(c => c != _side).ToList();
+        int right = parts.Max(c => c.Right) - _body.AutoScrollPosition.X;
+        float fx = (float)(right - rail + extra) / Math.Max(1, right - rail);
+        // Every place as it was, to go back exactly (no rounding creeping in).
+        _beforeStretch = [];
+        void Keep(Control c)
+        {
+            _beforeStretch[c] = c.Bounds;
+            foreach (Control child in c.Controls)
+                Keep(child);
+        }
+        foreach (var c in parts)
+            Keep(c);
+        Keep(_header);
+        _rectsBeforeStretch = (_dashBottomFarm, _logCardFarm, _logFarm, _attackInPreview);
+        SuspendLayout();
+        foreach (var c in parts)
+        {
+            int left = c.Left;
+            c.Scale(new SizeF(fx, 1f));
+            c.Left = (int)Math.Round(rail + (left - rail) * fx);
+        }
+        int headerRight = _connection.Left;
+        _header.Width += extra;
+        foreach (Control c in _header.Controls)
+            if (c.Left >= headerRight)
+                c.Left += extra;
+        Rectangle Across(Rectangle r, int origin) => new((int)Math.Round(origin + (r.X - origin) * fx), r.Y, (int)Math.Round(r.Width * fx), r.Height);
+        _dashBottomFarm = Across(_dashBottomFarm, rail);
+        _logCardFarm = Across(_logCardFarm, 0);
+        _logFarm = Across(_logFarm, 0);
+        _attackInPreview = Across(_attackInPreview, 0);
+        ResumeLayout(true);
+        FitRunItems();
+        Invalidate(true);
+    }
+
+    private void Unstretch()
+    {
+        if (_beforeStretch is not { } before)
+            return;
+        SuspendLayout();
+        foreach (var (c, bounds) in before)
+            if (!c.IsDisposed)
+                c.Bounds = bounds;
+        (_dashBottomFarm, _logCardFarm, _logFarm, _attackInPreview) = _rectsBeforeStretch;
+        _beforeStretch = null;
+        ResumeLayout(true);
+        FitRunItems();
     }
 
     /// <summary>Everything <paramref name="zoom"/> times its own size: places and sizes, the fonts, the remembered places.</summary>
@@ -2450,11 +2540,11 @@ internal sealed partial class MainForm : Form
         _logCardFarm = Grow(_logCardFarm);
         _logFarm = Grow(_logFarm);
         _attackInPreview = Grow(_attackInPreview);
-        foreach (ColumnHeader column in _runItems.Columns)
-            column.Width = (int)Math.Round(column.Width * f);
+        FitRunItems();
         _zoom = zoom;
         ResumeLayout(true);
         _logBold = null;
+        ShowLog(); // a new font clears the log's colours: written again
         Invalidate(true);
     }
 
@@ -2469,6 +2559,7 @@ internal sealed partial class MainForm : Form
         // Another screen: back to the normal size first (the fonts' own sizes are measured again there).
         if (_big)
         {
+            Unstretch();
             ZoomTo(1f);
             _big = false;
             _bigButton.Icon = "expand";
