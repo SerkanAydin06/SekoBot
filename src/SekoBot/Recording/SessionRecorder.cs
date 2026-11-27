@@ -20,7 +20,7 @@ internal sealed class SessionRecorder : IDisposable
 
     private sealed record Item(RecordedTick Tick, Frame? Image);
 
-    private readonly Channel<Item> _queue = Channel.CreateUnbounded<Item>(); // multi-reader variant: it supports Count
+    private readonly Channel<Item> _queue = Channel.CreateBounded<Item>(512);
     private readonly Action<string> _log;
     private readonly TimeSpan _frameInterval;
     private readonly long _maxBytes;
@@ -29,6 +29,9 @@ internal sealed class SessionRecorder : IDisposable
     private int _pendingFrames, _framesSaved, _ticks, _frameNumber;
     private long _bytes;
     private bool _limitWarned;
+    private int _backlogWarned;
+    private volatile bool _stopped;
+    internal bool IsStopped => _stopped;
 
     public SessionRecorder(string directory, BotProfile profile, string window, Action<string> log)
     {
@@ -52,11 +55,12 @@ internal sealed class SessionRecorder : IDisposable
     public long Bytes => Interlocked.Read(ref _bytes);
 
     public static string NewDirectory() =>
-        Path.Combine(RecordingFormat.Root, DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss"));
+        Path.Combine(RecordingFormat.Root, $"{DateTime.Now:yyyy-MM-dd_HH-mm-ss}_{Guid.NewGuid():N}");
 
     /// <param name="important">Potion or stop: store this frame regardless of the interval.</param>
     public void Record(Frame frame, GameState state, BotPhase phase, IReadOnlyList<BotAction> actions, bool important)
     {
+        if (_stopped) return;
         var tick = new RecordedTick
         {
             T = Math.Round(state.Time.TotalMilliseconds, 1),
@@ -87,7 +91,8 @@ internal sealed class SessionRecorder : IDisposable
 
         if (!_queue.Writer.TryWrite(new Item(tick, image)))
         {
-            // Recorder already closed.
+            if (!_stopped && Interlocked.Exchange(ref _backlogWarned, 1) == 0)
+                _log("Kayıt yazımı yetişemiyor; kuyruk doluyken gelen örnekler atlanıyor.");
             if (image != null)
             {
                 image.Dispose();
@@ -136,16 +141,23 @@ internal sealed class SessionRecorder : IDisposable
         }
         catch (Exception ex)
         {
+            _stopped = true;
+            _queue.Writer.TryComplete();
             _log("Kayıt durdu: " + ex.Message);
             // Drain so cloned frames go back to the pool.
             while (_queue.Reader.TryRead(out var rest))
-                rest.Image?.Dispose();
+            {
+                if (rest.Image == null) continue;
+                rest.Image.Dispose();
+                Interlocked.Decrement(ref _pendingFrames);
+            }
         }
     }
 
     /// <summary>Flushes everything that was queued and closes the files.</summary>
     public void Dispose()
     {
+        _stopped = true;
         _queue.Writer.TryComplete();
         try { _writer.Wait(TimeSpan.FromSeconds(10)); } catch { }
     }

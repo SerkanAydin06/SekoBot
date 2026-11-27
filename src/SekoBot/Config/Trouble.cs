@@ -49,8 +49,23 @@ internal static class Trouble
     /// <summary>Writes a file whole or not at all (a crash mid-way leaves the old one, never half a file).</summary>
     public static void WriteSafely(string path, string text)
     {
-        string temp = path + ".yaziliyor";
-        File.WriteAllText(temp, text);
-        File.Move(temp, path, overwrite: true);
+        string temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            using (var file = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                using var writer = new StreamWriter(file, new System.Text.UTF8Encoding(false), leaveOpen: true);
+                writer.Write(text);
+                writer.Flush();
+                file.Flush(flushToDisk: true);
+            }
+            File.Move(temp, path, overwrite: true);
+        }
+        finally
+        {
+            try { File.Delete(temp); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
     }
 }

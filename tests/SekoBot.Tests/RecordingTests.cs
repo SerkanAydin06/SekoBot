@@ -66,6 +66,27 @@ public sealed class RecordingTests : IDisposable
     }
 
     [Fact]
+    public void Parallel_recordings_have_distinct_directories()
+    {
+        var names = Enumerable.Range(0, 64).AsParallel().Select(_ => SessionRecorder.NewDirectory()).ToArray();
+        Assert.Equal(names.Length, names.Distinct().Count());
+    }
+
+    [Fact]
+    public void Writer_failure_stops_accepting_frames()
+    {
+        Directory.CreateDirectory(Path.Combine(_dir, RecordingFormat.TicksFile));
+        using var recorder = new SessionRecorder(_dir, CalibratedProfile(), "Test", _ => { });
+        Assert.True(SpinWait.SpinUntil(() => recorder.IsStopped, TimeSpan.FromSeconds(5)));
+        using var frame = HpFrame(1, 1);
+        var state = new GameState(TimeSpan.Zero, frame.Width, frame.Height, 1, null, null, 0);
+        for (int i = 0; i < 1000; i++)
+            recorder.Record(frame, state, default, [], important: true);
+        Assert.Equal(0, recorder.FramesSaved);
+        Assert.Equal(0, recorder.Ticks);
+    }
+
+    [Fact]
     public void Png_round_trip_keeps_pixels()
     {
         Directory.CreateDirectory(_dir);

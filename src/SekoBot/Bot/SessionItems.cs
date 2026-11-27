@@ -8,7 +8,7 @@ namespace SekoBot.Bot;
 /// counts). Started fresh every time the bot starts; written to tur-esyalari.txt as it changes, so
 /// the list of the last run can still be read after SekoBot is closed.
 /// </summary>
-internal sealed class SessionItems
+internal sealed class SessionItems(string? reportPath = null)
 {
     private readonly Dictionary<int, (int Picked, int Thrown, int Sold)> _items = [];
     private readonly object _gate = new();
@@ -63,24 +63,26 @@ internal sealed class SessionItems
     /// <summary>Written at most every few seconds (or now).</summary>
     public void Save(bool force = false)
     {
-        string text;
         lock (_gate)
         {
             if (!_dirty || !force && DateTime.Now - _savedAt < TimeSpan.FromSeconds(5))
                 return;
-            _dirty = false;
             _savedAt = DateTime.Now;
             var lines = new List<string> { $"PARDUS · bu tur alınan, atılan ve satılan eşyalar · başlangıç {_started:dd.MM.yyyy HH:mm}", "" };
             lines.Add($"{"Eşya",-36} {"Alınan",7} {"Atılan",7} {"Satılan",7}");
             foreach (var (vnum, (picked, thrown, sold)) in _items.OrderByDescending(kv => kv.Value.Picked))
                 lines.Add($"{ItemBook.NameOf(vnum),-36} {picked,7} {thrown,7} {sold,7}");
-            text = string.Join(Environment.NewLine, lines);
+            var path = reportPath ?? FilePath;
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                Trouble.WriteSafely(path, string.Join(Environment.NewLine, lines));
+                _dirty = false;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Trouble.Tell("Tur eşya raporu yazılamadı; yeniden denenecek", ex);
+            }
         }
-        try
-        {
-            Directory.CreateDirectory(ProfileStore.Directory);
-            File.WriteAllText(FilePath, text);
-        }
-        catch { }
     }
 }
