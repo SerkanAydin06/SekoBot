@@ -84,9 +84,15 @@ internal sealed partial class MainForm
     /// <summary>A launcher that brought no game back in this time is tried again (at most <see cref="MaxLaunches"/> times).</summary>
     internal static readonly TimeSpan LaunchWait = TimeSpan.FromMinutes(15);
     internal const int MaxLaunches = 3;
-    /// <summary>The game said "old version" but its launcher brought nothing new: played on this long before trying again
-    /// (seen 2026-11-26: the flag came up four times a day, every restart the same v3.0, and the game let us play).</summary>
-    internal static readonly TimeSpan NoUpdateWait = TimeSpan.FromHours(1);
+    /// <summary>The game said "old version" on its login screen but its launcher brought nothing new: tried again after
+    /// this (a short maintenance or a small update may take only minutes; the login is tried meanwhile).</summary>
+    internal static readonly TimeSpan NoUpdateWait = TimeSpan.FromMinutes(10);
+    /// <summary>The "old version" flag only counts on the login screen, seen there this long (the game sends us there
+    /// for an update or a maintenance). While playing it is never looked at: it comes up wrongly (seen 2026-11-27:
+    /// three times a day, the launcher had nothing new and the game let us play — the user: "o yanıltıcı bilgiye
+    /// hiç bakmasın").</summary>
+    internal static readonly TimeSpan OutdatedOnLogin = TimeSpan.FromSeconds(20);
+    private DateTime _onLoginSince = DateTime.MinValue;
     /// <summary>A game on its opening screen this long (no login, no character select, nothing readable) is started again
     /// (seen 2026-11-26: "İnternet bağlantısı kontrol ediliyor.. %0" for an hour after an update restart).</summary>
     internal static readonly TimeSpan StuckOpening = TimeSpan.FromMinutes(10);
@@ -137,8 +143,15 @@ internal sealed partial class MainForm
             _lastCharacter = e.CharacterName;
         bool working = e.BotRunning || e.Fishing || e.ScanningMarket;
 
-        // An update is out: the work noted, the game closed (started again from its launcher, which updates it).
-        if (_profile.AutoLogin && now >= _noUpdateUntil && e.GameOutdated() == true)
+        // An update is out (the game sent us to its login screen and says its version is old): the work noted, the game
+        // closed (started again from its launcher, which updates it).
+        bool onLogin = world != null && BotEngine.IsLoginScreen(world.MapName);
+        if (!onLogin)
+            _onLoginSince = DateTime.MinValue;
+        else if (_onLoginSince == DateTime.MinValue)
+            _onLoginSince = now;
+        bool closing = _closeAskedAt != DateTime.MinValue;
+        if (_profile.AutoLogin && now >= _noUpdateUntil && (closing || onLogin && now - _onLoginSince >= OutdatedOnLogin) && e.GameOutdated() == true)
         {
             if (!_outdatedTold)
             {
