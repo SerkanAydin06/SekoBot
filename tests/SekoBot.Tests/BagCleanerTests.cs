@@ -23,6 +23,29 @@ public class BagCleanerTests
     private static TimeSpan S(double s) => TimeSpan.FromSeconds(s);
 
     [Fact]
+    public void Confirmation_waits_for_delivery_and_retries_a_skipped_input()
+    {
+        var item = Item(20, Junk, 0, true);
+        var profile = new BotProfile();
+        var live = Bag(true, 0, [item]) with { MenuKnown = true };
+        var cleaner = new BagCleaner(() => live);
+        cleaner.Start(S(0));
+        IReadOnlyList<BotAction> Tick(double time) => cleaner.Tick(S(time), live, i => i.Vnum == Junk, profile, Client);
+        Tick(0);
+        live = live with { MenuSlot = item.Slot, DropButton = new Point(400, 300), DropBounds = new Rectangle(390, 290, 20, 20) };
+        Tick(1);
+        Tick(1.5);
+        live = live with { Confirm = new Point(500, 380), ConfirmBounds = new Rectangle(490, 370, 20, 20) };
+        var first = Assert.IsType<ClickAction>(Assert.Single(Tick(2)));
+        Assert.Empty(Tick(10));
+        first.Completion!.SetResult(false);
+        var retry = Assert.IsType<ClickAction>(Assert.Single(Tick(11)));
+        retry.Completion!.SetResult(true);
+        Assert.Empty(Tick(12));
+        Assert.Empty(Tick(12.1));
+    }
+
+    [Fact]
     public void Queued_drop_confirmation_rechecks_the_live_button_before_pressing()
     {
         var bounds = new Rectangle(500, 380, 40, 20);

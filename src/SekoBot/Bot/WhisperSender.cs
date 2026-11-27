@@ -22,6 +22,9 @@ internal sealed class WhisperSender(Func<DmLayout?>? readNow = null)
     private Step _step;
     private TimeSpan _started, _waitUntil;
     private int _opens, _selects, _checks, _closes;
+    private int _matchingBeforeSend;
+    private TaskCompletionSource<bool>? _sendPending;
+    private int Matching(DmLayout layout) => layout.Shown.Count(m => m.Mine && m.Message.Trim() == Text);
     private bool _openedByUs;
 
     public bool Active { get; private set; }
@@ -33,6 +36,7 @@ internal sealed class WhisperSender(Func<DmLayout?>? readNow = null)
 
     public void Start(TimeSpan now, string to, string text)
     {
+        _sendPending = null;
         Active = true;
         To = to.Trim();
         Text = text.Trim();
@@ -48,6 +52,7 @@ internal sealed class WhisperSender(Func<DmLayout?>? readNow = null)
 
     public void Abort(string why)
     {
+        _sendPending = null;
         Active = false;
         Problem ??= why;
     }
@@ -143,13 +148,37 @@ internal sealed class WhisperSender(Func<DmLayout?>? readNow = null)
                     Close("mesaj yazı alanı kapandı");
                     goto case Step.Close;
                 }
-                actions.Add(new KeyTapAction(Keys.Enter) { StillWanted = When(live => Conversation(live, recipient) && live.TextBox == dm.TextBox) });
+                _matchingBeforeSend = Matching(dm);
+                if (readNow == null)
+                    actions.Add(new KeyTapAction(Keys.Enter));
+                else
+                {
+                    var pending = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _sendPending = pending;
+                    actions.Add(new KeyTapAction(Keys.Enter) { Completion = pending, StillWanted = When(live =>
+                    {
+                        if (!ReferenceEquals(Volatile.Read(ref _sendPending), pending) || !Conversation(live, recipient) || live.TextBox != dm.TextBox)
+                            return false;
+                        _matchingBeforeSend = Matching(live);
+                        return true;
+                    }) });
+                }
                 _step = Step.Check;
                 _waitUntil = now + AfterClick;
                 break;
 
             case Step.Check:
-                if (dm.Shown.Any(m => m.Mine && m.Message.Trim() == Text))
+                if (_sendPending != null)
+                {
+                    if (!_sendPending.Task.IsCompleted) break;
+                    if (!_sendPending.Task.Result)
+                    {
+                        Close("Enter gönderilemedi");
+                        goto case Step.Close;
+                    }
+                    _sendPending = null;
+                }
+                if ((readNow == null || Conversation(dm, recipient)) && Matching(dm) > _matchingBeforeSend)
                 {
                     Sent = true;
                     Close(null);
@@ -189,6 +218,7 @@ internal sealed class WhisperSender(Func<DmLayout?>? readNow = null)
 
     private void Close(string? problem)
     {
+        _sendPending = null;
         _step = Step.Close;
         Problem ??= problem;
     }

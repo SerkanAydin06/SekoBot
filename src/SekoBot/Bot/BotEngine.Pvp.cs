@@ -45,6 +45,7 @@ internal sealed partial class BotEngine
     private int _channelFrom, _escTries;
     private DateTime _channelActedAt = DateTime.MinValue;
     private bool _channelGrown;
+    private TaskCompletionSource<bool>? _changePending;
     private DateTime _changePressedAt = DateTime.MinValue;
     private int _menuWaits;
     /// <summary>The menu didn't open while dead: revived first (the brain), the channel changed once alive.</summary>
@@ -201,6 +202,7 @@ internal sealed partial class BotEngine
 
     private IReadOnlyList<BotAction> StartChannelChange(GameState state, BotProfile p, DateTime now)
     {
+        _changePending = null;
         _channelSince = now;
         _channelActedAt = DateTime.MinValue;
         _changePressedAt = DateTime.MinValue;
@@ -227,6 +229,11 @@ internal sealed partial class BotEngine
     /// <summary>One step of changing channel: Esc menu → "Kanal değiştir" → the emptiest other channel → "Kanal değiştir".</summary>
     private IReadOnlyList<BotAction> ChannelTick(GameState state, BotProfile p, DateTime now)
     {
+        if (_changePending?.Task.IsCompleted == true)
+        {
+            if (_changePending.Task.Result) _changePressedAt = now;
+            _changePending = null;
+        }
         // Mobs on us while alive and not yet pressed: the fight comes first (the menus would leave us standing there).
         if (!state.Dead && _changePressedAt == DateTime.MinValue && (state.Attackers.Count > 0 || World?.Mobs.Any(m => m.AttacksMe && m.Hp > 0) == true))
         {
@@ -255,6 +262,7 @@ internal sealed partial class BotEngine
             EndChannelChange("🔀 Kanal değiştirilemedi (menü açılmadı ya da oyun izin vermedi); bot devam ediyor.", notify: true);
             return screen is { WindowOpen: true } || screen?.MenuButton != null ? [new KeyTapAction(p.Keys.CloseWindow)] : [];
         }
+        if (_changePending != null) return [];
         if (now - _channelActedAt < TimeSpan.FromMilliseconds(1200))
             return [];
         // Clicking needs the mouse: one bot at a time; a small game made big enough to show the windows whole.
@@ -296,9 +304,11 @@ internal sealed partial class BotEngine
                 return [];
             if (window.Change is { } change)
             {
-                _changePressedAt = now;
+                var pending = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _changePending = pending;
                 _log($"🔀 Kanal {target.Channel} seçildi (%{target.Full} dolu); 'Kanal değiştir'e basılıyor.");
-                return [ChannelClick(change, (live, at) => live.WindowOpen && live.Selected == target.Channel && live.Change?.Contains(at) == true)];
+                return [ChannelClick(change, (live, at) => ReferenceEquals(Volatile.Read(ref _changePending), pending)
+                    && live.WindowOpen && live.Selected == target.Channel && live.Change?.Contains(at) == true) with { Completion = pending }];
             }
             return [];
         }
@@ -333,6 +343,7 @@ internal sealed partial class BotEngine
 
     private void EndChannelChange(string message, bool notify)
     {
+        _changePending = null;
         _channelSince = null;
         _channelAfterRevive = false;
         if (_input != null && !_cleaner.Active)
