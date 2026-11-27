@@ -29,11 +29,35 @@ internal sealed partial class MainForm
     internal static readonly TimeSpan AfterUpdateFor = TimeSpan.FromMinutes(20);
 
     private bool _updatingAll;
+    private bool _checkingUpdate;
+
+    private bool TelegramUpdateAllowed(string token, string chat) =>
+        _profile.TelegramEnabled && _profile.TelegramCommands && token.Length > 0 && chat.Length > 0
+        && _profile.TelegramToken == token && _profile.TelegramChatId.Trim() == chat;
+
+    private async Task UpdateNoticeAsync(string? chat, string message)
+    {
+        WriteLog(message);
+        string token = _profile.TelegramToken;
+        if (chat != null && TelegramUpdateAllowed(token, chat)
+            && await TelegramNotifier.SendAsync(token, chat, message) is string error)
+            WriteLog(error);
+    }
+
+    private async Task ReportTelegramRestartAsync()
+    {
+        string? chat = Environment.GetEnvironmentVariable("SEKOBOT_UPDATED_CHAT");
+        string? version = Environment.GetEnvironmentVariable("SEKOBOT_UPDATED_VERSION");
+        Environment.SetEnvironmentVariable("SEKOBOT_UPDATED_CHAT", null);
+        Environment.SetEnvironmentVariable("SEKOBOT_UPDATED_VERSION", null);
+        if (chat != null && version == BuildInfo.Version && TelegramUpdateAllowed(_profile.TelegramToken, chat))
+            await UpdateNoticeAsync(chat, $"PARDUS v{BuildInfo.Version} ile yeniden açıldı.");
+    }
 
     /// <summary>The "update all" message reached this SekoBot.</summary>
-    private async Task UpdateAndResumeAsync()
+    private async Task UpdateAndResumeAsync(string? telegramChat = null)
     {
-        if (_updatingAll || _updating)
+        if (_updatingAll || _updating || _checkingUpdate)
             return;
         _updatingAll = true;
         try
@@ -46,23 +70,30 @@ internal sealed partial class MainForm
                 return;
             if (!string.IsNullOrEmpty(result.Error))
             {
-                WriteLog("⬆ " + result.Error);
+                await UpdateNoticeAsync(telegramChat, "⬆ " + result.Error);
                 return;
             }
             if (result.Update is not PreparedUpdate update)
             {
-                WriteLog($"⬆ PARDUS güncel (v{BuildInfo.Version}); bot olduğu gibi devam ediyor.");
+                await UpdateNoticeAsync(telegramChat, $"⬆ PARDUS güncel (v{BuildInfo.Version}); bot olduğu gibi devam ediyor.");
                 return;
             }
+            update = update with { TelegramChat = telegramChat };
             // What this one does, noted with its character, then stopped for the update.
             string character = _engine?.CharacterName ?? "";
             bool running = _engine is { BotRunning: true } || _engine is { ScanningMarket: true } || _engine is { Fishing: true };
+            if (running && character.Length == 0)
+            {
+                await UpdateNoticeAsync(telegramChat, "Güncelleme ertelendi. Çalışan karakterin adı henüz okunamadı.");
+                try { File.Delete(update.FilePath); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                return;
+            }
             if (character.Length > 0)
             {
                 var note = new WorkBeforeUpdate { Mode = _mode, Running = running, At = DateTime.Now };
                 if (SharedFile.Update<Dictionary<string, WorkBeforeUpdate>>(AfterUpdateFile, all => all[character] = note) == null)
                 {
-                    WriteLog("Güncelleme ertelendi; devam kaydı yazılamadı.");
+                    await UpdateNoticeAsync(telegramChat, "Güncelleme ertelendi; devam kaydı yazılamadı.");
                     try { File.Delete(update.FilePath); } catch (IOException) { } catch (UnauthorizedAccessException) { }
                     return;
                 }
@@ -74,6 +105,7 @@ internal sealed partial class MainForm
                 fishing.StopFishing();
             if (_engine is { BotRunning: true })
                 StopBot("güncelleme için durduruldu");
+            await UpdateNoticeAsync(telegramChat, $"PARDUS v{update.Version} kuruluyor.");
             await Task.Delay(1500);
             _pendingUpdate = update;
             await ApplyUpdateAsync(update);

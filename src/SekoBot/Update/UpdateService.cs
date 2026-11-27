@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace SekoBot.Update;
 
-internal sealed record PreparedUpdate(string Version, string FilePath);
+internal sealed record PreparedUpdate(string Version, string FilePath, string? TelegramChat = null);
 internal sealed record UpdateCheckResult(PreparedUpdate? Update, string? Error);
 
 /// <summary>
@@ -208,6 +208,11 @@ exit /B 0
             CreateNoWindow = true,
             WorkingDirectory = Path.GetDirectoryName(executable)!
         };
+        if (update.TelegramChat is { } chat)
+        {
+            launch.Environment["SEKOBOT_UPDATED_CHAT"] = chat;
+            launch.Environment["SEKOBOT_UPDATED_VERSION"] = update.Version;
+        }
         launch.ArgumentList.Add("/D");
         launch.ArgumentList.Add("/C");
         launch.ArgumentList.Add(updaterFile);

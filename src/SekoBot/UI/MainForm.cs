@@ -86,7 +86,7 @@ internal sealed partial class MainForm : Form
         "Yerden neyin toplanacağı ve çanta dolunca neyin atılacağı.",
         "Can ve mana iksirleri, ölünce yeniden başlama, becerilerin otomatik kullanımı.",
         "Avlanılan alan: sınırı, en iyi alanı bulma, ne zaman durulacağı.",
-        "Telegram'a bildirim ve Telegram'dan komut (/ekran, durum, dur, başla).",
+        "Telegram'a bildirim ve Telegram'dan komut (/ekran, /guncelle, durum, dur, başla).",
         "Oyunda kullandığın tuşlar. Değiştirmek için kutuya tıkla, sonra yeni tuşa bas.",
         "Deneme, kayıt ve teknik araçlar.",
         "Pazardaki bütün dükkanları açıp fiyatları toplama, aranan ürünleri bulma (hiçbir şey satın alınmaz).",
@@ -1126,6 +1126,7 @@ internal sealed partial class MainForm : Form
             _scanTimer.Start();
             _statsTimer.Start();
             _updateTimer.Start();
+            await ReportTelegramRestartAsync();
             if (Instance.IsFirst)
             {
                 _ = TelegramCommandsAsync(_telegramCts.Token);
@@ -1820,7 +1821,7 @@ internal sealed partial class MainForm : Form
         if (m.Msg == (int)WindowLayout.MiniMessage && m.WParam == 1)
             BeginInvoke(new Action(GoMini));
         // One SekoBot's "all bots" button: every SekoBot starts / pauses / stops its own work.
-        if (m.Msg == (int)WindowLayout.AllMessage)
+        if (m.Msg == (int)WindowLayout.AllMessage && m.LParam != Handle)
         {
             int what = (int)m.WParam;
             BeginInvoke(new Action(() => AllBots(what)));
@@ -2736,7 +2737,19 @@ internal sealed partial class MainForm : Form
                     if (skipOld || from != chat || text.Length == 0)
                         continue;
                     string? reply;
-                    if (TelegramNotifier.Command(text) == "ekran" && (text.TrimStart().StartsWith('/') || WhisperSender.WhisperFrom(replyTo) == null))
+                    if (TelegramNotifier.IsUpdateCommand(text, replyTo))
+                    {
+                        if (!TelegramUpdateAllowed(token, chat)) continue;
+                        if (_updating || _updatingAll || _checkingUpdate)
+                            reply = "Güncelleme denetimi veya kurulum zaten sürüyor.";
+                        else
+                        {
+                            WindowLayout.TellAll(WindowLayout.AllUpdate, Handle);
+                            await UpdateAndResumeAsync(chat);
+                            reply = null;
+                        }
+                    }
+                    else if (TelegramNotifier.Command(text) == "ekran" && (text.TrimStart().StartsWith('/') || WhisperSender.WhisperFrom(replyTo) == null))
                         reply = await TelegramScreenshotAsync(token, chat, cancel);
                     else
                         reply = TelegramMessage(text, replyTo);
@@ -2866,7 +2879,7 @@ internal sealed partial class MainForm : Form
                 }
                 return "Başlatılamadı: " + (_stopReason ?? (_engine == null ? "oyun açık değil" : "bilinmiyor"));
             default:
-                return "Komutlar: /ekran · durum · dur · başla · yaz İsim mesaj\nFısıltıya cevap: bildirime \"Yanıtla\" ile yaz.";
+                return "Komutlar: /ekran · /guncelle · durum · dur · başla · yaz İsim mesaj\nFısıltıya cevap: bildirime \"Yanıtla\" ile yaz.";
         }
     }
 
@@ -2999,29 +3012,34 @@ internal sealed partial class MainForm : Form
 
     private async Task CheckForUpdatesAsync(bool startup)
     {
-        if (_updating || (!startup && _engine?.BotRunning == true))
+        if (_updating || _updatingAll || _checkingUpdate || (!startup && _engine?.BotRunning == true))
             return;
-        if (_pendingUpdate is PreparedUpdate ready && File.Exists(ready.FilePath))
+        _checkingUpdate = true;
+        try
         {
-            await ApplyUpdateAsync(ready);
-            return;
+            if (_pendingUpdate is PreparedUpdate ready && File.Exists(ready.FilePath))
+            {
+                await ApplyUpdateAsync(ready);
+                return;
+            }
+            if (startup)
+                WriteLog("Güncelleme kontrol ediliyor…");
+            var result = await UpdateService.CheckAndDownloadAsync();
+            if (IsDisposed)
+                return;
+            if (!string.IsNullOrEmpty(result.Error))
+            {
+                WriteLog(result.Error);
+                return;
+            }
+            if (result.Update is not PreparedUpdate update)
+            {
+                if (startup) WriteLog($"PARDUS güncel (v{BuildInfo.Version}).");
+                return;
+            }
+            await ApplyUpdateAsync(update);
         }
-        if (startup)
-            WriteLog("Güncelleme kontrol ediliyor…");
-        var result = await UpdateService.CheckAndDownloadAsync();
-        if (IsDisposed)
-            return;
-        if (!string.IsNullOrEmpty(result.Error))
-        {
-            WriteLog(result.Error);
-            return;
-        }
-        if (result.Update is not PreparedUpdate update)
-        {
-            if (startup) WriteLog($"PARDUS güncel (v{BuildInfo.Version}).");
-            return;
-        }
-        await ApplyUpdateAsync(update);
+        finally { _checkingUpdate = false; }
     }
 
     private async Task ApplyUpdateAsync(PreparedUpdate update)
@@ -3064,7 +3082,7 @@ internal sealed partial class MainForm : Form
             _pendingUpdate = null;
             SetStatus("Bağlı değil", Theme.Muted, filled: false);
             _autoAttached = false;
-            WriteLog("Güncelleme uygulanamadı: " + ex.Message);
+            await UpdateNoticeAsync(update.TelegramChat, "Güncelleme uygulanamadı: " + ex.Message);
         }
     }
 
