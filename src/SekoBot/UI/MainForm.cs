@@ -822,6 +822,10 @@ internal sealed partial class MainForm : Form
         Check(notify, "Bot çalışırken oyundan atılırsa (bakım) sunucu açılana kadar girişi dene (şifreye dokunmaz; açılınca haber verir)", 0, 240, 700,
             () => _profile.AutoLogin, v => _profile.AutoLogin = v);
 
+        TextRow(notify, "Ortak klasör (ağ)", 0, 278, () => _profile.TelegramFleetFolder,
+            v => _profile.TelegramFleetFolder = v.Trim(), 440);
+        Check(notify, "Ana PC (komutları dinle)", 598, 278, 280, () => _profile.TelegramFleetHub,
+            v => _profile.TelegramFleetHub = v);
         var keys = _tabPages[6];
         var k = _profile.Keys;
         (string, Func<Keys>, Action<Keys>)[] bindings =
@@ -1126,6 +1130,7 @@ internal sealed partial class MainForm : Form
             _scanTimer.Start();
             _statsTimer.Start();
             _updateTimer.Start();
+            _ = TelegramFleetWorkerAsync(_telegramCts.Token);
             await ReportTelegramRestartAsync();
             if (Instance.IsFirst)
             {
@@ -2706,13 +2711,17 @@ internal sealed partial class MainForm : Form
     private async Task TelegramCommandsAsync(CancellationToken cancel)
     {
         long offset = -1;
+        (string Token, string Chat, string Folder, bool Hub) previous = default;
         string? lastError = null;
         try
         {
             while (!cancel.IsCancellationRequested)
             {
                 string token = _profile.TelegramToken, chat = _profile.TelegramChatId.Trim();
-                if (!_profile.TelegramEnabled || !_profile.TelegramCommands || token.Length == 0 || chat.Length == 0)
+                string folder = _profile.TelegramFleetFolder;
+                var config = (token, chat, folder, _profile.TelegramFleetHub);
+                if (config != previous) { previous = config; offset = -1; }
+                if (!TelegramUpdateAllowed(token, chat) || (folder.Length > 0 && !_profile.TelegramFleetHub))
                 {
                     offset = -1;
                     await Task.Delay(5000, cancel);
@@ -2736,6 +2745,13 @@ internal sealed partial class MainForm : Form
                     offset = Math.Max(offset, id + 1);
                     if (skipOld || from != chat || text.Length == 0)
                         continue;
+                    if (!TelegramUpdateAllowed(token, chat) || folder != _profile.TelegramFleetFolder
+                        || (folder.Length > 0 && !_profile.TelegramFleetHub)) break;
+                    if (folder.Length > 0)
+                    {
+                        await FleetMenuAsync(folder, token, chat, id, text, replyTo);
+                        continue;
+                    }
                     string? reply;
                     if (TelegramNotifier.IsUpdateCommand(text, replyTo))
                     {
@@ -2762,7 +2778,7 @@ internal sealed partial class MainForm : Form
         catch (OperationCanceledException) { }
     }
 
-    private async Task<string?> TelegramScreenshotAsync(string token, string chat, CancellationToken cancel)
+    private async Task<string?> TelegramScreenshotAsync(string token, string chat, CancellationToken cancel, string? caption = null)
     {
         var engine = _engine;
         if (engine == null) return "Oyun penceresi bağlı değil.";
@@ -2784,7 +2800,7 @@ internal sealed partial class MainForm : Form
                 byte[] jpeg = await Task.Run(() => ScreenshotJpeg(image), cancel);
                 if (!_profile.TelegramCommands || !_profile.TelegramEnabled || _profile.TelegramToken != token ||
                     _profile.TelegramChatId.Trim() != chat || engine != _engine) return null;
-                return await TelegramNotifier.SendScreenshotAsync(token, chat, jpeg, cancel);
+                return await TelegramNotifier.SendScreenshotAsync(token, chat, jpeg, cancel, caption);
             }
             return "Oyun penceresinden dört saniye içinde yeni görüntü alınamadı.";
         }
