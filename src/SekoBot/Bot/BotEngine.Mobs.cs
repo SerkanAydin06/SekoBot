@@ -55,7 +55,7 @@ internal sealed partial class BotEngine
         if (profile.PickUpDrops)
             // What can't go into the bag any more isn't walked to (a full bag: only yang and items adding to a stack),
             // nor what is someone else's still (the game says whose; it is gone for once it is free).
-            foreach (var item in (world.Drops ?? []).Where(d => WantedLoot(d, profile) && d.Takeable != false && world.Progress?.Fits(d.Vnum) != false && !AtDump(d.Position))
+            foreach (var item in (world.Drops ?? []).Where(d => WantedLoot(d, profile, world.Progress?.FreeSlots()) && d.Takeable != false && world.Progress?.Fits(d.Vnum) != false && !AtDump(d.Position))
                          .OrderBy(d => d.Position.DistanceXY(world.Player)))
             {
                 double away = item.Position.DistanceXY(world.Player);
@@ -77,7 +77,7 @@ internal sealed partial class BotEngine
         var junk = new List<Point>();
         if (profile.PickUpDrops)
             foreach (var item in world.Drops ?? [])
-                if ((!(WantedLoot(item, profile) && item.Takeable != false && world.Progress?.Fits(item.Vnum) != false) || AtDump(item.Position)) &&
+                if ((!(WantedLoot(item, profile, world.Progress?.FreeSlots()) && item.Takeable != false && world.Progress?.Fits(item.Vnum) != false) || AtDump(item.Position)) &&
                     item.Position.DistanceXY(world.Player) <= profile.DropRangeMetres * 100 + 300 &&
                     camera.ToScreen(item.Position, width, height) is PointF j)
                     junk.Add(Point.Round(j));
@@ -182,18 +182,26 @@ internal sealed partial class BotEngine
         return [.. skills.Where(s => !on.Contains(s.Name)).Select(s => s.Name)];
     }
 
-    /// <summary>Whether to walk to this item (unknown items: yes, they may be anything).</summary>
-    internal static bool WantedLoot(GroundItem item, BotProfile profile) =>
+    /// <summary>Picking up to see an item's bonuses stops with this few free bag slots (room kept for what is worth it).</summary>
+    internal const int BonusLookMinFree = 6;
+
+    /// <summary>Whether to walk to this item (unknown items: yes, they may be anything). With <paramref name="freeSlots"/>
+    /// known and few, weapons and armour only for their price, not to see their bonuses.</summary>
+    internal static bool WantedLoot(GroundItem item, BotProfile profile, int? freeSlots = null) =>
         !profile.LootSkip.Contains(item.Vnum) && !profile.LootThrow.Contains(item.Vnum) && (AlwaysLoot(item.Vnum, profile) || item.Kind switch
     {
         LootKind.Yang => profile.LootYang,
         LootKind.Potion => profile.LootPotions,
         // Only what the character's class can wear (no daggers, fans or bells for a warrior).
-        LootKind.Equipment => (!profile.LootOwnClass || Loot.FitsClass(item.Vnum)) && (profile.LootEquipment || MayCarryWantedBonus(item.Vnum, profile) ||
+        LootKind.Equipment => (!profile.LootOwnClass || Loot.FitsClass(item.Vnum)) && (profile.LootEquipment ||
+                              freeSlots is not (int f and <= BonusLookMinFree) && MayCarryWantedBonus(item.Vnum, profile) ||
                               profile.LootEquipmentMinGold > 0 && ItemBook.Get(item.Vnum)?.Sell >= profile.LootEquipmentMinGold),
         LootKind.Other => profile.LootOther,
         _ => true,
     });
+
+    /// <summary>What looking at bonuses brought per item (the tests use their own).</summary>
+    internal static BonusTrials Trials { get; set; } = BonusTrials.Shared;
 
     /// <summary>What was learned about which bonuses come on which items (set when the bot starts; null: nothing known).</summary>
     internal static BonusBook? BonusKnowledge { get; set; }
@@ -206,6 +214,9 @@ internal sealed partial class BotEngine
     internal static bool MayCarryWantedBonus(int vnum, BotProfile profile)
     {
         if (profile.LootBonuses.Count == 0)
+            return false;
+        // Picked up often enough without a wanted bonus: not any more (its price may still make it worth it).
+        if (!Trials.Worth(vnum))
             return false;
         var book = BonusKnowledge;
         // A line with item names is only about those items ("EXP on Deri Çizme": only Deri Çizme is picked up).
