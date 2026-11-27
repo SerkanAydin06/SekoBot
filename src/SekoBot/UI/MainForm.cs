@@ -85,7 +85,8 @@ internal sealed partial class MainForm : Form
         "Hangi moblara gidileceği: seviye, Metin taşları, isimle seçme ya da atlama.",
         "Yerden neyin toplanacağı ve çanta dolunca neyin atılacağı.",
         "Can ve mana iksirleri, ölünce yeniden başlama, becerilerin otomatik kullanımı.",
-        "Avlanılan alan: sınırı, en iyi alanı bulma, ne zaman durulacağı.",
+        "Avlanılan alan: sınırı, en iyi alanı bulma, alanı kaydetme.",
+        "Ne zaman durulacağı, molalar ve oyundan atılınca yeniden giriş.",
         "Telegram'a bildirim ve Telegram'dan komut (/ekran, /guncelle, durum, dur, başla).",
         "Oyunda kullandığın tuşlar. Değiştirmek için kutuya tıkla, sonra yeni tuşa bas.",
         "Deneme, kayıt ve teknik araçlar.",
@@ -193,7 +194,7 @@ internal sealed partial class MainForm : Form
         side.Controls.Add(_dashButton);
         Theme.Label(side, "AYARLAR", new Rectangle(22, 66, 150, 20), 7.5f, Theme.Faint, FontStyle.Bold);
         (string Name, string Icon)[] tabNames = [("Saldırı", "sword"), ("Hedef", "target"), ("Eşya", "bag"), ("İksir · Beceri", "flask"), ("Alan", "pin"),
-                             ("Bildirim", "bell"), ("Tuşlar", "key"), ("Gelişmiş", "cog"), ("Pazar", "cart")];
+                             ("Güvenlik · Mola", "shield"), ("Bildirim", "bell"), ("Tuşlar", "key"), ("Gelişmiş", "cog"), ("Pazar", "cart")];
         _tabButtons = new NavButton[tabNames.Length];
         _tabPages = new Panel[tabNames.Length];
         _events = new Label { Visible = false };
@@ -237,12 +238,14 @@ internal sealed partial class MainForm : Form
             _dashboard.Controls.Add(card);
             return card;
         }
-        int[] kx = [0, 152, 304, 456, 610];
-        _kExp = Stat("SAATTE EXP", kx[0], 140);
-        _kKills = Stat("ÖLDÜRÜLEN", kx[1], 140);
-        _kYang = Stat("YANG", kx[2], 140);
-        _kPotion = Stat("İKSİR", kx[3], 142);
-        _kLevel = Stat("SEVİYE", kx[4], 356);
+        // Two columns under the top card: the left 554 wide, the right 400 (the items list fits without a side scroll bar).
+        const int LeftW = 554, RightX = 566, RightW = 400;
+        int[] kx = [0, 142, 284, 426, RightX];
+        _kExp = Stat("SAATTE EXP", kx[0], 130);
+        _kKills = Stat("ÖLDÜRÜLEN", kx[1], 130);
+        _kYang = Stat("YANG", kx[2], 130);
+        _kPotion = Stat("İKSİR", kx[3], LeftW - kx[3]);
+        _kLevel = Stat("SEVİYE", kx[4], RightW);
         // The old tiles' values are still worked out (the small bar and the reports read them); the cards show them.
         _statTime = new Label(); _statMobs = new Label(); _statRate = new Label(); _statExp = new Label(); _statExpRate = new Label();
         _statLevel = new Label(); _statYang = new Label(); _statPotions = new Label(); _statDeaths = new Label();
@@ -253,20 +256,20 @@ internal sealed partial class MainForm : Form
         _preview.SelectionChanged += UpdateControls;
         _preview.MouseClick += (_, _) => { if (_engine != null && _gameMinimized) WindowService.Restore(_engine.Window); };
 
-        var feedCard = new Card { Bounds = new Rectangle(0, 116, 598, 200), Caption = "ŞİMDİ" };
+        var feedCard = new Card { Bounds = new Rectangle(0, 116, LeftW, 200), Caption = "ŞİMDİ" };
         _dashboard.Controls.Add(feedCard);
-        var openLiveMap = new ProButton { Text = "Canlı harita", Icon = "map", Kind = ButtonKind.Ghost, Bounds = new Rectangle(598 - 14 - 300, 6, 138, 30), Font = new Font("Segoe UI", 8.5f) };
+        var openLiveMap = new ProButton { Text = "Canlı harita", Icon = "map", Kind = ButtonKind.Ghost, Bounds = new Rectangle(LeftW - 14 - 300, 6, 138, 30), Font = new Font("Segoe UI", 8.5f) };
         openLiveMap.Click += (_, _) => OpenLiveMap();
         feedCard.Controls.Add(openLiveMap);
-        var openView = new ProButton { Text = "Oyun görüntüsü", Icon = "eye", Kind = ButtonKind.Ghost, Bounds = new Rectangle(598 - 14 - 156, 6, 156, 30), Font = new Font("Segoe UI", 8.5f) };
+        var openView = new ProButton { Text = "Oyun görüntüsü", Icon = "eye", Kind = ButtonKind.Ghost, Bounds = new Rectangle(LeftW - 14 - 156, 6, 156, 30), Font = new Font("Segoe UI", 8.5f) };
         openView.Click += (_, _) => OpenGameView();
         feedCard.Controls.Add(openView);
-        _feed = new Feed { Bounds = new Rectangle(18, 44, 562, 148), Font = new Font("Segoe UI", 8.5f) };
+        _feed = new Feed { Bounds = new Rectangle(18, 44, LeftW - 36, 148), Font = new Font("Segoe UI", 8.5f) };
         feedCard.Controls.Add(_feed);
 
-        var charCard = _previewCard = new Card { Bounds = new Rectangle(610, 116, 356, 200), Caption = "KARAKTER" };
+        var charCard = _previewCard = new Card { Bounds = new Rectangle(RightX, 116, RightW, 200), Caption = "KARAKTER" };
         _dashboard.Controls.Add(charCard);
-        _attackButton = new ProButton { Bounds = new Rectangle(356 - 14 - 150, 6, 150, 30), Font = new Font("Segoe UI", 8.5f), Anchor = AnchorStyles.Top | AnchorStyles.Right };
+        _attackButton = new ProButton { Bounds = new Rectangle(RightW - 14 - 150, 6, 150, 30), Font = new Font("Segoe UI", 8.5f), Anchor = AnchorStyles.Top | AnchorStyles.Right };
         _attackButton.Click += (_, _) =>
         {
             if (_mode == MarketMode)
@@ -279,7 +282,7 @@ internal sealed partial class MainForm : Form
         _reloads.Add(ShowAttack);
         Meter Bar(string caption, Color fill, int y)
         {
-            var meter = new Meter { Bounds = new Rectangle(18, y, 320, 32), Caption = caption, Fill = fill, Font = new Font("Segoe UI", 8.5f) };
+            var meter = new Meter { Bounds = new Rectangle(18, y, RightW - 36, 32), Caption = caption, Fill = fill, Font = new Font("Segoe UI", 8.5f) };
             charCard.Controls.Add(meter);
             return meter;
         }
@@ -305,38 +308,46 @@ internal sealed partial class MainForm : Form
         // A thin line under the title.
         _settingsCard.Controls.Add(new Panel { Bounds = new Rectangle(24, 52, 918, 1), BackColor = Theme.Border });
 
+        // Every settings page on the same grid: two columns (L, R), rows 34 apart, sections with a gold caption.
+        const int L = 0, R = 478, ColW = 440;
+        // (Words two spaces apart: at this small bold size one space all but vanished — "İKSİRALMA".)
+        void Section(Control page, string caption, int y) =>
+            Theme.Label(page, caption.Replace(" ", "  "), new Rectangle(0, y, 440, 20), 8.5f, Theme.Accent, FontStyle.Bold);
+
         // Saldırı
         var attack = _tabPages[0];
-        Check(attack, "Grupları topla (üçlüleri toplayıp birden kes)", 370, 0, 366, () => _profile.PullGroups,
-            v => _profile.PullGroups = v);
-        NumberRow(attack, "Toplanacak en fazla mob", 370, 34, 3, 30, () => _profile.PullMaxMobs, 0, 1,
-            v => _profile.PullMaxMobs = (int)v);
-        NumberRow(attack, "Toplarken can en az (%)", 370, 68, 10, 100, () => Math.Round(_profile.PullMinHp * 100), 0, 5,
-            v => _profile.PullMinHp = v / 100);
-        Check(attack, "Saldırı açık (kapalıyken sadece yerdeki eşyaları toplar)", 0, 34, 366, () => _profile.Attack, v =>
+        Section(attack, "SALDIRI", 0);
+        Check(attack, "Saldırı açık (kapalıyken sadece eşya toplar)", L, 24, ColW, () => _profile.Attack, v =>
         {
             _profile.Attack = v;
             ShowAttack();
         });
-        TextRow(attack, "Takip edilecek", 0, 68, () => _profile.FollowName, v => _profile.FollowName = v.Trim());
-        NumberRow(attack, "Toplama alanı (m)", 0, 0, 3, 30, () => _profile.PullAreaMetres, 0, 1,
+        TextRow(attack, "Takip edilecek", R, 24, () => _profile.FollowName, v => _profile.FollowName = v.Trim(), 300);
+        Section(attack, "GRUP TOPLAMA", 72);
+        Check(attack, "Grupları topla (üçlüleri toplayıp birden kes)", L, 96, ColW, () => _profile.PullGroups,
+            v => _profile.PullGroups = v);
+        NumberRow(attack, "Toplama alanı (m)", R, 96, 3, 30, () => _profile.PullAreaMetres, 0, 1,
             v => _profile.PullAreaMetres = v);
+        NumberRow(attack, "Toplanacak en fazla mob", L, 130, 3, 30, () => _profile.PullMaxMobs, 0, 1,
+            v => _profile.PullMaxMobs = (int)v);
+        NumberRow(attack, "Toplarken can en az (%)", R, 130, 10, 100, () => Math.Round(_profile.PullMinHp * 100), 0, 5,
+            v => _profile.PullMinHp = v / 100);
         Hint(attack, "Gruplar: bot en değerli üçlüden başlar, toplama alanındaki diğer üçlüleri de toplar (peşinde mob varken yalnız 10 m " +
             "içindekileri); sınıra ulaşınca, alan boşalınca ya da can düşünce hepsini birden keser. Can %40'ın altına düşen bir dövüşten " +
             "sonra kendiliğinden daha az mob toplar. Mob menzildeyken yerinde vurur; yürürken yoldaki mobların etrafından dolanır.\n\n" +
             "Saldırı kapalıyken bot \"Takip edilecek\" karakterin peşinden gider ve onun kestiklerinden düşenleri toplar. Boş bırakırsan " +
-            "yakındaki kendi karakterlerinden birini (PARDUS'ta açtığın) takip eder; birden fazla ad virgülle yazılabilir.", 102);
+            "yakındaki kendi karakterlerinden birini (PARDUS'ta açtığın) takip eder; birden fazla ad virgülle yazılabilir.", 170);
 
-        // İksir & Buff
-        // Hedef: which mobs to go for, and loot.
+        // Hedef: which mobs to go for.
         var targets = _tabPages[1];
-        NumberRow(targets, "En yüksek mob seviyesi", 0, 0, 0, 120, () => _profile.MaxMobLevel, 0, 1,
+        Section(targets, "MOBLAR", 0);
+        NumberRow(targets, "En yüksek mob seviyesi", L, 24, 0, 120, () => _profile.MaxMobLevel, 0, 1,
             v => _profile.MaxMobLevel = (int)v);
-        Check(targets, "Önce bana saldıran mobu kes", 370, 0, 360, () => _profile.AttackersFirst, v => _profile.AttackersFirst = v);
-        Theme.Label(targets, "Metin taşları", new Rectangle(0, 34, 190, 26), 9f, Theme.Muted);
+        Check(targets, "Önce bana saldıran mobu kes", R, 24, ColW, () => _profile.AttackersFirst, v => _profile.AttackersFirst = v);
+        Theme.Label(targets, "Metin taşları", new Rectangle(L, 58, 190, 26), 9f, Theme.Muted);
         var metins = new ComboBox
         {
-            Bounds = new Rectangle(196, 34, 150, 26),
+            Bounds = new Rectangle(L + 196, 58, 164, 26),
             DropDownStyle = ComboBoxStyle.DropDownList,
             BackColor = Theme.Inset,
             ForeColor = Theme.Text,
@@ -348,22 +359,22 @@ internal sealed partial class MainForm : Form
         metins.SelectedIndexChanged += (_, _) => { if (_reloading) return; _profile.Metins = (MetinMode)metins.SelectedIndex; SaveProfile(); };
         _reloads.Add(() => metins.SelectedIndex = (int)_profile.Metins);
         targets.Controls.Add(metins);
-        var mobInfo = Theme.Button(targets, "📊  Moblar ve düşenler", new Rectangle(370, 34, 200, 28), Theme.Secondary, Theme.SecondaryHover);
+        var mobInfo = Theme.Button(targets, "📊  Moblar ve düşenler", new Rectangle(R, 57, 220, 28), Theme.Secondary, Theme.SecondaryHover);
         mobInfo.Click += (_, _) =>
         {
             using var form = new MobInfoForm(_engine);
             form.ShowDialog(this);
         };
-        TextRow(targets, "Sadece bu moblar", 0, 68, () => _profile.OnlyMobs, v => _profile.OnlyMobs = v);
-        TextRow(targets, "Bu mobları atla", 370, 68, () => _profile.SkipMobs, v => _profile.SkipMobs = v);
+        TextRow(targets, "Sadece bu moblar", L, 92, () => _profile.OnlyMobs, v => _profile.OnlyMobs = v, 300);
+        TextRow(targets, "Bu mobları atla", R, 92, () => _profile.SkipMobs, v => _profile.SkipMobs = v, 300);
         Hint(targets, "Mob adları virgülle yazılır, adın bir kısmı yeter; boş = hepsi. Seviye 0 = sınırsız. " +
-            "\"Moblar ve düşenler\": bu haritadaki moblar, verdikleri EXP ve botun gördüğü düşen eşyalar.", 110);
+            "\"Moblar ve düşenler\": bu haritadaki moblar, verdikleri EXP ve botun gördüğü düşen eşyalar.", 140);
 
-        // Eşya / Envanter: what is picked up, what is thrown away when the bag fills.
+        // Eşya / Envanter: what is picked up, what is thrown away or sold when the bag fills.
         var items = _tabPages[2];
-        Check(items, "Yerdeki eşyalara yürüyüp topla", 0, 0, 300, () => _profile.PickUpDrops, v => _profile.PickUpDrops = v);
-        var itemList = Theme.Button(items, "📋  Eşya listesi (Topla / Alma / At)", new Rectangle(370, 0, 286, 28), Theme.Primary, Theme.PrimaryHover);
-        var presets = Theme.Button(items, "💾  Kayıtlı ayarlar (kaydet / yükle)", new Rectangle(666, 0, 250, 28), Theme.Secondary, Theme.SecondaryHover);
+        Check(items, "Yerdeki eşyalara yürüyüp topla", L, 0, ColW, () => _profile.PickUpDrops, v => _profile.PickUpDrops = v);
+        var itemList = Theme.Button(items, "📋  Eşya listesi", new Rectangle(R, 0, 214, 28), Theme.Primary, Theme.PrimaryHover);
+        var presets = Theme.Button(items, "💾  Kayıtlı ayarlar", new Rectangle(R + 226, 0, 214, 28), Theme.Secondary, Theme.SecondaryHover);
         presets.Click += (_, _) =>
         {
             using var form = new LootPresetForm(_profile, _engine?.CharacterName is { Length: > 0 } me ? me + " ayarı" : "");
@@ -375,29 +386,30 @@ internal sealed partial class MainForm : Form
                 $"{_profile.LootThrow.Count} atılacak, efsun listesinde {_profile.LootBonuses.Count} efsun" +
                 (_profile.LootEquipmentMinGold > 0 ? $", silah / zırh en az {_profile.LootEquipmentMinGold:N0} yang." : "."));
         };
-        Theme.Label(items, "Toplanacaklar:", new Rectangle(0, 38, 120, 26), 9f, Theme.Muted);
-        Check(items, "Yang", 124, 38, 70, () => _profile.LootYang, v => _profile.LootYang = v);
-        Check(items, "İksir", 198, 38, 70, () => _profile.LootPotions, v => _profile.LootPotions = v);
-        Check(items, "Silah / zırh", 272, 38, 110, () => _profile.LootEquipment, v => _profile.LootEquipment = v);
-        Check(items, "Diğer (malzeme, kitap…)", 386, 38, 200, () => _profile.LootOther, v => _profile.LootOther = v);
-        Check(items, "Ödül ve özel eşyaları hep topla", 600, 38, 300, () => _profile.LootRewards, v => _profile.LootRewards = v);
-        Check(items, "Sadece kendi sınıfımın silah / zırhı", 500, 72, 330, () => _profile.LootOwnClass, v => _profile.LootOwnClass = v);
-        Theme.Label(items, "Silah / zırh satışta en az", new Rectangle(0, 72, 190, 26), 9f, Theme.Muted);
-        var minGold = Theme.Number(items, new Rectangle(196, 72, 100, 26), 0, 10_000_000,
+        Section(items, "TOPLANACAKLAR", 44);
+        Check(items, "Yang", L, 68, 214, () => _profile.LootYang, v => _profile.LootYang = v);
+        Check(items, "İksir", L + 226, 68, 214, () => _profile.LootPotions, v => _profile.LootPotions = v);
+        Check(items, "Silah / zırh", R, 68, ColW, () => _profile.LootEquipment, v => _profile.LootEquipment = v);
+        Check(items, "Diğer (malzeme, kitap vb.)", L, 102, ColW, () => _profile.LootOther, v => _profile.LootOther = v);
+        Check(items, "Ödül ve özel eşyaları hep topla", R, 102, ColW, () => _profile.LootRewards, v => _profile.LootRewards = v);
+        Check(items, "Etkinlik eşyalarını her zaman topla", L, 136, ColW, () => _profile.EventLoot, v => _profile.EventLoot = v);
+        Check(items, "Sadece kendi sınıfımın silah / zırhı", R, 136, ColW, () => _profile.LootOwnClass, v => _profile.LootOwnClass = v);
+        Theme.Label(items, "Silah / zırh satışta en az", new Rectangle(L, 170, 190, 26), 9f, Theme.Muted);
+        var minGold = Theme.Number(items, new Rectangle(L + 196, 170, 110, 26), 0, 10_000_000,
             Math.Clamp(_profile.LootEquipmentMinGold, 0, 10_000_000), 0, 500);
         minGold.ValueChanged += (_, _) => { if (_reloading) return; _profile.LootEquipmentMinGold = (int)minGold.Value; SaveProfile(); };
         _reloads.Add(() => minGold.Value = Math.Clamp(_profile.LootEquipmentMinGold, 0, 10_000_000));
-        Theme.Label(items, "ÇANTA DOLARKEN", new Rectangle(0, 114, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
-        Check(items, "Yer azalınca 'At' işaretlileri ve botun aldığı ucuz silah/zırhı at", 0, 136, 470,
+        var bonusList = Theme.Button(items, "✨  Efsun listesi", new Rectangle(R, 169, 214, 28), Theme.Secondary, Theme.SecondaryHover);
+        Section(items, "ÇANTA DOLARKEN", 216);
+        Check(items, "Yer azalınca 'At' işaretlileri ve ucuz silah / zırhı at", L, 240, ColW,
             () => _profile.ThrowWhenInventoryFull, v => _profile.ThrowWhenInventoryFull = v);
-        Check(items, "Atılacak bir şey yoksa çanta dolunca dur", 480, 136, 330, () => _profile.StopWhenInventoryFull,
+        Check(items, "Atılacak bir şey yoksa çanta dolunca dur", R, 240, ColW, () => _profile.StopWhenInventoryFull,
             v => _profile.StopWhenInventoryFull = v);
-        var throwNow = Theme.Button(items, "🗑  Şimdi at", new Rectangle(0, 172, 140, 30), Theme.Secondary, Theme.SecondaryHover);
+        Check(items, "Fiyatı için alınan efsunsuz silah / zırhı market NPC'sine götürüp sat", L, 274, 918,
+            () => _profile.SellToNpc, v => _profile.SellToNpc = v);
+        var throwNow = Theme.Button(items, "🗑  Şimdi at", new Rectangle(L, 310, 214, 30), Theme.Secondary, Theme.SecondaryHover);
         throwNow.Click += (_, _) => WriteLog(_engine?.CleanNow() ?? "Önce oyunu bağla.");
-        _bagState = Theme.Label(items, "", new Rectangle(152, 172, 760, 30), 9f, Theme.Text);
-        Check(items, "Fiyatı için (≥) alınan efsunsuz silah / zırhı market NPC'sine götürüp sat (atılacaklar yine atılır; Topla / efsunlu / özel eşya satılmaz)",
-            0, 208, 760, () => _profile.SellToNpc, v => _profile.SellToNpc = v);
-        var bonusList = Theme.Button(items, "✨  Efsun listesi", new Rectangle(310, 72, 180, 26), Theme.Secondary, Theme.SecondaryHover);
+        _bagState = Theme.Label(items, "", new Rectangle(L + 226, 310, 692, 30), 9f, Theme.Text);
         bonusList.Click += (_, _) =>
         {
             using var form = new BonusListForm(_profile);
@@ -426,41 +438,48 @@ internal sealed partial class MainForm : Form
             WriteLog($"Eşya listesi: {_profile.LootPick.Count} eşya mutlaka toplanacak, {_profile.LootSkip.Count} eşya alınmayacak, " +
                 $"{_profile.LootThrow.Count} eşya envanter dolunca atılacak.");
         };
-        Hint(items, "Fiyat = dükkânın verdiği satış fiyatı. Botun yanlışlıkla aldığı istenmeyen eşyalar molada ya da yer azalınca " +
-            "atılır (senin eşyaların, Topla işaretliler, etkinlik ödülleri ve giyilenler hiç atılmaz). Atma: sakin bir yere geçer, " +
-            "eşyaya tıklayıp \"Yere at\" der. Bu turda alınan / atılanlar Panel'de listelenir.", 216);
+        Hint(items, "Eşya listesi: her eşya için Topla / Alma / At seçimi. Fiyat = dükkânın verdiği satış fiyatı. Botun yanlışlıkla aldığı " +
+            "istenmeyen eşyalar molada ya da yer azalınca atılır (senin eşyaların, Topla işaretliler, etkinlik ödülleri ve giyilenler hiç " +
+            "atılmaz). Atma: sakin bir yere geçer, eşyaya tıklayıp \"Yere at\" der. Satışta atılacaklar yine atılır; Topla işaretli, efsunlu " +
+            "ve özel eşyalar satılmaz. Bu turda alınan / atılan / satılanlar Panel'de listelenir.", 352);
 
         var potions = _tabPages[3];
-        NumberRow(potions, "HP iksiri (% altında)", 0, 0, 5, 95, () => Math.Round(_profile.PotionHpBelow * 100), 0, 1,
+        Section(potions, "İKSİR İÇME", 0);
+        NumberRow(potions, "HP iksiri (% altında)", L, 24, 5, 95, () => Math.Round(_profile.PotionHpBelow * 100), 0, 1,
             v => _profile.PotionHpBelow = v / 100);
-        NumberRow(potions, "MP iksiri (% altında)", 0, 34, 0, 95, () => Math.Round(_profile.PotionMpBelow * 100), 0, 1,
+        NumberRow(potions, "MP iksiri (% altında)", R, 24, 0, 95, () => Math.Round(_profile.PotionMpBelow * 100), 0, 1,
             v => _profile.PotionMpBelow = v / 100);
-        Check(potions, "Ölünce yeniden başla", 0, 68, 300, () => _profile.ReviveOnDeath, v => _profile.ReviveOnDeath = v);
-        NumberRow(potions, "Kaç HP iksiri kalınca kaç", 0, 102, 0, 200, () => _profile.RetreatAtPotions, 0, 1,
-            v => _profile.RetreatAtPotions = (int)v);
-        NumberRow(potions, "Tehlikede kaç: can % altı", 0, 136, 0, 90, () => Math.Round(_profile.FleeAtHp * 100), 0, 5,
-            v => _profile.FleeAtHp = v / 100);
-        Theme.Label(potions, "Tehlikede kaç: can bu yüzdenin altına düşer ve en az 3 mob saldırırsa bot vurmayı bırakıp moblardan " +
-            "uzaklaşır (iksir içmeye devam eder); can %60'ı geçince ya da 2 sn kimse saldırmayınca (en çok 20 sn) dövüşe döner. 0 = kapalı.", new Rectangle(0, 176, 918, 54), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
-        Check(potions, "Market NPC'sinden iksir al (satışa gidince; azalınca ayrıca gider)", 0, 236, 520, () => _profile.BuyPotions, v => _profile.BuyPotions = v);
-        NumberRow(potions, "Şu sayının altına düşünce al", 0, 270, 0, 5000, () => _profile.BuyPotionsBelow, 0, 50,
+        Section(potions, "İKSİR ALMA", 72);
+        Check(potions, "Market NPC'sinden iksir al", L, 96, ColW, () => _profile.BuyPotions, v => _profile.BuyPotions = v);
+        NumberRow(potions, "Şu sayının altına düşünce al", L, 130, 0, 5000, () => _profile.BuyPotionsBelow, 0, 50,
             v => _profile.BuyPotionsBelow = (int)v);
-        NumberRow(potions, "Şu sayıya tamamla", 370, 270, 0, 10000, () => _profile.BuyPotionsUpTo, 0, 100,
+        NumberRow(potions, "Şu sayıya tamamla", R, 130, 0, 10000, () => _profile.BuyPotionsUpTo, 0, 100,
             v => _profile.BuyPotionsUpTo = (int)v);
-        Check(potions, "Becerileri otomatik kullan (bellekten)", 370, 0, 360, () => _profile.AutoSkills, v => _profile.AutoSkills = v);
-        NumberRow(potions, "Alan becerisi: en az mob", 370, 34, 1, 15, () => _profile.AreaSkillMinMobs, 0, 1,
+        Section(potions, "TEHLİKE", 178);
+        Check(potions, "Ölünce yeniden başla", L, 202, ColW, () => _profile.ReviveOnDeath, v => _profile.ReviveOnDeath = v);
+        NumberRow(potions, "Kaç HP iksiri kalınca kaç", R, 202, 0, 200, () => _profile.RetreatAtPotions, 0, 1,
+            v => _profile.RetreatAtPotions = (int)v);
+        NumberRow(potions, "Tehlikede kaç: can % altı", L, 236, 0, 90, () => Math.Round(_profile.FleeAtHp * 100), 0, 5,
+            v => _profile.FleeAtHp = v / 100);
+        Section(potions, "BECERİLER", 284);
+        Check(potions, "Becerileri otomatik kullan (bellekten)", L, 308, ColW, () => _profile.AutoSkills, v => _profile.AutoSkills = v);
+        NumberRow(potions, "Alan becerisi: en az mob", R, 308, 1, 15, () => _profile.AreaSkillMinMobs, 0, 1,
             v => _profile.AreaSkillMinMobs = (int)v);
-        _skillList = Theme.Label(potions, "", new Rectangle(370, 68, 366, 72), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+        _skillList = Theme.Label(potions, "", new Rectangle(L, 342, 918, 54), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+        Hint(potions, "İksir alma: satıcıya satışa gidince eksik iksirler tamamlanır; iksir azalınca satıcıya ayrıca gidilir. " +
+            "Tehlikede kaç: can bu yüzdenin altına düşer ve en az 3 mob saldırırsa bot vurmayı bırakıp moblardan uzaklaşır (iksir içmeye " +
+            "devam eder); can %60'ı geçince ya da 2 sn kimse saldırmayınca (en çok 20 sn) dövüşe döner. 0 = kapalı.", 400);
 
-        // Alan
+        // Alan: where the bot farms.
         var area = _tabPages[4];
-        NumberRow(area, "Alan sınırı (metre)", 0, 0, 0, 500, () => Math.Round(_profile.LeashMeters), 0, 5,
+        Section(area, "FARM ALANI", 0);
+        NumberRow(area, "Alan sınırı (metre)", L, 24, 0, 500, () => Math.Round(_profile.LeashMeters), 0, 5,
             v => _profile.LeashMeters = v);
-        _findArea = Theme.Button(area, "📍  En iyi alanı bul", new Rectangle(370, 0, 180, 28), Theme.Primary, Theme.PrimaryHover);
+        Check(area, "Kayıtlı alanda başla", R, 24, ColW, () => _profile.UseFarmSpot, v => _profile.UseFarmSpot = v);
+        _findArea = Theme.Button(area, "📍  En iyi alanı bul", new Rectangle(L, 58, 214, 28), Theme.Primary, Theme.PrimaryHover);
         _findArea.Click += (_, _) => ToggleAreaScan();
-        Check(area, "Kayıtlı alanda başla", 560, 1, 176, () => _profile.UseFarmSpot, v => _profile.UseFarmSpot = v);
         // The map's walls, houses, rocks and trees (read from the game when the character comes onto a map).
-        var openMap = Theme.Button(area, "🗺  Haritayı aç", new Rectangle(746, 0, 172, 28), Theme.Secondary, Theme.SecondaryHover);
+        var openMap = Theme.Button(area, "🗺  Haritayı aç", new Rectangle(L + 226, 58, 214, 28), Theme.Secondary, Theme.SecondaryHover);
         openMap.Click += (_, _) =>
         {
             if (_engine?.MapPicture is { } picture)
@@ -468,25 +487,44 @@ internal sealed partial class MainForm : Form
             else
                 WriteLog("Henüz kayıtlı harita yok: oyun açıkken karakter bir haritaya girince engeller kendiliğinden okunur.");
         };
-        _farmState = Theme.Label(area, "", new Rectangle(370, 32, 366, 40), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
-        Check(area, "GM görünce dur", 0, 34, 180, () => _profile.StopNearGm, v => _profile.StopNearGm = v);
-        Check(area, "Şehre girince dur", 190, 34, 170, () => _profile.StopInSafeZone, v => _profile.StopInSafeZone = v);
-        Check(area, "Ara sıra mola ver", 0, 68, 180, () => _profile.Breaks, v => _profile.Breaks = v);
-        Check(area, "Güçlü moblara gitme", 190, 68, 176, () => _profile.AutoArea, v => _profile.AutoArea = v);
-        // Off by default: it took the character to odd places (user, 2026-11-19).
-        Check(area, "Oyuncu gelince başka alana geç", 0, 102, 360, () => _profile.MoveAwayFromPlayers, v => _profile.MoveAwayFromPlayers = v);
-        var saveSpot = Theme.Button(area, "📌  Bu alanı kaydet", new Rectangle(370, 100, 190, 28), Theme.Primary, Theme.PrimaryHover);
+        var saveSpot = Theme.Button(area, "📌  Bu alanı kaydet", new Rectangle(R, 58, 214, 28), Theme.Primary, Theme.PrimaryHover);
         saveSpot.Click += (_, _) =>
         {
             WriteLog(_engine?.SaveMySpot() ?? "Önce oyunu bağla.");
             ReloadSettings();
             SaveProfile();
         };
+        var forgetSpot = Theme.Button(area, "Kaydettiğim alanı sil", new Rectangle(R + 226, 58, 214, 28), Theme.Secondary, Theme.SecondaryHover);
+        forgetSpot.Click += (_, _) =>
+        {
+            if (_profile.MySpot == null)
+            {
+                WriteLog("Kaydettiğin bir alan yok.");
+                return;
+            }
+            _profile.MySpot = null;
+            SaveProfile();
+            WriteLog("Kaydettiğin alan silindi" + (_profile.FarmSpot != null && _profile.UseFarmSpot
+                ? "; bot başlarken botun bulduğu alana gider." : "; bot durduğu yerde başlar."));
+        };
+        Check(area, "Güçlü moblara gitme", L, 96, ColW, () => _profile.AutoArea, v => _profile.AutoArea = v);
+        // Off by default: it took the character to odd places (user, 2026-11-19).
+        Check(area, "Oyuncu gelince başka alana geç", R, 96, ColW, () => _profile.MoveAwayFromPlayers, v => _profile.MoveAwayFromPlayers = v);
+        Section(area, "DURUM", 144);
+        _farmState = Theme.Label(area, "", new Rectangle(L, 168, 918, 40), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+        _respawnState = Theme.Label(area, "", new Rectangle(L, 210, 918, 22), 8.5f, Theme.Muted);
+        _positionState = Theme.Label(area, "", new Rectangle(L, 234, 918, 40), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+
+        // Güvenlik · Mola: when to stop, the breaks, the login after a maintenance.
+        var safety = _tabPages[5];
+        Section(safety, "GÜVENLİK", 0);
+        Check(safety, "GM görünce dur", L, 24, ColW, () => _profile.StopNearGm, v => _profile.StopNearGm = v);
+        Check(safety, "Şehre girince dur", R, 24, ColW, () => _profile.StopInSafeZone, v => _profile.StopInSafeZone = v);
         // The character's kingdom: players of another one count as a danger (the game doesn't tell its own while playing).
-        Theme.Label(area, "Irkım", new Rectangle(0, 214, 190, 26), 9f, Theme.Muted);
+        Theme.Label(safety, "Irkım", new Rectangle(L, 58, 190, 26), 9f, Theme.Muted);
         var empire = new ComboBox
         {
-            Bounds = new Rectangle(196, 214, 164, 26),
+            Bounds = new Rectangle(L + 196, 58, 164, 26),
             DropDownStyle = ComboBoxStyle.DropDownList,
             BackColor = Theme.Inset,
             ForeColor = Theme.Text,
@@ -503,33 +541,24 @@ internal sealed partial class MainForm : Form
             WriteLog(empire.SelectedIndex > 0 ? $"Irk: {empire.Text}. Başka ırktan oyuncular tehlikeli sayılır." : "Irk seçilmedi: oyuncular ırklarına göre ayrılmaz.");
         };
         _reloads.Add(() => empire.SelectedIndex = Math.Clamp(_profile.Empire, 0, 3));
-        area.Controls.Add(empire);
-        Theme.Label(area, "Her karakter kendi ırkını seçer; başka ırktan oyuncu yaklaşınca bot onu tehlike sayar.", new Rectangle(370, 214, 548, 26), 8.5f, Theme.Faint);
-        var forgetSpot = Theme.Button(area, "Kaydettiğim alanı sil", new Rectangle(570, 100, 180, 28), Theme.Secondary, Theme.SecondaryHover);
-        forgetSpot.Click += (_, _) =>
-        {
-            if (_profile.MySpot == null)
-            {
-                WriteLog("Kaydettiğin bir alan yok.");
-                return;
-            }
-            _profile.MySpot = null;
-            SaveProfile();
-            WriteLog("Kaydettiğin alan silindi" + (_profile.FarmSpot != null && _profile.UseFarmSpot
-                ? "; bot başlarken botun bulduğu alana gider." : "; bot durduğu yerde başlar."));
-        };
+        safety.Controls.Add(empire);
+        Section(safety, "OTURUM", 106);
+        Check(safety, "Oyundan atılırsa (bakım) sunucu açılana kadar giriş yap", L, 130, 918,
+            () => _profile.AutoLogin, v => _profile.AutoLogin = v);
+        Section(safety, "MOLA", 178);
+        Check(safety, "Ara sıra kısa mola ver", L, 202, ColW, () => _profile.Breaks, v => _profile.Breaks = v);
         // Out of the game now and then (the user: "1 saatte bir 10 dakika çıkış yap").
-        Theme.Label(area, "OYUNDAN ÇIKIŞ MOLASI", new Rectangle(0, 252, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
-        Check(area, "Belli aralıklarla oyundan çıkıp giriş ekranında bekle", 0, 274, 460, () => _profile.LogoutBreaks, v => _profile.LogoutBreaks = v);
-        NumberRow(area, "Çalışma süresi (dakika)", 0, 306, 10, 600, () => _profile.LogoutPlayMin, 0, 5, v => _profile.LogoutPlayMin = (int)v);
-        NumberRow(area, "Mola süresi (dakika)", 460, 306, 1, 180, () => _profile.LogoutRestMin, 0, 1, v => _profile.LogoutRestMin = (int)v);
-        Theme.Label(area, "Süre dolunca bot yeni mob toplamaz; saldıranları bitirip sakin bir yere çekilir, sonra oyundan çıkar (Oturumu kapat). " +
-            "Mola bitince kendisi giriş yapıp aynı karakterle kaldığı yerden devam eder.", new Rectangle(0, 338, 918, 36), 8.5f, Theme.Faint, FontStyle.Regular, ContentAlignment.TopLeft);
-        _respawnState = Theme.Label(area, "", new Rectangle(0, 140, 918, 22), 8.5f, Theme.Muted);
-        _positionState = Theme.Label(area, "", new Rectangle(0, 166, 918, 40), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.TopLeft);
+        Check(safety, "Belli aralıklarla oyundan çıkıp giriş ekranında bekle", R, 202, ColW, () => _profile.LogoutBreaks, v => _profile.LogoutBreaks = v);
+        NumberRow(safety, "Çalışma süresi (dakika)", L, 236, 10, 600, () => _profile.LogoutPlayMin, 0, 5, v => _profile.LogoutPlayMin = (int)v);
+        NumberRow(safety, "Mola süresi (dakika)", R, 236, 1, 180, () => _profile.LogoutRestMin, 0, 1, v => _profile.LogoutRestMin = (int)v);
+        Hint(safety, "Irkım: her karakter kendi ırkını seçer; başka ırktan oyuncu yaklaşınca bot onu tehlike sayar.\n" +
+            "Oturum: bot çalışırken oyun bakıma girer ya da oyundan atılırsan sunucu açılana kadar birkaç dakikada bir giriş denenir; " +
+            "oyunun kayıtlı bilgileri kullanılır, şifreye dokunulmaz, açılınca haber verilir.\n" +
+            "Çıkış molası: çalışma süresi dolunca bot yeni mob toplamaz; saldıranları bitirip sakin bir yere çekilir, sonra oyundan çıkar " +
+            "(Oturumu kapat). Mola bitince kendisi giriş yapıp aynı karakterle kaldığı yerden devam eder.", 284);
 
         // Pazar: the market list of the map (kept up to date), search it, walk to a shop, scan, wanted items.
-        var market = _tabPages[8];
+        var market = _tabPages[9];
         _scanMarket = Theme.Button(market, "🛒  Pazarı tara", new Rectangle(0, 0, 140, 30), Theme.Secondary, Theme.SecondaryHover);
         _scanMarket.Click += (_, _) => ToggleMarketScan();
         var marketWindow = Theme.Button(market, "🖥  Pazar penceresi", new Rectangle(146, 0, 170, 30), Theme.Primary, Theme.PrimaryHover);
@@ -786,8 +815,8 @@ internal sealed partial class MainForm : Form
 
         // Tuşlar
         // Bildirim: messages to the user's own Telegram bot.
-        var notify = _tabPages[5];
-        Check(notify, "Telegram'a bildirim gönder (GM, ölüm, seviye, iksir bitti, bot durdu)", 0, 0, 600,
+        var notify = _tabPages[6];
+        Check(notify, "Telegram'a bildirim gönder (GM, ölüm, seviye, iksir bitti, bot durdu)", 0, 0, 918,
             () => _profile.TelegramEnabled, v => _profile.TelegramEnabled = v);
         var token = TextRow(notify, "Bot anahtarı", 0, 34, () => _profile.TelegramToken, v => _profile.TelegramToken = v.Trim(), 420);
         // Hidden like a password (it gives control of the Telegram bot; seen in a screenshot it could be taken).
@@ -809,27 +838,24 @@ internal sealed partial class MainForm : Form
         test.Click += async (_, _) =>
             WriteLog(await TelegramNotifier.SendAsync(_profile.TelegramToken, _profile.TelegramChatId, "PARDUS: deneme mesajı ✓")
                      ?? "Telegram deneme mesajı gönderildi ✓");
-        Check(notify, "Komutlar (durum/dur/başla)", 580, 68, 156, () => _profile.TelegramCommands,
+        Check(notify, "Komutları kabul et (durum / dur / başla)", 586, 68, 332, () => _profile.TelegramCommands,
             v => _profile.TelegramCommands = v);
         Hint(notify, "Kurulum: Telegram'da @BotFather'a /newbot yaz, verdiği anahtarı buraya yapıştır. Sonra kendi botuna " +
             "\"merhaba\" yaz ve 'Sohbeti bul'a bas. Botuna \"durum\", \"dur\", \"başla\" yazınca cevap verir (yalnız bu sohbete). " +
-            "Fısıltı, istek, adının geçmesi ve GM yazması uyarı sesiyle de bildirilir; hepsi günlüğe de yazılır.", 244);
-        Theme.Label(notify, "NELER BİLDİRİLSİN", new Rectangle(0, 108, 300, 18), 8f, Theme.Accent, FontStyle.Bold);
-        Check(notify, "Fısıltı (özel mesaj)", 0, 128, 170, () => _profile.NotifyWhispers, v => _profile.NotifyWhispers = v);
-        Check(notify, "Takas / grup / arkadaş isteği", 176, 128, 220, () => _profile.NotifyRequests, v => _profile.NotifyRequests = v);
-        Check(notify, "Sohbette adım ya da GM", 402, 128, 190, () => _profile.NotifyMentions, v => _profile.NotifyMentions = v);
-        Check(notify, "Dağıtılmamış puan", 598, 128, 160, () => _profile.NotifyPoints, v => _profile.NotifyPoints = v);
-        Check(notify, "Etkinlik başlayınca", 0, 156, 170, () => _profile.NotifyEvents, v => _profile.NotifyEvents = v);
-        Check(notify, "Tüm etkinlik ödüllerini her zaman topla", 176, 156, 380, () => _profile.EventLoot, v => _profile.EventLoot = v);
-        Check(notify, "Topla eşyası düşünce", 562, 156, 200, () => _profile.NotifyDrops, v => _profile.NotifyDrops = v);
-        Check(notify, "Efsun listesindeki efsunlu eşya alınınca (✨ Efsun listesi'nde seçtiklerin)", 0, 184, 560,
+            "Fısıltı, istek, adının geçmesi ve GM yazması uyarı sesiyle de bildirilir; hepsi günlüğe de yazılır.", 320);
+        Section(notify, "NELER BİLDİRİLSİN", 112);
+        Check(notify, "Fısıltı (özel mesaj)", 0, 136, 440, () => _profile.NotifyWhispers, v => _profile.NotifyWhispers = v);
+        Check(notify, "Takas / grup / arkadaş isteği", 478, 136, 440, () => _profile.NotifyRequests, v => _profile.NotifyRequests = v);
+        Check(notify, "Sohbette adım ya da GM", 0, 170, 440, () => _profile.NotifyMentions, v => _profile.NotifyMentions = v);
+        Check(notify, "Dağıtılmamış puan", 478, 170, 440, () => _profile.NotifyPoints, v => _profile.NotifyPoints = v);
+        Check(notify, "Etkinlik başlayınca", 0, 204, 440, () => _profile.NotifyEvents, v => _profile.NotifyEvents = v);
+        Check(notify, "Topla eşyası düşünce", 478, 204, 440, () => _profile.NotifyDrops, v => _profile.NotifyDrops = v);
+        Check(notify, "Seviye atlayınca", 0, 238, 440, () => _profile.NotifyLevelUp, v => _profile.NotifyLevelUp = v);
+        Check(notify, "Şehre gidip eşya satınca", 478, 238, 440, () => _profile.NotifySells, v => _profile.NotifySells = v);
+        Check(notify, "Efsun listesindeki efsunlu eşya alınınca (✨ Efsun listesi'nde seçtiklerin)", 0, 272, 918,
             () => _profile.NotifyBonusItems, v => _profile.NotifyBonusItems = v);
-        Check(notify, "Seviye atlayınca", 0, 212, 170, () => _profile.NotifyLevelUp, v => _profile.NotifyLevelUp = v);
-        Check(notify, "Şehre gidip eşya satınca", 176, 212, 240, () => _profile.NotifySells, v => _profile.NotifySells = v);
-        Check(notify, "Bot çalışırken oyundan atılırsa (bakım) sunucu açılana kadar girişi dene (şifreye dokunmaz; açılınca haber verir)", 0, 240, 700,
-            () => _profile.AutoLogin, v => _profile.AutoLogin = v);
 
-        var keys = _tabPages[6];
+        var keys = _tabPages[7];
         var k = _profile.Keys;
         (string, Func<Keys>, Action<Keys>)[] bindings =
         [
@@ -858,27 +884,27 @@ internal sealed partial class MainForm : Form
         Theme.Label(keys, "Değiştirmek için tuşa tıkla, sonra yeni tuşa bas.", new Rectangle(0, 122, 736, 22), 8.5f, Theme.Muted);
 
         // Gelişmiş
-        var advanced = _tabPages[7];
+        var advanced = _tabPages[8];
         advanced.AutoScroll = true;
         _dryRun = new Toggle
         {
             Text = "Kuru çalışma (tuş göndermez)",
             Checked = false,
-            Bounds = new Rectangle(0, 0, 230, 26),
+            Bounds = new Rectangle(0, 0, 300, 26),
             ForeColor = Theme.Text,
             BackColor = advanced.BackColor,
             Font = new Font("Segoe UI", 9f)
         };
         advanced.Controls.Add(_dryRun);
-        _calibrationState = Theme.Label(advanced, "", new Rectangle(240, 0, 230, 26), 9f, Theme.Muted);
-        _technical = Theme.Label(advanced, "", new Rectangle(476, 0, 260, 26), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.MiddleRight);
-        _calibrationHint = Theme.Label(advanced, "", new Rectangle(0, 30, 736, 22), 8.5f, Theme.Muted);
-        _record = Theme.Button(advanced, "⏺  Kaydet", new Rectangle(0, 100, 142, 30), Theme.Secondary, Theme.SecondaryHover);
+        _calibrationState = Theme.Label(advanced, "", new Rectangle(310, 0, 230, 26), 9f, Theme.Muted);
+        _technical = Theme.Label(advanced, "", new Rectangle(658, 0, 260, 26), 8.5f, Theme.Muted, FontStyle.Regular, ContentAlignment.MiddleRight);
+        _calibrationHint = Theme.Label(advanced, "", new Rectangle(0, 30, 918, 22), 8.5f, Theme.Muted);
+        _record = Theme.Button(advanced, "⏺  Kaydet", new Rectangle(0, 100, 214, 30), Theme.Secondary, Theme.SecondaryHover);
         _record.Click += (_, _) => ToggleRecording();
         _replay = Theme.Button(advanced, "▶  Kaydı oynat", new Rectangle(150, 100, 142, 30), Theme.Secondary, Theme.SecondaryHover);
         _replay.Click += async (_, _) => await ReplayAsync();
         _replay.Visible = false; // a developer tool
-        var reports = Theme.Button(advanced, "📊  Oturum raporları", new Rectangle(0, 60, 180, 30), Theme.Secondary, Theme.SecondaryHover);
+        var reports = Theme.Button(advanced, "📊  Oturum raporları", new Rectangle(0, 60, 214, 30), Theme.Secondary, Theme.SecondaryHover);
         reports.Click += (_, _) =>
         {
             if (!File.Exists(SessionLog.FilePath))
@@ -890,12 +916,12 @@ internal sealed partial class MainForm : Form
             catch (Exception ex) { WriteLog("Rapor açılamadı: " + ex.Message); }
         };
         // ── This computer: what the game sees, what Windows shows (a window of its own) ──
-        var machine = Theme.Button(advanced, "🖥  Bilgisayar bilgileri", new Rectangle(0, 146, 220, 30), Theme.Secondary, Theme.SecondaryHover);
+        var machine = Theme.Button(advanced, "🖥  Bilgisayar bilgileri", new Rectangle(226, 60, 214, 30), Theme.Secondary, Theme.SecondaryHover);
         machine.Click += (_, _) => OpenMachineWindow();
-        var openFolder = Theme.Button(advanced, "📁  Ayar klasörü", new Rectangle(150, 100, 142, 30), Theme.Secondary, Theme.SecondaryHover);
+        var openFolder = Theme.Button(advanced, "📁  Ayar klasörü", new Rectangle(478, 60, 214, 30), Theme.Secondary, Theme.SecondaryHover);
         if (Instance.IsFirst)
         {
-            var checkUpdate = Theme.Button(advanced, "↻  Güncellemeleri denetle", new Rectangle(300, 100, 220, 30), Theme.Secondary, Theme.SecondaryHover);
+            var checkUpdate = Theme.Button(advanced, "↻  Güncellemeleri denetle", new Rectangle(704, 60, 214, 30), Theme.Secondary, Theme.SecondaryHover);
             checkUpdate.Click += async (_, _) => await CheckForUpdatesAsync(startup: false);
         }
         openFolder.Click += (_, _) => OpenProfileFolder();
@@ -911,7 +937,7 @@ internal sealed partial class MainForm : Form
         // ── Dashboard bottom: the log and this run's items (the settings pages show here instead) ──
         _dashBottom = new Panel { Bounds = new Rectangle(202, B + 436, 966, 230), BackColor = Theme.Background };
         Controls.Add(_dashBottom);
-        var logCard = _logCard = new Card { Bounds = new Rectangle(0, 0, 598, 230), Caption = "GÜNLÜK" };
+        var logCard = _logCard = new Card { Bounds = new Rectangle(0, 0, LeftW, 230), Caption = "GÜNLÜK" };
         _dashBottom.Controls.Add(logCard);
         // Which lines: all, the sales, the warnings, the deaths.
         (string Name, string Kind)[] filters = [("Tümü", ""), ("Satış", "sell"), ("Uyarı", "warn"), ("Ölüm", "dead")];
@@ -920,13 +946,13 @@ internal sealed partial class MainForm : Form
         {
             string kind = filters[i].Kind;
             var button = _logFilters[i] = new NavButton { Text = filters[i].Name, Segment = true, Selected = i == 0, Tag = kind,
-                Bounds = new Rectangle(598 - 14 - (filters.Length - i) * 66, 7, 62, 26), Font = new Font("Segoe UI", 8.5f), Anchor = AnchorStyles.Top | AnchorStyles.Right };
+                Bounds = new Rectangle(LeftW - 14 - (filters.Length - i) * 66, 7, 62, 26), Font = new Font("Segoe UI", 8.5f), Anchor = AnchorStyles.Top | AnchorStyles.Right };
             button.Click += (_, _) => FilterLog(kind);
             logCard.Controls.Add(button);
         }
-        var itemsCard = _itemsCard = new Card { Bounds = new Rectangle(610, 0, 356, 230), Caption = "BU TUR EŞYALAR" };
+        var itemsCard = _itemsCard = new Card { Bounds = new Rectangle(RightX, 0, RightW, 230), Caption = "BU TUR EŞYALAR" };
         _dashBottom.Controls.Add(itemsCard);
-        var openItems = new IconButton { Icon = "list", Bounds = new Rectangle(356 - 14 - 30, 6, 30, 28) };
+        var openItems = new IconButton { Icon = "list", Bounds = new Rectangle(RightW - 14 - 30, 6, 30, 28) };
         itemsCard.Controls.Add(openItems);
         openItems.Click += (_, _) =>
         {
@@ -935,7 +961,7 @@ internal sealed partial class MainForm : Form
         };
         _runItems = new ListView
         {
-            Bounds = new Rectangle(14, 40, 328, 164),
+            Bounds = new Rectangle(14, 40, RightW - 28, 164),
             View = View.Details,
             FullRowSelect = true,
             HeaderStyle = ColumnHeaderStyle.Nonclickable,
@@ -962,10 +988,10 @@ internal sealed partial class MainForm : Form
         _runItems.Columns.Add("Atılan", 58, HorizontalAlignment.Right);
         _runItems.Columns.Add("Satılan", 58, HorizontalAlignment.Right);
         itemsCard.Controls.Add(_runItems);
-        _runItemsInfo = Theme.Label(itemsCard, "Bot başlayınca dolar; her turda yenilenir.", new Rectangle(16, 206, 326, 18), 8f, Theme.Faint);
+        _runItemsInfo = Theme.Label(itemsCard, "Bot başlayınca dolar; her turda yenilenir.", new Rectangle(16, 206, RightW - 32, 18), 8f, Theme.Faint);
         _log = new RichTextBox
         {
-            Bounds = new Rectangle(16, 42, 568, 176),
+            Bounds = new Rectangle(16, 42, LeftW - 32, 176),
             BorderStyle = BorderStyle.None,
             ReadOnly = true,
             WordWrap = false,
@@ -1179,11 +1205,8 @@ internal sealed partial class MainForm : Form
         Controls.Add(_body);
         Theme.DarkScrollBars(_body);
         // List columns don't scale with the window: fit them to the list.
-        int number = 56, nameWidth = _runItems.ClientSize.Width - 3 * number; // "Satılan" fits
-        _runItems.Columns[0].Width = nameWidth;
-        _runItems.Columns[1].Width = number;
-        _runItems.Columns[2].Width = number;
-        _runItems.Columns[3].Width = number;
+        FitRunItems();
+        _runItems.Resize += (_, _) => FitRunItems();
         _dashBottomFarm = _dashBottom.Bounds;
         _attackInPreview = _attackButton.Bounds;
         _logCardFarm = _logCard.Bounds;
@@ -1474,6 +1497,20 @@ internal sealed partial class MainForm : Form
         _reloads.Add(() => box.Text = value());
         parent.Controls.Add(new Field(box) { Bounds = new Rectangle(x + 134, y - 1, width, 28) });
         return box;
+    }
+
+    /// <summary>The items list's columns fitted to its width, room kept for the scroll bar (none to the side: the
+    /// user saw a side scroll bar once the list grew long); the number columns as wide as "Satılan" needs.</summary>
+    private void FitRunItems()
+    {
+        using var bold = new Font("Segoe UI", 8f, FontStyle.Bold);
+        int number = Math.Max(TextRenderer.MeasureText("Satılan", bold).Width, TextRenderer.MeasureText("99.999", _runItems.Font).Width) + 14;
+        // The scroll bar's room always kept (it comes once the list is long; the columns stay the same then).
+        int room = _runItems.Width - SystemInformation.VerticalScrollBarWidth - 4;
+        _runItems.Columns[1].Width = number;
+        _runItems.Columns[2].Width = number;
+        _runItems.Columns[3].Width = number;
+        _runItems.Columns[0].Width = Math.Max(60, room - 3 * number);
     }
 
     private static void Hint(Control parent, string text, int y)
