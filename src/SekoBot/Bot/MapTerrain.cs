@@ -212,11 +212,49 @@ internal sealed class MapTerrain
         bool alongRoads = roads && Roads != null && from.DistanceXY(to) > RoadsFrom;
         if (!alongRoads && LineClear(from, to, margin, keep))
             return [to];
+        if (alongRoads && RoadOnlyWay(from, to, margin, keep) is { } byRoad)
+            return byRoad;
         // Looked for close around the two points first; a long wall needs more room to get round.
         foreach (double r in Rooms.Where(r => r <= room))
             if (WayWithin(from, to, margin, r, keep) is { } way)
                 return way;
         return null;
+    }
+
+    /// <summary>The road is looked for this far around where a way starts and ends (world units, 80 m).</summary>
+    internal const double RoadReach = 8000;
+
+    /// <summary>
+    /// From one place to another far off: only along the roads (the user: "bir alandan başka alana sadece yollardan;
+    /// farm alanına en yakın yola gelince oradan geçiş; kısa yol diye atlamayacak" — seen: a shortcut over a cliff).
+    /// To the nearest road, along it to where it comes nearest the goal, and from there to the goal. Mobs and the
+    /// places the bot got stuck on the road are walked round on the road, never by leaving it. Null: no road near
+    /// either end, the two not joined by road, or the road no help (the way to it and back longer than the trip).
+    /// </summary>
+    private List<Vec3>? RoadOnlyWay(Vec3 from, Vec3 to, double margin, IReadOnlyList<Circle>? avoid)
+    {
+        if (Roads is not { } roads)
+            return null;
+        var along = roads.WayAlong(from, to, RoadReach, avoid?.Select(c => (c.X, c.Y, c.R + margin)).ToList());
+        if (along is not { Count: > 0 })
+            return null;
+        var onto = along[0];
+        var off = along[^1];
+        if (from.DistanceXY(onto) + off.DistanceXY(to) >= from.DistanceXY(to))
+            return null;
+        var way = new List<Vec3>();
+        // Onto the road: round what stands between (short; the fields only here).
+        if (from.DistanceXY(onto) > 150)
+            way.AddRange(LineClear(from, onto, margin, avoid) ? [onto] : WayWithin(from, onto, margin, Rooms[0], avoid) ?? WayWithin(from, onto, margin, Rooms[1], avoid) ?? [onto]);
+        way.AddRange(along.Skip(1));
+        if (way.Count == 0)
+            way.Add(onto);
+        // Off the road to the goal.
+        if (off.DistanceXY(to) > 150)
+            way.AddRange(LineClear(off, to, margin, avoid) ? [to] : WayWithin(off, to, margin, Rooms[0], avoid) ?? WayWithin(off, to, margin, Rooms[1], avoid) ?? [to]);
+        else
+            way[^1] = to;
+        return way;
     }
 
     /// <summary>A round place to keep away from (world units).</summary>
