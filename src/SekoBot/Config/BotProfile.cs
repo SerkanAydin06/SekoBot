@@ -294,8 +294,6 @@ internal sealed class BotProfile
     /// <summary>How much the experience a minute has to drop (percent) against before the player came.</summary>
     public double AvoidPlayerExpDrop { get; set; } = 40;
     /// <summary>Answer "durum", "dur", "başla" written to the Telegram bot.</summary>
-    public string TelegramFleetFolder { get; set; } = "";
-    public bool TelegramFleetHub { get; set; }
     public bool TelegramCommands { get; set; } = true;
     /// <summary>Tell (log, Telegram, sound) when someone writes a private message.</summary>
     public bool NotifyWhispers { get; set; } = true;
