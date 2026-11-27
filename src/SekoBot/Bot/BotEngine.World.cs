@@ -132,39 +132,15 @@ internal sealed partial class BotEngine
         "playerProfiler", // a player's little menu (trade, message…): Esc doesn't close it either (seen: the game menu opened
                           // again and again while fighting back a player); it goes by itself
     ];
-    private readonly PopupWatch _popups = new();
-    private string _windowsSeen = "";
-
-    /// <summary>
-    /// A window is open over the game: one of the known ones, or any other game window that wasn't
-    /// showing when the bot started. Logs which one, once.
-    /// </summary>
-    private bool PopupOpen(WorldSnapshot? world)
+    private bool SamePopupOpen(string expected)
     {
-        var givenUp = new List<string>();
-        // The message window isn't closed with Esc: someone may be writing in it (see GameState.Typing).
-        var open = _popups.Update((world?.OpenWindows ?? []).Where(w => w != GameWorldReader.MessageWindow).ToList(), _clock.Elapsed, givenUp);
-        foreach (string window in givenUp)
-            _log($"'{window}' penceresi Esc ile kapanmıyor; yok sayıldı, bot devam ediyor.");
-        string seen = string.Join(", ", open);
-        if (seen != _windowsSeen)
+        lock (_worldGate)
         {
-            _windowsSeen = seen;
-            if (open.Count > 0)
-                _log($"Açık pencere (bellekten): {seen}");
+            var windows = _world?.ReadWindowsNow();
+            return windows != null && !windows.Contains(GameWorldReader.MessageWindow)
+                && PopupWatch.Target(windows) == expected;
         }
-        _popupIsBag = open.Count > 0 && open.All(w => w is "inventory" or "equipment");
-        _popupIsMap = open.Count > 0 && open.All(IsMapWindow);
-        return open.Count > 0;
     }
-
-    /// <summary>The last <see cref="PopupOpen"/> found only the bag (and its equipment) open.</summary>
-    private bool _popupIsBag;
-    /// <summary>The last <see cref="PopupOpen"/> found only the M map open.</summary>
-    private bool _popupIsMap;
-
-    /// <summary>The M map showing (UI_C.bigMap: set while it is open, empty once closed).</summary>
-    internal static bool IsMapWindow(string window) => window == "bigMap";
 
     private readonly HotspotMap _hotspots = new();
     private string _hotspotMap = "";

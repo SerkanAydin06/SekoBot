@@ -14,7 +14,7 @@ public class PopupTests
         var brain = new Brain(() => p);
         brain.Start(TimeSpan.Zero);
         GameState At(double ms, bool popup, params Point[] mobs) =>
-            new(TimeSpan.FromMilliseconds(ms), 1920, 1080, 1, 1, null, 1) { PopupOpen = popup, MobCandidates = mobs };
+            new(TimeSpan.FromMilliseconds(ms), 1920, 1080, 1, 1, null, 1) { PopupTarget = popup ? "EscMenu" : null, MobCandidates = mobs };
 
         brain.Tick(At(0, false));
         // Walking to a mob when the advert pops up.
@@ -32,5 +32,34 @@ public class PopupTests
         // Closed: back to work.
         var after = brain.Tick(At(3400, false, new Point(1500, 540)));
         Assert.Contains(after, a => a is KeyDownAction d && d.Key == p.Keys.MoveRight);
+    }
+
+    [Theory]
+    [InlineData("bigMap", Keys.M)]
+    [InlineData("inventory", Keys.I)]
+    [InlineData("EscMenu", Keys.Escape)]
+    [InlineData("popup_C", Keys.Escape)]
+    public void Queued_close_requires_the_same_window_at_key_down(string window, Keys key)
+    {
+        string? live = window;
+        var brain = new Brain(() => new BotProfile()) { SamePopupOpen = expected => expected == live };
+        brain.Start(TimeSpan.Zero);
+        var state = new GameState(TimeSpan.Zero, 1920, 1080, 1, 1, null, 1) { PopupTarget = window };
+        var tap = Assert.Single(brain.Tick(state).OfType<KeyTapAction>());
+        Assert.Equal(key, tap.Key);
+        Assert.True(tap.StillWanted!());
+        live = null;
+        Assert.False(tap.StillWanted());
+        Assert.Contains(brain.Tick(state with { Time = TimeSpan.FromSeconds(31) }), a => a is StopAction);
+    }
+
+    [Fact]
+    public void Startup_and_stacked_windows_are_checked_in_order()
+    {
+        Assert.Equal("EscMenu", PopupWatch.Target(["inventory", "bigMap", "EscMenu"]));
+        Assert.Equal("popup_C", PopupWatch.Target(["bigMap", "popup_C"]));
+        Assert.Equal("bigMap", PopupWatch.Target(["miniMap", "bigMap"]));
+        Assert.Equal("newDialog_C", PopupWatch.Target(["newDialog_C"]));
+        Assert.Null(PopupWatch.Target(["miniMap", "chatBox", "taskbar"]));
     }
 }

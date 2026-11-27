@@ -318,8 +318,6 @@ internal sealed class BotProfile
     /// <summary>Stop the bot when the inventory has no free slot left (loot would be lost).</summary>
     public bool StopWhenInventoryFull { get; set; } = true;
 
-    /// <summary>Close windows that pop up over the game (Esc once, again after 3 s if still open).</summary>
-    public bool ClosePopups { get; set; } = true;
     /// <summary>While attacking, press the pickup key this often.</summary>
     public int LootEveryMs { get; set; } = 1500;
     /// <summary>No mob on screen: walk forward this long, then turn the camera, and look again.</summary>

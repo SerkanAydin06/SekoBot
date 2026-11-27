@@ -66,7 +66,7 @@ internal sealed partial class BotEngine : IDisposable
         _whisper = new WhisperSender(ReadMessagesNow);
         Profile = profile;
         _log = log;
-        _brain = new Brain(() => Profile) { ReviveState = () => World is { Dead: true, ReviveReady: true } && !_holdRevive ? State : null, JunkInBag = JunkInBag, Obstacles = _obstacles, Terrain = _terrain, NoGo = _noGo, Lore = SkillLore.Shared };
+        _brain = new Brain(() => Profile) { SamePopupOpen = SamePopupOpen, ReviveState = () => World is { Dead: true, ReviveReady: true } && !_holdRevive ? State : null, JunkInBag = JunkInBag, Obstacles = _obstacles, Terrain = _terrain, NoGo = _noGo, Lore = SkillLore.Shared };
         if (ItemBook.FilePath == null)
             ItemBook.Load(Path.Combine(ProfileStore.Directory, "esya-bilgisi.json"));
         _session.PotionsRanOut += kind =>
@@ -102,8 +102,6 @@ internal sealed partial class BotEngine : IDisposable
                 return "🗑 Envanterdeki eşyalar atılıyor";
             if (_tidying)
                 return "Ekranda açık kalan pencereler kapatılıyor";
-            if (_mapPeekSince != null || _mapPeekReadAt != null)
-                return "🗺 M haritası okunuyor";
             return _brain.Doing ?? _brain.Phase.ToTurkish();
         }
     }
@@ -217,15 +215,16 @@ internal sealed partial class BotEngine : IDisposable
                         };
                         if (world is { Dead: true })
                             state = state with { ReviveReady = world.ReviveReady, HoldRevive = _holdRevive };
-                        if (profile.ClosePopups && BotRunning && !state.Dead)
-                            // While throwing items the bag and its menu are ours (not windows to close or tell).
+                        if (BotRunning && !state.Dead)
+                        {
+                            string? window = PopupWatch.Target(world?.OpenWindows);
                             state = state with
                             {
-                                PopupOpen = !_cleaner.Active && !_brain.ReadyToClean && PopupOpen(world),
-                                PopupIsBag = _popupIsBag,
-                                PopupIsMap = _popupIsMap,
+                                WindowsUnreadable = world?.OpenWindows == null,
+                                PopupTarget = window,
                                 Typing = world?.OpenWindows?.Contains(GameWorldReader.MessageWindow) == true,
                             };
+                        }
                         var view = MemoryView(world, profile, frame.Width, frame.Height, DumpSpot(now), fit: !_fitRelaxed);
                         var mobs = view?.Mobs ?? [];
                         if (!profile.NavigateMode)
@@ -327,11 +326,16 @@ internal sealed partial class BotEngine : IDisposable
             }
             // Off to a market NPC to sell: that trip drives the character, the brain waits.
             else
+            {
                 // Dead on the way to the shop (seen: VaSPeN lay dead while the trip "walked" on for 5 minutes), or
                 // nearly so with mobs on it: the trip is given up, the brain revives / fights (the sale is tried later).
                 if (_selling && (state.Dead || state.Hp is < SellAbortHp && (state.Attackers.Count > 0 || state.Targets.Any(t => t.AttacksMe))))
                     AbortSellTrip(state.Dead ? "karakter öldü" : "can çok azaldı, moblar saldırıyor");
-                actions = _selling ? [] : PvpTick(state, Profile) ?? CrowdTick(state, Profile) ?? WhisperTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);
+                bool guard = !state.Dead && !_selling && !_cleaner.Active && !_tidying
+                    && !(_leftoverCheckUntil > DateTime.Now && _bagLayout is { } remaining && LeftOpen(remaining))
+                    && !_whisper.Active && _channelSince == null && (state.WindowsUnreadable || state.PopupTarget != null || state.Typing);
+                actions = guard ? _brain.Tick(state) : _selling ? [] : PvpTick(state, Profile) ?? CrowdTick(state, Profile) ?? WhisperTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);
+            }
             phase = _brain.Phase;
             // Throwing items away: the game stays in front for all the clicks, not back and forth for each.
             _input.HoldFront = _cleaner.Active || _channelSince != null;
@@ -470,9 +474,6 @@ internal sealed partial class BotEngine : IDisposable
             if (why != null)
                 _log(why);
             _botHome = _farmSpot ?? World?.Player;
-            // Windows already showing when the bot starts (chat, minimap, …) belong to the screen.
-            _popups.Start(World?.OpenWindows ?? []);
-            _windowsSeen = "";
             _sessionStarted = true;
         }
         _log(dryRun ? "Bot kuru çalışmada başladı (girdi gönderilmez)."

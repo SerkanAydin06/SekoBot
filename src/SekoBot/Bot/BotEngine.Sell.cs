@@ -288,11 +288,14 @@ internal sealed partial class BotEngine
                     reopened++;
                     _log($"💰 {name} penceresi kapandı; yeniden açılıyor ({reopened}. kez).");
                     input.HoldFront = false;
-                    input.Enqueue(new KeyTapAction(profile.Keys.CloseWindow));
-                    await Task.Delay(600, token);
-                    if (ReadBagNow() is { Open: true })
+                    if (ReadBagNow() is { OtherConfirm: not null } question)
                     {
-                        input.Enqueue(new KeyTapAction(profile.Keys.Inventory));
+                        input.Enqueue(TidyAction(question, profile, readBagNow: ReadBagNow));
+                        await Task.Delay(600, token);
+                    }
+                    if (ReadBagNow() is { Open: true, Confirm: null, OtherConfirm: null } openBag)
+                    {
+                        input.Enqueue(TidyAction(openBag, profile, readBagNow: ReadBagNow));
                         await Task.Delay(500, token);
                     }
                     if (!await OpenShopAsync())
