@@ -268,7 +268,7 @@ internal sealed partial class MainForm
 
     private static string ModeName(int mode) => mode switch { FishingMode => "balık", MarketMode => "pazar", _ => "farm" };
 
-    private void StartWork(BotEngine e, int mode, string why = "Oyuna yeniden girildi")
+    private bool StartWork(BotEngine e, int mode, string why = "Oyuna yeniden girildi")
     {
         string error = "";
         bool ok = mode switch
@@ -285,6 +285,7 @@ internal sealed partial class MainForm
         _launches = 0;
         UpdateControls();
         UpdateStats();
+        return ok;
     }
 
     /// <summary>The game went away (closed, crashed, closed for an update): the work noted to go back to.</summary>

@@ -60,6 +60,13 @@ internal static class UpdateService
         return File.Exists(inBase) ? inBase : path;
     }
 
+    internal static string DownloadPath(string executable) =>
+        Path.Combine(Path.GetDirectoryName(executable)!, $".SekoBot.update-{Guid.NewGuid():N}.exe");
+
+    internal static UpdateCheckResult Interrupted(bool cancelled) => new(null, cancelled
+        ? "Güncelleme denetimi iptal edildi."
+        : "Güncelleme zaman aşımına uğradı; kurulu sürümün güncelliği doğrulanamadı.");
+
     public static async Task<UpdateCheckResult> CheckAndDownloadAsync(
         CancellationToken token = default)
     {
@@ -73,21 +80,22 @@ internal static class UpdateService
             return new UpdateCheckResult(null, "Otomatik güncelleme: PARDUS'un kendi dosyası bulunamadı (klasörü taşınmış ya da " +
                                                "adı değişmiş olabilir). PARDUS'u kapatıp yeniden açınca güncellenir.");
 
-        // Clean up the backup retained by a successful previous replacement.
-        try { File.Delete(executable + ".old"); } catch { }
-
-        string tempFile = Path.Combine(Path.GetDirectoryName(executable)!, ".SekoBot.update.exe");
+        string tempFile = DownloadPath(executable);
+        bool prepared = false;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(90));
+        var downloadToken = deadline.Token;
         try
         {
             using var manifestResponse = await Client.GetAsync(
-                ManifestUrl, HttpCompletionOption.ResponseHeadersRead, token);
+                ManifestUrl, HttpCompletionOption.ResponseHeadersRead, downloadToken);
             if (!manifestResponse.IsSuccessStatusCode)
                 return new UpdateCheckResult(null,
                     $"Güncelleme bilgisi okunamadı (HTTP {(int)manifestResponse.StatusCode}).");
 
-            await using var manifestStream = await manifestResponse.Content.ReadAsStreamAsync(token);
+            await using var manifestStream = await manifestResponse.Content.ReadAsStreamAsync(downloadToken);
             var manifest = await JsonSerializer.DeserializeAsync<UpdateManifest>(
-                manifestStream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, token);
+                manifestStream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, downloadToken);
 
             if (manifest == null || string.IsNullOrWhiteSpace(manifest.Commit) ||
                 string.IsNullOrWhiteSpace(manifest.Sha256) ||
@@ -99,14 +107,14 @@ internal static class UpdateService
                 return new UpdateCheckResult(null, null);
 
             using var response = await Client.GetAsync(
-                ExecutableUrl, HttpCompletionOption.ResponseHeadersRead, token);
+                ExecutableUrl, HttpCompletionOption.ResponseHeadersRead, downloadToken);
             response.EnsureSuccessStatusCode();
 
-            await using (var input = await response.Content.ReadAsStreamAsync(token))
-            await using (var output = new FileStream(tempFile, FileMode.Create, FileAccess.Write,
+            await using (var input = await response.Content.ReadAsStreamAsync(downloadToken))
+            await using (var output = new FileStream(tempFile, FileMode.CreateNew, FileAccess.Write,
                 FileShare.None, 131_072, FileOptions.Asynchronous))
             {
-                await input.CopyToAsync(output, token);
+                await input.CopyToAsync(output, downloadToken);
             }
 
             var downloaded = new FileInfo(tempFile);
@@ -115,21 +123,26 @@ internal static class UpdateService
 
             await using var checkFile = new FileStream(tempFile, FileMode.Open, FileAccess.Read,
                 FileShare.Read, 131_072, FileOptions.Asynchronous);
-            byte[] hash = await SHA256.HashDataAsync(checkFile, token);
+            byte[] hash = await SHA256.HashDataAsync(checkFile, downloadToken);
             if (!CryptographicOperations.FixedTimeEquals(
                 hash, Convert.FromHexString(manifest.Sha256)))
                 throw new InvalidDataException("Güncellemenin SHA-256 değeri doğrulanamadı.");
 
+            prepared = true;
             return new UpdateCheckResult(new PreparedUpdate(manifest.Version ?? manifest.Commit[..7], tempFile), null);
         }
         catch (OperationCanceledException)
         {
-            return new UpdateCheckResult(null, null);
+            return Interrupted(token.IsCancellationRequested);
         }
         catch (Exception ex)
         {
-            try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
             return new UpdateCheckResult(null, "Otomatik güncelleme başarısız: " + ex.Message);
+        }
+        finally
+        {
+            if (!prepared)
+                try { File.Delete(tempFile); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }
 
@@ -163,17 +176,28 @@ for /L %%I in (1,1,30) do (
 :swap
 for /L %%I in (1,1,60) do (
   ping -n 2 127.0.0.1 >NUL
-  move /Y "%target%" "%old%" >NUL 2>&1
-  if not exist "%target%" (
-    move /Y "%replacement%" "%target%" >NUL 2>&1
-    if exist "%target%" (
-      start "" "%target%"
-      exit /B 0
-    )
-    if exist "%old%" move /Y "%old%" "%target%" >NUL 2>&1
-  )
+  call :replace 9>>"%target%.update.lock" 2>NUL
+  if not errorlevel 1 goto launch
 )
 exit /B 1
+
+:replace
+if not exist "%replacement%" exit /B 1
+if exist "%target%" (
+  fc /B "%replacement%" "%target%" >NUL 2>&1
+  if not errorlevel 1 (
+    del /Q "%replacement%" >NUL 2>&1
+    exit /B 0
+  )
+  move /Y "%target%" "%old%" >NUL 2>&1 || exit /B 1
+)
+move /Y "%replacement%" "%target%" >NUL 2>&1 && exit /B 0
+if exist "%old%" move /Y "%old%" "%target%" >NUL 2>&1
+exit /B 1
+
+:launch
+start "" "%target%"
+exit /B 0
 """;
 
         File.WriteAllText(updaterFile, script, new UTF8Encoding(false));
