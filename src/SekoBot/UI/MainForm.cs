@@ -1093,7 +1093,12 @@ internal sealed partial class MainForm : Form
         _previewTimer.Tick += (_, _) => RenderPreview();
         VisibleChanged += (_, _) => _engine?.ShowingPreview(GameViewShown);
         _statsTimer = new System.Windows.Forms.Timer { Interval = 400 };
-        _statsTimer.Tick += (_, _) => UpdateStats();
+        _statsTimer.Tick += async (_, _) =>
+        {
+            UpdateStats();
+            if (!_updating && !_updatingAll && !_checkingUpdate && ActiveWork == null && _pendingUpdate is { } ready)
+                await ApplyUpdateAsync(ready);
+        };
         _updateTimer = new System.Windows.Forms.Timer { Interval = (int)TimeSpan.FromHours(2).TotalMilliseconds };
         _updateTimer.Tick += async (_, _) => { if (Instance.IsFirst) await CheckForUpdatesAsync(startup: false); };
 
@@ -2071,7 +2076,7 @@ internal sealed partial class MainForm : Form
     /// (minimized game) keep the window as is so the user can see why it stopped.</param>
     private void StopBot(string reason, bool byUser = false)
     {
-        if (_engine is { Fishing: true } || _engine is { FishingPaused: true })
+        if (_engine is { Fishing: true } || (_engine is { FishingPaused: true } && ActiveWork == null))
         {
             var fisher = _engine;
             bool wasFishing = fisher.Fishing;
@@ -2856,6 +2861,13 @@ internal sealed partial class MainForm : Form
         }
     }
 
+    internal static string? ActiveWorkName(bool farm, bool market, bool fishing, bool area) =>
+        fishing ? ModeName(FishingMode) : market ? ModeName(MarketMode) : farm ? ModeName(FarmMode)
+        : area ? "alan taraması" : null;
+
+    private string? ActiveWork => _engine is { } e
+        ? ActiveWorkName(e.BotRunning, e.ScanningMarket, e.Fishing, e.ScanningArea) : null;
+
     private string TelegramCommand(string command)
     {
         switch (command)
@@ -2863,21 +2875,20 @@ internal sealed partial class MainForm : Form
             case "durum" or "status":
                 return AllStatuses();
             case "dur" or "stop":
-                if (_engine?.BotRunning != true)
-                    return "Bot zaten duruyor.";
+                if (ActiveWork is not string stopping) return "Bot zaten duruyor.";
                 StopBot("Telegram'dan durduruldu", byUser: true);
-                WriteLog("Telegram'dan durduruldu.");
-                return "⏹ Bot durduruldu.\n" + TelegramStatus();
+                return $"⏹ {stopping} için durdurma istendi.";
             case "basla" or "start":
-                if (_engine?.BotRunning == true)
-                    return "Bot zaten çalışıyor.";
-                ToggleBot();
-                if (_engine?.BotRunning == true)
-                {
-                    WriteLog("Telegram'dan başlatıldı.");
-                    return "▶ Bot başladı.";
-                }
-                return "Başlatılamadı: " + (_stopReason ?? (_engine == null ? "oyun açık değil" : "bilinmiyor"));
+                if (ActiveWork is string active) return $"Çalışan iş: {active}.";
+                if (_updating || _updatingAll) return "Güncelleme sürüyor.";
+                if (_engine is not { } engine) return "Başlatılamadı: oyun bağlı değil.";
+                bool started = TryStartMode(engine, _mode, _dryRun.Checked, out string error);
+                if (started) _stopReason = null;
+                UpdateControls();
+                UpdateStats();
+                string reply = started ? $"▶ {ModeName(_mode)} başladı." : $"Başlatılamadı: {error}";
+                WriteLog(reply);
+                return reply;
             default:
                 return "Komutlar: /ekran · /guncelle · durum · dur · başla · yaz İsim mesaj\nFısıltıya cevap: bildirime \"Yanıtla\" ile yaz.";
         }
@@ -3012,7 +3023,7 @@ internal sealed partial class MainForm : Form
 
     private async Task CheckForUpdatesAsync(bool startup)
     {
-        if (_updating || _updatingAll || _checkingUpdate || (!startup && _engine?.BotRunning == true))
+        if (_updating || _updatingAll || _checkingUpdate || ActiveWork != null)
             return;
         _checkingUpdate = true;
         try
@@ -3047,7 +3058,7 @@ internal sealed partial class MainForm : Form
         if (_updating || IsDisposed)
             return;
         // Never interrupt a running farm session; install when the user stops the bot.
-        if (_engine?.BotRunning == true)
+        if (ActiveWork != null)
         {
             if (_pendingUpdate == null)
                 WriteLog($"Yeni sürüm {update.Version} hazır; botu durdurduğunda (F10/F11) yüklenecek.");
@@ -3060,7 +3071,7 @@ internal sealed partial class MainForm : Form
         await Task.Delay(1200);
         if (IsDisposed)
             return;
-        if (_engine?.BotRunning == true)
+        if (ActiveWork != null)
         {
             // The user restarted the bot during the countdown.
             _updating = false;

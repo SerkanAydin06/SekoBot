@@ -81,6 +81,14 @@ internal sealed partial class MainForm
             update = update with { TelegramChat = telegramChat };
             // What this one does, noted with its character, then stopped for the update.
             string character = _engine?.CharacterName ?? "";
+            if (_engine is { ScanningArea: true })
+            {
+                try { File.Delete(update.FilePath); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                await UpdateNoticeAsync(telegramChat, "Alan taraması sürüyor. Bittiğinde güncellemeyi yeniden iste.");
+                return;
+            }
+            int runningMode = _engine is { Fishing: true } ? FishingMode :
+                _engine is { ScanningMarket: true } ? MarketMode : FarmMode;
             bool running = _engine is { BotRunning: true } || _engine is { ScanningMarket: true } || _engine is { Fishing: true };
             if (running && character.Length == 0)
             {
@@ -90,7 +98,7 @@ internal sealed partial class MainForm
             }
             if (character.Length > 0)
             {
-                var note = new WorkBeforeUpdate { Mode = _mode, Running = running, At = DateTime.Now };
+                var note = new WorkBeforeUpdate { Mode = running ? runningMode : _mode, Running = running, At = DateTime.Now };
                 if (SharedFile.Update<Dictionary<string, WorkBeforeUpdate>>(AfterUpdateFile, all => all[character] = note) == null)
                 {
                     await UpdateNoticeAsync(telegramChat, "Güncelleme ertelendi; devam kaydı yazılamadı.");
@@ -120,7 +128,7 @@ internal sealed partial class MainForm
     {
         string character = e.CharacterName;
         var world = e.World;
-        if (character.Length == 0 || world == null || BotEngine.IsLoginScreen(world.MapName) || world.MapName.Length == 0
+        if (_updatingAll || _updating || _pendingUpdate != null || character.Length == 0 || world == null || BotEngine.IsLoginScreen(world.MapName) || world.MapName.Length == 0
             || e.BotRunning || e.ScanningMarket || e.Fishing || !File.Exists(AfterUpdateFile))
         {
             _afterUpdateInGame = DateTime.MinValue;

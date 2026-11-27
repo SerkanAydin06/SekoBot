@@ -268,15 +268,16 @@ internal sealed partial class MainForm
 
     private static string ModeName(int mode) => mode switch { FishingMode => "balık", MarketMode => "pazar", _ => "farm" };
 
+    private static bool TryStartMode(BotEngine e, int mode, bool dryRun, out string error) => mode switch
+    {
+        FishingMode => e.StartFishing(out error),
+        MarketMode => e.StartMarketScan(out error, true),
+        _ => e.StartBot(dryRun, background: true, out error)
+    };
+
     private bool StartWork(BotEngine e, int mode, string why = "Oyuna yeniden girildi")
     {
-        string error = "";
-        bool ok = mode switch
-        {
-            FishingMode => e.StartFishing(out error),
-            MarketMode => e.StartMarketScan(out error, true),
-            _ => e.StartBot(false, background: true, out error),
-        };
+        bool ok = TryStartMode(e, mode, false, out string error);
         string text = ok ? $"🟢 {why}; kaldığı yerden devam ediliyor ({ModeName(mode)})."
                          : $"{why} ama iş başlatılamadı: {error}";
         WriteLog(text);
