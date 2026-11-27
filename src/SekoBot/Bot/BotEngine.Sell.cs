@@ -500,7 +500,8 @@ internal sealed partial class BotEngine
                     double sx = me.X + (ahead.X - me.X) / d * ObstacleMap.Ahead, sy = me.Y + (ahead.Y - me.Y) / d * ObstacleMap.Ahead;
                     // A mob next to us or the spot: it was the mob, not the ground (it moves on) — walked round this
                     // time, not kept for good (the user: "moblar hareketli, takılma olarak görmemeli").
-                    if (!world.Mobs.Any(m => m.Hp > 0 && (m.Position.DistanceXY(me) < Brain.MobFreeAround || m.Position.DistanceXY(new Vec3(sx, sy, me.Z)) < Brain.MobFreeAround)))
+                    // On a road: a mob too (the user: "yolda engel varsa çok büyük ihtimalle mobtur").
+                    if (_terrain.Of(world.MapName)?.Roads?.OnRoad(sx, sy) != true && !world.Mobs.Any(m => m.Hp > 0 && (m.Position.DistanceXY(me) < Brain.MobFreeAround || m.Position.DistanceXY(new Vec3(sx, sy, me.Z)) < Brain.MobFreeAround)))
                         _obstacles.Stuck(world.MapName, sx, sy, DateTime.Now);
                     stuckHere.Add(new MapTerrain.Circle(sx, sy, 60 + 30 * Math.Min(4, stuckHere.Count(c => Math.Abs(c.X - sx) < 150 && Math.Abs(c.Y - sy) < 150))));
                     Let([keys.MoveBack]);

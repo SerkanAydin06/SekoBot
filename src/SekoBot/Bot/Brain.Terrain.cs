@@ -236,6 +236,9 @@ internal sealed partial class Brain
         // A mob next to us or the spot (a living one moves: it was the mob, not the ground).
         if (state.Targets.Any(t => t.Position is Vec3 m && (m.DistanceXY(spot) < MobFreeAround || m.DistanceXY(me) < MobFreeAround)))
             return;
+        // On a road: a mob (or a player) held us up, not the ground.
+        if (TerrainHere(state)?.Roads?.OnRoad(spot.X, spot.Y) == true)
+            return;
         Obstacles.Stuck(state.MapName, spot.X, spot.Y, DateTime.Now);
     }
 }

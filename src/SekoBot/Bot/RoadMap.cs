@@ -114,6 +114,133 @@ internal sealed class RoadMap
         return _cost = cost;
     }
 
+    /// <summary>The road cell nearest to (x, y), within <paramref name="reach"/> world units; null: none.</summary>
+    internal (int C, int R)? NearestCell(double x, double y, double reach)
+    {
+        int c0 = (int)Math.Floor((x - StartX) / Cell), r0 = (int)Math.Floor((y - StartY) / Cell);
+        int most = (int)Math.Ceiling(reach / Cell);
+        for (int ring = 0; ring <= most; ring++)
+        {
+            (int C, int R)? best = null;
+            double bestD = double.MaxValue;
+            for (int r = r0 - ring; r <= r0 + ring; r++)
+                for (int c = c0 - ring; c <= c0 + ring; c++)
+                {
+                    if (Math.Max(Math.Abs(r - r0), Math.Abs(c - c0)) != ring || c < 0 || r < 0 || c >= Columns || r >= Rows || !_road[r * Columns + c])
+                        continue;
+                    double d = (c - c0) * (c - c0) + (r - r0) * (r - r0);
+                    if (d < bestD)
+                        (best, bestD) = ((c, r), d);
+                }
+            if (best != null)
+                return best;
+        }
+        return null;
+    }
+
+    /// <summary>A step inside one of these costs this many times more (a mob on the road: walked round on the road
+    /// when there is room, never left for the fields).</summary>
+    internal const float SlowCost = 12f;
+    /// <summary>The corners of a way kept within this cost of the road's middle (about 2 cells off it).</summary>
+    internal const float CornerCost = MiddleCost + EdgeStep * 2;
+
+    /// <summary>
+    /// The way along the roads only, from the road cell nearest to <paramref name="from"/> to the one nearest to
+    /// <paramref name="to"/>: the corners (world units, at height <paramref name="z"/>), the first where the road is
+    /// reached, the last where it is left. Null: no road near, or the two not joined by road. Round places in
+    /// <paramref name="slow"/> (mobs, where the bot got stuck) cost more, they are never shut.
+    /// </summary>
+    internal List<Vec3>? WayAlong(Vec3 from, Vec3 to, double reach, IReadOnlyList<(double X, double Y, double R)>? slow = null)
+    {
+        if (NearestCell(from.X, from.Y, reach) is not var (sc, sr) || NearestCell(to.X, to.Y, reach) is not var (gc, gr))
+            return null;
+        var costs = Costs();
+        int w = Columns, h = Rows, start = sr * w + sc, goal = gr * w + gc;
+        double X(int i) => StartX + (i % w + 0.5) * Cell;
+        double Y(int i) => StartY + (i / w + 0.5) * Cell;
+        float Slow(int i)
+        {
+            if (slow == null)
+                return 1;
+            double x = X(i), y = Y(i);
+            foreach (var s in slow)
+                if ((x - s.X) * (x - s.X) + (y - s.Y) * (y - s.Y) < s.R * s.R)
+                    return SlowCost;
+            return 1;
+        }
+        var cost = new float[w * h];
+        Array.Fill(cost, float.MaxValue);
+        var came = new int[w * h];
+        var open = new PriorityQueue<int, float>();
+        float Guess(int i) => (float)Math.Sqrt((i % w - gc) * (i % w - gc) + (i / w - gr) * (i / w - gr)) * MiddleCost;
+        cost[start] = 0;
+        open.Enqueue(start, Guess(start));
+        bool found = false;
+        while (open.TryDequeue(out int i, out float pri))
+        {
+            if (i == goal)
+            {
+                found = true;
+                break;
+            }
+            if (pri - Guess(i) > cost[i] + 0.01f)
+                continue;
+            int x = i % w, y = i / w;
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int nx = x + dx, ny = y + dy;
+                    if ((dx == 0 && dy == 0) || nx < 0 || ny < 0 || nx >= w || ny >= h)
+                        continue;
+                    int n = ny * w + nx;
+                    if (!_road[n])
+                        continue;
+                    float c = cost[i] + (dx != 0 && dy != 0 ? 1.4142f : 1f) * costs[n] * Slow(n);
+                    if (c < cost[n])
+                    {
+                        cost[n] = c;
+                        came[n] = i;
+                        open.Enqueue(n, c + Guess(n));
+                    }
+                }
+        }
+        if (!found)
+            return null;
+        var cells = new List<int>();
+        for (int i = goal; i != start; i = came[i])
+            cells.Add(i);
+        cells.Add(start);
+        cells.Reverse();
+        // Only the corners: on to the furthest cell in a straight line kept near the road's middle (and off the slow places).
+        bool Straight(int a, int b)
+        {
+            double ax = X(cells[a]), ay = Y(cells[a]), bx = X(cells[b]), by = Y(cells[b]);
+            int steps = Math.Max(1, (int)Math.Ceiling(Math.Sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay)) / (Cell * 0.5)));
+            for (int s = 1; s < steps; s++)
+            {
+                double t = (double)s / steps, px = ax + (bx - ax) * t, py = ay + (by - ay) * t;
+                int c = (int)Math.Floor((px - StartX) / Cell), r = (int)Math.Floor((py - StartY) / Cell);
+                if (c < 0 || r < 0 || c >= w || r >= h || !_road[r * w + c])
+                    return false;
+                float here = costs[r * w + c], onWay = costs[cells[Math.Clamp(a + (int)Math.Round(t * (b - a)), a, b)]];
+                if (here > Math.Max(CornerCost, onWay) + 0.01f || Slow(r * w + c) > 1 && Slow(cells[Math.Clamp(a + (int)Math.Round(t * (b - a)), a, b)]) == 1)
+                    return false;
+            }
+            return true;
+        }
+        var way = new List<Vec3> { new(X(start), Y(start), to.Z) };
+        int k = 0;
+        while (k < cells.Count - 1)
+        {
+            int far = k + 1;
+            while (far + 1 < cells.Count && Straight(k, far + 1))
+                far++;
+            way.Add(new Vec3(X(cells[far]), Y(cells[far]), to.Z));
+            k = far;
+        }
+        return way;
+    }
+
     /// <summary>What a step at (x, y) costs on the road (0: not on the road).</summary>
     public float CostAt(double x, double y)
     {

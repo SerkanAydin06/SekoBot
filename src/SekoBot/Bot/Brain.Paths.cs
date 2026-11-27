@@ -99,7 +99,8 @@ internal sealed partial class Brain
         _wayStuck.Add(spot);
         if (_wayStuck.Count > 30)
             _wayStuck.RemoveAt(0);
-        if (Obstacles != null && state.MapName.Length > 0)
+        // On a road: a mob (or a player) held us up, not the ground — walked round, not kept.
+        if (Obstacles != null && state.MapName.Length > 0 && TerrainHere(state)?.Roads?.OnRoad(spot.X, spot.Y) != true)
             Obstacles.Stuck(state.MapName, spot.X, spot.Y, DateTime.Now);
         if (_way is { } w)
             _way = (w.Goal, Never, w.Way); // found again on the next look
