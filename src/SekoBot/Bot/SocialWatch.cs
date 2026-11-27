@@ -4,7 +4,8 @@ using SekoBot.Memory;
 namespace SekoBot.Bot;
 
 /// <summary>Something to tell the user. <paramref name="Urgent"/>: also an alert sound (a person may be checking on the bot).</summary>
-internal readonly record struct SocialNotice(string Text, bool Urgent);
+/// <param name="Send">Also sent to Telegram (else only written in the log).</param>
+internal readonly record struct SocialNotice(string Text, bool Urgent, bool Send = true);
 
 /// <summary>
 /// Turns what the game shows around the fight into messages for the user: a private message, a
@@ -52,6 +53,14 @@ internal sealed class SocialWatch
 
     internal static bool IsNotOurs(ChatLine line) =>
         FromGame(line) && line.Message.Contains("toplayamazsın", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The game's system line about a player put out of the game (a ban) — "[SYSTEM] …" in the chat, written for all.
+    /// The chat bans ("[SYSTEM] NAME chat blocked.", seen 34 times in a day) are left out: the user wants the real bans only.
+    /// </summary>
+    internal static bool IsSystemBan(ChatLine line) =>
+        FromGame(line) && line.Message.TrimStart().StartsWith("[SYSTEM]", StringComparison.OrdinalIgnoreCase)
+        && !line.Message.Contains("chat blocked", StringComparison.OrdinalIgnoreCase);
 
     internal static bool IsSkillWait(ChatLine line) =>
         FromGame(line) && line.Message.Trim().TrimEnd('!').Equals("WAIT", StringComparison.OrdinalIgnoreCase);
@@ -117,6 +126,11 @@ internal sealed class SocialWatch
         // The game's own lines the bot acts on.
         NotOurs = social.NewChat.Count(IsNotOurs);
         SkillWaits = social.NewChat.Count(IsSkillWait);
+
+        // The game's system lines about bans: always in the log, on Telegram when chosen.
+        foreach (var line in social.NewChat)
+            if (IsSystemBan(line))
+                notices.Add(new("⚖ Sistem: " + line.Message.Trim()[8..].Trim(), false, Send: p.NotifyBans));
 
         // The server's announcement box: a new text is told (once; the server repeats them).
         string announcement = social.Announcement.Trim();

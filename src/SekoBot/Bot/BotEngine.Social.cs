@@ -62,7 +62,8 @@ internal sealed partial class BotEngine
         foreach (var notice in notices)
         {
             _log(notice.Text);
-            Notify(notice.Text);
+            if (notice.Send)
+                Notify(notice.Text);
             if (notice.Urgent)
                 Alert();
         }
