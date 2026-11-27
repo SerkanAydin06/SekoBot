@@ -51,6 +51,13 @@ internal sealed partial class BotEngine : IDisposable
     private bool _sessionStarted;
     private Vec3? _farmSpot;
     private DateTime _sessionStartedAt;
+    /// <summary>Stopped for a while only (an out-of-game break, kicked to the login screen with the login on): the run
+    /// goes on when the bot starts again — the counters kept, the time away not counted (the user: "her çıkıp girişte
+    /// süre neden sıfırlanıyor? molada bot hâlâ çalışıyor").</summary>
+    private bool _sessionHeld;
+    private TimeSpan _heldAt, _heldTotal;
+    /// <summary>The run is held (stopped for a while, going on when the bot starts again).</summary>
+    public bool SessionHeld { get { lock (_botGate) return _sessionHeld; } }
     /// <summary>The summary of the last run (for the stop message), or null.</summary>
     private string? _lastSummary;
 
@@ -368,9 +375,14 @@ internal sealed partial class BotEngine : IDisposable
         }
         if (stopReason != null)
         {
-            StopBot(stopReason);
+            // Kicked with the login on: logged in again and the work goes on — the run with it.
+            bool hold = KickedWhileWorking && Profile.AutoLogin;
+            StopBot(stopReason, hold);
             BotStopped?.Invoke(stopReason);
-            Notify("⏹ Bot durdu: " + stopReason + (_lastSummary is { } s1 ? "\n" + s1 : ""));
+            if (hold)
+                Notify("⏸ " + char.ToUpper(stopReason[0]) + stopReason[1..] + "; oyuna yeniden girilince kaldığı yerden devam edilecek.");
+            else
+                Notify("⏹ Bot durdu: " + stopReason + (_lastSummary is { } s1 ? "\n" + s1 : ""));
         }
         return (phase, actions);
     }
@@ -456,21 +468,30 @@ internal sealed partial class BotEngine : IDisposable
                 MarkMiss,
                 _ => { }, // the selected mob's place on screen comes from memory
                 background);
-            _botStarted = _clock.Elapsed;
-            _brain.Start(_clock.Elapsed);
+            bool goOn = _sessionHeld && _sessionStarted;
+            _sessionHeld = false;
+            var away = goOn ? _clock.Elapsed - _heldAt : TimeSpan.Zero;
+            _heldTotal = goOn ? _heldTotal + away : TimeSpan.Zero;
+            _botStarted = goOn ? _botStarted + away : _clock.Elapsed;
+            _brain.Start(_clock.Elapsed, keepCounts: goOn);
             _cleaner.Abort(null, Profile, "");
             _whisper.Abort("");
             _pendingWhisper = null;
             _cleanTries = 0;
             _notes.Reset();
-            _sessionItems.Reset();
-            lock (_social)
-                _social.Reset();
-            _session.Reset(_clock.Elapsed);
+            if (goOn)
+                _session.GoOn(away);
+            else
+            {
+                _sessionItems.Reset();
+                lock (_social)
+                    _social.Reset();
+                _session.Reset(_clock.Elapsed);
+                _sessionStartedAt = DateTime.Now;
+            }
             _players.Reset();
             ResetStuck();
             ResetFit();
-            _sessionStartedAt = DateTime.Now;
             _farmSpot = UsableFarmSpot(World, Profile, out string? why);
             if (why != null)
                 _log(why);
@@ -483,7 +504,8 @@ internal sealed partial class BotEngine : IDisposable
         return true;
     }
 
-    public void StopBot(string reason)
+    /// <param name="hold">Only for a while (a break, kicked with the login on): the run goes on at the next start.</param>
+    public void StopBot(string reason, bool hold = false)
     {
         _sellCts?.Cancel(); // a sale trip stops with the bot
         ItemBook.SaveIfChanged();
@@ -516,6 +538,32 @@ internal sealed partial class BotEngine : IDisposable
         _tidying = false;
         ShrinkAfterWork();
         FrontTurn.Shared.LetGo(); // another bot waiting can go on
+        if (hold && _sessionStarted)
+        {
+            lock (_botGate)
+            {
+                _sessionHeld = true;
+                _heldAt = _clock.Elapsed;
+            }
+            _lastSummary = null;
+            _log($"Bot bekliyor: {reason}. Oturum sürüyor; yeniden başlayınca sayaçlar kaldığı yerden devam edecek.");
+            return;
+        }
+        _sessionHeld = false;
+        _log("Bot durdu: " + reason);
+        WriteSessionReport(reason);
+    }
+
+    /// <summary>A held run given up (stopped by the user during a break, or the way back given up): its report written.</summary>
+    public void EndHeldSession(string reason)
+    {
+        lock (_botGate)
+        {
+            if (!_sessionHeld || _input != null)
+                return;
+            _sessionHeld = false;
+            _heldTotal += _clock.Elapsed - _heldAt;
+        }
         _log("Bot durdu: " + reason);
         WriteSessionReport(reason);
     }
@@ -524,7 +572,7 @@ internal sealed partial class BotEngine : IDisposable
     private void WriteSessionReport(string reason)
     {
         _lastSummary = null;
-        var duration = DateTime.Now - _sessionStartedAt;
+        var duration = DateTime.Now - _sessionStartedAt - _heldTotal;
         if (!_sessionStarted || duration < TimeSpan.FromMinutes(1))
             return;
         var world = World is { } now && !IsLoginScreen(now.MapName) ? now : _lastInGame ?? World;
@@ -536,7 +584,7 @@ internal sealed partial class BotEngine : IDisposable
                  $"{_brain.NoWayMobs} mob ya da yerdeki eşyaya kısa yol olmadığı için gidilmedi.");
         try
         {
-            SessionLog.Append(SessionLog.Line(_sessionStartedAt, DateTime.Now, world?.MapName ?? "", report, _brain.Deaths, reason));
+            SessionLog.Append(SessionLog.Line(_sessionStartedAt, _sessionStartedAt + duration, world?.MapName ?? "", report, _brain.Deaths, reason));
         }
         catch (IOException ex)
         {
@@ -558,7 +606,7 @@ internal sealed partial class BotEngine : IDisposable
                 return new EngineStats(_capture?.Name ?? "—", _captureFps, State?.AnalysisMs ?? 0,
                     _brain.Phase, _input != null, _input?.DryRun ?? true,
                     _brain.Cycles, _brain.Potions,
-                    _input != null ? _clock.Elapsed - _botStarted : TimeSpan.Zero,
+                    _input != null ? _clock.Elapsed - _botStarted : _sessionHeld ? _heldAt - _botStarted : TimeSpan.Zero,
                     _brain.Deaths, _brain.AreaStatus,
                     _sessionStarted ? _session.Report(World, _clock.Elapsed) : null);
             }

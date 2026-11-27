@@ -55,6 +55,28 @@ public class RoadOnlyWayTests
     }
 
     [Fact]
+    public void Mobs_filling_the_road_are_passed_beside_it()
+    {
+        var map = Bend();
+        var mob = new MapTerrain.Circle(3000, 1250, BotEngine.PassMobsBy);
+        var way = map.WayTo(Farm, Shop, roads: true, mobs: [mob])!;
+        Assert.Equal(Shop, way[^1]);
+        Assert.Contains(way, p => p.X > 5700 && p.Y < 1600); // still along the road round the bend
+        var prev = Farm;
+        foreach (var corner in way)
+        {
+            for (double t = 0; t <= 1; t += 0.02)
+            {
+                double x = prev.X + (corner.X - prev.X) * t, y = prev.Y + (corner.Y - prev.Y) * t;
+                Assert.False(mob.Holds(new Vec3(x, y, 0), 0), $"through the mobs at ({x:0},{y:0})");
+                if (x > 2000 && x < 4000)
+                    Assert.NotNull(map.Roads!.NearestCell(x, y, MapTerrain.OffRoadMost)); // never far from the road
+            }
+            prev = corner;
+        }
+    }
+
+    [Fact]
     public void A_trip_the_road_does_not_help_goes_straight()
     {
         var map = Bend();

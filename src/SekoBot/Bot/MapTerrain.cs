@@ -205,20 +205,146 @@ internal sealed class MapTerrain
     /// <param name="avoid">Round places kept away from as well (where the bot got stuck before, unreachable
     /// places, mobs on the way); one the character or the goal stands in doesn't count.</param>
     /// <param name="roads">A long way: along the roads (when known) even where the straight way is free.</param>
-    public List<Vec3>? WayTo(Vec3 from, Vec3 to, double margin = Margin, double room = 12000, IReadOnlyList<Circle>? avoid = null, bool roads = false)
+    /// <param name="mobs">Mobs to keep away from: walked round on the road, and where they fill it, round them on firm
+    /// ground beside it (at most <see cref="OffRoadMost"/> off the road). One the character stands by doesn't count.</param>
+    public List<Vec3>? WayTo(Vec3 from, Vec3 to, double margin = Margin, double room = 12000, IReadOnlyList<Circle>? avoid = null, bool roads = false,
+        IReadOnlyList<Circle>? mobs = null)
     {
         // One the character stands in still counts (it got stuck right there): not walked into again.
         var keep = avoid?.Where(c => !c.Holds(to, margin)).ToList();
+        var nearMobs = mobs?.Where(c => !c.Holds(to, margin) && !c.Holds(from, margin)).ToList();
+        if (nearMobs is { Count: > 0 })
+            keep = [.. keep ?? [], .. nearMobs];
         bool alongRoads = roads && Roads != null && from.DistanceXY(to) > RoadsFrom;
         if (!alongRoads && LineClear(from, to, margin, keep))
             return [to];
         if (alongRoads && RoadOnlyWay(from, to, margin, keep) is { } byRoad)
-            return byRoad;
+            return nearMobs is { Count: > 0 } ? AroundMobs(from, byRoad, nearMobs, keep, margin) : byRoad;
         // Looked for close around the two points first; a long wall needs more room to get round.
         foreach (double r in Rooms.Where(r => r <= room))
             if (WayWithin(from, to, margin, r, keep) is { } way)
                 return way;
         return null;
+    }
+
+    /// <summary>Round mobs that fill the road: at most this far off it (world units, 10 m; the user: option A).</summary>
+    internal const double OffRoadMost = 1000;
+    /// <summary>Mobs on the way are looked for this far ahead (world units, 40 m); further ones move on before we come.</summary>
+    internal const double MobsAhead = 4000;
+
+    /// <summary>
+    /// The road way still passes through a mob (the road full of them — the road way only makes them dear, never
+    /// shuts them): from a little before the first to a little after the last, round them on firm ground (no wall,
+    /// no slope), kept within <see cref="OffRoadMost"/> of the road; else the way as it was.
+    /// </summary>
+    internal List<Vec3> AroundMobs(Vec3 from, List<Vec3> way, IReadOnlyList<Circle> mobs, IReadOnlyList<Circle>? avoid, double margin = Margin)
+    {
+        if (way.Count == 0 || Roads is not { } roads)
+            return way;
+        const double Step = 50, Before = 500, After = 500, Gap = 300;
+        // The way as points every 50 units: where each lies along it, and the corner it leads to.
+        var points = new List<(Vec3 P, double At, int Corner)>();
+        var a = from;
+        double at = 0;
+        for (int i = 0; i < way.Count; i++)
+        {
+            var b = way[i];
+            double len = a.DistanceXY(b);
+            int steps = Math.Max(1, (int)Math.Ceiling(len / Step));
+            for (int s = 1; s <= steps; s++)
+            {
+                double t = (double)s / steps;
+                points.Add((new Vec3(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t, b.Z), at + len * t, i));
+            }
+            at += len;
+            a = b;
+        }
+        bool InMob(Vec3 p) => mobs.Any(m => m.Holds(p, margin));
+        double first = -1, last = -1;
+        foreach (var (p, d, _) in points)
+        {
+            if (d > MobsAhead && first < 0)
+                break;
+            if (!InMob(p))
+            {
+                if (first >= 0 && d - last > Gap)
+                    break;
+                continue;
+            }
+            if (first < 0)
+                first = d;
+            last = d;
+        }
+        if (first < 0)
+            return way;
+        Vec3 PointAt(double d)
+        {
+            if (d <= 0)
+                return from;
+            foreach (var (p, pd, _) in points)
+                if (pd >= d)
+                    return p;
+            return way[^1];
+        }
+        int CornerAfter(double d)
+        {
+            foreach (var (_, pd, c) in points)
+                if (pd >= d)
+                    return c;
+            return way.Count;
+        }
+        double startAt = Math.Max(0, first - Before), endAt = Math.Min(at, last + After);
+        var start = PointAt(startAt);
+        var end = PointAt(endAt);
+        if (InMob(end) || start.DistanceXY(end) < 100)
+            return way;
+        var all = new List<Circle>(avoid ?? []);
+        all.AddRange(mobs.Where(m => !all.Contains(m)));
+        var detour = LineClear(start, end, margin, all) ? [end] : WayWithin(start, end, margin, Rooms[0], all);
+        if (detour is not { Count: > 0 })
+            return way;
+        // Kept near the road all along (no wandering into the fields).
+        var prev = start;
+        foreach (var corner in detour)
+        {
+            int steps = Math.Max(1, (int)Math.Ceiling(prev.DistanceXY(corner) / Step));
+            for (int s = 0; s <= steps; s++)
+            {
+                double t = (double)s / steps, x = prev.X + (corner.X - prev.X) * t, y = prev.Y + (corner.Y - prev.Y) * t;
+                if (roads.NearestCell(x, y, OffRoadMost) == null)
+                    return way;
+            }
+            prev = corner;
+        }
+        var result = new List<Vec3>();
+        int before = CornerAfter(startAt);
+        result.AddRange(way.Take(before));
+        if (startAt > 0)
+            result.Add(start);
+        result.AddRange(detour);
+        result.AddRange(way.Skip(CornerAfter(endAt) is var k && way[Math.Min(k, way.Count - 1)].DistanceXY(end) < 1 ? k + 1 : k));
+        return result;
+    }
+
+    /// <summary>The point <paramref name="p"/> lies within <paramref name="within"/> of the way ahead (from <paramref name="me"/>
+    /// along <paramref name="way"/>, at most <paramref name="ahead"/> far).</summary>
+    internal static bool NearWayAhead(Vec3 me, IReadOnlyList<Vec3> way, Vec3 p, double within, double ahead = MobsAhead)
+    {
+        var a = me;
+        double gone = 0;
+        foreach (var b in way)
+        {
+            double dx = b.X - a.X, dy = b.Y - a.Y, len = dx * dx + dy * dy;
+            double t = len <= 0 ? 0 : Math.Clamp(((p.X - a.X) * dx + (p.Y - a.Y) * dy) / len, 0, 1);
+            double px = a.X + dx * t - p.X, py = a.Y + dy * t - p.Y;
+            if (px * px + py * py < within * within)
+                return true;
+            gone += Math.Sqrt(len);
+            if (gone > ahead)
+                return false;
+            a = b;
+        }
+        return false;
     }
 
     /// <summary>The road is looked for this far around where a way starts and ends (world units, 80 m).</summary>

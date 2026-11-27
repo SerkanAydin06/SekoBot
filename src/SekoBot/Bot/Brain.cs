@@ -46,10 +46,14 @@ internal sealed partial class Brain
     public int Potions { get; private set; }
     public int Deaths { get; private set; }
 
-    public void Start(TimeSpan now)
+    /// <param name="keepCounts">The run goes on (after a break): its counts kept.</param>
+    public void Start(TimeSpan now, bool keepCounts = false)
     {
-        Cycles = Potions = Deaths = 0;
-        Detours = NoWayMobs = 0;
+        if (!keepCounts)
+        {
+            Cycles = Potions = Deaths = 0;
+            Detours = NoWayMobs = 0;
+        }
         _lastAttackDown = Never;
         _hpLowSince = _mpLowSince = _lastEsc = _popupSince = Never;
         ResetSkills();
