@@ -86,7 +86,7 @@ internal sealed partial class MainForm : Form
         "Yerden neyin toplanacağı ve çanta dolunca neyin atılacağı.",
         "Can ve mana iksirleri, ölünce yeniden başlama, becerilerin otomatik kullanımı.",
         "Avlanılan alan: sınırı, en iyi alanı bulma, ne zaman durulacağı.",
-        "Telegram'a bildirim ve Telegram'dan komut (durum / dur / başla).",
+        "Telegram'a bildirim ve Telegram'dan komut (/ekran, durum, dur, başla).",
         "Oyunda kullandığın tuşlar. Değiştirmek için kutuya tıkla, sonra yeni tuşa bas.",
         "Deneme, kayıt ve teknik araçlar.",
         "Pazardaki bütün dükkanları açıp fiyatları toplama, aranan ürünleri bulma (hiçbir şey satın alınmaz).",
@@ -2735,13 +2735,59 @@ internal sealed partial class MainForm : Form
                     offset = Math.Max(offset, id + 1);
                     if (skipOld || from != chat || text.Length == 0)
                         continue;
-                    string reply = TelegramMessage(text, replyTo);
+                    string? reply;
+                    if (TelegramNotifier.Command(text) == "ekran" && (text.TrimStart().StartsWith('/') || WhisperSender.WhisperFrom(replyTo) == null))
+                        reply = await TelegramScreenshotAsync(token, chat, cancel);
+                    else
+                        reply = TelegramMessage(text, replyTo);
+                    if (reply == null) continue;
                     if (await TelegramNotifier.SendAsync(token, chat, reply) is string sendError)
                         WriteLog(sendError);
                 }
             }
         }
         catch (OperationCanceledException) { }
+    }
+
+    private async Task<string?> TelegramScreenshotAsync(string token, string chat, CancellationToken cancel)
+    {
+        var engine = _engine;
+        if (engine == null) return "Oyun penceresi bağlı değil.";
+        long requested = Stopwatch.GetTimestamp();
+        try
+        {
+            while (Stopwatch.GetElapsedTime(requested) < TimeSpan.FromSeconds(4))
+            {
+                cancel.ThrowIfCancellationRequested();
+                if (engine != _engine || !WindowService.IsAlive(engine.Window, out _)) return "Oyun penceresi kapandı veya bağlantı değişti.";
+                if (engine.GameMinimized) return "Oyun penceresi simge durumunda; görüntü için pencereyi aç.";
+                if (!engine.UsesWindowCapture) return "Oyun penceresi ayrı yakalanamıyor (GDI modu).";
+                using var image = engine.CopyWindowFrameSince(requested);
+                if (image == null)
+                {
+                    await Task.Delay(100, cancel);
+                    continue;
+                }
+                byte[] jpeg = await Task.Run(() => ScreenshotJpeg(image), cancel);
+                if (!_profile.TelegramCommands || !_profile.TelegramEnabled || _profile.TelegramToken != token ||
+                    _profile.TelegramChatId.Trim() != chat || engine != _engine) return null;
+                return await TelegramNotifier.SendScreenshotAsync(token, chat, jpeg, cancel);
+            }
+            return "Oyun penceresinden dört saniye içinde yeni görüntü alınamadı.";
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.Runtime.InteropServices.ExternalException)
+        {
+            return "Oyun penceresinin görüntüsü hazırlanamadı.";
+        }
+    }
+
+    internal static byte[] ScreenshotJpeg(Bitmap image)
+    {
+        double scale = Math.Min(1d, 2560d / Math.Max(image.Width, image.Height));
+        using var resized = new Bitmap(image, Math.Max(1, (int)(image.Width * scale)), Math.Max(1, (int)(image.Height * scale)));
+        using var buffer = new MemoryStream();
+        resized.Save(buffer, System.Drawing.Imaging.ImageFormat.Jpeg);
+        return buffer.ToArray();
     }
 
     /// <summary>
@@ -2820,7 +2866,7 @@ internal sealed partial class MainForm : Form
                 }
                 return "Başlatılamadı: " + (_stopReason ?? (_engine == null ? "oyun açık değil" : "bilinmiyor"));
             default:
-                return "Komutlar: durum · dur · başla · yaz İsim mesaj\nFısıltıya cevap: bildirime \"Yanıtla\" ile yaz.";
+                return "Komutlar: /ekran · durum · dur · başla · yaz İsim mesaj\nFısıltıya cevap: bildirime \"Yanıtla\" ile yaz.";
         }
     }
 
