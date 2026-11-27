@@ -206,7 +206,8 @@ internal sealed class BotProfile
     /// <summary>One game on this computer: it is kept at <see cref="SingleGameWidth"/> × <see cref="SingleGameHeight"/>
     /// (its picture) in the screen's top left corner, PARDUS beside it, the small mode a panel at its side.</summary>
     public bool SingleGame { get; set; } = true;
-    public int SingleGameWidth { get; set; } = 1280;
+    /// <summary>0: automatic — the biggest 16:9 picture the screen holds beside the side panel (each computer its own).</summary>
+    public int SingleGameWidth { get; set; }
     public int SingleGameHeight { get; set; } = 720;
     /// <summary>PARDUS starts with Windows (a task at sign-in, as administrator) and goes on with the last character.</summary>
     public bool AutoStart { get; set; }
