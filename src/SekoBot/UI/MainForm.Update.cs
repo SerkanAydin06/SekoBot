@@ -19,6 +19,8 @@ internal sealed partial class MainForm
         public int Mode { get; set; }
         public bool Running { get; set; }
         public DateTime At { get; set; }
+        public string? Claim { get; set; }
+        public DateTime ClaimUntil { get; set; }
     }
 
     internal static string AfterUpdateFile => Path.Combine(ProfileStore.Directory, "guncelleme-devam.json");
@@ -58,7 +60,12 @@ internal sealed partial class MainForm
             if (character.Length > 0)
             {
                 var note = new WorkBeforeUpdate { Mode = _mode, Running = running, At = DateTime.Now };
-                SharedFile.Update<Dictionary<string, WorkBeforeUpdate>>(AfterUpdateFile, all => all[character] = note);
+                if (SharedFile.Update<Dictionary<string, WorkBeforeUpdate>>(AfterUpdateFile, all => all[character] = note) == null)
+                {
+                    WriteLog("Güncelleme ertelendi; devam kaydı yazılamadı.");
+                    try { File.Delete(update.FilePath); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                    return;
+                }
                 WriteLog($"⬆ Yeni sürüm {update.Version}: {character} {(running ? "çalışıyordu" : "duruyordu")}; güncellemeden sonra kaldığı yerden devam edecek.");
             }
             if (_engine is { ScanningMarket: true } market)
@@ -91,16 +98,37 @@ internal sealed partial class MainForm
             _afterUpdateInGame = DateTime.Now;
         if (DateTime.Now - _afterUpdateInGame < TimeSpan.FromSeconds(6))
             return;
-        WorkBeforeUpdate? mine = null;
-        SharedFile.Update<Dictionary<string, WorkBeforeUpdate>>(AfterUpdateFile, all =>
+        _afterUpdateInGame = DateTime.Now;
+        TryResume(AfterUpdateFile, character, DateTime.Now,
+            work => StartWork(e, Math.Clamp(work.Mode, FarmMode, FishingMode), $"PARDUS {BuildInfo.Version} sürümüne güncellendi"));
+    }
+
+    internal static void TryResume(string path, string character, DateTime now, Func<WorkBeforeUpdate, bool> start)
+    {
+        string claim = Guid.NewGuid().ToString("N");
+        var notes = SharedFile.Update<Dictionary<string, WorkBeforeUpdate>>(path, all =>
         {
-            foreach (var old in all.Where(kv => DateTime.Now - kv.Value.At > AfterUpdateFor).Select(kv => kv.Key).ToList())
-                all.Remove(old);
-            if (all.Remove(character, out var found))
-                mine = found;
+            foreach (var key in all.Where(pair => now - pair.Value.At > AfterUpdateFor).Select(pair => pair.Key).ToList())
+                all.Remove(key);
+            if (!all.TryGetValue(character, out var note)) return;
+            if (!note.Running) { all.Remove(character); return; }
+            if (note.Claim != claim && note.ClaimUntil > now) return;
+            note.Claim = claim;
+            note.ClaimUntil = now.AddMinutes(1);
         });
-        if (mine is not { Running: true } work)
+        if (notes == null || !notes.TryGetValue(character, out var work) || work.Claim != claim)
             return;
-        StartWork(e, Math.Clamp(work.Mode, FarmMode, FishingMode), $"PARDUS {BuildInfo.Version} sürümüne güncellendi");
+
+        bool started = false;
+        try { started = start(work); }
+        finally
+        {
+            SharedFile.Update<Dictionary<string, WorkBeforeUpdate>>(path, all =>
+            {
+                if (!all.TryGetValue(character, out var note) || note.Claim != claim) return;
+                if (started) all.Remove(character);
+                else { note.Claim = null; note.ClaimUntil = default; }
+            });
+        }
     }
 }

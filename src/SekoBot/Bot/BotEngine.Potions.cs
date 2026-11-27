@@ -23,6 +23,10 @@ internal sealed partial class BotEngine
     /// The potions on the HP / MP keys below the line (a trip is due). <paramref name="topUp"/>: at the shop anyway —
     /// every one short of the target is filled up (the user: the HP potions at 500 should come along with the MP).
     /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(string Character, int Vnum), int> _unconfirmedPotions = new();
+
+    internal static bool StockStillPending(int before, int? current) => !current.HasValue || current.Value == before;
+
     private List<PotionNeed> PotionNeeds(WorldSnapshot world, BotProfile p, bool topUp = false)
     {
         var needs = new List<PotionNeed>();
@@ -30,6 +34,7 @@ internal sealed partial class BotEngine
             return needs;
         foreach (var (kind, key) in new[] { ("HP", p.Keys.HpPotion), ("MP", p.Keys.MpPotion) })
             if (Potion(world, key) is { Vnum: int vnum } potion
+                && (!_unconfirmedPotions.TryGetValue((CharacterName, vnum), out int previous) || !StockStillPending(previous, potion.InBag))
                 && potion.InBag < (topUp ? p.BuyPotionsUpTo * TopUpShare : p.BuyPotionsBelow))
                 needs.Add(new PotionNeed(kind, vnum, potion.InBag, p.BuyPotionsUpTo));
         return needs;
@@ -66,9 +71,11 @@ internal sealed partial class BotEngine
             return "";
         foreach (var need in PotionNeeds(world, p, topUp: true))
         {
-            int have = need.Have, got = 0, fails = 0;
+            int have = need.Have, got = 0;
+            var key = (CharacterName, need.Vnum);
+            bool pending = false;
             long spent = 0;
-            for (int round = 0; round < 25 && have < need.Want && fails < 2; round++)
+            for (int round = 0; round < 25 && have < need.Want; round++)
             {
                 token.ThrowIfCancellationRequested();
                 NpcShopScreen? shop;
@@ -91,6 +98,13 @@ internal sealed partial class BotEngine
                     _log("İksir sayısı okunamadı; satın alma durduruldu.");
                     break;
                 }
+                if (_unconfirmedPotions.TryGetValue(key, out int previous) && StockStillPending(previous, before))
+                {
+                    pending = true;
+                    break;
+                }
+                if (before >= need.Want || before + pack.Count > need.Want + pack.Count / 2)
+                    break;
                 bool SlotStillValid()
                 {
                     lock (_worldGate)
@@ -98,9 +112,14 @@ internal sealed partial class BotEngine
                             && current.Slots.Any(s => s.Vnum == pack.Vnum && s.Count == pack.Count
                             && s.Price == pack.Price && s.At.Contains(target));
                 }
+                // Record before dispatch: cancellation can arrive after the mouse button went down.
+                _unconfirmedPotions[key] = before;
                 if (!await input.ClickAndWaitAsync(new ClickAction(target, Slow: true, Fast: true,
                         Right: true, StillWanted: SlotStillValid), token))
+                {
+                    _unconfirmedPotions.TryRemove(key, out _);
                     break;
+                }
                 // Bought: the bag shows more of it within a moment.
                 int? observed = null;
                 for (int wait = 0; wait < 12 && !(observed > before); wait++)
@@ -108,24 +127,20 @@ internal sealed partial class BotEngine
                     await Task.Delay(250, token);
                     observed = Count(need.Vnum);
                 }
-                if (observed is not int now)
+                if (observed is not int now || now <= before)
                 {
-                    _log("İksir alımı doğrulanamadı; tekrar satın alma durduruldu.");
+                    pending = true;
+                    _log("İksir alımı doğrulanamadı; stok değişene kadar bu iksir tekrar alınmayacak.");
                     break;
                 }
-                if (now <= before)
-                {
-                    fails++;
-                    continue;
-                }
+                _unconfirmedPotions.TryRemove(key, out _);
                 got += now - before;
                 spent += (long)pack.Price * (now - before);
                 have = now;
-                fails = 0;
             }
             if (got > 0)
                 bought.Add($"{got} {ItemBook.NameOf(need.Vnum)} ({spent:N0} yang)");
-            else
+            else if (!pending)
                 _log($"🧪 {ItemBook.NameOf(need.Vnum)} alınamadı (dükkânda yok, yang yetmiyor ya da çanta dolu).");
         }
         return string.Join(", ", bought);
