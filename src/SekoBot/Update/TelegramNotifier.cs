@@ -14,14 +14,15 @@ internal static class TelegramNotifier
     private static string Url(string token, string method) => $"https://api.telegram.org/bot{token.Trim()}/{method}";
 
     /// <returns>Null when sent, else what went wrong (Turkish, for the log).</returns>
-    public static async Task<string?> SendAsync(string token, string chatId, string text)
+    public static async Task<string?> SendAsync(string token, string chatId, string text, string[][]? buttons = null)
     {
         if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(chatId))
             return "Telegram ayarları eksik (anahtar ve sohbet no).";
         try
         {
             using var response = await Http.PostAsJsonAsync(Url(token, "sendMessage"),
-                new { chat_id = chatId.Trim(), text });
+                buttons == null ? (object)new { chat_id = chatId.Trim(), text }
+                    : new { chat_id = chatId.Trim(), text, reply_markup = new { keyboard = buttons, resize_keyboard = true } });
             if (response.IsSuccessStatusCode)
                 return null;
             return $"Telegram mesajı gönderilemedi ({(int)response.StatusCode}). Anahtarı ve sohbet numarasını kontrol et.";
@@ -32,10 +33,11 @@ internal static class TelegramNotifier
         }
     }
 
-    internal static async Task<string?> SendScreenshotAsync(string token, string chatId, byte[] jpeg, CancellationToken cancel)
+    internal static async Task<string?> SendScreenshotAsync(string token, string chatId, byte[] jpeg, CancellationToken cancel, string? caption = null)
     {
         using var form = new MultipartFormDataContent();
         form.Add(new StringContent(chatId.Trim()), "chat_id");
+        if (caption != null) form.Add(new StringContent(caption), "caption");
         var photo = new ByteArrayContent(jpeg);
         photo.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/jpeg");
         form.Add(photo, "photo", "oyun.jpg");
