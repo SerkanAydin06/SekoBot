@@ -376,19 +376,25 @@ internal sealed partial class BotEngine : IDisposable
 
     // ── Recording ────────────────────────────────────────────────
 
-    public bool IsRecording => Volatile.Read(ref _recorder) != null;
+    public bool IsRecording => Volatile.Read(ref _recorder) is { IsStopped: false };
     public SessionRecorder? Recorder => Volatile.Read(ref _recorder);
 
     /// <summary>Starts recording bar readings, decisions and frames into a new folder.</summary>
     public string StartRecording()
     {
-        if (Volatile.Read(ref _recorder) is { } running)
-            return running.Directory;
-        var recorder = new SessionRecorder(SessionRecorder.NewDirectory(), Profile, _window.Title, _log);
-        if (Interlocked.CompareExchange(ref _recorder, recorder, null) != null)
+        while (true)
+        {
+            var previous = Volatile.Read(ref _recorder);
+            if (previous is { IsStopped: false }) return previous.Directory;
+            var recorder = new SessionRecorder(SessionRecorder.NewDirectory(), Profile, _window.Title, _log);
+            if (Interlocked.CompareExchange(ref _recorder, recorder, previous) == previous)
+            {
+                previous?.Dispose();
+                _log("Kayıt başladı: " + recorder.Directory);
+                return recorder.Directory;
+            }
             recorder.Dispose();
-        _log("Kayıt başladı: " + recorder.Directory);
-        return recorder.Directory;
+        }
     }
 
     public void StopRecording()
