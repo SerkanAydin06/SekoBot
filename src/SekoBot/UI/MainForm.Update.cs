@@ -54,6 +54,9 @@ internal sealed partial class MainForm
             await UpdateNoticeAsync(chat, $"PARDUS v{BuildInfo.Version} ile yeniden açıldı.");
     }
 
+    /// <summary>Waited at most this long for a quiet spot before an update.</summary>
+    internal static readonly TimeSpan QuietBeforeUpdate = TimeSpan.FromMinutes(3);
+
     /// <summary>The "update all" message reached this SekoBot.</summary>
     private async Task UpdateAndResumeAsync(string? telegramChat = null)
     {
@@ -111,6 +114,18 @@ internal sealed partial class MainForm
                 market.StopMarketScan();
             if (_engine is { Fishing: true } fishing)
                 fishing.StopFishing();
+            // Farming: what attacks us fought and a quiet spot reached first (the game stays on while PARDUS restarts; seen:
+            // stopped among the mobs, found dead after the update three times). At most a few minutes.
+            if (_engine is { BotRunning: true } farming && runningMode == FarmMode)
+            {
+                WriteLog("⬆ Güncellemeden önce etraftaki moblar bitirilip sakin bir yere çekiliniyor.");
+                var until = DateTime.Now + QuietBeforeUpdate;
+                while (DateTime.Now < until && farming.BotRunning && !farming.QuietFor("⬆ Güncelleme"))
+                    await Task.Delay(500);
+                farming.QuietFor(null);
+                if (IsDisposed)
+                    return;
+            }
             if (_engine is { BotRunning: true })
                 StopBot("güncelleme için durduruldu");
             await UpdateNoticeAsync(telegramChat, $"PARDUS v{update.Version} kuruluyor.");

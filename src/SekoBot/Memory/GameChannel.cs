@@ -88,6 +88,29 @@ internal sealed partial class GameWorldReader
     }
 
     /// <summary>A <c>c_Button_C</c> of <paramref name="widget"/> by the game's text key (langText), where it is drawn.</summary>
+    /// <summary>The game menu's (Esc) button with this text key (e.g. "SYSTEM_LOGOUT") when the menu shows; else null.</summary>
+    public Rectangle? ReadMenuButton(string key)
+    {
+        try
+        {
+            if (!_located)
+                return null;
+            long instance = Pointer(_moduleBase + _gameInstance);
+            long instanceClass = Pointer(instance + ObjClass);
+            if (ClassName(instanceClass) != "m2data_C")
+                return null;
+            long ui = Pointer(instance + Offset(instanceClass, "m2data_C", "uiMain"));
+            if (!MemoryReads.IsPointer(ui) || ClassName(Pointer(ui + ObjClass)) != "UI_C")
+                return null;
+            long menu = Pointer(ui + Offset(Pointer(ui + ObjClass), "UI_C", "EscMenu"));
+            return Showing(menu) && ClassName(Pointer(menu + ObjClass)) == "WBP_EscMenu_C" ? ButtonByKey(menu, key) : null;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
     private Rectangle? ButtonByKey(long widget, string key)
     {
         long cls = Pointer(widget + ObjClass);

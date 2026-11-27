@@ -203,6 +203,14 @@ internal sealed class BotProfile
     /// <summary>About this long a break lasts (±25 %).</summary>
     public int BreakSeconds { get; set; } = 40;
 
+    /// <summary>Out of the game now and then: after <see cref="LogoutPlayMin"/> minutes of farming, what attacks us is
+    /// fought, then the game is left for its login screen for <see cref="LogoutRestMin"/> minutes; logged in again after.</summary>
+    public bool LogoutBreaks { get; set; }
+    /// <summary>Minutes of farming before such a break.</summary>
+    public int LogoutPlayMin { get; set; } = 60;
+    /// <summary>Minutes on the login screen.</summary>
+    public int LogoutRestMin { get; set; } = 10;
+
     /// <summary>Stop the bot when a game master (GM) shows up nearby.</summary>
     public bool StopNearGm { get; set; } = true;
     /// <summary>Also pick up weapons and armour a shop pays at least this much for (the selling
