@@ -88,7 +88,7 @@ internal sealed partial class MainForm : Form
         "Can ve mana iksirleri, ölünce yeniden başlama, becerilerin otomatik kullanımı.",
         "Avlanılan alan: sınırı, en iyi alanı bulma, alanı kaydetme.",
         "Ne zaman durulacağı, molalar ve oyundan atılınca yeniden giriş.",
-        "Telegram'a bildirim ve Telegram'dan komut (/ekran, /guncelle, durum, dur, başla).",
+        "Telegram'a bildirim ve Telegram'dan komut (/ekran, /guncelle, durum, dur, başla, restart).",
         "Oyunda kullandığın tuşlar. Değiştirmek için kutuya tıkla, sonra yeni tuşa bas.",
         "Deneme, kayıt ve teknik araçlar.",
         "Pazardaki bütün dükkanları açıp fiyatları toplama, aranan ürünleri bulma (hiçbir şey satın alınmaz).",
@@ -1189,7 +1189,7 @@ internal sealed partial class MainForm : Form
 
         // ── Timers & hotkeys ─────────────────────────────────────
         _scanTimer = new System.Windows.Forms.Timer { Interval = 2000 };
-        _scanTimer.Tick += (_, _) => { if (_engine == null) RefreshWindows(); else LoginTick(); ResumeTick(); RestTick(); };
+        _scanTimer.Tick += (_, _) => { if (_engine == null) RefreshWindows(); else LoginTick(); RestartTick(); ResumeTick(); RestTick(); };
         _previewTimer = new System.Windows.Forms.Timer { Interval = 33 };
         _previewTimer.Tick += (_, _) => RenderPreview();
         VisibleChanged += (_, _) => _engine?.ShowingPreview(GameViewShown);
@@ -3145,6 +3145,8 @@ internal sealed partial class MainForm : Form
                 if (ActiveWork is not string stopping) return "Bot zaten duruyor.";
                 StopBot("Telegram'dan durduruldu", byUser: true);
                 return $"⏹ {stopping} için durdurma istendi.";
+            case "restart" or "yenidenbaslat":
+                return RestartGameCommand();
             case "basla" or "start":
                 if (ActiveWork is string active) return $"Çalışan iş: {active}.";
                 if (_updating || _updatingAll) return "Güncelleme sürüyor.";
@@ -3157,7 +3159,7 @@ internal sealed partial class MainForm : Form
                 WriteLog(reply);
                 return reply;
             default:
-                return "Komutlar: /ekran · /guncelle · durum · dur · başla · yaz İsim mesaj\nFısıltıya cevap: bildirime \"Yanıtla\" ile yaz.";
+                return "Komutlar: /ekran · /guncelle · durum · dur · başla · restart · yaz İsim mesaj\nFısıltıya cevap: bildirime \"Yanıtla\" ile yaz.";
         }
     }
 

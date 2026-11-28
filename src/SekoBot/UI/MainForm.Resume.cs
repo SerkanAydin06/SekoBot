@@ -21,7 +21,9 @@ namespace SekoBot.UI;
 internal sealed partial class MainForm
 {
     /// <summary>What to go back to: the character and the work (farm, market, fishing).</summary>
-    private sealed record ResumeWork(string Character, int Mode, DateTime Since);
+    /// <param name="Work">False: only logged in again with the character (the bot wasn't working; "restart" from Telegram).</param>
+    /// <param name="Why">What the message says happened ("Oyuna yeniden girildi" when null).</param>
+    private sealed record ResumeWork(string Character, int Mode, DateTime Since, bool Work = true, string? Why = null);
 
     /// <summary>The work to go back to — kept on disk too (devam-N.json): a PARDUS that restarts (an update of its own)
     /// still knows it (seen 2026-11-26: restarted while its game was stuck after an update, it forgot to go back).</summary>
@@ -133,6 +135,9 @@ internal sealed partial class MainForm
             return;
         }
         _gameFolder ??= GameFolderOf(e.Window.ProcessId);
+        // A restart asked for (Telegram): nothing goes on with the game it is closing.
+        if (_restart != RestartStage.None)
+            return;
         ResumeAfterUpdateTick(e);
         var world = e.World;
         // Back after closing the game for an update: its file the same (the launcher had nothing to bring) — played on.
@@ -297,7 +302,17 @@ internal sealed partial class MainForm
             _gameRestarted = false;
             ArrangeAll();
         }
-        StartWork(e, resume.Mode);
+        if (!resume.Work)
+        {
+            string text = $"🟢 {resume.Why ?? "Oyuna yeniden girildi"}: {resume.Character} ile oyuna girildi (bot çalışmıyordu; başlatılmadı).";
+            WriteLog(text);
+            e.Notify(text);
+            LetGoGameTurn();
+            _launches = 0;
+            UpdateControls();
+            return;
+        }
+        StartWork(e, resume.Mode, resume.Why ?? "Oyuna yeniden girildi");
     }
 
     /// <summary>The work this SekoBot was doing, to go back to (the character last seen in the game).</summary>
