@@ -394,6 +394,11 @@ public class GameWorldTests
         game.Memory.WriteLong(adds, popup);
         game.Memory.WriteLong(ui + 0x7E8, adds);
         game.Int(ui + 0x7E8 + 8, 1);
+        // Closed by the user: taken off the screen (no slot), yet left in the list "visible" (seen 2026-11-28).
+        using var closed = new GameWorldReader(game.Memory, Module);
+        Assert.Equal(["EscMenu", "inventory"], closed.Read()!.OpenWindows);
+        // On the screen: in a panel (its slot set).
+        game.Memory.WriteLong(popup + 0x30, game.Alloc(64));
         using var advert = new GameWorldReader(game.Memory, Module);
         Assert.Equal(["EscMenu", "inventory", "popup_C"], advert.Read()!.OpenWindows);
     }

@@ -516,6 +516,7 @@ internal sealed partial class GameWorldReader : IDisposable
         ("dmText_C", "isme", 0x2D8),
         ("msgbox_C", "evet", 0x288),
         ("Widget", "Visibility", 0xCB),
+        ("Widget", "slot", 0x30), // lower case in this game (seen: EscMenu, inventory open: a CanvasPanelSlot; a closed advert: null)
         ("UI_C", "reSpawn", 0x818),
         ("UI_C", "canvasAdds", 0x7E8),
         ("UI_C", "chatBox", 0x2F0),
@@ -958,6 +959,11 @@ internal sealed partial class GameWorldReader : IDisposable
                 // three of them listed with the map shut): whether it shows is UI_C.bigMap (empty when closed).
                 // Same for the channel window (seen: chChange_C left here "visible" after closing; open while m2data.chChange is set).
                 if (ClassName(cls) is "bigMap_C" or "chChange_C")
+                    continue;
+                // Closed and taken off the screen, yet kept here "visible" (seen 2026-11-28: the Özüt advert "popup_C",
+                // closed by the user, left in the list; the bot pressed Esc for it in a loop, opening the game's menu):
+                // on the screen only while it sits in a panel (its Slot set).
+                if (!MemoryReads.IsPointer(Pointer(widget + Offset(cls, "Widget", "slot"))))
                     continue;
                 if (Byte(widget + Offset(cls, "Widget", "Visibility")) is byte visibility and not (1 or 2))
                     open.Add(ClassName(cls));
