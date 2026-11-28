@@ -19,7 +19,7 @@ public class GameSaysTests
     public void The_games_own_lines_are_counted_and_players_writing_the_same_are_not()
     {
         var watch = new SocialWatch();
-        var p = new BotProfile();
+        var p = new BotProfile { NotifyWhispers = true, NotifyRequests = true, NotifyEvents = true, NotifyPoints = true, NotifyDrops = true, NotifyLevelUp = true, NotifySells = true }; // the notices on (off by default)
         watch.Update(Social(), p, 28, Now);
         watch.Update(Social(
         [
@@ -40,7 +40,7 @@ public class GameSaysTests
     public void A_new_announcement_is_told_once()
     {
         var watch = new SocialWatch();
-        var p = new BotProfile();
+        var p = new BotProfile { NotifyWhispers = true, NotifyRequests = true, NotifyEvents = true, NotifyPoints = true, NotifyDrops = true, NotifyLevelUp = true, NotifySells = true }; // the notices on (off by default)
         Assert.Empty(watch.Update(Social(announcement: "Eski duyuru"), p, 28, Now));          // there before: not told
         Assert.Equal("📢 Duyuru: Bakım saat 05:00'te.", Assert.Single(watch.Update(Social(announcement: "Bakım saat 05:00'te."), p, 28, Now)).Text);
         Assert.Empty(watch.Update(Social(announcement: "Bakım saat 05:00'te."), p, 28, Now));

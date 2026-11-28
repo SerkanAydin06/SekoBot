@@ -78,8 +78,8 @@ internal sealed class BotProfile
     /// <summary>Decisions per second (everything comes from memory, so this is cheap).</summary>
     public int PerceptionFps { get; set; } = 20;
 
-    public double PotionHpBelow { get; set; } = 0.55;
-    public double PotionMpBelow { get; set; } = 0.25;
+    public double PotionHpBelow { get; set; } = 0.6;
+    public double PotionMpBelow { get; set; } = 0.4;
     public int PotionCooldownMs { get; set; } = 1500;
     /// <summary>A low HP/MP reading must last this long before a potion or stop (filters bad frames).</summary>
     public int BarConfirmMs { get; set; } = 300;
@@ -157,7 +157,7 @@ internal sealed class BotProfile
     public string OnlyMobs { get; set; } = "";
     /// <summary>Never go for mobs whose name contains one of these (comma separated).</summary>
     public string SkipMobs { get; set; } = "";
-    public MetinMode Metins { get; set; } = MetinMode.Normal;
+    public MetinMode Metins { get; set; } = MetinMode.Prefer;
     /// <summary>
     /// The character's kingdom ("ırk"), chosen by the player: 1 kırmızı, 2 sarı, 3 mavi; 0 not chosen. The game leaves its
     /// own field for it empty while playing (charData.empire = 0), so players of another kingdom are told by this.
@@ -173,7 +173,7 @@ internal sealed class BotProfile
     /// <summary>Only items this close (metres) are walked to.</summary>
     public double DropRangeMetres { get; set; } = 6;
     /// <summary>Stop the bot when the character ends up in a safe zone (town).</summary>
-    public bool StopInSafeZone { get; set; } = true;
+    public bool StopInSafeZone { get; set; } = false;
 
     /// <summary>Send messages to the user's Telegram (GM, death, level up, potions out, bot stopped).</summary>
     public bool TelegramEnabled { get; set; }
@@ -208,7 +208,7 @@ internal sealed class BotProfile
     public bool SingleGame { get; set; } = true;
     /// <summary>0: automatic — the biggest 16:9 picture the screen holds beside the side panel (each computer its own).</summary>
     public int SingleGameWidth { get; set; }
-    public int SingleGameHeight { get; set; } = 720;
+    public int SingleGameHeight { get; set; } = 0;
     /// <summary>PARDUS starts with Windows (a task at sign-in, as administrator) and goes on with the last character.</summary>
     public bool AutoStart { get; set; }
     /// <summary>The character and the game folder last seen (for starting by itself after the computer starts).</summary>
@@ -259,7 +259,7 @@ internal sealed class BotProfile
     public bool MarketAutoRefresh { get; set; }
 
     /// <summary>The bot was made small (one bar under its game) when last closed: it opens small again.</summary>
-    public bool MiniMode { get; set; }
+    public bool MiniMode { get; set; } = true;
 
     /// <summary>What this SekoBot shows: 0 FARM, 1 PAZAR (the market watch), 2 BALIKÇILIK.</summary>
     public int UiMode { get; set; }
@@ -284,16 +284,16 @@ internal sealed class BotProfile
     public bool SellToNpc { get; set; } = true;
     /// <summary>Buy the HP / MP potions on the keys at the market NPC when fewer than <see cref="BuyPotionsBelow"/> are left.</summary>
     public bool BuyPotions { get; set; } = true;
-    public int BuyPotionsBelow { get; set; } = 300;
+    public int BuyPotionsBelow { get; set; } = 50;
     /// <summary>Bought up to about this many of each.</summary>
-    public int BuyPotionsUpTo { get; set; } = 1000;
+    public int BuyPotionsUpTo { get; set; } = 100;
     /// <summary>Yang never spent on potions (kept in the bag).</summary>
     public long KeepYang { get; set; }
     /// <summary>Another player staying this many minutes within 30 m while the experience drops: find another place (0 = off).</summary>
     public double AvoidPlayerMinutes { get; set; } = 3;
 
     /// <summary>Fishing: the quick slot key the bait is on (pressed when a cast doesn't take); None = not used.</summary>
-    public System.Windows.Forms.Keys FishBaitKey { get; set; } = System.Windows.Forms.Keys.None;
+    public System.Windows.Forms.Keys FishBaitKey { get; set; } = System.Windows.Forms.Keys.D4;
     /// <summary>On the login screen (a maintenance): the login button pressed every few minutes until the server opens.</summary>
     public bool AutoLogin { get; set; } = true;
     /// <summary>Killed by a player: wait for them to leave before reviving, change channel if they stay;
@@ -316,23 +316,23 @@ internal sealed class BotProfile
     /// <summary>Answer "durum", "dur", "başla" written to the Telegram bot.</summary>
     public bool TelegramCommands { get; set; } = true;
     /// <summary>Tell (log, Telegram, sound) when someone writes a private message.</summary>
-    public bool NotifyWhispers { get; set; } = true;
+    public bool NotifyWhispers { get; set; } = false;
     /// <summary>Tell about trade / party / friend requests and the game's yes-no questions.</summary>
-    public bool NotifyRequests { get; set; } = true;
+    public bool NotifyRequests { get; set; } = false;
     /// <summary>Tell when our name (or a GM) shows up in the chat.</summary>
     public bool NotifyMentions { get; set; } = true;
     /// <summary>Tell when an item with a bonus of the bonus list comes into the bag (the items chosen there).</summary>
     public bool NotifyBonusItems { get; set; } = true;
     /// <summary>Tell when a drop event starts.</summary>
-    public bool NotifyEvents { get; set; } = true;
+    public bool NotifyEvents { get; set; } = false;
     /// <summary>Tell when there are stat / skill points to spend.</summary>
-    public bool NotifyPoints { get; set; } = true;
+    public bool NotifyPoints { get; set; } = false;
     /// <summary>Send "🎁 Yere düştü" to Telegram when a "Topla" item drops (the log always gets it).</summary>
-    public bool NotifyDrops { get; set; } = true;
+    public bool NotifyDrops { get; set; } = false;
     /// <summary>Send "⭐ Seviye atladın" to Telegram.</summary>
-    public bool NotifyLevelUp { get; set; } = true;
+    public bool NotifyLevelUp { get; set; } = false;
     /// <summary>Send "💰 … satıldı" to Telegram after a trip to a market NPC (the log always gets it).</summary>
-    public bool NotifySells { get; set; } = true;
+    public bool NotifySells { get; set; } = false;
     /// <summary>The game's system lines about a player banned: sent to Telegram too (always written in the log).</summary>
     public bool NotifyBans { get; set; } = true;
     /// <summary>Pick up the item of a drop event going on now (level allowing), like "Topla".</summary>
@@ -583,17 +583,17 @@ internal static class CharacterSettings
 
     public static bool Exists(string character) => File.Exists(PathOf(character));
 
-    /// <summary>What a newly seen character keeps from the SekoBot it was opened in: the player's
-    /// own choices about what to pick up. How it fights, hunts and where starts fresh: it learns
-    /// its own (how many mobs it can take on each map) instead of playing like another character.</summary>
-    internal static readonly string[] Kept =
+    /// <summary>
+    /// What a newly seen character starts without: where it farms and what it has learned (how many mobs it takes on
+    /// each map, its fights, its skills' timing, its empire, whom it follows). Everything else — how it fights, its
+    /// potions, targets, keys, what it picks up — is taken from the settings in use (the user, 2026-11-28: "her yeni
+    /// oyuncu açınca ayarlar sıfırlanmasın").
+    /// </summary>
+    internal static readonly string[] Fresh_ =
     [
-        nameof(BotProfile.PickUpDrops), nameof(BotProfile.LootYang), nameof(BotProfile.LootPotions),
-        nameof(BotProfile.LootEquipment), nameof(BotProfile.LootOther), nameof(BotProfile.LootEquipmentMinGold),
-        nameof(BotProfile.LootBonuses), nameof(BotProfile.LootAlways), nameof(BotProfile.LootPick),
-        nameof(BotProfile.LootSkip), nameof(BotProfile.LootThrow), nameof(BotProfile.EventLoot), nameof(BotProfile.AutoSkills),
-        nameof(BotProfile.LootVersion), nameof(BotProfile.LootOwnClass), nameof(BotProfile.LootRewards),
-        nameof(BotProfile.UiMode), nameof(BotProfile.Keys),
+        nameof(BotProfile.FarmSpot), nameof(BotProfile.MySpot), nameof(BotProfile.UseFarmSpot),
+        nameof(BotProfile.PullLearned), nameof(BotProfile.MobFights), nameof(BotProfile.SkillGapLearnedMs),
+        nameof(BotProfile.Empire), nameof(BotProfile.FollowName),
     ];
 
     /// <summary>
@@ -624,11 +624,11 @@ internal static class CharacterSettings
     /// <summary>The loot upgrade's number (2: the first one was marked done in the files without being applied).</summary>
     internal const int LootUpgrade = 2;
 
-    /// <summary>A new character: everything but <see cref="Kept"/> back to the defaults.</summary>
+    /// <summary>A new character: the settings in use kept, only <see cref="Fresh_"/> back to the defaults.</summary>
     internal static void Fresh(BotProfile profile)
     {
         var defaults = new BotProfile();
-        foreach (string name in Names.Except(Kept))
+        foreach (string name in Fresh_)
             if (typeof(BotProfile).GetProperty(name) is { } property)
                 property.SetValue(profile, JsonSerializer.Deserialize(
                     JsonSerializer.Serialize(property.GetValue(defaults), property.PropertyType, ProfileStore.JsonOptions),

@@ -18,7 +18,7 @@ public class SocialWatchTests
     public void Only_new_private_messages_from_others_are_told()
     {
         var watch = new SocialWatch();
-        var p = new BotProfile();
+        var p = new BotProfile { NotifyWhispers = true, NotifyRequests = true, NotifyEvents = true, NotifyPoints = true, NotifyDrops = true, NotifyLevelUp = true, NotifySells = true }; // the notices on (off by default)
         // Already there when the bot started: not told.
         Assert.Empty(watch.Update(Social([new("Ali", 2, [new("Ali", 40, "eski mesaj"), new("KAiZER06", 20, "cevap")])]), p, 20, Now));
         var notices = watch.Update(Social([new("Ali", 4, [new("Ali", 40, "eski mesaj"), new("KAiZER06", 20, "cevap"),
@@ -32,7 +32,7 @@ public class SocialWatchTests
     public void Requests_and_questions_are_told_once_while_they_last()
     {
         var watch = new SocialWatch();
-        var p = new BotProfile();
+        var p = new BotProfile { NotifyWhispers = true, NotifyRequests = true, NotifyEvents = true, NotifyPoints = true, NotifyDrops = true, NotifyLevelUp = true, NotifySells = true }; // the notices on (off by default)
         watch.Update(Social(), p, 20, Now);
         var trade = new PlayerRequest(RequestKind.Trade, "Deniz", 33);
         Assert.Equal("🤝 Takas isteği: Deniz (Sv 33)", Assert.Single(watch.Update(Social(requests: [trade]), p, 20, Now)).Text);
@@ -48,7 +48,7 @@ public class SocialWatchTests
     public void Our_name_or_a_gm_in_the_chat_is_told()
     {
         var watch = new SocialWatch();
-        var p = new BotProfile();
+        var p = new BotProfile { NotifyWhispers = true, NotifyRequests = true, NotifyEvents = true, NotifyPoints = true, NotifyDrops = true, NotifyLevelUp = true, NotifySells = true }; // the notices on (off by default)
         watch.Update(Social(), p, 20, Now);
         ChatLine[] chat =
         [
@@ -67,7 +67,7 @@ public class SocialWatchTests
     public void A_drop_event_for_our_level_is_told_and_its_item_picked_up()
     {
         var watch = new SocialWatch();
-        var p = new BotProfile();
+        var p = new BotProfile { NotifyWhispers = true, NotifyRequests = true, NotifyEvents = true, NotifyPoints = true, NotifyDrops = true, NotifyLevelUp = true, NotifySells = true }; // the notices on (off by default)
         GameEvent[] events =
         [
             new(1, 39028, 30, 30, true, Now.AddMinutes(-30), Now.AddMinutes(30)),   // level 30+: not for a level 20
@@ -95,7 +95,7 @@ public class SocialWatchTests
     public void Points_to_spend_are_told_when_they_grow()
     {
         var watch = new SocialWatch();
-        var p = new BotProfile();
+        var p = new BotProfile { NotifyWhispers = true, NotifyRequests = true, NotifyEvents = true, NotifyPoints = true, NotifyDrops = true, NotifyLevelUp = true, NotifySells = true }; // the notices on (off by default)
         Assert.Empty(watch.Update(Social(), p, 20, Now));
         Assert.Contains("3 statü", Assert.Single(watch.Update(Social(stat: 3), p, 21, Now)).Text);
         Assert.Empty(watch.Update(Social(stat: 3), p, 21, Now));
