@@ -5,7 +5,7 @@ using SekoBot.Config;
 namespace SekoBot.Bot;
 
 /// <summary>
-/// The summary of every bot run, one line per run in %LOCALAPPDATA%\SekoBot\oturumlar.csv
+/// The summary of every bot run, one line per run in the data folder (veri\oturumlar.csv)
 /// (semicolon separated, opens in Excel), and as text for the log and Telegram.
 /// </summary>
 internal static class SessionLog
