@@ -119,16 +119,15 @@ public class CharacterTests
     }
 
     [Fact]
-    public void A_new_character_starts_fresh_but_keeps_what_the_player_picks_up()
+    public void A_new_character_keeps_the_settings_in_use_but_not_the_area_or_what_was_learned()
     {
         var other = new BotProfile { PullMaxMobs = 6, PotionHpBelow = 0.7, OnlyMobs = "Ayı", LootYang = false, LootPick = [5] };
         other.PullLearned["c2"] = 4;
         other.FarmSpot = new FarmSpot { MapName = "c2" };
         CharacterSettings.Fresh(other);
-        var defaults = new BotProfile();
-        Assert.Equal(defaults.PullMaxMobs, other.PullMaxMobs);
-        Assert.Equal(defaults.PotionHpBelow, other.PotionHpBelow);
-        Assert.Equal("", other.OnlyMobs);
+        Assert.Equal(6, other.PullMaxMobs);                // the settings in use (the user: not reset)
+        Assert.Equal(0.7, other.PotionHpBelow);
+        Assert.Equal("Ayı", other.OnlyMobs);
         Assert.Empty(other.PullLearned);
         Assert.Null(other.FarmSpot);
         Assert.False(other.LootYang);                      // the player's choice stays

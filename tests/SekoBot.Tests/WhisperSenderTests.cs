@@ -158,7 +158,7 @@ public class WhisperSenderTests
     public void A_new_message_whose_text_cannot_be_read_is_still_told_but_not_our_own_answer()
     {
         var watch = new SocialWatch();
-        var p = new BotProfile();
+        var p = new BotProfile { NotifyWhispers = true }; // off by default
         var now = new DateTime(2026, 11, 10, 1, 0, 0);
         SocialSnapshot Social(params WhisperThread[] threads) => new("KAiZER06", threads, [], [], [], [], 0, 0);
         watch.Update(Social(new WhisperThread("OxyyGeN", 1, [], 67)), p, 20, now);

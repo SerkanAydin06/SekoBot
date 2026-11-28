@@ -2795,9 +2795,9 @@ internal sealed partial class MainForm : Form
                      (_profile.PullLearned.Count > 0 ? ", öğrenilen: " + string.Join(", ", _profile.PullLearned.Select(l => $"{l.Key} haritasında en fazla {l.Value} mob")) : "") + ").");
         }
         else
-            WriteLog($"👤 {name}: ilk kez görüldü; dövüş ayarları baştan (her haritada {Brain.PullStartMobs} mobla başlar, rahat geçen " +
-                     "dövüşlerle kendi kaldırabileceği kadar artar, zorlananlarla azalır; öğrendiği karakterle saklanır). " +
-                     "Toplanacak eşya seçimlerin korundu. Bundan sonra yapılan değişiklikler bu karaktere ait.");
+            WriteLog($"👤 {name}: ilk kez görüldü; şu anki ayarlarla başlıyor (saldırı, iksir, hedef, tuşlar, eşya seçimleri aynı). " +
+                     $"Farm alanı boş; her haritada kaç mob kaldırabildiğini kendisi öğrenir ({Brain.PullStartMobs} mobla başlar). " +
+                     "Bundan sonra yapılan değişiklikler bu karaktere ait.");
     }
 
     private void UpdateStats()
