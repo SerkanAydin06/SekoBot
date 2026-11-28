@@ -345,10 +345,10 @@ internal sealed partial class BotEngine : IDisposable
                 // nearly so with mobs on it: the trip is given up, the brain revives / fights (the sale is tried later).
                 if (_selling && (state.Dead || state.Hp is < SellAbortHp && (state.Attackers.Count > 0 || state.Targets.Any(t => t.AttacksMe))))
                     AbortSellTrip(state.Dead ? "karakter öldü" : "can çok azaldı, moblar saldırıyor");
-                bool guard = !state.Dead && !_selling && !_cleaner.Active && !_tidying
+                bool guard = !state.Dead && !_selling && !_cleaner.Active && !_refill.Active && !_tidying
                     && !(_leftoverCheckUntil > DateTime.Now && _bagLayout is { } remaining && LeftOpen(remaining))
                     && !_whisper.Active && _channelSince == null && (state.WindowsUnreadable || state.PopupTarget != null || state.Typing);
-                actions = guard ? _brain.Tick(state) : _selling ? [] : PvpTick(state, Profile) ?? CrowdTick(state, Profile) ?? WhisperTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);
+                actions = guard ? _brain.Tick(state) : _selling ? [] : PvpTick(state, Profile) ?? CrowdTick(state, Profile) ?? WhisperTick(state, Profile) ?? RefillTick(state, Profile) ?? CleanTick(state, Profile) ?? _brain.Tick(state);
             }
             phase = _brain.Phase;
             // Throwing items away: the game stays in front for all the clicks, not back and forth for each.
@@ -481,6 +481,7 @@ internal sealed partial class BotEngine : IDisposable
             _botStarted = goOn ? _botStarted + away : _clock.Elapsed;
             _brain.Start(_clock.Elapsed, keepCounts: goOn);
             _cleaner.Abort(null, Profile, "");
+            _refill.Reset();
             _whisper.Abort("");
             _pendingWhisper = null;
             _cleanTries = 0;

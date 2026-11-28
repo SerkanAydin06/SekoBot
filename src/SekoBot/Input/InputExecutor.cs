@@ -297,6 +297,7 @@ internal sealed class InputExecutor : IDisposable
                 await ClickAsync(click.Client, 30, 60, token);
                 break;
             case MouseDragAction drag:
+                if (drag.StillWanted?.Invoke() == false) break;
                 await DragAsync(drag.From, drag.To, token);
                 break;
             case TypeTextAction type:

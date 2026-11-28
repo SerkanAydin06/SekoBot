@@ -19,7 +19,7 @@ internal sealed record ClickAction(Point Client, bool Slow = false, bool Fast = 
 
 /// <summary>Drag with the left button held, like a person does (an item out of the bag onto the
 /// ground). Points in game client pixels; the game is brought to the front for it.</summary>
-internal sealed record MouseDragAction(Point From, Point To) : BotAction
+internal sealed record MouseDragAction(Point From, Point To, Func<bool>? StillWanted = null) : BotAction
 {
     public override string ToString() => $"Sürükle ({From.X}, {From.Y}) → ({To.X}, {To.Y})";
 }

@@ -1734,6 +1734,35 @@ internal sealed partial class GameWorldReader : IDisposable
     private const int QuickSlotStride = 0x10, QuickSlotWidget = 0x8;
 
     /// <summary>
+    /// Where each quick slot (key 1, 2, …) is drawn on the screen (client pixels; null: not drawn), from the quick slot
+    /// bar itself (m2data.quickSlots → slot_C) — to drag a potion onto it. Null when not readable.
+    /// </summary>
+    internal List<Rectangle?>? ReadQuickSlotRects()
+    {
+        try
+        {
+            if (!_located) return null;
+            long instance = Pointer(_moduleBase + _gameInstance);
+            long cls = Pointer(instance + ObjClass);
+            if (ClassName(cls) != "m2data_C") return null;
+            long array = instance + Offset(cls, "m2data_C", "quickSlots");
+            long data = Pointer(array);
+            int count = Int32(array + 8) ?? 0;
+            if (!MemoryReads.IsPointer(data) || count is <= 0 or > 32)
+                return null;
+            var rects = new List<Rectangle?>(count);
+            for (int i = 0; i < count; i++)
+            {
+                long widget = Pointer(data + (long)i * QuickSlotStride + QuickSlotWidget);
+                rects.Add(Showing(widget) && DrawnAt(widget) is { Width: > 4, Height: > 4 } r ? r : null);
+            }
+            return rects;
+        }
+        catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException or OverflowException or InvalidOperationException) { }
+        return null;
+    }
+
+    /// <summary>
     /// How long each quick slot's skill still has to wait (seconds; 0 = ready, null = unknown),
     /// from the quick slot bar itself (m2data.quickSlots → slot_C: skillUsed while it cools down,
     /// Time = seconds left). The game's own clock: no guessing, and it shows whether a press took.

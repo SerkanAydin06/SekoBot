@@ -278,7 +278,7 @@ internal sealed partial class BotEngine
     /// <summary>The turn is let go (the bag emptied, the trip over, the message sent).</summary>
     private void LetGoTurn()
     {
-        if (!_cleaner.Active && !_selling && !_whisper.Active)
+        if (!_cleaner.Active && !_refill.Active && !_selling && !_whisper.Active)
             FrontTurn.Shared.LetGo();
     }
 
@@ -287,8 +287,11 @@ internal sealed partial class BotEngine
         state.Attackers.Count > 0 || state.Targets.Any(t => t.AttacksMe) ? null : [];
 
     /// <summary>The inventory as drawn, read only while throwing (on the perception thread).</summary>
-    private void ReadBagForCleaning() =>
-        _bagLayout = _cleaner.Active || _brain.ReadyToClean || _tidying || DateTime.Now < _leftoverCheckUntil ? _world?.ReadBagLayout() : null;
+    private void ReadBagForCleaning()
+    {
+        _bagLayout = _cleaner.Active || _refill.Active || _brain.ReadyToClean || _tidying || DateTime.Now < _leftoverCheckUntil ? _world?.ReadBagLayout() : null;
+        _quickRects = _refill.Active ? _world?.ReadQuickSlotRects() : null;
+    }
 
     // ── The screen left clean before the turn goes to another bot ──
     // (seen: the last item's "throw it away?" left open when the next bot took over, the bot fighting on under it)
