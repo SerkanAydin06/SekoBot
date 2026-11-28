@@ -3151,6 +3151,8 @@ internal sealed partial class MainForm : Form
                 if (ActiveWork is string active) return $"Çalışan iş: {active}.";
                 if (_updating || _updatingAll) return "Güncelleme sürüyor.";
                 if (_engine is not { } engine) return "Başlatılamadı: oyun bağlı değil.";
+                // On the login screen or the character select: logged in, "Başla" pressed, then the work started.
+                if (_mode == FarmMode && EnterGameAndWork(engine, "Telegram'dan başlatıldı") is string entering) return entering;
                 bool started = TryStartMode(engine, _mode, _dryRun.Checked, out string error);
                 if (started) _stopReason = null;
                 UpdateControls();

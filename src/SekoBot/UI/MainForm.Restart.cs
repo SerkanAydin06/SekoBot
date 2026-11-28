@@ -30,7 +30,8 @@ internal sealed partial class MainForm
         _gameFolder ??= GameFolderOf(e.Window.ProcessId);
         if (_gameFolder == null || !File.Exists(Path.Combine(_gameFolder, "Mobile2Launcher.exe")))
             return "Oyunun klasörü (başlatıcısı) bulunamadı; oyun yeniden başlatılmıyor.";
-        if (_restart != RestartStage.None || _resume != null || _gameGoneAt != DateTime.MinValue || _closeAskedAt != DateTime.MinValue)
+        // (A note to go back to doesn't stop it: seen — restarted, left on the character select, "restart" refused.)
+        if (_restart != RestartStage.None || _gameGoneAt != DateTime.MinValue || _closeAskedAt != DateTime.MinValue)
             return "Oyun zaten yeniden başlatılıyor.";
         if (_updating || _updatingAll)
             return "PARDUS güncelleniyor; bitince yeniden dene.";
@@ -38,10 +39,14 @@ internal sealed partial class MainForm
             return "Oyundan çıkış molası sürüyor; mola bitince yeniden dene.";
         var world = e.World;
         bool inGame = world != null && world.MapName.Length > 0 && !BotEngine.IsLoginScreen(world.MapName) && !world.MapName.StartsWith('_');
-        string character = inGame && e.CharacterName.Length > 0 ? e.CharacterName : _lastCharacter.Length > 0 ? _lastCharacter : _profile.LastCharacter;
+        string character = inGame && e.CharacterName.Length > 0 ? e.CharacterName
+            : e.CharSelectNow() is { Selected.Length: > 0 } select ? select.Selected
+            : _resume is { } pending ? pending.Character
+            : _lastCharacter.Length > 0 ? _lastCharacter : _profile.LastCharacter;
         if (character.Length == 0)
             return "Hangi karakterle girileceği bilinmiyor; oyun yeniden başlatılmıyor.";
-        _restartWork = e.BotRunning || e.Fishing || e.ScanningMarket;
+        // Work waiting to go back to (left on the character select after a restart) is still gone back to.
+        _restartWork = e.BotRunning || e.Fishing || e.ScanningMarket || _resume is { Work: true };
         _restartPid = e.Window.ProcessId;
         _restart = e.BotRunning && e.SellingNow ? RestartStage.Selling : e.BotRunning ? RestartStage.Quieting : RestartStage.Closing;
         _restartStageAt = DateTime.Now;
@@ -97,11 +102,45 @@ internal sealed partial class MainForm
         }
     }
 
+    /// <summary>
+    /// "başla" with the game on its login screen or character select: logged in with the game's own saved details, "Başla"
+    /// pressed with the character shown (else the last one played), then the farm started (the user: "uzak bir PC'den
+    /// yönetiyorum"). The reply; null when the game is already in play (started the usual way).
+    /// </summary>
+    private string? EnterGameAndWork(BotEngine e, string why)
+    {
+        var world = e.World;
+        var select = e.CharSelectNow();
+        bool onLogin = world != null && BotEngine.IsLoginScreen(world.MapName);
+        if (select == null && !onLogin)
+            return null;
+        if (!_profile.AutoLogin)
+            return "Başlatılamadı: oyun giriş ekranında ve otomatik giriş kapalı (ayarlardan açılabilir).";
+        if (Resting)
+            return "Oyundan çıkış molası sürüyor; mola bitince kendisi girip devam edecek.";
+        string character = select is { Selected.Length: > 0 } s ? s.Selected
+            : _resume is { } pending ? pending.Character
+            : _lastCharacter.Length > 0 ? _lastCharacter : _profile.LastCharacter;
+        if (character.Length == 0)
+            return "Başlatılamadı: hangi karakterle girileceği bilinmiyor; karakteri seçip 'Başla'ya bas.";
+        _resume = new ResumeWork(character, FarmMode, DateTime.Now, true, why);
+        _wrongCharTold = _selectStuckTold = false;
+        _pickTries = 0;
+        _selectSince = DateTime.MinValue;
+        e.KickedWhileWorking = true; // the login button pressed on the login screen
+        string text = select != null
+            ? $"▶ Karakter seçiminde {character} ile 'Başla'ya basılacak, oyuna girince farm başlayacak."
+            : $"▶ Oyuna giriş yapılacak, {character} ile girilip farm başlayacak.";
+        WriteLog(text);
+        return text;
+    }
+
     /// <summary>The work noted (by character) and the game asked to close.</summary>
     private void CloseForRestart(BotEngine e, string character)
     {
         _resume = new ResumeWork(character, _mode, DateTime.Now, _restartWork, "Oyun yeniden başlatıldı");
-        _wrongCharTold = false;
+        _wrongCharTold = _selectStuckTold = false;
+        _pickTries = 0;
         _closingPid = e.Window.ProcessId;
         try
         {

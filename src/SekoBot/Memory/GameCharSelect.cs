@@ -10,7 +10,9 @@ namespace SekoBot.Memory;
 /// </summary>
 /// <param name="Selected">The character shown (to be started with "Başla"); empty when not known.</param>
 /// <param name="Start">The "Başla" button where it is drawn (client pixels); null when not shown.</param>
-internal sealed record CharSelectScreen(IReadOnlyList<string> Characters, string Selected, Rectangle? Start);
+/// <param name="Places">Where each character's entry is drawn in the list (client pixels), to choose it; null when not known.</param>
+internal sealed record CharSelectScreen(IReadOnlyList<string> Characters, string Selected, Rectangle? Start,
+    IReadOnlyDictionary<string, Rectangle>? Places = null);
 
 internal sealed partial class GameWorldReader
 {
@@ -36,6 +38,7 @@ internal sealed partial class GameWorldReader
                 return null;
             // The characters, by their place in the list.
             var names = new SortedDictionary<int, string>();
+            var places = new Dictionary<string, Rectangle>();
             long panel = Pointer(screen + Offset(cls, "charSelectNew_C", "owningCharPanel"));
             if (MemoryReads.IsPointer(panel))
             {
@@ -52,7 +55,11 @@ internal sealed partial class GameWorldReader
                     int index = Int32(entry + Offset(entryClass, "selectebleOwningChar_C", "Index")) ?? i;
                     string name = ReadFString(entry + Offset(entryClass, "selectebleOwningChar_C", "charData.playerid"), 64);
                     if (name.Length > 0)
+                    {
                         names[index] = name;
+                        if (Showing(entry) && DrawnAt(entry) is { Width: > 4, Height: > 4 } at)
+                            places[name] = at;
+                    }
                 }
             }
             int shown = Int32(screen + Offset(cls, "charSelectNew_C", "Index")) ?? -1;
@@ -73,7 +80,7 @@ internal sealed partial class GameWorldReader
                     start = r;
                 break;
             }
-            return new CharSelectScreen([.. names.Values], selected, start);
+            return new CharSelectScreen([.. names.Values], selected, start, places);
         }
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException or OverflowException or InvalidOperationException) { }
         return null;
