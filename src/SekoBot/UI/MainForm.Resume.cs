@@ -94,6 +94,13 @@ internal sealed partial class MainForm
     private string _lastCharacter = "";
     /// <summary>This SekoBot's game copy (the folder holding Mobile2Launcher.exe).</summary>
     private string? _gameFolder;
+    /// <summary>On the character select with work to go back to since (MinValue: not there).</summary>
+    private DateTime _selectSince = DateTime.MinValue;
+    private bool _selectStuckTold;
+    private int _pickTries;
+    private DateTime _pickedAt = DateTime.MinValue;
+    /// <summary>On the character select this long without "Başla" pressed: why, told.</summary>
+    internal static readonly TimeSpan SelectStuckAfter = TimeSpan.FromSeconds(45);
     private DateTime _startPressedAt = DateTime.MinValue, _inGameSince = DateTime.MinValue, _gameGoneAt = DateTime.MinValue;
     private DateTime _launcherAt = DateTime.MinValue, _closeAskedAt = DateTime.MinValue;
     private bool _wrongCharTold, _outdatedTold, _launcherStarted;
@@ -243,10 +250,38 @@ internal sealed partial class MainForm
         if (e.CharSelectNow() is { } select)
         {
             _inGameSince = DateTime.MinValue;
+            if (_selectSince == DateTime.MinValue)
+                _selectSince = now;
+            // Waiting here long without pressing: why, told once (the user runs it from far away, by Telegram).
+            if (!_selectStuckTold && now - _selectSince > SelectStuckAfter && now - _startPressedAt > SelectStuckAfter)
+            {
+                string? why = select.Selected.Length == 0
+                    ? $"seçili karakter okunamadı (listede: {(select.Characters.Count > 0 ? string.Join(", ", select.Characters) : "okunamadı")})"
+                    : select.Start == null ? "'Başla' düğmesi ekranda görünmüyor" : null;
+                if (why != null)
+                {
+                    _selectStuckTold = true;
+                    string text = $"⚠ Karakter seçiminde bekleniyor: {why}. {resume.Character} ile girilecekti; karakteri seçip 'Başla'ya basarsan bot kaldığı yerden devam eder.";
+                    WriteLog(text);
+                    e.Notify(text);
+                }
+            }
+            // Another character shown (a game just started shows its own choice): the right one chosen in the list.
+            if (!select.Selected.Equals(resume.Character, StringComparison.Ordinal) && select.Places?.GetValueOrDefault(resume.Character) is { } entry
+                && _pickTries < 3 && now - _pickedAt > TimeSpan.FromSeconds(4))
+            {
+                _pickedAt = now;
+                _pickTries++;
+                e.PickCharacter(entry);
+                WriteLog($"👤 Karakter seçiminde {(select.Selected.Length > 0 ? select.Selected : "başka bir karakter")} seçiliydi; {resume.Character} seçiliyor.");
+                return;
+            }
             if (select.Selected.Length == 0 || select.Start is not { } start)
                 return;
             if (!select.Selected.Equals(resume.Character, StringComparison.Ordinal))
             {
+                if (now - _pickedAt < TimeSpan.FromSeconds(4))
+                    return; // the click a moment ago still coming through
                 if (!_wrongCharTold)
                 {
                     _wrongCharTold = true;
@@ -271,11 +306,14 @@ internal sealed partial class MainForm
                 return;
             _startPressedAt = now;
             _startPresses++;
+            _selectStuckTold = false;
+            _pickTries = 0;
             e.PressStart(start);
             WriteLog($"👤 Karakter seçiminde {resume.Character} ile 'Başla'ya basıldı.");
             return;
         }
 
+        _selectSince = DateTime.MinValue;
         // In the game with the character: the work starts again once the game has settled.
         if (!inGame)
         {

@@ -78,6 +78,14 @@ internal sealed partial class BotEngine
     }
 
     /// <summary>Presses a point of the game (client pixels), e.g. "Onayla" on its update question.</summary>
+    /// <summary>A character chosen in the character select's list (its entry clicked).</summary>
+    public void PickCharacter(Rectangle entry)
+    {
+        _loginInput ??= new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
+        var at = BagCleaner.ClickPoint(entry);
+        _loginInput.Enqueue(new ClickAction(at, Slow: true, Fast: true, StillWanted: () => CharSelectNow() != null));
+    }
+
     public void PressAt(Point at)
     {
         _loginInput ??= new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
