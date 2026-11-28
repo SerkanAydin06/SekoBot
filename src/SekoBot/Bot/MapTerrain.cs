@@ -211,14 +211,16 @@ internal sealed class MapTerrain
         IReadOnlyList<Circle>? mobs = null)
     {
         // One the character stands in still counts (it got stuck right there): not walked into again.
-        var keep = avoid?.Where(c => !c.Holds(to, margin)).ToList();
+        var learned = avoid?.Where(c => !c.Holds(to, margin)).ToList();
         var nearMobs = mobs?.Where(c => !c.Holds(to, margin) && !c.Holds(from, margin)).ToList();
-        if (nearMobs is { Count: > 0 })
-            keep = [.. keep ?? [], .. nearMobs];
+        var keep = nearMobs is { Count: > 0 } ? [.. learned ?? [], .. nearMobs] : learned;
         bool alongRoads = roads && Roads != null && from.DistanceXY(to) > RoadsFrom;
         if (!alongRoads && LineClear(from, to, margin, keep))
             return [to];
-        if (alongRoads && RoadOnlyWay(from, to, margin, keep) is { } byRoad)
+        // The road way is chosen without the mobs: they move, and with two ways about as long the choice flipped with
+        // them every moment (seen 2026-11-28: walked east and west on the same road for 6 minutes, twice, never reaching
+        // the shop; out of potions, the bot stopped). They are walked round only where they are, near on the way.
+        if (alongRoads && RoadOnlyWay(from, to, margin, learned) is { } byRoad)
             return nearMobs is { Count: > 0 } ? AroundMobs(from, byRoad, nearMobs, keep, margin) : byRoad;
         // Looked for close around the two points first; a long wall needs more room to get round.
         foreach (double r in Rooms.Where(r => r <= room))
