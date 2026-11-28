@@ -63,7 +63,7 @@ internal sealed partial class BotEngine
                 continue;
             int? seen;
             lock (_potionSeen)
-                seen = _potionSeen.TryGetValue(key, out int v) ? v : null;
+                seen = _potionSeen.TryGetValue(key, out int v) ? v : p.PotionVnums.TryGetValue(kind, out int kept) ? kept : null;
             int? want = seen is int s && progress.Count(s) > 0 ? s
                 : progress.Inventory.Where(i => i.Slot >= CharacterProgress.FirstBagSlot && i.Count > 0 && PotionOfKind(ItemBook.Get(i.Vnum)?.Name, kind))
                     .GroupBy(i => i.Vnum).OrderByDescending(g => g.Sum(i => i.Count)).Select(g => (int?)g.Key).FirstOrDefault();
@@ -86,7 +86,8 @@ internal sealed partial class BotEngine
                 RefillDone(state.Time);
             return actions;
         }
-        if (attacked || _cleaner.Active || _selling || _tidying || _brain.WantsClean || _brain.Traveling || _whisper.Active
+        // Also on the way to the farm area (the user: "alanın dışında olsa bile önce potlarını kontrol etsin").
+        if (attacked || _cleaner.Active || _selling || _tidying || _brain.WantsClean || _whisper.Active
             || World is not { } world || !BagRead(world) || RefillWanted(world, p, state.Time) is not var (kind, key, vnum))
             return null;
         if (!FrontTurn.Shared.TryTake(_world?.CharacterName is { Length: > 0 } me ? me : "başka bir PARDUS"))
@@ -95,7 +96,11 @@ internal sealed partial class BotEngine
             return [];
         _refill.Start(state.Time, kind, key, vnum);
         _log($"🧪 {kind} iksiri tuşu ({key}) boş; çantadaki {ItemBook.NameOf(vnum)} oraya sürükleniyor.");
-        return [];
+        // Walking (to the farm area): stopped for it.
+        var stop = new List<BotAction> { new KeyUpAction(p.Keys.Attack) };
+        foreach (var move in new[] { p.Keys.MoveForward, p.Keys.MoveBack, p.Keys.MoveLeft, p.Keys.MoveRight })
+            stop.Add(new KeyUpAction(move));
+        return stop;
     }
 
     private void RefillDone(TimeSpan now)
