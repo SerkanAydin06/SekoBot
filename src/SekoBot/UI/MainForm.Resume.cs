@@ -309,7 +309,7 @@ internal sealed partial class MainForm
             _selectStuckTold = false;
             _pickTries = 0;
             e.PressStart(start);
-            WriteLog($"👤 Karakter seçiminde {resume.Character} ile 'Başla'ya basıldı.");
+            WriteLog($"👤 Karakter seçiminde {resume.Character} ile 'Başla'ya basıldı, Enter'a da basıldı.");
             return;
         }
 
