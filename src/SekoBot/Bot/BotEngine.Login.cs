@@ -38,6 +38,8 @@ internal sealed partial class BotEngine
         _loginInput ??= new InputExecutor(_window, false, _log, () => null, () => null, _ => { }, _ => { }, background: true);
         var at = BagCleaner.ClickPoint(button);
         _loginInput.Enqueue(new ClickAction(at, Slow: true, Fast: true, StillWanted: () => CharSelectNow()?.Start is { } current && current.Contains(at)));
+        // Enter too (the user: "hem oraya bassın hem entere"): starts with the character shown when the click didn't take.
+        _loginInput.Enqueue(new KeyTapAction(Keys.Enter) { StillWanted = () => CharSelectNow() != null });
     }
 
     /// <summary>
