@@ -56,6 +56,8 @@ internal sealed partial class BotEngine : IDisposable
     /// süre neden sıfırlanıyor? molada bot hâlâ çalışıyor").</summary>
     private bool _sessionHeld;
     private TimeSpan _heldAt, _heldTotal;
+    /// <summary>Windows Esc doesn't reach (not on the screen though listed): left out.</summary>
+    private readonly PopupGuard _popupGuard = new();
     /// <summary>The run is held (stopped for a while, going on when the bot starts again).</summary>
     public bool SessionHeld { get { lock (_botGate) return _sessionHeld; } }
     /// <summary>The summary of the last run (for the stop message), or null.</summary>
@@ -224,7 +226,11 @@ internal sealed partial class BotEngine : IDisposable
                             state = state with { ReviveReady = world.ReviveReady, HoldRevive = _holdRevive };
                         if (BotRunning && !state.Dead)
                         {
-                            string? window = PopupWatch.Target(world?.OpenWindows);
+                            var (windows, ignored) = _popupGuard.Filter(world?.OpenWindows);
+                            if (ignored != null)
+                                _log($"'{ignored}' penceresi ekranda değil (Esc oyun menüsünü açtı); yok sayılıyor, menü kapatılıp devam ediliyor.");
+                            string? window = PopupWatch.Target(windows);
+                            _popupGuard.Closing(window, PopupWatch.CloseKey(window, profile.Keys) == profile.Keys.CloseWindow);
                             state = state with
                             {
                                 WindowsUnreadable = world?.OpenWindows == null,
