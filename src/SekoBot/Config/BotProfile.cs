@@ -101,6 +101,10 @@ internal sealed class BotProfile
     public double PullAreaMetres { get; set; } = 8;
     /// <summary>Learned per map: how many mobs this character can take at once without its HP
     /// falling under 40 % (lowered after a hard fight, raised after easy ones). Kept with the character.</summary>
+    /// <summary>The potion last seen on the HP / MP key ("HP" / "MP" → item), kept with the character: a key found empty
+    /// after a restart is filled with it, and it is bought when the bag has none.</summary>
+    public Dictionary<string, int> PotionVnums { get; set; } = [];
+
     public Dictionary<string, int> PullLearned { get; set; } = [];
     /// <summary>Learned: how the fights with each kind of mob went for this character (see <see cref="Bot.MobFit"/>).</summary>
     public Dictionary<string, MobFights> MobFights { get; set; } = [];
@@ -569,7 +573,7 @@ internal static class CharacterSettings
         nameof(BotProfile.SkillGapLearnedMs), nameof(BotProfile.MobFights), nameof(BotProfile.AutoArea), nameof(BotProfile.Attack), nameof(BotProfile.FollowName),
         // The page (farm / market / fishing) and the keys go with the character too (the user: SekoBots may come up
         // on other games after a restart — the market character must stay on the market page).
-        nameof(BotProfile.UiMode), nameof(BotProfile.Keys), nameof(BotProfile.Empire),
+        nameof(BotProfile.UiMode), nameof(BotProfile.Keys), nameof(BotProfile.Empire), nameof(BotProfile.PotionVnums),
     ];
 
     public static string Folder { get; set; } = Path.Combine(ProfileStore.Directory, "karakterler");

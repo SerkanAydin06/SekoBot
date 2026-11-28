@@ -308,11 +308,23 @@ internal sealed partial class BotEngine
         };
         if (number == 0 || world.Progress is not { } progress)
             return null;
+        var p = Profile;
+        string? kind = key == p.Keys.HpPotion ? "HP" : key == p.Keys.MpPotion ? "MP" : null;
         lock (_potionSeen)
         {
-            var potion = progress.Potion(number, _potionSeen.TryGetValue(key, out int seen) ? seen : null);
+            // What was on the key: seen in this run, else kept with the character (a restart, a new PARDUS).
+            int? known = _potionSeen.TryGetValue(key, out int seen) ? seen
+                : kind != null && p.PotionVnums.TryGetValue(kind, out int kept) ? kept : null;
+            var potion = progress.Potion(number, known);
             if (potion.OnKey && potion.Vnum is int vnum)
+            {
                 _potionSeen[key] = vnum;
+                if (kind != null && p.PotionVnums.GetValueOrDefault(kind) != vnum)
+                {
+                    p.PotionVnums = new Dictionary<string, int>(p.PotionVnums) { [kind] = vnum }; // replaced, not changed: saved elsewhere
+                    _brain.ProfileChanged = true;
+                }
+            }
             return potion;
         }
     }

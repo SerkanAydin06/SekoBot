@@ -54,8 +54,8 @@ internal sealed partial class BotEngine
     private bool PotionTripDue(GameState state, BotProfile p)
     {
         if (!p.BuyPotions || _selling || SellWaiting || World is not { } world || state.Dead || state.Attackers.Count > 0
-            || state.Targets.Any(t => t.AttacksMe) || _brain.Traveling)
-            return false;
+            || state.Targets.Any(t => t.AttacksMe))
+            return false; // on the way to the farm area too: the potions first (the user), then on to the area
         return PotionNeeds(world, p).Count > 0 && PotionShop(world) != null && (world.Progress?.Yang ?? 0) >= MinPotionYang;
     }
 
