@@ -84,3 +84,36 @@ public class RoadOnlyWayTests
         Assert.DoesNotContain(way, p => p.Y < 1500);
     }
 }
+
+/// <summary>Mobs on one of two ways about as long don't send the walk to the other (they move; the choice flipped).</summary>
+public class RoadChoiceTests
+{
+    /// <summary>A ring road (rows/columns 10–14 and 65–69 of 80): from its bottom to its top the left and right ways are as long.</summary>
+    private static MapTerrain Ring()
+    {
+        int n = 80;
+        var road = new System.Collections.BitArray(n * n);
+        for (int i = 10; i <= 69; i++)
+            for (int k = 0; k < 5; k++)
+            {
+                road[(10 + k) * n + i] = road[(65 + k) * n + i] = true;  // top, bottom rows
+                road[i * n + 10 + k] = road[i * n + 65 + k] = true;      // left, right columns
+            }
+        return new MapTerrain("t", [], DateTime.Now) { Roads = new RoadMap("t", 0, 0, n, n, road) };
+    }
+
+    [Fact]
+    public void Moving_mobs_on_the_way_dont_flip_it_to_the_other_side()
+    {
+        var map = Ring();
+        var from = new Vec3(4000, 6700, 0);
+        var to = new Vec3(4100, 1200, 0);
+        var plain = map.WayTo(from, to, roads: true)!;
+        bool left = plain.Any(p => p.X < 2000);
+        // Mobs all along the side it takes: still that side (round them where they are, not the other way round).
+        var mobs = Enumerable.Range(0, 12).Select(i => new MapTerrain.Circle(left ? 1250 : 6750, 1500 + i * 400, 300)).ToList();
+        var crowded = map.WayTo(from, to, roads: true, mobs: mobs)!;
+        Assert.Equal(left, crowded.Any(p => p.X < 2000));
+        Assert.Equal(!left, crowded.Any(p => p.X > 6000));
+    }
+}
