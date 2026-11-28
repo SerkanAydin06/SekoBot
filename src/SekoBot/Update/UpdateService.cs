@@ -193,6 +193,9 @@ if exist "%old%" move /Y "%old%" "%target%" >NUL 2>&1
 exit /B 1
 
 :launch
+rem Nothing left over beside PARDUS (the user: only what is needed in its folder).
+del /F /Q "%old%" >NUL 2>&1
+del /F /Q "%target%.update.lock" >NUL 2>&1
 start "" "%target%"
 exit /B 0
 """;

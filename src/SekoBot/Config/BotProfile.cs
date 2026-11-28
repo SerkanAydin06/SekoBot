@@ -384,8 +384,61 @@ internal static class ProfileStore
         Converters = { new JsonStringEnumConverter() }
     };
 
-    public static string Directory { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SekoBot");
+    /// <summary>
+    /// Where everything is kept: the "veri" folder beside PARDUS.exe (the user: "her şey bu klasörün içinde olsun;
+    /// klasörü başka bir PC'ye atınca aynı ayarlarla, haritalarla, pazarla çalışsın"). The first time, what was kept in
+    /// the old place (%LOCALAPPDATA%\SekoBot) is copied in. A folder PARDUS can't write in (Program Files…), or not
+    /// PARDUS itself (the tests): the old place.
+    /// </summary>
+    public static string Directory { get; } = PickDirectory();
+
+    /// <summary>The old place of the data (before 0.4.1079).</summary>
+    internal static string OldDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SekoBot");
+
+    internal const string FolderName = "veri";
+
+    private static string PickDirectory()
+    {
+        string old = OldDirectory;
+        string? exe = Environment.ProcessPath;
+        string name = Path.GetFileNameWithoutExtension(exe ?? "");
+        if (exe == null || !(name.Equals("PARDUS", StringComparison.OrdinalIgnoreCase) || name.Equals("SekoBot", StringComparison.OrdinalIgnoreCase)))
+            return old;
+        string here = Path.Combine(Path.GetDirectoryName(exe)!, FolderName);
+        try
+        {
+            System.IO.Directory.CreateDirectory(here);
+            string probe = Path.Combine(here, ".yazma-denemesi");
+            File.WriteAllText(probe, "");
+            File.Delete(probe);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return old;
+        }
+        // The first start here: the data from the old place (not the screen recordings — large, not needed for the work).
+        if (!File.Exists(Path.Combine(here, "profile.json")) && File.Exists(Path.Combine(old, "profile.json")))
+            CopyIn(old, here);
+        return here;
+    }
+
+    private static void CopyIn(string from, string to)
+    {
+        foreach (string file in System.IO.Directory.EnumerateFiles(from, "*", SearchOption.AllDirectories))
+        {
+            string rel = Path.GetRelativePath(from, file);
+            if (rel.StartsWith("recordings", StringComparison.OrdinalIgnoreCase) || rel.EndsWith(".lock", StringComparison.OrdinalIgnoreCase))
+                continue;
+            string target = Path.Combine(to, rel);
+            try
+            {
+                System.IO.Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                if (!File.Exists(target))
+                    File.Copy(file, target);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+    }
 
     /// <summary>profile.json for the first SekoBot, profile-2.json for a second one open at the same time.</summary>
     private static string ProfilePath => Path.Combine(Directory, Instance.FileName("profile", "json"));
